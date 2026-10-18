@@ -1,0 +1,10 @@
+node_modules/
+*.log
+.env
+data/
+
+# 本机交接/核实笔记，含私人环境信息，不公开
+claude-web-handoff.md
+
+# 图标方案草图（python3 tools/icon-concepts.py 可重新生成）
+public/icons/concept-*.png

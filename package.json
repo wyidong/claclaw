@@ -1,0 +1,22 @@
+{
+  "name": "claclaw",
+  "version": "0.1.0",
+  "private": true,
+  "description": "在手机浏览器里接管本机的 Claude Code 会话：选会话、看流式回复、大按钮确认权限",
+  "type": "module",
+  "main": "server.mjs",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "passwd": "node passwd.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.302",
+    "web-push": "^3.6.7",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  }
+}

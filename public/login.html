@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<!-- 主屏幕 Web App：状态栏用 default（black-translucent 时 iOS 会在状态栏下加一层模糊）。
+     这几项 iOS 只在「添加到主屏幕」时读一次，改了要删掉图标重新添加 -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Claclaw">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=4">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png?v=4">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161B21" media="(prefers-color-scheme: dark)">
+<title>登录 · Claclaw</title>
+<style>
+:root{
+  --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
+  --accent:#12864A;--accent-ink:#FFFFFF;--deny:#B23A2E;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
+  --accent:#3FCB86;--accent-ink:#0E1115;--deny:#F27C70;
+}}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+form{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 18px}
+h1{margin:0 0 4px;font-size:20px}
+[hidden]{display:none!important}
+p{margin:0 0 18px;color:var(--muted);font-size:13px}
+label{display:block;font-size:14px;margin:12px 0 4px}
+input{width:100%;box-sizing:border-box;min-height:48px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{width:100%;min-height:52px;margin-top:20px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.5}
+#err{min-height:1.5em;margin-top:12px;color:var(--deny);font-size:14px}
+</style>
+</head>
+<body>
+<form id="f" autocomplete="on">
+  <h1>claclaw</h1>
+  <p id="hint">登录后连接本机的 Claude 会话</p>
+  <label for="u">用户名</label>
+  <input id="u" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <label for="pw">密码</label>
+  <input id="pw" name="password" type="password" autocomplete="current-password">
+  <div id="again" hidden>
+    <label for="pw2">再输一次密码</label>
+    <input id="pw2" type="password" autocomplete="new-password">
+  </div>
+  <button type="submit" id="go">登录</button>
+  <div id="err" role="alert"></div>
+</form>
+<script>
+(function(){
+var f=document.getElementById('f'),err=document.getElementById('err'),go=document.getElementById('go');
+var u=document.getElementById('u'),pw=document.getElementById('pw'),pw2=document.getElementById('pw2');
+var setup=location.pathname==='/setup';
+if(setup){
+  document.title='首次设置 · claclaw';
+  document.querySelector('h1').textContent='设置登录账号';
+  document.getElementById('hint').hidden=true;
+  document.getElementById('again').hidden=false;
+  pw.setAttribute('autocomplete','new-password');
+  go.textContent='设置并进入';
+}
+f.addEventListener('submit',function(e){
+  e.preventDefault();err.textContent='';
+  if(setup){
+    if(!u.value.trim()&&!pw.value){err.textContent='用户名和密码至少要设一个';return}
+    if(/\s/.test(u.value.trim())){err.textContent='用户名不能含空格';return}
+    if(pw.value&&!pw.value.trim()){err.textContent='密码不能全是空格';return}
+    if(pw.value!==pw2.value){err.textContent='两次输入的密码不一样';return}
+  }
+  go.disabled=true;
+  fetch(setup?'/api/setup':'/api/login',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({username:u.value,password:pw.value})})
+  .then(function(r){return r.json().then(function(j){return {ok:r.ok,status:r.status,j:j}})})
+  .then(function(x){
+    if(x.ok)location.replace('/');
+    else if(setup&&x.status===409)location.replace('/login');
+    else{err.textContent=x.j.error||'失败';go.disabled=false}
+  })
+  .catch(function(){err.textContent='连不上服务';go.disabled=false});
+});
+u.focus();
+})();
+</script>
+</body>
+</html>

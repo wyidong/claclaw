@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Claude 会话（演示）</title>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
+  --accent:#2B55D8;--accent-ink:#FFFFFF;--user-bg:#E3EAFD;
+  --allow:#17794A;--on-allow:#FFFFFF;--deny:#B23A2E;--warn:#A86200;
+  --add-bg:#E2F3E8;--del-bg:#FBE5E2;--code-bg:#E9ECEF;--banner-bg:#FFF4DC;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
+    --accent:#7F9DFF;--accent-ink:#0E1115;--user-bg:#1E2A4A;
+    --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
+    --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
+  --accent:#7F9DFF;--accent-ink:#0E1115;--user-bg:#1E2A4A;
+  --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
+  --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+#app{position:relative;height:100%;display:flex;flex-direction:column;max-width:760px;margin:0 auto;background:var(--bg)}
+@media (min-width:800px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
+
+header{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
+#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-align:left}
+#sessBtn .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
+#sessBtn .nm{font-weight:600}
+#sessBtn .sid{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sessBtn svg{flex:none;color:var(--muted)}
+#modeBtn{flex:none;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px}
+#modeBtn[data-m="accept"]{border-color:var(--warn);color:var(--warn)}
+#modeBtn[data-m="plan"]{border-color:var(--accent);color:var(--accent)}
+
+#banner{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;background:var(--banner-bg);color:var(--warn);font-size:13px;line-height:1.4}
+#banner span{flex:1}
+#banner button{flex:none;width:36px;height:36px;border:0;background:none;color:inherit;font-size:20px;line-height:1}
+
+#feed{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:16px 14px 10px;display:flex;flex-direction:column;gap:14px}
+.msg{white-space:pre-wrap;word-break:break-word;max-width:100%}
+.msg.user{align-self:flex-end;max-width:86%;padding:9px 13px;background:var(--user-bg);border-radius:16px 16px 4px 16px}
+.msg.ai{align-self:stretch}
+.msg code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
+.sys{align-self:center;max-width:92%;text-align:center;color:var(--muted);font-size:13px;line-height:1.45}
+.think{align-self:flex-start;display:flex;gap:5px;padding:6px 0}
+.think i{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.5;animation:blink 1.1s infinite}
+.think i:nth-child(2){animation-delay:.18s}.think i:nth-child(3){animation-delay:.36s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.tool{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.tool[data-k="wait"]{border-color:var(--warn)}
+.tool-h{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:0;background:none;text-align:left}
+.tool-h .st{flex:none;width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.tool[data-k="wait"] .st{background:var(--warn)}
+.tool[data-k="run"] .st{background:var(--accent);animation:pulse 1s infinite}
+.tool[data-k="ok"] .st{background:var(--allow)}
+.tool[data-k="no"] .st{background:var(--deny)}
+.tn{flex:none;font-weight:600;font-size:14px}
+.tt{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ts{flex:none;font-size:13px;color:var(--muted)}
+.tool-b{display:none;border-top:1px solid var(--line)}
+.tool.open .tool-b{display:block}
+.diff{font-family:var(--mono);font-size:12.5px;line-height:1.55;overflow-x:auto;padding:4px 0}
+.diff div{padding:0 12px;white-space:pre;min-width:max-content}
+.diff .a{background:var(--add-bg)}
+.diff .d{background:var(--del-bg)}
+.out{margin:0;padding:10px 12px;font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
+
+#dock{background:var(--surface);border-top:1px solid var(--line);padding:10px 12px 12px}
+#dock[data-state="perm"]{border-top:2px solid var(--warn)}
+#chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
+#chips::-webkit-scrollbar{display:none}
+.chip{flex:none;min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:20px;background:var(--bg);font-size:14px}
+#composer{display:flex;align-items:flex-end;gap:8px}
+#ta{flex:1;min-width:0;resize:none;min-height:44px;max-height:120px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit;line-height:1.4;box-sizing:border-box}
+#send{flex:none;width:44px;height:44px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center}
+#send:disabled{opacity:.4;cursor:default}
+#perm{display:none}
+#dock[data-state="perm"] #perm{display:block}
+#dock[data-state="perm"] #composer,#dock[data-state="perm"] #chips,#dock[data-state="busy"] #chips{display:none}
+.perm-t{font-weight:600}
+.perm-s{margin:2px 0 12px;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.perm-row{display:grid;grid-template-columns:1fr 1.6fr;gap:10px}
+.btn{min-height:52px;border-radius:12px;font-weight:600;border:1.5px solid}
+.btn.deny{background:transparent;color:var(--deny);border-color:var(--deny)}
+.btn.allow{background:var(--allow);color:var(--on-allow);border-color:var(--allow)}
+.always{display:block;width:100%;min-height:44px;margin-top:6px;border:0;background:none;color:var(--muted);font-size:14px;text-decoration:underline}
+
+#sheet{position:absolute;inset:0;display:none;align-items:flex-end;background:rgba(0,0,0,.42);z-index:5}
+#sheet.on{display:flex}
+.sheet-p{width:100%;max-height:78%;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 12px 16px}
+.sheet-p h2{margin:0 4px 4px;font-size:16px;font-weight:600}
+.sheet-p p{margin:0 4px 6px;font-size:13px;color:var(--muted)}
+.s-item{display:block;width:100%;min-height:56px;margin-top:8px;padding:10px 12px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.s-item[aria-current="true"]{border-color:var(--accent)}
+.s-item .t{font-weight:600}
+.s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
+.s-item .m .id{font-family:var(--mono)}
+
+@media (prefers-reduced-motion:reduce){.think i,.tool[data-k="run"] .st{animation:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="sessBtn" type="button" aria-label="切换会话">
+      <span class="dot"></span><span class="nm">my-app</span><span class="sid" id="sid"></span>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+    </button>
+    <button id="modeBtn" type="button" data-m="default" aria-label="切换模式">默认</button>
+  </header>
+
+  <div id="banner" role="note"><span>演示：这个页面没有连接任何电脑，回复都是预设的。</span><button type="button" id="bannerX" aria-label="关闭提示">×</button></div>
+
+  <main id="feed" aria-live="polite"></main>
+
+  <div id="dock" data-state="idle">
+    <div id="chips"></div>
+    <div id="perm">
+      <div class="perm-t" id="permTitle"></div>
+      <div class="perm-s" id="permSub"></div>
+      <div class="perm-row">
+        <button type="button" class="btn deny" id="bDeny">拒绝</button>
+        <button type="button" class="btn allow" id="bAllow">允许</button>
+      </div>
+      <button type="button" class="always" id="bAlways" hidden></button>
+    </div>
+    <div id="composer">
+      <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
+      <button type="button" id="send" aria-label="发送" disabled></button>
+    </div>
+  </div>
+
+  <div id="sheet" aria-hidden="true">
+    <div class="sheet-p" role="dialog" aria-label="恢复会话">
+      <h2>恢复会话</h2>
+      <p>对应命令行里的 claude --resume</p>
+      <div id="sList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s)};
+var feed=$('#feed'),dock=$('#dock'),ta=$('#ta'),sendBtn=$('#send'),chipsEl=$('#chips');
+
+var ICON_SEND='<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 16V4M5 9l5-5 5 5"/></svg>';
+var ICON_STOP='<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="12" height="12" rx="2"/></svg>';
+
+var SESSIONS=[
+ {id:'9769c337',title:'登录页加验证码',when:'2 小时前',hist:[['u','登录接口最近被人撞库，先帮我看看 Auth.php'],['a','`login()` 里没有频率限制，也没有验证码。建议先加验证码，再考虑按 IP 限流。你想先做哪个？']]},
+ {id:'a41f02bc',title:'订单导出报 500',when:'昨天',hist:[['u','订单导出一点就 500'],['a','日志里是 memory limit：导出一次性把全部订单读进了内存。改成分批读取就能解决。']]},
+ {id:'e7d3b915',title:'整理 nginx 配置',when:'3 天前',hist:[['u','把三个站点的 server 块拆成独立文件'],['a','已经拆成 sites-available 下的三个文件，`nginx -t` 通过。']]}
+];
+var MODES=[
+ {key:'default',label:'默认',note:'改文件前会先问你。'},
+ {key:'accept',label:'自动改文件',note:'改文件不再询问，运行命令仍会询问。'},
+ {key:'plan',label:'计划',note:'只读：不会改文件，也不会运行命令。'}
+];
+var CH_START=['给登录接口加验证码校验','看看现在有哪些改动','把刚才的改动解释一下'];
+var CH_AFTER=['把刚才的改动解释一下','撤销刚才的改动','看看现在有哪些改动'];
+
+var DIFF=[
+ [' ','public function login()'],
+ [' ','{'],
+ ['+','    $captcha = $this->input->post(\'captcha\');'],
+ ['+','    if (!$this->captcha_lib->verify($captcha)) {'],
+ ['+','        return $this->json(412, \'Captcha invalid\');'],
+ ['+','    }'],
+ ['-','    $user = $this->User_model->check($this->input->post(\'username\'), $this->input->post(\'password\'));'],
+ ['+','    $u = $this->input->post(\'username\');'],
+ ['+','    $p = $this->input->post(\'password\');'],
+ ['+','    $user = $this->User_model->check($u, $p);'],
+ ['+','    log_message(\'info\', \'login attempt: \' . $u);']
+];
+var ADDS=DIFF.filter(function(l){return l[0]==='+'}).length;
+var DELS=DIFF.filter(function(l){return l[0]==='-'}).length;
+var STAT='+'+ADDS+' −'+DELS;
+
+var token=0,busy=false,modeIdx=0,allowEdits=false,permResolve=null,session=SESSIONS[0],stick=true;
+var CANCEL={};
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fmt(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>')}
+function wait(ms,tok){return new Promise(function(res,rej){setTimeout(function(){tok===token?res():rej(CANCEL)},ms)})}
+function chk(tok){if(tok!==token)throw CANCEL}
+function scrollDown(force){if(force)stick=true;if(stick)feed.scrollTop=feed.scrollHeight}
+feed.addEventListener('scroll',function(){stick=feed.scrollHeight-feed.scrollTop-feed.clientHeight<80});
+
+function addUser(t){var e=document.createElement('div');e.className='msg user';e.textContent=t;feed.appendChild(e);scrollDown(true)}
+function addAi(t){var e=document.createElement('div');e.className='msg ai';e.innerHTML=fmt(t);feed.appendChild(e);scrollDown()}
+function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
+function addThink(){var e=document.createElement('div');e.className='think';e.innerHTML='<i></i><i></i><i></i>';feed.appendChild(e);scrollDown();return e}
+
+async function aiSay(tok,text){
+  var el=document.createElement('div');el.className='msg ai';feed.appendChild(el);
+  var i=0;
+  while(i<text.length){
+    i=Math.min(text.length,i+2+Math.floor(Math.random()*3));
+    el.textContent=text.slice(0,i);scrollDown();
+    await wait(22,tok);
+  }
+  el.innerHTML=fmt(text);scrollDown();
+}
+
+function toolCard(name,target){
+  var el=document.createElement('div');el.className='tool open';
+  el.innerHTML='<button class="tool-h" type="button"><span class="st"></span><span class="tn"></span><span class="tt"></span><span class="ts"></span></button><div class="tool-b"></div>';
+  el.querySelector('.tn').textContent=name;
+  el.querySelector('.tt').textContent=target;
+  el.querySelector('.tool-h').addEventListener('click',function(){el.classList.toggle('open')});
+  feed.appendChild(el);scrollDown();
+  return {
+    el:el,
+    status:function(k,t){el.dataset.k=k;el.querySelector('.ts').textContent=t;scrollDown()},
+    body:function(node){var b=el.querySelector('.tool-b');b.innerHTML='';b.appendChild(node);scrollDown()},
+    collapse:function(){el.classList.remove('open')}
+  };
+}
+function diffNode(){
+  var d=document.createElement('div');d.className='diff';
+  DIFF.forEach(function(l){
+    var r=document.createElement('div');
+    r.className=l[0]==='+'?'a':l[0]==='-'?'d':'';
+    r.textContent=l[0]+' '+l[1];
+    d.appendChild(r);
+  });
+  return d;
+}
+function outNode(t){var p=document.createElement('pre');p.className='out';p.textContent=t;return p}
+
+function setChips(list){
+  chipsEl.innerHTML='';
+  list.forEach(function(t){
+    var b=document.createElement('button');b.type='button';b.className='chip';b.textContent=t;
+    b.addEventListener('click',function(){run(t)});
+    chipsEl.appendChild(b);
+  });
+}
+function setDock(s){dock.dataset.state=s;syncSend()}
+function syncSend(){
+  if(busy){sendBtn.innerHTML=ICON_STOP;sendBtn.setAttribute('aria-label','停止');sendBtn.disabled=false}
+  else{sendBtn.innerHTML=ICON_SEND;sendBtn.setAttribute('aria-label','发送');sendBtn.disabled=!ta.value.trim()}
+}
+
+function askPerm(o){
+  return new Promise(function(res){
+    permResolve=res;
+    $('#permTitle').textContent=o.title;
+    $('#permSub').textContent=o.sub;
+    $('#bAllow').textContent=o.allow||'允许';
+    var al=$('#bAlways');
+    if(o.always){al.hidden=false;al.textContent=o.always}else{al.hidden=true}
+    setDock('perm');
+  });
+}
+function closePerm(v){
+  if(!permResolve)return;
+  var r=permResolve;permResolve=null;
+  setDock(busy?'busy':'idle');
+  r(v);
+}
+$('#bAllow').addEventListener('click',function(){closePerm('allow')});
+$('#bDeny').addEventListener('click',function(){closePerm('deny')});
+$('#bAlways').addEventListener('click',function(){closePerm('always')});
+
+function currentMode(){return allowEdits&&MODES[modeIdx].key==='default'?'accept':MODES[modeIdx].key}
+
+async function flowEdit(tok){
+  var mode=currentMode();
+  await aiSay(tok,'收到。我先看一下登录接口现在是怎么写的。');
+  if(mode==='plan'){
+    await aiSay(tok,'计划模式下我只读不改，方案如下：\n1. 在 `login()` 开头读取 captcha 参数\n2. 校验失败直接返回 412，不再查用户库\n3. 用 `php -l` 检查语法\n\n切回「默认」模式，我再动手。');
+    setChips(CH_START);return;
+  }
+  var rd=toolCard('Read','application/controllers/Auth.php');
+  rd.status('run','读取中');await wait(700,tok);
+  rd.status('ok','214 行');rd.collapse();
+  await aiSay(tok,'`login()` 里目前没有任何验证码校验。我准备在查用户之前加一道：');
+
+  var ed=toolCard('Edit','application/controllers/Auth.php');
+  ed.body(diffNode());
+  var result;
+  if(mode==='accept'){
+    ed.status('run','应用中');await wait(600,tok);result='auto';
+  }else{
+    ed.status('wait','等待确认');
+    result=await askPerm({title:'允许修改这个文件？',sub:'application/controllers/Auth.php　'+STAT,allow:'允许修改',always:'本会话内改文件都不再询问'});
+    chk(tok);
+  }
+  if(result==='deny'){
+    ed.status('no','已拒绝');ed.collapse();
+    await aiSay(tok,'好的，没有动任何文件。要换个思路吗？比如只做 IP 限流，或者先把验证码逻辑写成独立函数给你看。');
+    setChips(CH_START);return;
+  }
+  if(result==='always'){allowEdits=true;addSys('本会话内改文件不再询问')}
+  ed.status('ok',(result==='auto'?'已自动允许　':'')+STAT);ed.collapse();
+
+  var sh=toolCard('Bash','php -l application/controllers/Auth.php');
+  sh.status('wait','等待确认');
+  var r2=await askPerm({title:'允许运行这条命令？',sub:'php -l application/controllers/Auth.php',allow:'允许运行'});
+  chk(tok);
+  if(r2==='deny'){
+    sh.status('no','已拒绝');sh.collapse();
+    await aiSay(tok,'好的，没有运行检查。文件已经改好，你可以自己跑一下 `php -l`。');
+    setChips(CH_AFTER);return;
+  }
+  sh.status('run','运行中');await wait(900,tok);
+  sh.body(outNode('No syntax errors detected in application/controllers/Auth.php'));
+  sh.status('ok','完成');
+  await aiSay(tok,'已加上验证码校验：失败时返回 412，语法检查通过。接口文档里还没有 `captcha` 这个参数，需要的话我再补上。');
+  setChips(CH_AFTER);
+}
+
+async function flowGit(tok){
+  if(currentMode()==='plan'){
+    await aiSay(tok,'计划模式下我不运行命令。切回「默认」模式后，我会运行 `git status --short` 给你看。');
+    setChips(CH_START);return;
+  }
+  await aiSay(tok,'我看一下工作区的状态。');
+  var sh=toolCard('Bash','git status --short');
+  sh.status('wait','等待确认');
+  var r=await askPerm({title:'允许运行这条命令？',sub:'git status --short',allow:'允许运行'});
+  chk(tok);
+  if(r==='deny'){sh.status('no','已拒绝');sh.collapse();await aiSay(tok,'好的，没有运行。');setChips(CH_START);return}
+  sh.status('run','运行中');await wait(700,tok);
+  sh.body(outNode(' M application/controllers/Auth.php\n M application/views/login.php\n?? public/js/par-api.js'));
+  sh.status('ok','3 个文件');
+  await aiSay(tok,'有 2 个文件被修改，1 个是新文件，还没有提交。');
+  setChips(CH_AFTER);
+}
+
+async function flowExplain(tok){
+  await aiSay(tok,'改动只在 `login()` 一个函数里：先取 `captcha` 参数，校验不通过就直接返回 412，不再查用户库。这样验证码错误不会白白消耗一次密码尝试，也不会给撞库的人多一次试探。其他代码没有动。');
+  setChips(CH_AFTER);
+}
+
+async function flowUndo(tok){
+  if(currentMode()==='plan'){
+    await aiSay(tok,'计划模式下我不会改动文件。切回「默认」模式后，我会用 `git checkout` 还原 Auth.php。');
+    setChips(CH_START);return;
+  }
+  await aiSay(tok,'我把 Auth.php 还原到上次提交的状态，其他文件不动。');
+  var sh=toolCard('Bash','git checkout -- application/controllers/Auth.php');
+  sh.status('wait','等待确认');
+  var r=await askPerm({title:'允许运行这条命令？',sub:'git checkout -- application/controllers/Auth.php\n这会丢弃该文件未提交的修改。',allow:'允许运行'});
+  chk(tok);
+  if(r==='deny'){sh.status('no','已拒绝');sh.collapse();await aiSay(tok,'好的，改动保留着。');setChips(CH_AFTER);return}
+  sh.status('run','运行中');await wait(700,tok);
+  sh.body(outNode('Updated 1 path from the index'));
+  sh.status('ok','完成');
+  await aiSay(tok,'已还原。');
+  setChips(CH_START);
+}
+
+async function flow(text,tok){
+  var th=addThink();
+  await wait(650,tok);
+  th.remove();
+  if(/解释/.test(text))return flowExplain(tok);
+  if(/撤销|回退|还原/.test(text))return flowUndo(tok);
+  if(/改动|git|状态/.test(text))return flowGit(tok);
+  if(/验证码|登录|加|改/.test(text))return flowEdit(tok);
+  await aiSay(tok,'（演示）这里只预设了几段对话。点下面的快捷回复试试。');
+  setChips(CH_START);
+}
+
+async function run(text){
+  text=(text||'').trim();
+  if(!text||busy)return;
+  ta.value='';ta.style.height='auto';
+  addUser(text);
+  busy=true;setDock('busy');chipsEl.innerHTML='';
+  var tok=++token;
+  try{await flow(text,tok)}catch(e){if(e!==CANCEL)throw e}
+  if(tok===token){busy=false;setDock('idle')}
+}
+
+function stop(){
+  token++;
+  busy=false;
+  closePerm(null);
+  document.querySelectorAll('.think').forEach(function(n){n.remove()});
+  document.querySelectorAll('.tool[data-k="run"],.tool[data-k="wait"]').forEach(function(n){
+    n.dataset.k='no';n.querySelector('.ts').textContent='已取消';n.classList.remove('open');
+  });
+  setDock('idle');
+  addSys('已中断');
+  setChips(CH_START);
+}
+
+sendBtn.addEventListener('click',function(){busy?stop():run(ta.value)});
+ta.addEventListener('input',function(){
+  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px';syncSend();
+});
+ta.addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&window.matchMedia('(pointer:fine)').matches){
+    e.preventDefault();run(ta.value);
+  }
+});
+
+$('#modeBtn').addEventListener('click',function(){
+  modeIdx=(modeIdx+1)%MODES.length;
+  var m=MODES[modeIdx];
+  var b=$('#modeBtn');b.textContent=m.label;b.dataset.m=m.key;
+  addSys('模式：'+m.label+'。'+m.note);
+});
+
+var sheet=$('#sheet');
+function openSheet(){
+  var list=$('#sList');list.innerHTML='';
+  SESSIONS.forEach(function(s,i){
+    var b=document.createElement('button');b.type='button';b.className='s-item';
+    if(s===session)b.setAttribute('aria-current','true');
+    b.innerHTML='<div class="t">'+esc(s.title)+'</div><div class="m"><span class="id">'+s.id+'</span><span>~/www/my-app</span><span>'+s.when+'</span></div>';
+    b.addEventListener('click',function(){pick(i);closeSheet()});
+    list.appendChild(b);
+  });
+  sheet.classList.add('on');sheet.setAttribute('aria-hidden','false');
+}
+function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
+sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
+$('#sessBtn').addEventListener('click',openSheet);
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSheet()});
+
+function pick(i){
+  token++;closePerm(null);busy=false;
+  session=SESSIONS[i];
+  feed.innerHTML='';
+  $('#sid').textContent=session.id;
+  addSys('已恢复会话 '+session.id+'：'+session.title);
+  session.hist.forEach(function(h){h[0]==='u'?addUser(h[1]):addAi(h[1])});
+  setChips(CH_START);setDock('idle');
+  scrollDown(true);
+}
+
+$('#bannerX').addEventListener('click',function(){$('#banner').hidden=true});
+
+if(window.visualViewport){
+  var app=$('#app'),root=document.documentElement;
+  var fit=function(){
+    var cs=getComputedStyle(root);
+    var pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+    app.style.height=Math.max(200,window.visualViewport.height-pad)+'px';
+    window.scrollTo(0,0);scrollDown();
+  };
+  window.visualViewport.addEventListener('resize',fit);
+  window.visualViewport.addEventListener('scroll',function(){window.scrollTo(0,0)});
+}
+
+pick(0);
+syncSend();
+})();
+</script>
+</body>
+</html>

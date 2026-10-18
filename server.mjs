@@ -1,0 +1,1071 @@
+// claclaw —— 手机浏览器连本机 Claude Code 会话（阶段 1 最小原型）
+// 现在只监听 127.0.0.1、没有认证；远程访问和密码等功能验证完再加。
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
+import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import * as push from './push.mjs';
+import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
+
+// 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
+// CLACLAW_HOST 可以写逗号分隔的列表覆盖默认值
+function tailscaleIp() {
+  for (const bin of ['tailscale', '/usr/local/bin/tailscale', '/Applications/Tailscale.app/Contents/MacOS/Tailscale']) {
+    try {
+      const ip = execFileSync(bin, ['ip', '-4'], { timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().split('\n')[0];
+      if (/^100\./.test(ip)) return ip;
+    } catch {}
+  }
+  return null;
+}
+// https 地址：Tailscale 的 MagicDNS 名字 + tailscale serve 时可用；拿不到就没有（页面上不显示跳转链接）
+function httpsUrl() {
+  for (const bin of ['tailscale', '/usr/local/bin/tailscale', '/Applications/Tailscale.app/Contents/MacOS/Tailscale']) {
+    try {
+      const st = JSON.parse(execFileSync(bin, ['status', '--json'], { timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).toString());
+      const name = String(st?.Self?.DNSName || '').replace(/\.$/, '');
+      const serve = execFileSync(bin, ['serve', 'status'], { timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+      if (name && serve.includes('https://' + name)) return 'https://' + name;
+      return null;
+    } catch {}
+  }
+  return null;
+}
+let HTTPS_URL = null, httpsCheckedAt = 0;
+function getHttpsUrl() {
+  if (Date.now() - httpsCheckedAt > 60_000) { HTTPS_URL = httpsUrl(); httpsCheckedAt = Date.now(); }
+  return HTTPS_URL;
+}
+
+const HOSTS = process.env.CLACLAW_HOST
+  ? process.env.CLACLAW_HOST.split(',').map(x => x.trim()).filter(Boolean)
+  : ['127.0.0.1', tailscaleIp()].filter(Boolean);
+if (HOSTS.some(h => h === '0.0.0.0' || h === '::')) throw new Error('不允许监听所有网卡');
+// 端口：命令行 --port / -p 优先，其次环境变量 CLACLAW_PORT，默认 8787
+function argPort() {
+  const a = process.argv.slice(2);
+  for (let i = 0; i < a.length; i++) {
+    const m = a[i].match(/^--port=(.+)$/);
+    if (m) return m[1];
+    if (a[i] === '--port' || a[i] === '-p') return a[i + 1];
+  }
+}
+const PORT = Number(argPort() ?? process.env.CLACLAW_PORT ?? 8787);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('端口不合法：' + (argPort() ?? process.env.CLACLAW_PORT));
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const REGISTRY = path.join(os.homedir(), '.claude', 'sessions');
+const HOME = os.homedir();
+
+// 网页上可切换的基本模式；原会话用的是别的模式（比如 bypassPermissions）时，
+// 网页继承它，并把它加进这个会话可切换的列表里 —— 只对该会话有效，不会凭空给出 bypass
+const MODES = ['default', 'acceptEdits', 'plan'];
+const ALL_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions', 'dontAsk', 'auto'];
+
+// 原会话在原处（VS Code / 终端）最后一次用的权限模式：从会话记录末尾往前找 user 记录的 permissionMode，
+// 跳过网页（entrypoint=sdk-ts）自己写的，否则网页用过一次就把原来的模式盖掉了
+function originalMode(file) {
+  let fd;
+  try { fd = fs.openSync(file, 'r'); } catch { return null; }
+  try {
+    const CHUNK = 4 << 20;
+    let pos = fs.fstatSync(fd).size, carry = Buffer.alloc(0);
+    while (pos > 0) {
+      const start = Math.max(0, pos - CHUNK);
+      const buf = Buffer.alloc(pos - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      pos = start;
+      let all = Buffer.concat([buf, carry]);
+      // 块首那半行留到下一轮拼完整再解析（按字节切，避免把多字节字符切坏）
+      if (pos > 0) { const nl = all.indexOf(10); carry = all.subarray(0, nl < 0 ? all.length : nl); all = nl < 0 ? Buffer.alloc(0) : all.subarray(nl + 1); }
+      const lines = all.toString('utf8').split('\n');
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const l = lines[i];
+        if (!l.includes('"permissionMode"')) continue;
+        try {
+          const o = JSON.parse(l);
+          if (o.type === 'user' && o.permissionMode && o.entrypoint !== 'sdk-ts' && ALL_MODES.includes(o.permissionMode)) return o.permissionMode;
+        } catch {}
+      }
+    }
+  } finally { fs.closeSync(fd); }
+  return null;
+}
+const OUT_MAX = 4000;
+// 发图：前端会先压缩到长边 2000px 以内；这里再兜底限制张数和单张大小（base64 字符数）
+const MAX_IMAGES = 5;
+const MAX_IMAGE_B64 = 7 * 1024 * 1024;
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+// 历史记录里的图片总量上限，超过的只显示占位，免得打开会话时传几十 MB
+const HISTORY_IMAGE_BUDGET = 4 * 1024 * 1024;
+const HISTORY_MAX = 80;
+const IDLE_CLOSE_MS = 60_000;
+// 新建后还没发过消息的会话：Claude Code 要等第一条消息才建会话文件，关掉就什么都不剩，所以多留一会儿
+const IDLE_CLOSE_NEW_MS = 30 * 60_000;
+// 原处（VS Code / 终端）闲置满这么久，网页端才能接管；反方向（原处收回）任何时候都行
+const TAKEOVER_MIN = Number(process.env.CLACLAW_TAKEOVER_MIN ?? 30);
+const WATCH_MS = 3000;
+
+// 去掉从父 Claude 会话继承来的 CLAUDE* 变量，否则子进程会被当成那个会话的子进程，
+// 不登记到 ~/.claude/sessions/，也收不到别的会话的消息（阶段 0 实测）
+const CHILD_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^CLAUDE/.test(k)));
+// 额度接近上限时 Claude Code 默认不出建议回复；这个开关让它在「接近上限」时也照常出（到上限仍然不出）
+CHILD_ENV.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = 'true';
+
+const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+
+// ---------- 会话登记表：判断某个会话是不是正被终端 / VS Code 占用 ----------
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+function liveRegistry() {
+  const map = new Map();
+  let files = [];
+  try { files = fs.readdirSync(REGISTRY).filter(f => f.endsWith('.json')); } catch {}
+  for (const f of files) {
+    try {
+      const o = JSON.parse(fs.readFileSync(path.join(REGISTRY, f), 'utf8'));
+      if (o.sessionId && pidAlive(o.pid)) {
+        const list = map.get(o.sessionId) || [];
+        list.push({ pid: o.pid, entrypoint: o.entrypoint, status: o.status, name: o.name, procStart: o.procStart, statusUpdatedAt: o.statusUpdatedAt || 0 });
+        map.set(o.sessionId, list);
+      }
+    } catch {}
+  }
+  return map;
+}
+
+// 同一个会话在登记表里、但不是 claclaw 自己起的进程
+function foreignHolders(sessionId, live = liveRegistry()) {
+  const ours = runners.get(sessionId)?.childPid;
+  return (live.get(sessionId) || []).filter(r => r.pid !== ours && !(r.entrypoint === 'sdk-ts' && isOurChild(r.pid)));
+}
+
+function isOurChild(pid) {
+  try { return Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)]).toString().trim()) === process.pid; } catch { return false; }
+}
+
+// 原处最近一次活跃：会话文件最后修改时间 和 登记表状态变化时间 取较晚的
+function lastActive(holder, jsonlPath) {
+  let mtime = 0;
+  try { mtime = fs.statSync(jsonlPath).mtimeMs; } catch {}
+  return Math.max(mtime, holder.statusUpdatedAt || 0);
+}
+
+function takeoverInfo(sessionId, jsonlPath, live) {
+  const holders = foreignHolders(sessionId, live);
+  if (!holders.length) return null;
+  const h = holders[0];
+  const idleMin = Math.floor((Date.now() - Math.max(...holders.map(x => lastActive(x, jsonlPath)))) / 60000);
+  const allIdle = holders.every(x => x.status === 'idle');
+  return {
+    pids: holders.map(x => x.pid), entrypoint: h.entrypoint, name: h.name, status: h.status,
+    idleMin, canTakeover: allIdle && idleMin >= TAKEOVER_MIN, needMin: TAKEOVER_MIN,
+  };
+}
+
+// 防 pid 被复用：登记表里的 procStart 就是 UTC 下的 ps lstart
+function sameProcess(holder) {
+  try {
+    const lstart = execFileSync('ps', ['-o', 'lstart=', '-p', String(holder.pid)], { env: { ...process.env, TZ: 'UTC' } }).toString();
+    const norm = x => String(x).replace(/\s+/g, ' ').trim();
+    return !holder.procStart || norm(lstart) === norm(holder.procStart);
+  } catch { return false; }
+}
+
+async function endHolders(sessionId) {
+  const holders = foreignHolders(sessionId);
+  for (const h of holders) {
+    if (!sameProcess(h)) { log('skip pid', h.pid, 'procStart mismatch'); continue; }
+    log('takeover: SIGTERM', h.pid, h.entrypoint, h.name);
+    try { process.kill(h.pid, 'SIGTERM'); } catch {}
+  }
+  for (let i = 0; i < 50; i++) {
+    if (!holders.some(h => pidAlive(h.pid))) return true;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  for (const h of holders) if (pidAlive(h.pid)) { log('takeover: SIGKILL', h.pid); try { process.kill(h.pid, 'SIGKILL'); } catch {} }
+  await new Promise(r => setTimeout(r, 300));
+  return !holders.some(h => pidAlive(h.pid));
+}
+
+function jsonlPathOf(info) {
+  // ~/.claude/projects/<cwd 中非字母数字换成 -> /<id>.jsonl
+  return path.join(HOME, '.claude', 'projects', String(info.cwd || '').replace(/[^A-Za-z0-9]/g, '-'), info.sessionId + '.jsonl');
+}
+
+// ---------- 把工具调用整理成卡片要显示的东西 ----------
+
+function relPath(p, cwd) {
+  if (typeof p !== 'string') return '';
+  if (cwd && p.startsWith(cwd + '/')) return p.slice(cwd.length + 1);
+  if (p.startsWith(HOME + '/')) return '~' + p.slice(HOME.length);
+  return p;
+}
+
+const LOGIN_TOOL = 'mcp__claclaw__set_web_login';
+
+function toolTarget(name, input, cwd) {
+  input = input || {};
+  if (name === LOGIN_TOOL) return '网页登录改成：' + (input.username ? '用户名 ' + input.username : '用户名留空') + '，' + (input.password ? '密码 ' + '•'.repeat(String(input.password).length) : '密码留空');
+  if (name === 'Bash') return input.command || '';
+  if (input.file_path) return relPath(input.file_path, cwd);
+  if (input.notebook_path) return relPath(input.notebook_path, cwd);
+  if (input.pattern) return input.pattern + (input.path ? '  ' + relPath(input.path, cwd) : '');
+  if (input.url) return input.url;
+  if (input.query) return input.query;
+  if (input.description) return input.description;
+  if (input.skill) return input.skill;
+  if (input.to) return '→ ' + input.to;
+  const s = Object.values(input).find(v => typeof v === 'string');
+  return s ? s.slice(0, 200) : '';
+}
+
+function splitLines(s, max) {
+  const lines = String(s ?? '').split('\n');
+  return lines.length > max ? lines.slice(0, max).concat(['… 还有 ' + (lines.length - max) + ' 行']) : lines;
+}
+
+// 返回 [[' '|'+'|'-', text], ...]；没有 diff 可看的工具返回 null
+function toolDiff(name, input) {
+  input = input || {};
+  if (name === 'Edit') {
+    return [
+      ...splitLines(input.old_string, 200).map(l => ['-', l]),
+      ...splitLines(input.new_string, 200).map(l => ['+', l]),
+    ];
+  }
+  if (name === 'MultiEdit' && Array.isArray(input.edits)) {
+    return input.edits.flatMap((e, i) => [
+      ...(i ? [[' ', '⋯']] : []),
+      ...splitLines(e.old_string, 80).map(l => ['-', l]),
+      ...splitLines(e.new_string, 80).map(l => ['+', l]),
+    ]);
+  }
+  if (name === 'Write') return splitLines(input.content, 300).map(l => ['+', l]);
+  return null;
+}
+
+function resultText(content) {
+  let s = '';
+  if (typeof content === 'string') s = content;
+  else if (Array.isArray(content)) s = content.map(b => (b.type === 'text' ? b.text : b.type === 'image' ? '[图片]' : '')).join('\n');
+  return s.length > OUT_MAX ? s.slice(0, OUT_MAX) + '\n… 已截断' : s;
+}
+
+function userText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+  return '';
+}
+
+// 系统注入的提示、斜杠命令包装等不是用户真正打的字，不显示
+function isNoise(text) {
+  const t = text.trim();
+  return !t || /^<(system-reminder|command-|local-command|task-notification|ide_|user-prompt-submit-hook)/.test(t) || t.startsWith('Caveat:');
+}
+
+// 别的会话通过跨会话消息发来的：Claude Code 把正文包在 <cross-session-message> 里，前后再加给 Claude 看的说明和安全提示。
+// 网页上只显示发送者和正文
+// 一条里可能排了好几条，全部取出；不是跨会话消息返回空数组
+function peerMessages(text) {
+  return [...String(text || '').matchAll(/<cross-session-message\b([^>]*)>([\s\S]*?)<\/cross-session-message>/g)].map(m => {
+    const attr = k => (m[1].match(new RegExp(k + '="([^"]*)"')) || [])[1] || '';
+    return { from: attr('from-name') || attr('from'), text: m[2].trim() };
+  });
+}
+
+// ---------- 历史消息 → 前端条目 ----------
+
+async function loadHistory(sessionId, cwd) {
+  const msgs = await getSessionMessages(sessionId, cwd ? { dir: cwd } : undefined);
+  const items = [];
+  const toolIdx = new Map();
+  for (const m of msgs) {
+    if (m.parent_tool_use_id) continue; // 子 Agent 内部的消息不展开
+    const content = m.message?.content;
+    if (m.type === 'user') {
+      if (Array.isArray(content)) {
+        for (const b of content) {
+          if (b.type === 'tool_result' && toolIdx.has(b.tool_use_id)) {
+            const it = items[toolIdx.get(b.tool_use_id)];
+            it.status = b.is_error ? 'no' : 'ok';
+            it.output = resultText(b.content);
+          }
+        }
+      }
+      const t = userText(content);
+      const peers = peerMessages(t);
+      if (peers.length) { for (const p of peers) items.push({ kind: 'peer', from: p.from, text: p.text }); continue; }
+      const imgs = Array.isArray(content) ? content.filter(b => b.type === 'image' && b.source?.type === 'base64') : [];
+      if (imgs.length && !/<command-name>/.test(t)) {
+        items.push({ kind: 'user', text: isNoise(t) ? '' : t, images: imgs.map(b => b.source) });
+        continue;
+      }
+      const cmd = t.match(/<command-name>\s*(\/?[^<\s]+)\s*<\/command-name>/);
+      if (cmd) {
+        // 用户执行过的斜杠命令：记录里被包成 <command-name>…</command-name><command-args>…</command-args>
+        const args = (t.match(/<command-args>([\s\S]*?)<\/command-args>/) || [])[1] || '';
+        items.push({ kind: 'user', text: (cmd[1].startsWith('/') ? cmd[1] : '/' + cmd[1]) + (args.trim() ? ' ' + args.trim() : '') });
+      } else if (!isNoise(t)) items.push({ kind: 'user', text: t });
+    } else if (m.type === 'assistant' && Array.isArray(content)) {
+      for (const b of content) {
+        if (b.type === 'text' && b.text.trim()) items.push({ kind: 'ai', text: b.text });
+        else if (b.type === 'tool_use') {
+          toolIdx.set(b.id, items.length);
+          items.push({ kind: 'tool', id: b.id, name: b.name, target: toolTarget(b.name, b.input, cwd), diff: toolDiff(b.name, b.input), status: 'ok' });
+        }
+      }
+    }
+  }
+  const shown = items.slice(-HISTORY_MAX);
+  // 图片预算从最新的往前分：近的图优先显示，超出的给 null（前端显示占位）
+  let budget = HISTORY_IMAGE_BUDGET;
+  for (let i = shown.length - 1; i >= 0; i--) {
+    if (!shown[i].images) continue;
+    shown[i] = { ...shown[i], images: shown[i].images.map(src => {
+      if (budget < src.data.length) return null;
+      budget -= src.data.length;
+      return 'data:' + src.media_type + ';base64,' + src.data;
+    }) };
+  }
+  return shown;
+}
+
+// ---------- Runner：一个被网页打开的会话 = 一个常驻的 SDK query ----------
+
+const runners = new Map(); // sessionId -> Runner
+
+// 网页里打开的会话才有这个工具：用户在对话里说「把网页登录改成 001 002」，Claude 调它。
+// 调用照常走权限确认（手机上会弹「允许」），不会静默修改。
+function claclawMcp() {
+  return createSdkMcpServer({
+    name: 'claclaw',
+    version: '1.0.0',
+    tools: [
+      tool(
+        'set_web_login',
+        '修改 claclaw 网页（就是用户现在用来和你对话的这个手机网页）的登录用户名和密码。' +
+        '只在用户明确要求改网页登录用户名/密码时调用，例如「把用户密码改成 001 002」= username 001、password 002。' +
+        '用户名和密码各自可以留空（传空字符串），但至少要有一个；用户说「只要密码 xxx」就 username 传空。' +
+        '以本说明为准：如果之前的对话里出现过别的限制（例如必须有用户名、有 admin 初始账号），那些已经过时。' +
+        '只保留最后一次设置的这一组；用户首次打开网页时设置的初始账号始终有效，不受影响。回复里不要复述密码。',
+        { username: z.string().default('').describe('新的用户名，不要用户名就传空字符串'), password: z.string().default('').describe('新的密码，不要密码就传空字符串') },
+        async ({ username, password }) => {
+          try {
+            const r = setLastSet(username, password);
+            log('web login changed via chat');
+            return { content: [{ type: 'text', text: '已改好：' + describeCredential(r) + '。下次登录生效，初始账号仍然可用。' }] };
+          } catch (e) {
+            return { content: [{ type: 'text', text: '修改失败：' + e.message }], isError: true };
+          }
+        },
+        { alwaysLoad: true },
+      ),
+    ],
+  });
+}
+
+class Runner {
+  constructor(info, mode, allowedModes, opts = {}) {
+    this.id = info.sessionId;
+    this.info = info;
+    // 新建的会话：用预先分配的 sessionId 开新会话，而不是 resume（第一条消息之前还没有会话文件）
+    this.isNew = !!opts.isNew;
+    this.createdAt = Date.now();
+    this.allowedModes = allowedModes;
+    this.cwd = info.cwd;
+    this.title = info.summary;
+    this.mode = mode;
+    this.busy = false;
+    this.subs = new Set();
+    this.pending = new Map(); // requestId -> { resolve, input, suggestions, card }
+    this.queue = [];
+    this.wake = null;
+    this.closeTimer = null;
+    this.closed = false;
+    this.textOpen = false;
+    this.start();
+  }
+
+  start() {
+    const self = this;
+    const inbox = {
+      async *[Symbol.asyncIterator]() {
+        while (!self.closed) {
+          while (self.queue.length) yield self.queue.shift();
+          await new Promise(r => (self.wake = r));
+        }
+      },
+    };
+    this.q = query({
+      prompt: inbox,
+      options: {
+        ...(this.isNew ? { sessionId: this.id, ...(this.info.customTitle ? { title: this.info.customTitle } : {}) } : { resume: this.id }),
+        cwd: this.cwd,
+        permissionMode: this.mode,
+        // 只有继承来的模式就是 bypass 时才放开（SDK 要求显式同意才能进 bypass）
+        allowDangerouslySkipPermissions: this.allowedModes.includes('bypassPermissions'),
+        includePartialMessages: true,
+        // 每轮结束后由 Claude Code 生成一条「下一句可能要说的话」，在网页输入框里做成提示
+        promptSuggestions: true,
+        // 不传 settingSources = 和 CLI 一样加载 user + project + local，网页会话与原会话的权限完全一致
+        env: CHILD_ENV,
+        mcpServers: { claclaw: claclawMcp() },
+        canUseTool: (name, input, o) => this.askPermission(name, input, o),
+        stderr: d => log('[stderr]', this.id.slice(0, 8), String(d).trim().slice(0, 300)),
+      },
+    });
+    // init 要等第一条消息才来，命令列表不能等它：一打开就取（init 到了再按「仅终端可用」过滤一遍）
+    this.loadCommands();
+    this.pump().catch(e => {
+      log('runner error', this.id.slice(0, 8), e?.message);
+      this.emit({ t: 'error', message: '会话进程出错：' + (e?.message || e) });
+    }).finally(() => this.dispose(this.closeReason));
+  }
+
+  emit(ev) {
+    const s = JSON.stringify({ ...ev, sessionId: this.id });
+    for (const ws of this.subs) if (ws.readyState === 1) ws.send(s);
+  }
+
+  async pump() {
+    for await (const m of this.q) {
+      if (m.parent_tool_use_id) continue;
+      if (m.type === 'stream_event') {
+        const e = m.event;
+        if (e.type === 'message_start' && e.message?.id) (this.streamed ||= new Set()).add(e.message.id);
+        if (e.type === 'content_block_start' && e.content_block?.type === 'text') {
+          this.textOpen = true; this.emit({ t: 'ai.start' });
+        } else if (e.type === 'content_block_delta' && e.delta?.type === 'text_delta' && this.textOpen) {
+          this.emit({ t: 'ai.delta', text: e.delta.text });
+        } else if (e.type === 'content_block_stop' && this.textOpen) {
+          this.textOpen = false; this.emit({ t: 'ai.end' });
+        }
+      } else if (m.type === 'assistant') {
+        // /context 这类本地命令的输出是一条整段的 assistant 消息，没有流式片段，要整段发
+        if (!this.streamed?.has(m.message?.id)) {
+          const text = (m.message?.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+          if (text.trim()) this.emit({ t: 'ai.full', text });
+        }
+        for (const b of m.message?.content || []) {
+          if (b.type === 'tool_use') {
+            this.emit({ t: 'tool.start', id: b.id, name: b.name, target: toolTarget(b.name, b.input, this.cwd), diff: toolDiff(b.name, b.input) });
+          }
+        }
+      } else if (m.type === 'user') {
+        const content = m.message?.content;
+        if (Array.isArray(content)) {
+          for (const b of content) {
+            if (b.type === 'tool_result') this.emit({ t: 'tool.result', id: b.tool_use_id, output: resultText(b.content), isError: !!b.is_error });
+          }
+        }
+        const peers = peerMessages(userText(content));
+        for (const p of peers) this.emit({ t: 'peer', from: p.from, text: p.text });
+        if (!peers.length && m.origin?.kind === 'peer') this.emit({ t: 'peer', from: m.origin.name || m.origin.from || '', text: '' });
+      } else if (m.type === 'system') {
+        if (m.subtype === 'init') {
+          this.mode = m.permissionMode || this.mode;
+          this.childPid = (liveRegistry().get(this.id) || []).find(r => r.entrypoint === 'sdk-ts' && isOurChild(r.pid))?.pid;
+          log('init', this.id.slice(0, 8), 'mode', this.mode, 'model', m.model);
+          this.terminalOnly = new Set(m.terminal_slash_commands || []);
+          this.loadCommands();
+        } else if (m.subtype === 'peer_message_hold') {
+          const who = m.from_name || m.from || '另一个会话';
+          if (m.state === 'held') this.emit({ t: 'sys', text: who + ' 发来一条消息，因权限模式不同被扣住，需要批准（网页端暂不支持批准）' });
+          else this.emit({ t: 'sys', text: who + ' 的消息：' + (m.outcome || m.state) });
+        } else if (m.subtype === 'local_command_output') {
+          // /cost、/context 这类本地命令的输出
+          this.emit({ t: 'cmd.out', text: String(m.content || '') });
+        } else if (m.subtype === 'compact_boundary') {
+          const c = m.compact_metadata || {};
+          const k = n => (n >= 1000 ? Math.round(n / 1000) + 'k' : String(n ?? '?'));
+          this.emit({ t: 'sys', text: (c.trigger === 'auto' ? '已自动压缩会话历史' : '已压缩会话历史') + '（' + k(c.pre_tokens) + (c.post_tokens != null ? ' → ' + k(c.post_tokens) : '') + ' tokens）' });
+        } else if (m.subtype === 'commands_changed') {
+          this.loadCommands();
+        } else if (m.subtype === 'session_state_changed' || m.subtype === 'status') {
+          // 不需要显示
+        }
+      } else if (m.type === 'prompt_suggestion') {
+        // 在 result 之后才到；只保留最新一条，重新打开会话时也带上
+        this.suggestion = m.suggestion;
+        this.emit({ t: 'suggest', text: m.suggestion });
+      } else if (m.type === 'result') {
+        this.busy = false;
+        this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined });
+        this.notify(m.subtype === 'success' ? '回复完了' : '这一轮出错结束了', 'done-' + this.id);
+        this.maybeScheduleClose();
+      }
+    }
+  }
+
+  // 当前会话可用的斜杠命令（内置 + skill + 插件 + MCP），去掉只能在终端里用的
+  async loadCommands() {
+    try {
+      const list = await this.q.supportedCommands();
+      const seen = new Set();
+      this.commands = list
+        .filter(c => !this.terminalOnly?.has(c.name) && !c.name.startsWith('__'))
+        .filter(c => (seen.has(c.name) ? false : seen.add(c.name)))
+        .map(c => ({ name: c.name, description: c.description || '', hint: c.argumentHint || '', builtin: !!c.builtin }))
+        .sort((a, b) => (b.builtin - a.builtin) || a.name.localeCompare(b.name));
+      this.emit({ t: 'commands', commands: this.commands });
+    } catch (e) {
+      log('supportedCommands failed', e?.message);
+    }
+  }
+
+  send(text, images = []) {
+    if (this.busy) return false;
+    this.busy = true;
+    this.suggestion = null;
+    this.cancelClose();
+    // 有图片时用内容块数组：图片在前、文字在后（Claude 看图再读问题效果更好）
+    const content = images.length
+      ? [...images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } })),
+         ...(text ? [{ type: 'text', text }] : [])]
+      : text;
+    this.queue.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null });
+    this.wake?.();
+    return true;
+  }
+
+  askPermission(name, input, o) {
+    // 网页端还不支持回答选择题：拒绝并让 Claude 改成在回复里直接问
+    const requestId = crypto.randomUUID();
+    const canAlways = !!(o.suggestions?.length) && !o.suppressAlwaysAllowRule;
+    const req = {
+      t: 'perm.request', requestId, toolUseID: o.toolUseID, name,
+      title: o.title || null,
+      displayName: o.displayName || name,
+      description: o.description || '',
+      target: toolTarget(name, input, this.cwd),
+      plan: name === 'ExitPlanMode' ? String(input?.plan || '') : undefined,
+      // 选择题：把题目和选项交给网页，网页把答案按「题目文字 → 选中的选项」传回来
+      questions: name === 'AskUserQuestion' && Array.isArray(input?.questions)
+        ? input.questions.map(q => ({ question: String(q.question || ''), header: String(q.header || ''), multiSelect: !!q.multiSelect,
+            options: (q.options || []).map(o => ({ label: String(o.label || ''), description: String(o.description || '') })) }))
+        : undefined,
+      reason: o.decisionReason || '',
+      canAlways, defaultToNo: !!o.defaultToNo,
+    };
+    return new Promise(resolve => {
+      this.pending.set(requestId, { resolve, input, suggestions: o.suggestions, req });
+      o.signal?.addEventListener('abort', () => {
+        if (this.pending.delete(requestId)) {
+          this.emit({ t: 'perm.cancel', requestId, toolUseID: o.toolUseID });
+          resolve({ behavior: 'deny', message: '已取消' });
+        }
+      });
+      this.emit(req);
+      this.notify(req.questions ? 'Claude 在问你问题' : '等你确认：' + (req.displayName || name), 'perm-' + this.id);
+    });
+  }
+
+  replyPermission(requestId, decision, answers) {
+    const p = this.pending.get(requestId);
+    if (!p) return;
+    this.pending.delete(requestId);
+    if (decision === 'answer' && p.req.questions) {
+      // 只收题目里有的、字符串的答案；每道题都要有答案
+      const clean = {};
+      for (const q of p.req.questions) {
+        const a = answers && typeof answers[q.question] === 'string' ? answers[q.question].trim().slice(0, 2000) : '';
+        if (a) clean[q.question] = a;
+      }
+      if (Object.keys(clean).length === p.req.questions.length) {
+        p.resolve({ behavior: 'allow', updatedInput: { ...p.input, answers: clean } });
+        this.emit({ t: 'perm.done', requestId, toolUseID: p.req.toolUseID, decision: 'answer', answers: clean });
+        return;
+      }
+      decision = 'deny';
+    }
+    if (decision === 'allow') p.resolve({ behavior: 'allow', updatedInput: p.input });
+    else if (decision === 'allow_session' && p.req.canAlways) p.resolve({ behavior: 'allow', updatedInput: p.input, updatedPermissions: p.suggestions });
+    else p.resolve({ behavior: 'deny', message: p.req.questions ? '用户没有回答这个问题（在网页上取消了）。' : '用户在网页上拒绝了这次操作。' });
+    this.emit({ t: 'perm.done', requestId, toolUseID: p.req.toolUseID, decision });
+  }
+
+  async interrupt() {
+    for (const id of [...this.pending.keys()]) this.replyPermission(id, 'deny');
+    try { await this.q.interrupt(); } catch (e) { log('interrupt failed', e?.message); }
+    this.emit({ t: 'sys', text: '已中断' });
+  }
+
+  async setMode(mode) {
+    if (!this.allowedModes.includes(mode)) return;
+    try {
+      await this.q.setPermissionMode(mode);
+      this.mode = mode;
+      this.emit({ t: 'mode', mode });
+    } catch (e) {
+      this.emit({ t: 'error', message: '切换模式失败：' + e?.message });
+    }
+  }
+
+  subscribe(ws) { this.subs.add(ws); this.cancelClose(); }
+
+  // 有人正看着这个会话（页面在前台、打开的就是它）就不推送
+  watched() { return [...this.subs].some(ws => ws.visible !== false); }
+
+  notify(body, tag) {
+    if (this.watched()) return;
+    const title = this.info.customTitle || this.title || path.basename(this.cwd || '') || '会话';
+    push.sendAll({ title, body, tag, url: '/?s=' + this.id }, log)
+      .then(n => n && log('push sent', this.id.slice(0, 8), body, '→', n));
+  }
+  unsubscribe(ws) { this.subs.delete(ws); this.maybeScheduleClose(); }
+
+  // 没人看、也没在跑 → 一分钟后关掉进程，把会话还给终端
+  // 新建的、还没有会话文件（= 一条消息都没发过）
+  unsent() { return this.isNew && !fs.existsSync(jsonlPathOf(this.info)); }
+
+  maybeScheduleClose() {
+    if (this.subs.size || this.busy || this.pending.size || this.closeTimer) return;
+    this.closeTimer = setTimeout(() => this.dispose(), this.unsent() ? IDLE_CLOSE_NEW_MS : IDLE_CLOSE_MS);
+  }
+  cancelClose() { clearTimeout(this.closeTimer); this.closeTimer = null; }
+
+  dispose(reason) {
+    if (this.closed) return;
+    this.closed = true;
+    this.cancelClose();
+    for (const id of [...this.pending.keys()]) this.replyPermission(id, 'deny');
+    try { this.q.close(); } catch {}
+    this.wake?.();
+    runners.delete(this.id);
+    this.emit({ t: 'session.closed', reason });
+    log('closed', this.id.slice(0, 8), reason || '');
+  }
+}
+
+// ---------- HTTP ----------
+
+// 没有对话内容、无法 resume 的「僵尸会话」：比如新开就改了名、一句话没说的会话，
+// 文件里只有一条 custom-title。每条真实消息都带 cwd，没有 cwd 就说明从没聊过；
+// 小文件再确认一下有没有 user 消息（大文件不可能是空会话，不读）
+function resumable(s) {
+  if (!s.cwd) return false;
+  if ((s.fileSize ?? Infinity) > 64 * 1024) return true;
+  try { return fs.readFileSync(jsonlPathOf(s), 'utf8').includes('"type":"user"'); } catch { return true; }
+}
+
+// 网页里新建的会话是 SDK 起的（entrypoint=sdk-ts），listSessions({ includeProgrammatic: false })
+// 会把它们和探针、脚本跑出来的会话一起滤掉。记下网页自己建的会话 id，列表里单独补回来。
+// 同时记下新建时继承的权限模式：这种会话从没在 VS Code / 终端用过，originalMode() 找不到东西，
+// 不记的话关掉再打开就掉回 default
+// 文件格式 { id: { mode } }；旧版是 id 数组，读的时候兼容
+const WEB_SESSIONS = path.join(DATA, 'web-sessions.json');
+function webSessions() {
+  try {
+    const o = JSON.parse(fs.readFileSync(WEB_SESSIONS, 'utf8'));
+    return Array.isArray(o) ? Object.fromEntries(o.map(id => [id, {}])) : (o && typeof o === 'object' ? o : {});
+  } catch { return {}; }
+}
+const webSessionIds = () => new Set(Object.keys(webSessions()));
+function rememberWebSession(id, mode) {
+  const all = webSessions();
+  all[id] = { mode };
+  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
+  const tmp = WEB_SESSIONS + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(all, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, WEB_SESSIONS);
+}
+// 会话该继承的模式：原处（VS Code / 终端）最后用的优先；网页新建的会话用新建时记下的
+function inheritedMode(info) {
+  const m = originalMode(jsonlPathOf(info)) || webSessions()[info.sessionId]?.mode;
+  return ALL_MODES.includes(m) ? m : 'default';
+}
+
+async function sessionList() {
+  const ours = webSessionIds();
+  const [normal, all, live] = [
+    await listSessions({ includeProgrammatic: false, limit: 80 }),
+    ours.size ? await listSessions({ includeProgrammatic: true, limit: 500 }) : [],
+    liveRegistry(),
+  ];
+  const seen = new Set(normal.map(s => s.sessionId));
+  const list = normal.concat(all.filter(s => ours.has(s.sessionId) && !seen.has(s.sessionId)));
+  return list.filter(resumable).map(s => {
+    const ours = runners.has(s.sessionId);
+    const elsewhere = ours ? null : takeoverInfo(s.sessionId, jsonlPathOf(s), live);
+    return {
+      id: s.sessionId,
+      title: s.customTitle || s.summary || s.firstPrompt || '(无标题)',
+      cwd: s.cwd || '',
+      cwdShort: relPath(s.cwd || '', null),
+      branch: s.gitBranch || '',
+      lastModified: s.lastModified,
+      openInWeb: ours,
+      busyElsewhere: elsewhere,
+    };
+  }).concat(
+    // 网页里新建、还没发过消息的会话：没有会话文件，listSessions 看不到，也列出来
+    [...runners.values()].filter(r => !r.closed && r.unsent()).map(r => ({
+      id: r.id, title: r.info.customTitle || '新会话', cwd: r.cwd, cwdShort: relPath(r.cwd || '', null),
+      branch: '', lastModified: r.createdAt, openInWeb: true, busyElsewhere: null, unsent: true,
+    })),
+  ).sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+}
+
+// ---------- 登录 ----------
+
+const COOKIE = 'claclaw_sid';
+const fails = new Map(); // ip -> { n, until }
+const MAX_FAILS = 5, LOCK_MS = 10 * 60 * 1000;
+
+function cookieToken(req) {
+  const m = (req.headers.cookie || '').match(/(?:^|;\s*)claclaw_sid=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+const authed = req => checkToken(cookieToken(req));
+
+function readBody(req, max = 4096) {
+  return new Promise((resolve, reject) => {
+    let b = '';
+    req.on('data', c => { b += c; if (b.length > max) { reject(new Error('too large')); req.destroy(); } });
+    req.on('end', () => resolve(b));
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res, code, obj, headers = {}) {
+  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
+  res.end(JSON.stringify(obj));
+}
+
+function loginCookie(token) {
+  return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(TOKEN_TTL_MS / 1000)}`;
+}
+
+// 首次设置初始账号：只在还没设置过时可用，设好直接登录
+async function handleSetup(req, res) {
+  if (isSetUp()) return sendJson(res, 409, { error: '初始账号已经设置过了，请直接登录' });
+  let body = {};
+  try { body = JSON.parse(await readBody(req)); } catch {}
+  try {
+    setupMaster(body.username, body.password);
+  } catch (e) {
+    return sendJson(res, 400, { error: e.message });
+  }
+  const ip = req.socket.remoteAddress;
+  log('initial login set up from', ip);
+  sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(issueToken('master', ip)) });
+}
+
+async function handleLogin(req, res) {
+  const ip = req.socket.remoteAddress;
+  const f = fails.get(ip);
+  if (f && f.until > Date.now()) return sendJson(res, 429, { error: '失败次数太多，请 ' + Math.ceil((f.until - Date.now()) / 60000) + ' 分钟后再试' });
+  let body = {};
+  try { body = JSON.parse(await readBody(req)); } catch {}
+  const via = verify(body.username, body.password);
+  if (!via) {
+    const n = (f && f.until > Date.now() ? f.n : (f?.n || 0)) + 1;
+    fails.set(ip, { n: n >= MAX_FAILS ? 0 : n, until: n >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
+    log('login failed from', ip);
+    return sendJson(res, 401, { error: n >= MAX_FAILS ? '失败次数太多，10 分钟内不能再试' : '用户名或密码不对' });
+  }
+  fails.delete(ip);
+  const token = issueToken(via, ip);
+  log('login ok from', ip, 'via', via);
+  sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(token) });
+}
+
+// ---------- 删除会话：要求再次输入初始账号；文件挪进 data/trash/，不直接删 ----------
+
+const TRASH = path.join(DATA, 'trash');
+
+async function handleDelete(req, res) {
+  const ip = req.socket.remoteAddress;
+  const f = fails.get(ip);
+  if (f && f.until > Date.now()) return sendJson(res, 429, { error: '失败次数太多，请 ' + Math.ceil((f.until - Date.now()) / 60000) + ' 分钟后再试' });
+  if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+  let body = {};
+  try { body = JSON.parse(await readBody(req)); } catch {}
+  if (!verifyMaster(body.username, body.password)) {
+    const n = (f?.n || 0) + 1;
+    fails.set(ip, { n: n >= MAX_FAILS ? 0 : n, until: n >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
+    log('delete: wrong initial credentials from', ip);
+    return sendJson(res, 401, { error: n >= MAX_FAILS ? '失败次数太多，10 分钟内不能再试' : '初始用户名或密码不对' });
+  }
+  fails.delete(ip);
+  const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
+  const info = list.find(s => s.sessionId === body.id);
+  if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
+  const holders = foreignHolders(info.sessionId);
+  if (holders.length) return sendJson(res, 409, { error: '这个会话正在' + (holders[0].entrypoint === 'cli' ? '终端' : holders[0].entrypoint === 'claude-vscode' ? ' VS Code ' : '别处') + '打开，先关掉再删' });
+  const file = jsonlPathOf(info);
+  if (!fs.existsSync(file)) return sendJson(res, 404, { error: '找不到会话文件' });
+  // 正有网页在看的会话（包括发起删除的这个页面当前所在的会话）不给删
+  const r = runners.get(info.sessionId);
+  if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
+  // 没人看、但进程还没到点关的：先关掉，等会话进程真正退出再挪文件。
+  // 进程退出时会往会话记录末尾补写标题、费用等收尾信息，挪早了会在原处留下一个只有这几行的空壳
+  if (r) {
+    r.closeReason = 'deleted';
+    r.dispose('deleted');
+    for (let i = 0; i < 50 && liveRegistry().get(info.sessionId)?.length; i++) await new Promise(ok => setTimeout(ok, 100));
+    await new Promise(ok => setTimeout(ok, 200));
+  }
+  const dest = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_' + info.sessionId);
+  fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: info.sessionId, title: info.customTitle || info.summary, cwd: info.cwd, from: path.dirname(file), deletedAt: new Date().toISOString() }, null, 2));
+  fs.renameSync(file, path.join(dest, path.basename(file)));
+  const sub = file.replace(/\.jsonl$/, '');
+  if (fs.existsSync(sub)) fs.renameSync(sub, path.join(dest, path.basename(sub)));
+  log('deleted session', info.sessionId.slice(0, 8), '→', path.relative(ROOT, dest));
+  sendJson(res, 200, { ok: true });
+}
+
+// ---------- 会话改名：SDK renameSession 往会话记录末尾追加一条 custom-title，和终端 /rename 一样 ----------
+
+async function handleRename(req, res) {
+  if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+  let body = {};
+  try { body = JSON.parse(await readBody(req)); } catch {}
+  const title = String(body.title ?? '').replace(/\s+/g, ' ').trim();
+  if (!title) return sendJson(res, 400, { error: '名字不能为空' });
+  if (title.length > 100) return sendJson(res, 400, { error: '名字太长了（最多 100 个字）' });
+  const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
+  const info = list.find(s => s.sessionId === body.id);
+  if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
+  await renameSession(info.sessionId, title, info.cwd ? { dir: info.cwd } : undefined);
+  runners.get(info.sessionId)?.emit({ t: 'session.renamed', title });
+  log('renamed session', info.sessionId.slice(0, 8));
+  sendJson(res, 200, { ok: true, title });
+}
+
+const handler = async (req, res) => {
+  try {
+    const url = new URL(req.url, 'http://x');
+    const page = (name) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      fs.createReadStream(path.join(ROOT, 'public', name)).pipe(res);
+    };
+    const go = (to) => { res.writeHead(302, { location: to, 'cache-control': 'no-store' }); res.end(); };
+    const setUp = isSetUp();
+    if (url.pathname === '/setup') return setUp ? go('/login') : page('login.html');
+    if (url.pathname === '/login') return setUp ? page('login.html') : go('/setup');
+    // 主屏幕图标：iOS 添加到主屏幕时不带 cookie 去取，必须免登录；只放行 icons/ 下已知的 png
+    const icon = url.pathname.match(/^\/icons\/([a-z0-9-]+\.png)$/);
+    if (icon && fs.existsSync(path.join(ROOT, 'public', 'icons', icon[1]))) {
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
+      return fs.createReadStream(path.join(ROOT, 'public', 'icons', icon[1])).pipe(res);
+    }
+    // manifest 由浏览器不带 cookie 去取，必须免登录
+    // Service Worker 脚本：浏览器更新它时不一定带 cookie，免登录（里面没有任何敏感内容）
+    if (url.pathname === '/sw.js') {
+      res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache' });
+      return fs.createReadStream(path.join(ROOT, 'public', 'sw.js')).pipe(res);
+    }
+    if (url.pathname === '/manifest.webmanifest') {
+      res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' });
+      return fs.createReadStream(path.join(ROOT, 'public', 'manifest.webmanifest')).pipe(res);
+    }
+    if (url.pathname === '/api/setup' && req.method === 'POST') return handleSetup(req, res);
+    if (url.pathname === '/api/login' && req.method === 'POST') return handleLogin(req, res);
+    if (url.pathname === '/api/logout' && req.method === 'POST') {
+      revokeToken(cookieToken(req));
+      return sendJson(res, 200, { ok: true }, { 'set-cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0` });
+    }
+    if (!authed(req)) {
+      if (url.pathname.startsWith('/api/')) return sendJson(res, 401, { error: 'login required' });
+      return go(setUp ? '/login' : '/setup');
+    }
+    if (url.pathname === '/' || url.pathname === '/index.html') {
+      // 页面版本 = 文件内容的短哈希 + 修改时间，改了页面自动变，用来确认手机拿到的是不是新页面
+      const file = path.join(ROOT, 'public', 'index.html');
+      const html = fs.readFileSync(file, 'utf8');
+      const mt = new Date(fs.statSync(file).mtimeMs);
+      const pad = n => String(n).padStart(2, '0');
+      const ver = crypto.createHash('sha1').update(html).digest('hex').slice(0, 7) +
+        ' · ' + pad(mt.getMonth() + 1) + '-' + pad(mt.getDate()) + ' ' + pad(mt.getHours()) + ':' + pad(mt.getMinutes());
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(html.replace('__PAGE_VERSION__', ver));
+    }
+    if (url.pathname === '/api/push/key') return sendJson(res, 200, { publicKey: push.publicKey(), devices: push.subscriptionCount(), httpsUrl: getHttpsUrl() });
+    if (url.pathname === '/api/push/status') return sendJson(res, 200, { subscribed: push.hasSubscription(url.searchParams.get('endpoint') || '') });
+    if ((url.pathname === '/api/push/subscribe' || url.pathname === '/api/push/unsubscribe') && req.method === 'POST') {
+      if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+      let body = {};
+      try { body = JSON.parse(await readBody(req, 8192)); } catch {}
+      try {
+        if (url.pathname === '/api/push/subscribe') { push.subscribe(body.subscription, req.headers['user-agent']); log('push subscribed', push.subscriptionCount(), 'device(s)'); }
+        else push.unsubscribe(String(body.endpoint || ''));
+        return sendJson(res, 200, { ok: true });
+      } catch (e) { return sendJson(res, 400, { error: e.message }); }
+    }
+    if (url.pathname === '/api/push/test' && req.method === 'POST') {
+      const n = await push.sendAll({ title: 'Claclaw', body: '测试通知：推送已经通了', tag: 'test', url: '/' }, log);
+      return sendJson(res, 200, { sent: n });
+    }
+    if (url.pathname === '/api/sessions/delete' && req.method === 'POST') return handleDelete(req, res);
+    if (url.pathname === '/api/sessions/rename' && req.method === 'POST') return handleRename(req, res);
+    if (url.pathname === '/api/sessions') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(JSON.stringify(await sessionList()));
+    }
+    res.writeHead(404).end('not found');
+  } catch (e) {
+    log('http error', e?.message);
+    res.writeHead(500).end('error');
+  }
+};
+
+// ---------- WebSocket ----------
+
+// 没有认证期间至少挡住跨站：手机上随便哪个网页都能 new WebSocket('ws://100.x:8787')，
+// 浏览器不对 WebSocket 做同源限制，所以只接受 Origin 与 Host 一致的连接
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // 非浏览器客户端（curl / 测试脚本）
+  try { return new URL(origin).host === req.headers.host; } catch { return false; }
+}
+
+const wss = new WebSocketServer({ noServer: true });
+function onUpgrade(req, socket, head) {
+  if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
+    log('ws rejected', req.headers.origin || '', req.socket.remoteAddress);
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+    return socket.destroy();
+  }
+  if (!authed(req)) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    return socket.destroy();
+  }
+  wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
+}
+
+wss.on('connection', (ws, req) => {
+  log('ws connected from', req.socket.remoteAddress);
+  ws.visible = true; // 页面会在切到后台 / 回到前台时告诉我们
+  let runner = null;
+  const send = o => ws.readyState === 1 && ws.send(JSON.stringify(o));
+
+  ws.on('message', async raw => {
+    let m;
+    try { m = JSON.parse(raw); } catch { return; }
+    try {
+      if (m.t === 'visible') { ws.visible = !!m.on; return; }
+      if (m.t === 'session.new') {
+        // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
+        const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
+        const from = list.find(s => s.sessionId === m.from) || runners.get(m.from)?.info;
+        if (!from?.cwd) return send({ t: 'error', message: '找不到要参照的会话' });
+        if (!fs.existsSync(from.cwd)) return send({ t: 'error', message: '会话目录已不存在：' + from.cwd });
+        const title = String(m.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+        const id = crypto.randomUUID();
+        const inherited = (runners.get(from.sessionId)?.mode) || inheritedMode(from);
+        const allowed = MODES.includes(inherited) ? MODES : [...MODES, inherited];
+        const info = { sessionId: id, cwd: from.cwd, summary: title || '新会话', customTitle: title || undefined };
+        runner?.unsubscribe(ws);
+        runner = new Runner(info, inherited, allowed, { isNew: true });
+        runners.set(id, runner);
+        rememberWebSession(id, inherited);
+        runner.subscribe(ws);
+        log('new session', id.slice(0, 8), 'in', from.cwd, 'mode', inherited, 'sibling of', from.sessionId.slice(0, 8));
+        send({
+          t: 'session.opened', id, title: info.summary, cwd: info.cwd, cwdShort: relPath(info.cwd, null),
+          mode: runner.mode, modes: runner.allowedModes, busy: false, history: [], pending: [], suggestion: null,
+          commands: runner.commands || null, isNew: true,
+        });
+      } else if (m.t === 'session.open') {
+        const list = await listSessions({ includeProgrammatic: true, limit: 500 });
+        // 刚新建、还没发过消息的会话不在列表里（没有会话文件），从开着的 runner 里拿
+        const info = list.find(s => s.sessionId === m.id) || runners.get(m.id)?.info;
+        if (!info) return send({ t: 'error', message: '找不到这个会话' });
+        if (!runners.has(m.id)) {
+          if (info.cwd && !fs.existsSync(info.cwd)) return send({ t: 'error', message: '会话目录已不存在：' + info.cwd });
+          const el = takeoverInfo(m.id, jsonlPathOf(info), liveRegistry());
+          if (el) {
+            if (!m.takeover || !el.canTakeover) return send({ t: 'session.busy', id: m.id, ...el });
+            if (!(await endHolders(m.id))) return send({ t: 'error', message: '没能结束原处的会话进程，未接管' });
+            log('takeover done', m.id.slice(0, 8));
+          }
+        }
+        runner?.unsubscribe(ws);
+        const history = await loadHistory(m.id, info.cwd);
+        if (!runners.has(m.id)) {
+          const inherited = inheritedMode(info);
+          const allowed = MODES.includes(inherited) ? MODES : [...MODES, inherited];
+          log('open', m.id.slice(0, 8), 'inherit mode', inherited);
+          runners.set(m.id, new Runner(info, inherited, allowed));
+        }
+        runner = runners.get(m.id);
+        runners.set(m.id, runner);
+        runner.subscribe(ws);
+        log('open', m.id.slice(0, 8), info.cwd);
+        send({
+          t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
+          cwdShort: relPath(info.cwd || '', null), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy, history,
+          pending: [...runner.pending.values()].map(p => p.req),
+          suggestion: runner.busy ? null : runner.suggestion || null,
+          commands: runner.commands || null,
+        });
+      } else if (!runner) {
+        send({ t: 'error', message: '还没有打开会话' });
+      } else if (m.t === 'message.send') {
+        const text = String(m.text || '').trim();
+        const images = Array.isArray(m.images) ? m.images : [];
+        if (images.length > MAX_IMAGES) return send({ t: 'error', message: '一次最多 ' + MAX_IMAGES + ' 张图片' });
+        for (const i of images) {
+          if (!IMAGE_TYPES.includes(i?.media_type) || typeof i.data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(i.data)) return send({ t: 'error', message: '图片格式不支持（只支持 JPEG / PNG / GIF / WebP）' });
+          if (i.data.length > MAX_IMAGE_B64) return send({ t: 'error', message: '图片太大了' });
+        }
+        if (!text && !images.length) return;
+        if (!runner.send(text, images)) send({ t: 'error', message: '上一条还在处理中' });
+        else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data) });
+      } else if (m.t === 'permission.reply') {
+        runner.replyPermission(m.requestId, m.decision, m.answers);
+      } else if (m.t === 'interrupt') {
+        await runner.interrupt();
+      } else if (m.t === 'mode.set') {
+        await runner.setMode(m.mode);
+      }
+    } catch (e) {
+      log('ws error', e?.message);
+      send({ t: 'error', message: String(e?.message || e) });
+    }
+  });
+
+  ws.on('close', () => runner?.unsubscribe(ws));
+});
+
+// 原处重新打开了这个会话 → 以用户在原处的操作为准，网页端立刻退出
+setInterval(() => {
+  if (!runners.size) return;
+  const live = liveRegistry();
+  for (const r of runners.values()) {
+    if (r.closed) continue;
+    const other = foreignHolders(r.id, live);
+    if (other.length) {
+      log('reclaimed by', other[0].entrypoint, other[0].pid, r.id.slice(0, 8));
+      r.closeReason = 'reclaimed';
+      r.emit({ t: 'session.reclaimed', entrypoint: other[0].entrypoint, name: other[0].name });
+      r.dispose('reclaimed');
+    }
+  }
+}, WATCH_MS);
+
+for (const host of HOSTS) {
+  const srv = http.createServer(handler);
+  srv.on('upgrade', onUpgrade);
+  srv.on('error', e => log(`listen ${host}:${PORT} failed:`, e.code || e.message));
+  srv.listen(PORT, host, () => log(`claclaw listening on http://${host}:${PORT}`));
+}
+
+function shutdown() {
+  log('shutting down');
+  for (const r of [...runners.values()]) r.dispose();
+  setTimeout(() => process.exit(0), 500);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
