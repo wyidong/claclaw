@@ -90,18 +90,20 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md th{background:var(--code-bg);font-weight:600;white-space:nowrap}
 .md img.mdimg{display:block;max-width:100%;max-height:320px;margin:.3em 0;border-radius:10px;cursor:zoom-in}
 .peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:3px solid var(--muted);border-radius:4px 10px 10px 4px;background:var(--code-bg);font-size:14px;line-height:1.5}
-.md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px;min-height:38px}
+.md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px}
 .cp{position:absolute;top:5px;right:6px;display:flex;align-items:center;justify-content:center;width:30px;height:28px;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:0;border-radius:7px}
-.cp svg,.acts svg{pointer-events:none;flex:none}
+.cp svg,.ic svg{pointer-events:none;flex:none}
 .md :not(pre)>code{cursor:copy}
-.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.acts button{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:none;color:var(--muted);font-size:12px;line-height:1.2;padding:5px 9px;border-radius:8px;max-width:100%;font-family:var(--mono)}
-.acts button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.peer .acts{margin-top:5px}
+.ic{display:inline-flex;align-items:center;justify-content:center;vertical-align:-3px;width:22px;height:20px;margin:0 1px 0 3px;padding:0;border:0;border-radius:5px;background:none;color:var(--muted)}
+.ic:active,.cp:active{background:var(--code-bg)}
+.md blockquote{position:relative;padding-right:40px}
+.md blockquote>.cp{top:0;right:2px}
 #toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
 #toast.on{opacity:1}
 .peer .from{font-size:12px;color:var(--muted);margin-bottom:3px}
-.peer .body{white-space:pre-wrap;word-break:break-word}
+.peer .body{word-break:break-word}
+.peer code{font-family:var(--mono);font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
+.peer .md pre{background:var(--surface)}
 .sys{align-self:center;max-width:92%;text-align:center;color:var(--muted);font-size:13px;line-height:1.45}
 .think{align-self:flex-start;display:flex;align-items:center;gap:5px;padding:6px 0}
 .think .tt{margin-left:6px;font-size:13px;color:var(--muted)}
@@ -375,15 +377,19 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 
 // ---------- Markdown：自己写的小渲染器，先转义再加标签，回复里的内容没法往页面注入 HTML ----------
 // 支持：标题、粗体、斜体、删除线、行内代码、代码块、有序/无序（可嵌套）列表、表格、引用、分割线、链接
+var COPY_ICON='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+// 紧跟在要复制的东西后面的小图标：复制它前面那个元素（链接复制网址，代码复制文字）
+var COPY_BTN='<button class="ic" type="button" aria-label="复制">'+COPY_ICON+'</button>';
 function mdInline(s){
   var keep=[];
   var put=function(h){keep.push(h);return '\u0000'+(keep.length-1)+'\u0000'};
   s=esc(s);
-  s=s.replace(/`([^`\n]+)`/g,function(_,c){return put('<code>'+c+'</code>')});
+  // 像 ID、命令、路径的行内代码后面跟一个复制图标（太短或纯单词的只是强调，不加）
+  s=s.replace(/`([^`\n]+)`/g,function(_,c){return put('<code>'+c+'</code>'+(c.trim().length>=6&&/[0-9\/._:@=-]/.test(c)?COPY_BTN:''))});
   // 图片 ![说明](地址)：只认 http(s) 和本站路径（/icons/... 这类，不认 // 开头的）
   s=s.replace(/!\[([^\]\n]*)\]\(((?:https?:\/\/|\/(?!\/))[^\s)]+)\)/g,function(_,t,u){return put('<img class="mdimg" src="'+u+'" alt="'+t+'" loading="lazy">')});
-  s=s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>')});
-  s=s.replace(/(^|[\s(（])(https?:\/\/[^\s<)）]+)/g,function(_,pre,u){return pre+put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>')});
+  s=s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>'+COPY_BTN)});
+  s=s.replace(/(^|[\s(（：:，、；])(https?:\/\/[^\s<)），。、；！？」]+)/g,function(_,pre,u){return pre+put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'+COPY_BTN)});
   s=s.replace(/\*\*([^*\n]+?)\*\*/g,'<strong>$1</strong>');
   s=s.replace(/~~([^~\n]+?)~~/g,'<del>$1</del>');
   s=s.replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\*)/g,'$1<em>$2</em>');
@@ -395,7 +401,6 @@ function mdBlockStart(l,next){
   return /^\s*(```|~~~)/.test(l)||/^#{1,6}\s/.test(l)||/^\s*>/.test(l)||MD_LIST.test(l)||/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)||(l.indexOf('|')>=0&&next!==undefined&&MD_TABLE_SEP.test(next));
 }
 function mdCells(l){l=l.trim().replace(/^\|/,'').replace(/\|$/,'');return l.split('|').map(function(c){return c.trim()})}
-var COPY_ICON='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 function md(src){
   var L=String(src).replace(/\r\n?/g,'\n').split('\n'),out=[],i=0,m;
   while(i<L.length){
@@ -417,7 +422,7 @@ function md(src){
     }
     if(/^\s*>/.test(l)){                          // 引用
       var q=[];while(i<L.length&&/^\s*>/.test(L[i])){q.push(L[i].replace(/^\s*>\s?/,''));i++}
-      out.push('<blockquote>'+md(q.join('\n'))+'</blockquote>');continue;
+      out.push('<blockquote><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button>'+md(q.join('\n'))+'</blockquote>');continue;
     }
     if(MD_LIST.test(l)){                          // 列表（按缩进嵌套）
       var items=[];
@@ -489,47 +494,30 @@ function toast(t){
   toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove('on')},1300);
 }
 // 消息下面的「复制」按钮：复制原文（Markdown 源文本）
-// 从消息原文里挑出「用户多半想复制的东西」：网址、代码块、行内代码（ID、命令、路径），按出现顺序去重
-function copyItems(t){
-  var items=[],seen={},m;
-  function add(v,label,block){v=String(v).trim();if(!v||seen[v])return;seen[v]=1;items.push({v:v,label:label||v,block:!!block})}
-  // 一遍扫完：代码块 | 行内代码 | 网址，保持出现顺序
-  var re=/^[ \t]*(```|~~~)[^\n]*\n([\s\S]*?)\n[ \t]*\1[ \t]*$|`([^`\n]+)`|(https?:\/\/[^\s<>()（）「」，。、；！？"'`]+)/gm;
-  while((m=re.exec(String(t)))){
-    if(m[2]!=null){var first=m[2].split('\n').filter(function(x){return x.trim()})[0]||'';add(m[2],first.trim(),true)}
-    else if(m[4])add(m[4].replace(/[.,;:!?]+$/,''));
-    else if(m[3].trim().length>=6&&/[0-9\/._:@=-]/.test(m[3]))add(m[3]);   // 太短或纯单词的行内代码多半只是强调，不算
-  }
-  return items;
-}
-function short(s,n){s=s.replace(/^https?:\/\//,'');return s.length<=n?s:s.slice(0,Math.ceil(n*0.6))+'…'+s.slice(-Math.floor(n*0.4))}
-// 消息下面：只在有值得单独复制的东西（网址、ID、命令、路径）时才出现按钮，点了只复制那一项。
-// 代码块自己右上角有复制按钮，这里不再重复；整条消息需要时长按选择即可。
-function addActs(e,t){
-  if(!t)return;
-  var items=copyItems(t).filter(function(it){return !it.block}).slice(0,6);
-  if(!items.length)return;
-  var a=document.createElement('div');a.className='acts';
-  items.forEach(function(it){
-    var b=document.createElement('button');b.type='button';b.title=it.v;b.setAttribute('aria-label','复制 '+it.v);b._copy=it.v;
-    b.innerHTML=COPY_ICON+'<span></span>';b.lastChild.textContent=short(it.label,26);a.appendChild(b);
-  });
-  e.appendChild(a);
-}
 feed.addEventListener('click',function(e){
   var t=e.target,btn=t.closest&&t.closest('button');
-  if(btn&&btn._copy!=null){copyText(btn._copy);return}
-  if(btn&&btn.classList.contains('cp')){t=btn;var pre=t.parentNode.querySelector('pre');if(pre)copyText(pre.textContent);return}
-  // 点一下行内代码（`xxx`）就复制，方便复制会话 ID、命令、路径
+  if(btn&&btn.classList.contains('ic')){
+    var prev=btn.previousElementSibling;
+    if(prev)copyText(prev.tagName==='A'?prev.getAttribute('href'):prev.textContent);
+    return;
+  }
+  if(btn&&btn.classList.contains('cp')){
+    var box=btn.parentNode,pre=box.querySelector('pre');
+    if(pre&&box.classList.contains('cb'))copyText(pre.textContent);
+    else{var c=box.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}
+    return;
+  }
+  // 点一下行内代码（`xxx`）也能复制
   if(t.tagName==='CODE'&&!(t.parentNode&&t.parentNode.tagName==='PRE')&&t.closest('.md')){copyText(t.textContent);return}
 });
-function addAi(t){var e=document.createElement('div');e.className='msg ai md';e.innerHTML=md(t);addActs(e,t);feed.appendChild(e);scrollDown()}
+function addAi(t){var e=document.createElement('div');e.className='msg ai md';e.innerHTML=md(t);feed.appendChild(e);scrollDown()}
 // 别的会话发来的消息：灰色引用卡片，和自己发的气泡区分开
 function addPeer(from,t){
   var e=document.createElement('div');e.className='peer';
   var f=document.createElement('div');f.className='from';f.textContent='来自会话 '+(from||'?');e.appendChild(f);
-  if(t){var b=document.createElement('div');b.className='body';b.textContent=t;e.appendChild(b)}
-  addActs(e,t);feed.appendChild(e);scrollDown();
+  // 正文按 Markdown 渲染：里面的网址、ID、代码块、引用旁边同样有复制图标
+  if(t){var b=document.createElement('div');b.className='body md';b.innerHTML=md(t);e.appendChild(b)}
+  feed.appendChild(e);scrollDown();
 }
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
@@ -920,7 +908,7 @@ function onEvent(m){
     break;
   case 'ai.end':
     clearTimeout(aiRender);aiRender=null;
-    if(aiEl){aiEl.innerHTML=md(aiText);addActs(aiEl,aiText);aiEl=null;scrollDown()}
+    if(aiEl){aiEl.innerHTML=md(aiText);aiEl=null;scrollDown()}
     if(busy)think(true,'思考中');
     break;
   case 'tool.start':
