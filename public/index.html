@@ -874,6 +874,13 @@ function onEvent(m){
     commands=m.commands||[];
     setBusy(m.busy);
     (m.pending||[]).forEach(onPermRequest);
+    if(outbox){
+      var lastUser=m.history.filter(function(it){return it.kind==='user'}).pop();
+      if(outbox.sid!==m.id)outboxRestore();                       // 换了会话：不往别的会话发，放回输入框
+      else if(lastUser&&lastUser.text===outbox.text)outboxDone();  // 其实已经送到了
+      else if(m.busy)outboxRestore();                              // 会话正忙：放回输入框，等它忙完再发
+      else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');trySend()}
+    }
     scrollDown(true);
     break;
   case 'session.busy':
@@ -894,6 +901,7 @@ function onEvent(m){
     session=null;permQueue=[];suggestion=null;commands=[];cmdMenu.hidden=true;setBusy(false);
     break;
   case 'user':
+    if(outbox&&m.text===outbox.text)outboxDone();
     addUser(m.text,m.images);think(true);
     break;
   case 'ai.start':
@@ -964,6 +972,7 @@ function onEvent(m){
     addSys(m.text);
     break;
   case 'error':
+    if(outbox){outboxRestore();setBusy(false)}
     addSys('⚠ '+m.message);
     break;
   }
@@ -1008,7 +1017,31 @@ function run(text){
   attachments.forEach(function(a){URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
   ta.value='';ta.style.height='auto';
   busy=true;setDock('busy');
-  wsSend({t:'message.send',text:text,images:images});
+  outbox={text:text,images:images,sid:session.id};trySend();
+}
+// 待确认的消息：发出去后要等服务器回显（'user' 事件）才算送达。
+// 手机切后台、换网络后 WebSocket 常常「看着连着、其实已断」，消息会被悄悄吞掉：
+// 8 秒没回显就判定连接已死，主动重连；重连后对照历史记录，没送到就自动重发。
+var outbox=null,outboxTimer=null;
+function trySend(){
+  if(!outbox)return;
+  clearTimeout(outboxTimer);
+  if(!ws||ws.readyState!==1){banner('连接已断开，恢复后会自动发送刚才那条消息');return}
+  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images}));
+  outboxTimer=setTimeout(function(){if(outbox)reconnectNow()},8000);
+}
+function outboxDone(){outbox=null;clearTimeout(outboxTimer)}
+// 丢掉疑似已死的连接，立即重连（不等浏览器慢慢发现断线）
+function reconnectNow(){
+  var old=ws;ws=null;
+  if(old){old.onclose=null;old.onmessage=null;try{old.close()}catch(_){}}
+  banner('连接似乎断了，正在重连…');connect();
+}
+// 输入框还空着就把没送出的文字放回去，免得丢
+function outboxRestore(){
+  if(!outbox)return;
+  if(!ta.value){ta.value=outbox.text;ta.dispatchEvent(new Event('input'))}
+  outboxDone();
 }
 function stop(){wsSend({t:'interrupt'})}
 
