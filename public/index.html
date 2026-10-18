@@ -90,12 +90,13 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md th{background:var(--code-bg);font-weight:600;white-space:nowrap}
 .md img.mdimg{display:block;max-width:100%;max-height:320px;margin:.3em 0;border-radius:10px;cursor:zoom-in}
 .peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:3px solid var(--muted);border-radius:4px 10px 10px 4px;background:var(--code-bg);font-size:14px;line-height:1.5}
-.md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-top:30px}
-.cp{position:absolute;top:5px;right:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:12px;line-height:1;padding:5px 9px;border-radius:7px}
+.md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px;min-height:38px}
+.cp{position:absolute;top:5px;right:6px;display:flex;align-items:center;justify-content:center;width:30px;height:28px;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:0;border-radius:7px}
+.cp svg,.acts svg{pointer-events:none;flex:none}
 .md :not(pre)>code{cursor:copy}
 .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.acts button{border:1px solid var(--line);background:none;color:var(--muted);font-size:12px;line-height:1.2;padding:6px 10px;border-radius:8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.acts button.it{color:var(--accent);border-color:var(--accent);font-family:var(--mono)}
+.acts button{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:none;color:var(--muted);font-size:12px;line-height:1.2;padding:5px 9px;border-radius:8px;max-width:100%;font-family:var(--mono)}
+.acts button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .peer .acts{margin-top:5px}
 #toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
 #toast.on{opacity:1}
@@ -394,6 +395,7 @@ function mdBlockStart(l,next){
   return /^\s*(```|~~~)/.test(l)||/^#{1,6}\s/.test(l)||/^\s*>/.test(l)||MD_LIST.test(l)||/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)||(l.indexOf('|')>=0&&next!==undefined&&MD_TABLE_SEP.test(next));
 }
 function mdCells(l){l=l.trim().replace(/^\|/,'').replace(/\|$/,'');return l.split('|').map(function(c){return c.trim()})}
+var COPY_ICON='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 function md(src){
   var L=String(src).replace(/\r\n?/g,'\n').split('\n'),out=[],i=0,m;
   while(i<L.length){
@@ -402,7 +404,7 @@ function md(src){
     if((m=l.match(/^\s*(```|~~~)/))){            // 代码块
       var fence=m[1],code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
-      i++;out.push('<div class="cb"><button class="cp" type="button">复制</button><pre><code>'+esc(code.join('\n'))+'</code></pre></div>');continue;
+      i++;out.push('<div class="cb"><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code.join('\n'))+'</code></pre></div>');continue;
     }
     if((m=l.match(/^(#{1,6})\s+(.*)$/))){var n=Math.min(m[1].length+2,6);out.push('<h'+n+'>'+mdInline(m[2])+'</h'+n+'>');i++;continue}
     if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)){out.push('<hr>');i++;continue}
@@ -490,29 +492,34 @@ function toast(t){
 // 从消息原文里挑出「用户多半想复制的东西」：网址、代码块、行内代码（ID、命令、路径），按出现顺序去重
 function copyItems(t){
   var items=[],seen={},m;
-  function add(v,label){v=String(v).trim();if(!v||seen[v])return;seen[v]=1;items.push({v:v,label:label||v})}
+  function add(v,label,block){v=String(v).trim();if(!v||seen[v])return;seen[v]=1;items.push({v:v,label:label||v,block:!!block})}
   // 一遍扫完：代码块 | 行内代码 | 网址，保持出现顺序
   var re=/^[ \t]*(```|~~~)[^\n]*\n([\s\S]*?)\n[ \t]*\1[ \t]*$|`([^`\n]+)`|(https?:\/\/[^\s<>()（）「」，。、；！？"'`]+)/gm;
   while((m=re.exec(String(t)))){
-    if(m[2]!=null){var first=m[2].split('\n').filter(function(x){return x.trim()})[0]||'';add(m[2],(m[2].indexOf('\n')>=0?'代码块 ':'')+first.trim())}
+    if(m[2]!=null){var first=m[2].split('\n').filter(function(x){return x.trim()})[0]||'';add(m[2],first.trim(),true)}
     else if(m[4])add(m[4].replace(/[.,;:!?]+$/,''));
     else if(m[3].trim().length>=6&&/[0-9\/._:@=-]/.test(m[3]))add(m[3]);   // 太短或纯单词的行内代码多半只是强调，不算
   }
   return items;
 }
 function short(s,n){s=s.replace(/^https?:\/\//,'');return s.length<=n?s:s.slice(0,Math.ceil(n*0.6))+'…'+s.slice(-Math.floor(n*0.4))}
-// 消息下面：每个可复制的东西一个按钮（点了只复制它），最后是「复制全文」
+// 消息下面：只在有值得单独复制的东西（网址、ID、命令、路径）时才出现按钮，点了只复制那一项。
+// 代码块自己右上角有复制按钮，这里不再重复；整条消息需要时长按选择即可。
 function addActs(e,t){
-  if(!t)return;var a=document.createElement('div');a.className='acts';
-  copyItems(t).slice(0,6).forEach(function(it){
-    var b=document.createElement('button');b.type='button';b.className='it';b.textContent='⧉ '+short(it.label,26);b.title=it.v;b._copy=it.v;a.appendChild(b);
+  if(!t)return;
+  var items=copyItems(t).filter(function(it){return !it.block}).slice(0,6);
+  if(!items.length)return;
+  var a=document.createElement('div');a.className='acts';
+  items.forEach(function(it){
+    var b=document.createElement('button');b.type='button';b.title=it.v;b.setAttribute('aria-label','复制 '+it.v);b._copy=it.v;
+    b.innerHTML=COPY_ICON+'<span></span>';b.lastChild.textContent=short(it.label,26);a.appendChild(b);
   });
-  var b=document.createElement('button');b.type='button';b.textContent='复制全文';b._copy=t;a.appendChild(b);e.appendChild(a);
+  e.appendChild(a);
 }
 feed.addEventListener('click',function(e){
-  var t=e.target;
-  if(t._copy!=null){copyText(t._copy);return}
-  if(t.classList&&t.classList.contains('cp')){var pre=t.parentNode.querySelector('pre');if(pre)copyText(pre.textContent);return}
+  var t=e.target,btn=t.closest&&t.closest('button');
+  if(btn&&btn._copy!=null){copyText(btn._copy);return}
+  if(btn&&btn.classList.contains('cp')){t=btn;var pre=t.parentNode.querySelector('pre');if(pre)copyText(pre.textContent);return}
   // 点一下行内代码（`xxx`）就复制，方便复制会话 ID、命令、路径
   if(t.tagName==='CODE'&&!(t.parentNode&&t.parentNode.tagName==='PRE')&&t.closest('.md')){copyText(t.textContent);return}
 });
