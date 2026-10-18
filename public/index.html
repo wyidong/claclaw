@@ -90,6 +90,14 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md th{background:var(--code-bg);font-weight:600;white-space:nowrap}
 .md img.mdimg{display:block;max-width:100%;max-height:320px;margin:.3em 0;border-radius:10px;cursor:zoom-in}
 .peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:3px solid var(--muted);border-radius:4px 10px 10px 4px;background:var(--code-bg);font-size:14px;line-height:1.5}
+.md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-top:30px}
+.cp{position:absolute;top:5px;right:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:12px;line-height:1;padding:5px 9px;border-radius:7px}
+.md :not(pre)>code{cursor:copy}
+.acts{display:flex;gap:8px;margin-top:6px}
+.acts button{border:1px solid var(--line);background:none;color:var(--muted);font-size:12px;line-height:1;padding:6px 10px;border-radius:8px}
+.peer .acts{margin-top:5px}
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
+#toast.on{opacity:1}
 .peer .from{font-size:12px;color:var(--muted);margin-bottom:3px}
 .peer .body{white-space:pre-wrap;word-break:break-word}
 .sys{align-self:center;max-width:92%;text-align:center;color:var(--muted);font-size:13px;line-height:1.45}
@@ -393,7 +401,7 @@ function md(src){
     if((m=l.match(/^\s*(```|~~~)/))){            // 代码块
       var fence=m[1],code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
-      i++;out.push('<pre><code>'+esc(code.join('\n'))+'</code></pre>');continue;
+      i++;out.push('<div class="cb"><button class="cp" type="button">复制</button><pre><code>'+esc(code.join('\n'))+'</code></pre></div>');continue;
     }
     if((m=l.match(/^(#{1,6})\s+(.*)$/))){var n=Math.min(m[1].length+2,6);out.push('<h'+n+'>'+mdInline(m[2])+'</h'+n+'>');i++;continue}
     if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)){out.push('<hr>');i++;continue}
@@ -462,13 +470,40 @@ lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
 // 回复里的 Markdown 图片：点开全屏；加载完再滚到底，免得图片撑高后看不到最新内容
 feed.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))showImage(e.target.src)});
 feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))scrollDown()},true);
-function addAi(t){var e=document.createElement('div');e.className='msg ai md';e.innerHTML=md(t);feed.appendChild(e);scrollDown()}
+// 复制：http 访问（Tailscale IP）不是安全上下文，navigator.clipboard 不可用，退回 execCommand
+function copyText(t){
+  function legacy(){
+    var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');
+    a.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';document.body.appendChild(a);
+    a.select();a.setSelectionRange(0,t.length);var ok=false;try{ok=document.execCommand('copy')}catch(_){}
+    document.body.removeChild(a);toast(ok?'已复制':'复制失败，请长按选择');
+  }
+  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(function(){toast('已复制')},legacy);else legacy();
+}
+var toastEl=null,toastT=null;
+function toast(t){
+  if(!toastEl){toastEl=document.createElement('div');toastEl.id='toast';document.body.appendChild(toastEl)}
+  toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove('on')},1300);
+}
+// 消息下面的「复制」按钮：复制原文（Markdown 源文本）
+function addActs(e,t){
+  if(!t)return;var a=document.createElement('div');a.className='acts';
+  var b=document.createElement('button');b.type='button';b.textContent='复制';b._copy=t;a.appendChild(b);e.appendChild(a);
+}
+feed.addEventListener('click',function(e){
+  var t=e.target;
+  if(t._copy!=null){copyText(t._copy);return}
+  if(t.classList&&t.classList.contains('cp')){var pre=t.parentNode.querySelector('pre');if(pre)copyText(pre.textContent);return}
+  // 点一下行内代码（`xxx`）就复制，方便复制会话 ID、命令、路径
+  if(t.tagName==='CODE'&&!(t.parentNode&&t.parentNode.tagName==='PRE')&&t.closest('.md')){copyText(t.textContent);return}
+});
+function addAi(t){var e=document.createElement('div');e.className='msg ai md';e.innerHTML=md(t);addActs(e,t);feed.appendChild(e);scrollDown()}
 // 别的会话发来的消息：灰色引用卡片，和自己发的气泡区分开
 function addPeer(from,t){
   var e=document.createElement('div');e.className='peer';
   var f=document.createElement('div');f.className='from';f.textContent='来自会话 '+(from||'?');e.appendChild(f);
   if(t){var b=document.createElement('div');b.className='body';b.textContent=t;e.appendChild(b)}
-  feed.appendChild(e);scrollDown();
+  addActs(e,t);feed.appendChild(e);scrollDown();
 }
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
@@ -859,7 +894,7 @@ function onEvent(m){
     break;
   case 'ai.end':
     clearTimeout(aiRender);aiRender=null;
-    if(aiEl){aiEl.innerHTML=md(aiText);aiEl=null;scrollDown()}
+    if(aiEl){aiEl.innerHTML=md(aiText);addActs(aiEl,aiText);aiEl=null;scrollDown()}
     if(busy)think(true,'思考中');
     break;
   case 'tool.start':
