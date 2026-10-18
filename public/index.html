@@ -53,7 +53,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;border-bottom:1px solid var(--line);background:var(--surface)}
 #sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-align:left}
 #sessBtn .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
-#sessBtn .nm{font-weight:600}
+#sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn .sid{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn svg{flex:none;color:var(--muted)}
 #modeBtn{flex:none;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px}
@@ -855,8 +855,8 @@ function onEvent(m){
   case 'session.opened':
     session={id:m.id,title:m.title,cwd:m.cwd};
     feed.innerHTML='';cards={};permQueue=[];aiEl=null;
-    $('#nm').textContent=(m.cwdShort||'').split('/').pop()||'会话';
-    $('#sid').textContent=m.id.slice(0,8)+'　'+(m.title||'');
+    session.dir=(m.cwdShort||'').split('/').pop()||'';
+    setHeader();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
     setMode(m.mode,false);
@@ -951,7 +951,7 @@ function onEvent(m){
     setMode(m.mode,true);
     break;
   case 'session.renamed':
-    if(session){session.title=m.title;$('#sid').textContent=session.id.slice(0,8)+'　'+m.title}
+    if(session){session.title=m.title;setHeader()}
     break;
   case 'suggest':
     setSuggestion(m.text);
@@ -980,6 +980,13 @@ function onEvent(m){
 
 // ---------- 连接 ----------
 
+// 顶部：会话名（加粗）在左，后面是会话 ID 和目录名；没起名字时用目录名当名字
+function setHeader(){
+  if(!session)return;
+  var t=(session.title||'').trim(),dir=session.dir||'';
+  $('#nm').textContent=t||dir||'会话';
+  $('#sid').textContent=session.id.slice(0,8)+(t&&dir?'　'+dir:'');
+}
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function connect(){
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
