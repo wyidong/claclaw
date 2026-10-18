@@ -93,8 +93,9 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-top:30px}
 .cp{position:absolute;top:5px;right:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:12px;line-height:1;padding:5px 9px;border-radius:7px}
 .md :not(pre)>code{cursor:copy}
-.acts{display:flex;gap:8px;margin-top:6px}
-.acts button{border:1px solid var(--line);background:none;color:var(--muted);font-size:12px;line-height:1;padding:6px 10px;border-radius:8px}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.acts button{border:1px solid var(--line);background:none;color:var(--muted);font-size:12px;line-height:1.2;padding:6px 10px;border-radius:8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acts button.it{color:var(--accent);border-color:var(--accent);font-family:var(--mono)}
 .peer .acts{margin-top:5px}
 #toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
 #toast.on{opacity:1}
@@ -486,9 +487,27 @@ function toast(t){
   toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove('on')},1300);
 }
 // 消息下面的「复制」按钮：复制原文（Markdown 源文本）
+// 从消息原文里挑出「用户多半想复制的东西」：网址、代码块、行内代码（ID、命令、路径），按出现顺序去重
+function copyItems(t){
+  var items=[],seen={},m;
+  function add(v,label){v=String(v).trim();if(!v||seen[v])return;seen[v]=1;items.push({v:v,label:label||v})}
+  // 一遍扫完：代码块 | 行内代码 | 网址，保持出现顺序
+  var re=/^[ \t]*(```|~~~)[^\n]*\n([\s\S]*?)\n[ \t]*\1[ \t]*$|`([^`\n]+)`|(https?:\/\/[^\s<>()（）「」，。、；！？"'`]+)/gm;
+  while((m=re.exec(String(t)))){
+    if(m[2]!=null){var first=m[2].split('\n').filter(function(x){return x.trim()})[0]||'';add(m[2],(m[2].indexOf('\n')>=0?'代码块 ':'')+first.trim())}
+    else if(m[4])add(m[4].replace(/[.,;:!?]+$/,''));
+    else if(m[3].trim().length>=6&&/[0-9\/._:@=-]/.test(m[3]))add(m[3]);   // 太短或纯单词的行内代码多半只是强调，不算
+  }
+  return items;
+}
+function short(s,n){s=s.replace(/^https?:\/\//,'');return s.length<=n?s:s.slice(0,Math.ceil(n*0.6))+'…'+s.slice(-Math.floor(n*0.4))}
+// 消息下面：每个可复制的东西一个按钮（点了只复制它），最后是「复制全文」
 function addActs(e,t){
   if(!t)return;var a=document.createElement('div');a.className='acts';
-  var b=document.createElement('button');b.type='button';b.textContent='复制';b._copy=t;a.appendChild(b);e.appendChild(a);
+  copyItems(t).slice(0,6).forEach(function(it){
+    var b=document.createElement('button');b.type='button';b.className='it';b.textContent='⧉ '+short(it.label,26);b.title=it.v;b._copy=it.v;a.appendChild(b);
+  });
+  var b=document.createElement('button');b.type='button';b.textContent='复制全文';b._copy=t;a.appendChild(b);e.appendChild(a);
 }
 feed.addEventListener('click',function(e){
   var t=e.target;
