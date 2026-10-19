@@ -206,6 +206,7 @@ function jsonlPathOf(info) {
 function relPath(p, cwd) {
   if (typeof p !== 'string') return '';
   if (cwd && p.startsWith(cwd + '/')) return p.slice(cwd.length + 1);
+  if (p === HOME) return '~';
   if (p.startsWith(HOME + '/')) return '~' + p.slice(HOME.length);
   return p;
 }

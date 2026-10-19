@@ -223,8 +223,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #lightbox img{max-width:100%;max-height:100%;object-fit:contain}
 .sheet-p{overflow-x:hidden}
 .ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
-#sList .s-grp{display:flex;align-items:baseline;gap:8px;margin:14px 2px 6px;font-size:13px;color:var(--muted)}
-#sList .s-grp:first-child{margin-top:4px}
+#sList .s-grp{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 4px;padding:6px 2px;border:0;background:none;font-size:13px;color:var(--muted);text-align:left}
+#sList .s-grp:first-child{margin-top:0}
+#sList .s-grp .chev{flex:none;transition:transform .15s}
+#sList .s-grp[aria-expanded="false"] .chev{transform:rotate(-90deg)}
+#sList .s-gbox[hidden]{display:none}
 #sList .s-grp .gn{font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-grp .gc{flex:none;font-size:12px}
 #soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}#soundPick[hidden]{display:none}
@@ -1114,25 +1117,33 @@ function openSheet(){
   fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(arr){
     list.innerHTML='';
     if(!arr.length){list.innerHTML='<div class="s-empty">没有找到会话</div>';return}
-    // 按目录分组：组按组里最近一次活动排序，组内按时间倒序；当前会话所在的组排最前
+    // 按目录分组：哪个目录有最新活动就排最前，组内按时间倒序；点组标题折叠/展开（记在本机）
     var groups={},order=[];
     arr.forEach(function(s){
       var k=s.cwd||'';
-      if(!groups[k]){groups[k]={key:k,label:s.cwdShort||'（目录未知）',items:[],last:0};order.push(groups[k])}
+      if(!groups[k]){groups[k]={key:k,label:(s.cwdShort||'（目录未知）').replace(/^\/(Users|home)\/[^\/]+$/,'~'),items:[],last:0};order.push(groups[k])}
       var g=groups[k];g.items.push(s);g.last=Math.max(g.last,s.lastModified||0);
-      if(session&&s.id===session.id)g.cur=true;
     });
-    order.sort(function(a,b){return (b.cur?1:0)-(a.cur?1:0)||b.last-a.last});
+    order.sort(function(a,b){return b.last-a.last});
+    var folded=foldedGroups();
     order.forEach(function(g){g.items.sort(function(a,b){return (b.lastModified||0)-(a.lastModified||0)})});
-    var flat=[];
+    var flat=[],cur=list;
     order.forEach(function(g){flat.push({grp:g});g.items.forEach(function(s){flat.push(s)})});
     flat.forEach(function(s){
       if(s.grp){
-        var h=document.createElement('div');h.className='s-grp';
-        h.innerHTML='<span class="gn"></span><span class="gc"></span>';
-        h.querySelector('.gn').textContent=s.grp.label;
-        h.querySelector('.gc').textContent=s.grp.items.length+' 个会话';
-        list.appendChild(h);return;
+        var g=s.grp,h=document.createElement('button');h.type='button';h.className='s-grp';
+        var box=document.createElement('div');box.className='s-gbox';
+        h.innerHTML='<svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="gn"></span><span class="gc"></span>';
+        h.querySelector('.gn').textContent=g.label;
+        h.querySelector('.gc').textContent=g.items.length+' 个会话';
+        var shut=!!folded[g.key];
+        h.setAttribute('aria-expanded',String(!shut));box.hidden=shut;
+        h.addEventListener('click',function(){
+          var f=foldedGroups(),open=box.hidden;box.hidden=!open;h.setAttribute('aria-expanded',String(open));
+          if(open)delete f[g.key];else f[g.key]=1;
+          localStorage.setItem('claclaw.folded',JSON.stringify(f));
+        });
+        list.appendChild(h);list.appendChild(box);cur=box;return;
       }
       var row=document.createElement('div');row.className='s-row';
       var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
@@ -1174,10 +1185,11 @@ function openSheet(){
         d.addEventListener('click',function(e){e.stopPropagation();openDel(s)});
         row.appendChild(d);
       }
-      list.appendChild(row);
+      cur.appendChild(row);
     });
   }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
+function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 $('#sessBtn').addEventListener('click',openSheet);
