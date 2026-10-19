@@ -382,16 +382,22 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sSearch:focus{outline:none;border-color:var(--accent)}
 #sNew,#sReload{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 #setPane{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
-/* 手机会话卡片紧凑一些：按钮小一点，时间不再挤到第三行 */
+/* 手机会话卡片：没有常驻按钮，像微信一样左滑露出「编辑 / 删除」 */
+.s-ren span,.s-del span{display:none}
 @media (max-width:999px){
-  .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{min-height:0;padding:9px 10px}
-  .s-row .s-item .t{padding-right:40px}
-  .s-row.two .s-item .t,.s-row.pn .s-item .t{padding-right:76px}
-  .s-row.three .s-item .t{padding-right:110px}
-  .s-ren,.s-new,.s-del{top:3px;width:34px;height:30px}
-  .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:40px}.s-row.pn .s-ren{right:4px}
-  .s-new{right:40px}.s-row.three .s-new{right:76px}
-  .s-del{right:4px}
+  .s-row{overflow:hidden;border-radius:12px}
+  .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;padding:9px 10px;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
+  .s-row.dragging .s-item{transition:none}
+  .s-row .s-item .t,.s-row.two .s-item .t,.s-row.pn .s-item .t,.s-row.three .s-item .t{padding-right:0}
+  .s-new{display:none!important}
+  .s-ren,.s-del{top:0;bottom:0;height:auto;width:72px;border-radius:0;opacity:1;z-index:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;font-size:13px;font-weight:600;visibility:hidden}
+  .s-row.sw .s-ren,.s-row.sw .s-del{visibility:visible}
+  .s-ren span,.s-del span{display:block}
+  .s-del{right:0;background:#F23C3C}
+  .s-ren{right:0;background:#8B95A3}
+  .s-row.two .s-ren,.s-row.three .s-ren{right:72px}
+  .s-ren:hover,.s-ren:focus-visible{color:#fff;background:#8B95A3}
+  .s-del:hover,.s-del:focus-visible{color:#fff;background:#F23C3C}
   .s-item .m{font-size:12px;gap:8px}
 }
 #setPane .set-foot{padding-top:18px}
@@ -1579,7 +1585,7 @@ function openSheet(silent){
       });
       // 改名：任何会话都行（只是往记录末尾追加一条标题）
       var rn=document.createElement('button');rn.type='button';rn.className='s-ren';rn.setAttribute('aria-label','改名');
-      rn.innerHTML=ICON_PEN;
+      rn.innerHTML=ICON_PEN+'<span>编辑</span>';
       rn.addEventListener('click',function(e){e.stopPropagation();renameSess(s)});
       row.appendChild(rn);
       // 新建：在这个会话的目录里开一个兄弟会话
@@ -1596,7 +1602,7 @@ function openSheet(silent){
       if(!noDel){
         row.classList.add(s.cwd?'three':'two'); // 删除 + 改名（+ 新建）
         var d=document.createElement('button');d.type='button';d.className='s-del';d.setAttribute('aria-label','删除会话');
-        d.innerHTML=ICON_TRASH;
+        d.innerHTML=ICON_TRASH+'<span>删除</span>';
         d.addEventListener('click',function(e){e.stopPropagation();openDel(s)});
         row.appendChild(d);
       }
@@ -1667,6 +1673,50 @@ document.addEventListener('pointerdown',function(){pressing=true},true);
   setTimeout(function(){pressing=false;var w=pressWait;pressWait=[];w.forEach(function(f){f()})},400);   // 等 click 先触发
 },true)});
 function whenNotPressing(v){return pressing?new Promise(function(res){pressWait.push(function(){res(v)})}):v}
+// ---------- 手机：会话行左滑露出「编辑 / 删除」（像微信）----------
+// 只在横向拖动时接管（先判断方向，竖向就照常滚动列表）；用 transform 跟手，松手按位置 / 速度决定打开还是弹回
+var swOpen=null,swSuppress=0,sw=null;
+function swClose(row,now){
+  if(!row)return;var it=row.querySelector('.s-item');
+  row.classList.remove('open');if(it)it.style.transform='';
+  if(now)row.classList.remove('sw');else setTimeout(function(){if(!row.classList.contains('open')&&!row.classList.contains('dragging'))row.classList.remove('sw')},240);
+  if(swOpen===row)swOpen=null;
+}
+function swMax(row){return row.querySelector('.s-del')?144:72}
+$('#sList').addEventListener('touchstart',function(e){
+  if(DESKTOP.matches||e.touches.length!==1)return;
+  var row=e.target.closest('.s-row');if(!row||e.target.closest('.s-ren,.s-del'))return;
+  if(swOpen&&swOpen!==row){swClose(swOpen);swSuppress=Date.now()}   // 点别的行：先收起已打开的那行
+  var t=e.touches[0];
+  sw={row:row,it:row.querySelector('.s-item'),x:t.clientX,y:t.clientY,t:Date.now(),base:row.classList.contains('open')?-swMax(row):0,lock:null,off:0};
+},{passive:true});
+$('#sList').addEventListener('touchmove',function(e){
+  if(!sw)return;var t=e.touches[0],dx=t.clientX-sw.x,dy=t.clientY-sw.y;
+  if(!sw.lock){if(Math.abs(dx)<8&&Math.abs(dy)<8)return;sw.lock=Math.abs(dx)>Math.abs(dy)*1.2?'h':'v'}
+  if(sw.lock!=='h')return;
+  e.preventDefault();
+  var max=swMax(sw.row),off=sw.base+dx;
+  if(off>0)off=0;if(off<-max)off=-max-(-max-off)*0.25;   // 拉过头有点阻力
+  sw.off=off;sw.row.classList.add('sw','dragging');sw.it.style.transform='translateX('+off+'px)';
+},{passive:false});
+function swEnd(){
+  if(!sw)return;var s0=sw;sw=null;
+  if(s0.lock!=='h')return;
+  s0.row.classList.remove('dragging');swSuppress=Date.now();
+  var max=swMax(s0.row),v=(s0.off-s0.base)/Math.max(1,Date.now()-s0.t);   // px/ms，负数是向左
+  var open=v<-0.35?true:v>0.35?false:s0.off<-max*0.4;
+  if(open){s0.row.classList.add('open','sw');s0.it.style.transform='translateX('+(-max)+'px)';if(swOpen&&swOpen!==s0.row)swClose(swOpen);swOpen=s0.row}
+  else swClose(s0.row);
+}
+$('#sList').addEventListener('touchend',swEnd);$('#sList').addEventListener('touchcancel',swEnd);
+// 刚滑过 / 有行开着时，点一下只是收起，不打开会话
+$('#sList').addEventListener('click',function(e){
+  if(DESKTOP.matches)return;
+  if(Date.now()-swSuppress<150&&!e.target.closest('.s-ren,.s-del')){e.preventDefault();e.stopPropagation();return}
+  if(swOpen&&!e.target.closest('.s-ren,.s-del')){e.preventDefault();e.stopPropagation();swClose(swOpen);return}
+  if(e.target.closest('.s-ren,.s-del')){var r=e.target.closest('.s-row');setTimeout(function(){swClose(r,true)},50)}
+},true);
+document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest('#sList'))swClose(swOpen)},{passive:true});
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
