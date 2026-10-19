@@ -75,6 +75,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #feed{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:16px 14px 10px;display:flex;flex-direction:column;gap:14px}
 #feed>*{flex-shrink:0}   /* 消息多了也不许被压扁（工具卡片 overflow:hidden，以前会被压成 0 高，只剩两条边框）*/
 .msg{white-space:pre-wrap;word-break:break-word;max-width:100%}
+.msg.user.pending{opacity:.55}
 .msg.user{align-self:flex-end;max-width:86%;padding:9px 13px;background:var(--user-bg);border-radius:16px 16px 4px 16px}
 .msg.ai{align-self:stretch}
 .msg code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
@@ -762,6 +763,7 @@ function addUser(t,images){
   }
   if(t){var tx=document.createElement('div');tx.className='ut';tx.textContent=t;e.appendChild(tx)}
   feed.appendChild(e);scrollDown(true);
+  return e;
 }
 var lightbox=document.getElementById('lightbox');
 function showImage(src){lightbox.querySelector('img').src=src;lightbox.classList.add('on')}
@@ -1203,7 +1205,7 @@ function onEvent(m){
       if(outbox.sid!==m.id)outboxRestore();                       // 换了会话：不往别的会话发，放回输入框
       else if(lastUser&&lastUser.text===outbox.text)outboxDone();  // 其实已经送到了
       else if(m.busy)outboxRestore();                              // 会话正忙：放回输入框，等它忙完再发
-      else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');trySend()}
+      else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');outboxShow();trySend()}
     }
     scrollDown(true);
     break;
@@ -1226,6 +1228,7 @@ function onEvent(m){
     session=null;permQueue=[];suggestion=null;commands=[];cmdMenu.hidden=true;setBusy(false);
     break;
   case 'user':
+    if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');outboxDone();think(true);break}
     if(outbox&&m.text===outbox.text)outboxDone();
     addUser(m.text,m.images);think(true);
     break;
@@ -1368,7 +1371,7 @@ function run(text){
   attachments.forEach(function(a){URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
   ta.value='';ta.style.height='auto';
   busy=true;setDock('busy');
-  outbox={text:text,images:images,sid:session.id};trySend();
+  outbox={text:text,images:images,sid:session.id};outboxShow();trySend();
 }
 // 待确认的消息：发出去后要等服务器回显（'user' 事件）才算送达。
 // 手机切后台、换网络后 WebSocket 常常「看着连着、其实已断」，消息会被悄悄吞掉：
@@ -1389,8 +1392,15 @@ function reconnectNow(){
   banner('连接似乎断了，正在重连…');connect();
 }
 // 输入框还空着就把没送出的文字放回去，免得丢
+// 发出去立刻显示（半透明 = 发送中），服务器回显后变正常；不让人觉得消息发没了
+function outboxShow(){
+  if(!outbox)return;
+  var imgs=(outbox.images||[]).map(function(i){return 'data:'+i.media_type+';base64,'+i.data});
+  outbox.el=addUser(outbox.text,imgs);outbox.el.classList.add('pending');
+}
 function outboxRestore(){
   if(!outbox)return;
+  if(outbox.el&&outbox.el.isConnected)outbox.el.remove();   // 没发出去：气泡收回，文字放回输入框
   if(!ta.value){ta.value=outbox.text;ta.dispatchEvent(new Event('input'))}
   outboxDone();
 }
