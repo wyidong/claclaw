@@ -609,10 +609,15 @@ sugBtn.addEventListener('click',acceptSuggestion);
 var MAX_IMAGES=5,attachments=[],attsEl=$('#atts'),fileIn=$('#fileIn');
 $('#attachBtn').addEventListener('click',function(){if(attachments.length>=MAX_IMAGES){addSys('一次最多 '+MAX_IMAGES+' 张图片');return}fileIn.click()});
 fileIn.addEventListener('change',function(){addFiles(fileIn.files);fileIn.value=''});
-ta.addEventListener('paste',function(e){
+// 粘贴图片：整个页面都接（焦点不在输入框时也能粘），items 和 files 两种来源都看（Safari 有时只给 files）
+document.addEventListener('paste',function(e){
+  var t=e.target;
+  if(t&&t!==ta&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable))return; // 别的输入框自己处理
+  var cd=e.clipboardData;if(!cd)return;
   var files=[];
-  Array.prototype.forEach.call((e.clipboardData&&e.clipboardData.items)||[],function(it){if(it.kind==='file'&&/^image\//.test(it.type))files.push(it.getAsFile())});
-  if(files.length){e.preventDefault();addFiles(files)}
+  Array.prototype.forEach.call(cd.items||[],function(it){if(it.kind==='file'&&/^image\//.test(it.type)){var f=it.getAsFile();if(f)files.push(f)}});
+  if(!files.length)Array.prototype.forEach.call(cd.files||[],function(f){if(/^image\//.test(f.type))files.push(f)});
+  if(files.length){e.preventDefault();addFiles(files);ta.focus()}
 });
 function addFiles(list){
   Array.prototype.slice.call(list).forEach(function(f){
@@ -1219,12 +1224,16 @@ pushBtn.addEventListener('click',function(){
     }).then(syncPushBtn);
     return;
   }
-  pushBtn.textContent='正在开启…';
+  // 每一步都显示在按钮上、并且有超时：卡住时能看出卡在哪一步，不会一直「正在开启…」
+  function step(label,p,sec){
+    pushBtn.textContent=label;
+    return Promise.race([p,new Promise(function(_,rej){setTimeout(function(){rej(new Error(label.replace(/…$/,'')+'超时（'+sec+' 秒没反应）'))},sec*1000)})]);
+  }
   // iOS 要求：请求通知权限必须直接由这次点击触发
-  Notification.requestPermission().then(function(perm){
-    if(perm!=='granted'){syncPushBtn();return}
-    return Promise.all([navigator.serviceWorker.ready,fetch('/api/push/key').then(function(r){return r.json()})]).then(function(x){
-      return x[0].pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(x[1].publicKey)});
+  step('等你允许通知…（看看有没有弹出询问框）',Notification.requestPermission(),60).then(function(perm){
+    if(perm!=='granted'){syncPushBtn();if(perm==='denied')alert('通知被拒绝了：到浏览器或系统设置里允许这个网站发通知');return}
+    return step('正在准备…',Promise.all([navigator.serviceWorker.ready,fetch('/api/push/key').then(function(r){return r.json()})]),15).then(function(x){
+      return step('正在向推送服务登记…',x[0].pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(x[1].publicKey)}),20);
     }).then(function(sub){
       return fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})});
     }).then(function(r){
