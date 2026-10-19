@@ -265,20 +265,43 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .plan{margin:0;padding:10px 12px;white-space:pre-wrap;font-size:14px;max-height:40vh;overflow-y:auto}
 #sessBtn .dot.off{background:var(--muted)}
 
-/* ---------- 电脑端（宽屏）：左边会话列表、右边聊天，像微信电脑版 ---------- */
-.d-only{display:none}
+/* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
+#rail,#sTop,.d-only,.d-only-b{display:none}
 @media (min-width:1000px){
-  .d-only{display:inline}
-  #app{max-width:none;margin:0;display:grid;grid-template-columns:320px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto}
-  header,#banner,#feed,#dock{grid-column:2}
+  .d-only{display:inline}.d-only-b{display:block}.m-only{display:none}
+  #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px 300px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto}
+  header,#banner,#feed,#dock{grid-column:3}
   header{grid-row:1}#banner{grid-row:2}#feed{grid-row:3}#dock{grid-row:4}
-  #sheet,#sheet.on{grid-column:1;grid-row:1 / -1;position:static;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
-  .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:14px 12px 16px}
-  .sheet-p h2{font-size:15px}
-  #sessBtn{cursor:default}
-  /* 左栏会话：紧凑的一行一个，像微信的聊天列表；操作按钮鼠标移上去才出现 */
+
+  /* 图标栏 */
+  #rail{grid-column:1;grid-row:1 / -1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 12px;background:var(--code-bg);border-right:1px solid var(--line)}
+  #rail .logo{width:38px;height:38px;border-radius:9px;margin-bottom:12px}
+  #rail button{width:44px;height:44px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+  #rail button:hover{background:var(--surface);color:var(--ink)}
+  #rail button.on{color:var(--accent);background:var(--surface)}
+  #rail .gap{flex:1}
+
+  /* 会话列表栏 */
+  #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:static;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
+  .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:0 10px 16px;overflow-y:auto}
+  .sheet-p>h2:first-child{display:none}
+  #sTop{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:2;margin:0 -10px 4px;padding:14px 12px 10px;background:var(--surface)}
+  #sSearch{flex:1;min-width:0;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+  #sSearch:focus{outline:none;border-color:var(--accent)}
+  #sNew{flex:none;width:32px;height:32px;border:0;border-radius:8px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+  #sNew:hover{color:var(--accent);background:var(--bg)}
+  /* 设置页（点图标栏的齿轮）：会话列表和设置二选一显示 */
+  #setPane{display:none;padding-top:14px}
+  #setPane h2{margin:0 4px 12px;font-size:16px}
+  #app.set-on #sTop,#app.set-on #sList{display:none}
+  #app.set-on #setPane{display:block}
+  #setPane .always{display:block;width:100%;text-align:left;margin:0 0 8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-decoration:none;color:var(--ink);font-size:14px}
+  #setPane #soundPick{text-align:left;padding:0 4px}
+  #setPane .ver{text-align:left;padding:4px}
+
+  /* 会话行：紧凑，一行一个；操作按钮鼠标移上去才出现 */
   .s-row{margin-top:2px}
-  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding:8px 10px;border:0;border-radius:8px;background:none}
+  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding:8px 10px;border:0;border-radius:8px;background:none;cursor:pointer}
   .s-row:hover .s-item{background:var(--bg)}
   .s-item[aria-current="true"]{background:var(--user-bg)!important;border:0}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
@@ -292,22 +315,41 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:36px}.s-row.pn .s-ren{right:4px}
   .s-new{right:36px}.s-row.three .s-new{right:68px}
   .s-del{right:4px}
-  .m-only{display:none}
+  #sList .s-row[hidden],#sList .s-grp[hidden]{display:none}
+
+  /* 聊天区标题：像微信，只有名字加粗，没有框 */
+  header{padding:0 20px;min-height:56px;background:var(--surface)}
+  #sessBtn{border:0;background:none;padding:0;min-height:56px;cursor:default}
+  #sessBtn .nm{font-size:17px}
   #sessBtn>svg{display:none}
-  /* 聊天区：内容限宽居中，读起来不累 */
-  #feed{padding:20px max(28px,calc((100% - 920px) / 2)) 14px}
-  #dock{padding:12px max(28px,calc((100% - 920px) / 2)) 14px}
-  /* 输入框放大 */
-  #composer{border:1px solid var(--line);border-radius:14px;background:var(--bg)}
-  #composer:focus-within{border-color:var(--accent)}
-  #ta{min-height:96px;max-height:40vh;font-size:15px;line-height:1.55;padding:12px 56px 12px 44px}
-  #attachBtn{top:6px;left:2px}
-  #send{top:auto;bottom:8px;right:8px}
+  #modeBtn{min-height:34px}
+  #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
+
+  /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
+  #dock{padding:0;border-top:1px solid var(--line)}
+  #dock>#perm,#dock>#ask,#dock>#cmdMenu,#dock>#atts{margin:10px max(20px,calc((100% - 960px) / 2)) 0}
+  #composer{height:190px;display:flex;flex-direction:column}
+  #taWrap{flex:1;min-height:0}
+  #ta{height:100%!important;min-height:0;max-height:none;padding:14px 20px 52px;font-size:15px;line-height:1.6}
+  #attachBtn{top:auto;bottom:10px;left:12px;width:34px;height:34px;border-radius:8px}
+  #attachBtn:hover{background:var(--bg);color:var(--ink)}
+  #send{top:auto;bottom:12px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
+  #send:disabled{background:var(--code-bg);color:var(--muted);opacity:1}
+  #send.stop{background:var(--deny)}
+  #sugBtn{bottom:10px;top:auto;right:110px}
 }
 </style>
 </head>
 <body>
 <div id="app">
+  <!-- 电脑端最左边的图标栏（像微信 / Teams）；手机上隐藏 -->
+  <nav id="rail" aria-label="导航">
+    <img class="logo" src="/icons/icon-192.png?v=4" alt="Claclaw">
+    <button type="button" id="railChats" class="on" aria-label="会话" title="会话"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg></button>
+    <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    <span class="gap"></span>
+    <button type="button" id="railOut" aria-label="退出登录" title="退出登录"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>
+  </nav>
   <header>
     <button id="sessBtn" type="button" aria-label="切换会话">
       <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span>
@@ -372,7 +414,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2><span class="m-only">恢复会话</span><span class="d-only">会话</span></h2>
       <p class="m-only">对应命令行里的 claude --resume</p>
+      <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
+      <div id="setPane">
+      <h2 class="d-only-b">设置</h2>
       <button type="button" class="always" id="pushBtn" hidden></button>
       <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
       <div class="ver" id="pushTip" hidden></div>
@@ -380,6 +425,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <label class="ver" id="soundPick" hidden>提示音 <select id="soundSel"></select>（选了会先试听）</label>
       <button type="button" class="always" id="logout">退出登录</button>
       <div class="ver">页面版本 __PAGE_VERSION__</div>
+      </div>
     </div>
   </div>
 </div>
@@ -767,8 +813,9 @@ function pickCmd(i){
 }
 function setDock(s){dock.dataset.state=s;syncSend()}
 function syncSend(){
-  if(busy){sendBtn.innerHTML=ICON_STOP;sendBtn.setAttribute('aria-label','停止');sendBtn.disabled=false}
-  else{sendBtn.innerHTML=ICON_SEND;sendBtn.setAttribute('aria-label','发送');var at=attachments||[];sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data})}
+  var d=DESKTOP.matches;sendBtn.classList.toggle('stop',busy&&d);
+  if(busy){sendBtn.innerHTML=d?'停止':ICON_STOP;sendBtn.setAttribute('aria-label','停止');sendBtn.disabled=false}
+  else{sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');var at=attachments||[];sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data})}
 }
 function setBusy(b){
   if(b&&!busy){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
@@ -1157,7 +1204,27 @@ function taMax(){return DESKTOP.matches?Math.round(window.innerHeight*.4):120}
 // 电脑端：会话列表常驻左边，切会话、一轮结束、每分钟都刷新一次（不闪「加载中」，保持滚动位置）
 function refreshList(){if(DESKTOP.matches)openSheet()}
 setInterval(function(){if(DESKTOP.matches&&!document.hidden)openSheet()},60000);
-DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.matches)openSheet();else closeSheet()});
+DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.matches)openSheet();else closeSheet();syncSend()});
+// 图标栏：会话 / 设置 / 退出登录
+function railTab(set){$('#app').classList.toggle('set-on',set);$('#railSet').classList.toggle('on',set);$('#railChats').classList.toggle('on',!set)}
+$('#railChats').addEventListener('click',function(){railTab(false)});
+$('#railSet').addEventListener('click',function(){railTab(true)});
+$('#railOut').addEventListener('click',function(){$('#logout').click()});
+// 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
+function applySearch(){
+  var q=$('#sSearch').value.trim().toLowerCase();
+  document.querySelectorAll('#sList .s-gbox').forEach(function(box){
+    var h=box.previousElementSibling,label=(h.querySelector('.gn')||{}).textContent||'',hit=0;
+    box.querySelectorAll('.s-row').forEach(function(r){var ok=!q||(label+' '+r.textContent).toLowerCase().indexOf(q)>=0;r.hidden=!ok;if(ok)hit++});
+    h.hidden=!!q&&!hit;
+    if(q)box.style.display=hit?'block':'none';else box.style.display='';
+  });
+}
+$('#sSearch').addEventListener('input',applySearch);
+$('#sNew').addEventListener('click',function(){
+  if(!session||!session.cwd){alert('先在左边打开一个会话，新会话会建在它的目录里');return}
+  newSibling({id:session.id,cwd:session.cwd,cwdShort:session.cwd});
+});
 function openSheet(){
   var list=$('#sList');
   if(!(DESKTOP.matches&&list.querySelector('.s-row')))list.innerHTML='<div class="s-empty">加载中…</div>';
@@ -1238,6 +1305,7 @@ function openSheet(){
       }
       cur.appendChild(row);
     });
+    applySearch();
   }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
