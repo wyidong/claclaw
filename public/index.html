@@ -66,6 +66,9 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #modeSel{min-height:44px;max-width:9em;padding:4px 18px 4px 4px;border:0;background:none;color:var(--muted);font:inherit;font-size:14.5px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;cursor:pointer;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
 #modeWrap .d-only{display:none!important}
+/* 会话信息 + 模式选择装在一块圆角色块里（和设置页「主题」那一行一样：无边框、有底色），返回键在色块外 */
+#hdCard{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 6px 0 12px;border-radius:12px;background:var(--bg)}
+#hdCard #sessBtn{min-height:40px}
 #sessBtn .mtag{flex:none;margin-left:2px;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
 #sessBtn .mtag:empty{display:none}
 .cpid{cursor:copy;border-radius:4px}
@@ -512,11 +515,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   </nav>
   <header>
     <button id="backBtn" type="button" aria-label="返回会话列表"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div id="hdCard">
     <button id="sessBtn" type="button" aria-label="切换会话">
       <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
     </button>
     <label id="modeWrap" data-m="default"><span class="d-only">会话模式：</span><select id="modeSel" aria-label="会话模式"></select></label>
+    </div>
   </header>
 
   <div id="banner" role="note"><span id="bannerT">正在连接…</span><button type="button" id="bannerX" aria-label="关闭提示">×</button></div>
