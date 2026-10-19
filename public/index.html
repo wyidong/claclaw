@@ -67,6 +67,10 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .mtag:empty{display:none}
 .cpid{cursor:copy;border-radius:4px}
 .cpid:hover{text-decoration:underline dotted;text-underline-offset:3px;color:var(--accent)}
+/* 会话 ID：浅底小胶囊 + 透明扩大的点击范围（四周各多 8px），点 ID 复制时不容易误点成「打开会话」 */
+#sList .s-item .m .id.cpid,#sid .cpid{position:relative;display:inline-block;padding:1px 6px;margin:-1px 0;border-radius:6px;background:var(--code-bg);line-height:1.4}
+#sList .s-item .m .id.cpid::after,#sid .cpid::after{content:'';position:absolute;inset:-8px -8px}
+.cpid:active{background:var(--user-bg)!important;color:var(--accent)}
 @media (max-width:599px){#sessBtn .mtag{display:none}}  /* 手机上太挤：右边下拉框已经显示模式 */
 #sessBtn .mtag[data-m="accept"]{color:var(--warn)}
 #sessBtn .mtag[data-m="plan"]{color:var(--accent)}
