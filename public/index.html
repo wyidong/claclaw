@@ -264,6 +264,46 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-empty{padding:16px 4px;color:var(--muted);font-size:14px}
 .plan{margin:0;padding:10px 12px;white-space:pre-wrap;font-size:14px;max-height:40vh;overflow-y:auto}
 #sessBtn .dot.off{background:var(--muted)}
+
+/* ---------- 电脑端（宽屏）：左边会话列表、右边聊天，像微信电脑版 ---------- */
+.d-only{display:none}
+@media (min-width:1000px){
+  .d-only{display:inline}
+  #app{max-width:none;margin:0;display:grid;grid-template-columns:320px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto}
+  header,#banner,#feed,#dock{grid-column:2}
+  header{grid-row:1}#banner{grid-row:2}#feed{grid-row:3}#dock{grid-row:4}
+  #sheet,#sheet.on{grid-column:1;grid-row:1 / -1;position:static;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
+  .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:14px 12px 16px}
+  .sheet-p h2{font-size:15px}
+  #sessBtn{cursor:default}
+  /* 左栏会话：紧凑的一行一个，像微信的聊天列表；操作按钮鼠标移上去才出现 */
+  .s-row{margin-top:2px}
+  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding:8px 10px;border:0;border-radius:8px;background:none}
+  .s-row:hover .s-item{background:var(--bg)}
+  .s-item[aria-current="true"]{background:var(--user-bg)!important;border:0}
+  .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
+  .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
+  .s-item .bz{font-size:11.5px}
+  .s-ren,.s-new,.s-del{top:4px;width:30px;height:30px;opacity:0}
+  .s-row:hover .s-ren,.s-row:hover .s-new,.s-row:hover .s-del,.s-row :focus-visible{opacity:1}
+  .s-row:hover .s-item{padding-right:44px}
+  .s-row.two:hover .s-item,.s-row.pn:hover .s-item{padding-right:76px}
+  .s-row.three:hover .s-item{padding-right:108px}
+  .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:36px}.s-row.pn .s-ren{right:4px}
+  .s-new{right:36px}.s-row.three .s-new{right:68px}
+  .s-del{right:4px}
+  .m-only{display:none}
+  #sessBtn>svg{display:none}
+  /* 聊天区：内容限宽居中，读起来不累 */
+  #feed{padding:20px max(28px,calc((100% - 920px) / 2)) 14px}
+  #dock{padding:12px max(28px,calc((100% - 920px) / 2)) 14px}
+  /* 输入框放大 */
+  #composer{border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+  #composer:focus-within{border-color:var(--accent)}
+  #ta{min-height:96px;max-height:40vh;font-size:15px;line-height:1.55;padding:12px 56px 12px 44px}
+  #attachBtn{top:6px;left:2px}
+  #send{top:auto;bottom:8px;right:8px}
+}
 </style>
 </head>
 <body>
@@ -330,8 +370,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
   <div id="sheet" aria-hidden="true">
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
-      <h2>恢复会话</h2>
-      <p>对应命令行里的 claude --resume</p>
+      <h2><span class="m-only">恢复会话</span><span class="d-only">会话</span></h2>
+      <p class="m-only">对应命令行里的 claude --resume</p>
       <div id="sList"></div>
       <button type="button" class="always" id="pushBtn" hidden></button>
       <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
@@ -348,6 +388,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 (function(){
 'use strict';
 var $=function(s){return document.querySelector(s)};
+var DESKTOP=window.matchMedia('(min-width:1000px)');
 var feed=$('#feed'),dock=$('#dock'),ta=$('#ta'),sendBtn=$('#send'),taWrap=$('#taWrap'),sugBtn=$('#sugBtn');
 
 var ICON_SEND='<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 18V4.5M5 10.5l6-6 6 6"/></svg>';
@@ -608,7 +649,7 @@ function syncSuggestion(){
 function acceptSuggestion(){
   if(!suggestion)return;
   ta.value=suggestion;suggestion=null;
-  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px';
+  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';
   syncSuggestion();syncSend();ta.focus();
   ta.setSelectionRange(ta.value.length,ta.value.length);
 }
@@ -887,6 +928,7 @@ function onEvent(m){
     });
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+m.id.slice(0,8)+'　'+(m.cwdShort||''));
     localStorage.setItem('claclaw.session',m.id);
+    refreshList();
     suggestion=m.suggestion||null;
     commands=m.commands||[];
     setBusy(m.busy);
@@ -957,6 +999,7 @@ function onEvent(m){
     if(busy&&!permQueue.length)think(true);
     break;
   case 'turn.done':
+    refreshList();
     if(m.error)addSys('本轮结束：'+m.error);
     document.querySelectorAll('.tool[data-k="run"],.tool[data-k="wait"]').forEach(function(n){
       n.dataset.k='no';n.querySelector('.ts').textContent='已取消';n.classList.remove('open');
@@ -1071,7 +1114,7 @@ function stop(){wsSend({t:'interrupt'})}
 
 sendBtn.addEventListener('click',function(){busy?stop():run(ta.value)});
 ta.addEventListener('input',function(){
-  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px';syncSend();
+  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';syncSend();
   if(ta.value)suggestion=null; // 开始自己打字就作废
   syncSuggestion();
   cmdSel=0;syncCmdMenu();
@@ -1110,13 +1153,21 @@ function ago(ms){
   return new Date(ms).toLocaleDateString();
 }
 var sheet=$('#sheet');
+function taMax(){return DESKTOP.matches?Math.round(window.innerHeight*.4):120}
+// 电脑端：会话列表常驻左边，切会话、一轮结束、每分钟都刷新一次（不闪「加载中」，保持滚动位置）
+function refreshList(){if(DESKTOP.matches)openSheet()}
+setInterval(function(){if(DESKTOP.matches&&!document.hidden)openSheet()},60000);
+DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.matches)openSheet();else closeSheet()});
 function openSheet(){
-  var list=$('#sList');list.innerHTML='<div class="s-empty">加载中…</div>';
+  var list=$('#sList');
+  if(!(DESKTOP.matches&&list.querySelector('.s-row')))list.innerHTML='<div class="s-empty">加载中…</div>';
   sheet.classList.add('on');sheet.setAttribute('aria-hidden','false');
   syncPushBtn();
   fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(arr){
+    var sp=$('.sheet-p'),keepTop=sp.scrollTop;   // 电脑端定时刷新时保持滚动位置
     list.innerHTML='';
     if(!arr.length){list.innerHTML='<div class="s-empty">没有找到会话</div>';return}
+    setTimeout(function(){sp.scrollTop=keepTop},0);
     // 按目录分组：哪个目录有最新活动就排最前，组内按时间倒序；点组标题折叠/展开（记在本机）
     var groups={},order=[];
     arr.forEach(function(s){
