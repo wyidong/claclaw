@@ -464,6 +464,13 @@ class Runner {
   async pump() {
     for await (const m of this.q) {
       if (m.parent_tool_use_id) continue;
+      // 不是从网页发消息开始的一轮（别的会话发来消息、定时任务等）：一有输出就算「在干活」，
+      // 否则网页显示成空闲、没有工作状态，空闲关闭还可能把干到一半的进程关掉
+      if (!this.busy && (m.type === 'stream_event' || m.type === 'assistant')) {
+        this.busy = true; this.busySince = Date.now(); this.cancelClose();
+        log('busy (started elsewhere)', this.id.slice(0, 8));
+        this.emit({ t: 'busy', on: true });
+      }
       if (m.type === 'stream_event') {
         const e = m.event;
         if (e.type === 'message_start' && e.message?.id) (this.streamed ||= new Set()).add(e.message.id);
