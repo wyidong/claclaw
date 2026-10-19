@@ -682,7 +682,7 @@ function tickWork(){
   var quiet=lastEvt?Math.floor((Date.now()-lastEvt)/1000):0,stuck=quiet>=90;
   bar.hidden=false;bar.classList.toggle('quiet',stuck);
   $('#workT').textContent='Claude 正在工作 · '+workLabel+(sec?' · 已 '+fmtSec(sec):'')+
-    (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':' · 可以继续输入，作为插话发给它');
+    (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':'');
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
 var connectedOnce=false,updateReady=false;
@@ -877,7 +877,7 @@ function syncSend(){
   var steer=busy&&(ta.value.trim()||(attachments||[]).length);
   sendBtn.classList.toggle('stop',busy&&!steer&&d);
   if(busy&&!steer){sendBtn.innerHTML=d?'停止':ICON_STOP;sendBtn.setAttribute('aria-label','停止');sendBtn.disabled=false}
-  else if(steer){sendBtn.innerHTML=d?'插话':ICON_SEND;sendBtn.setAttribute('aria-label','插话');sendBtn.disabled=(attachments||[]).some(function(a){return !a.data})}
+  else if(steer){sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');sendBtn.disabled=(attachments||[]).some(function(a){return !a.data})}
   else{sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');var at=attachments||[];sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data})}
 }
 function setBusy(b){
@@ -1202,7 +1202,6 @@ function run(text){
   var images=attachments.map(function(a){return {media_type:a.media_type,data:a.data}});
   attachments.forEach(function(a){URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
   ta.value='';ta.style.height='auto';
-  if(busy)addSys('插话已排队，Claude 会在下一个合适的时机读到');
   busy=true;setDock('busy');
   outbox={text:text,images:images,sid:session.id};trySend();
 }
