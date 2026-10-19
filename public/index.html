@@ -228,7 +228,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-grp .chev{flex:none;transition:transform .15s}
 #sList .s-grp[aria-expanded="false"] .chev{transform:rotate(-90deg)}
 #sList .s-gbox[hidden]{display:none}
-#sList .s-grp .gn{font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-grp .gn{flex:0 1 auto;min-width:0;font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-gpath{margin:-2px 2px 4px 22px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
 #sList .s-grp.recent .gn{font-family:var(--sans)}
 #soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}#soundPick[hidden]{display:none}
@@ -1105,7 +1106,7 @@ function connect(){
     if(fromUrl)history.replaceState(null,'','/');
     var last=fromUrl||(session?session.id:localStorage.getItem('claclaw.session'));
     if(last)wsSend({t:'session.open',id:last,mode:mode});
-    else openSheet();
+    if(!last||DESKTOP.matches)openSheet();   // 电脑端会话列表常驻：连上就加载，不管上次的会话能不能打开
   };
   ws.onmessage=function(e){try{onEvent(JSON.parse(e.data))}catch(err){console.error(err)}};
   ws.onclose=function(){
@@ -1220,7 +1221,7 @@ $('#railSet').addEventListener('click',function(){railTab(true)});
 function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
-    var h=box.previousElementSibling,label=(h.querySelector('.gn')||{}).textContent||'',hit=0;
+    var h=box.previousElementSibling,label=h.dataset.path||(h.querySelector('.gn')||{}).textContent||'',hit=0;
     box.querySelectorAll('.s-row').forEach(function(r){var ok=!q||(label+' '+r.textContent).toLowerCase().indexOf(q)>=0;r.hidden=!ok;if(ok)hit++});
     h.hidden=!!q&&!hit;
     if(q)box.style.display=hit?'block':'none';else box.style.display='';
@@ -1266,7 +1267,10 @@ function openSheet(){
         var g=s.grp,h=document.createElement('button');h.type='button';h.className='s-grp';
         var box=document.createElement('div');box.className='s-gbox';
         h.innerHTML='<svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="gn"></span><span class="gc"></span>';
-        h.querySelector('.gn').textContent=g.label;
+        // 组标题只显示最后一级目录名；展开后在组里第一行显示完整路径
+        var last=g.recent?g.label:(g.label.split('/').pop()||g.label);
+        h.querySelector('.gn').textContent=last;h.title=g.label;h.dataset.path=g.label;
+        if(!g.recent&&last!==g.label){var gp=document.createElement('div');gp.className='s-gpath';gp.textContent=g.label;box.appendChild(gp)}
         h.querySelector('.gc').textContent=g.recent?'':g.items.length+' 个会话';
         if(g.recent)h.classList.add('recent');
         var shut=!!folded[g.key];
