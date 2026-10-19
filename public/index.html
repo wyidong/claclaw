@@ -385,8 +385,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 /* 手机会话卡片：没有常驻按钮，像微信一样左滑露出「编辑 / 删除」 */
 .s-ren span,.s-del span{display:none}
 @media (max-width:999px){
-  .s-row{overflow:hidden;border-radius:12px}
-  .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;padding:9px 10px;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
+  /* 边框画在外层（不动）：滑动时只有里面的内容往左移，编辑 / 删除也在框里 */
+  .s-row{overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+  .s-row.working{border-color:var(--allow)}
+  .s-row.waiting{border-color:var(--warn)}
+  .s-row:has(> .s-item[aria-current="true"]){border-color:var(--accent)}
+  .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
   .s-row.dragging .s-item{transition:none}
   .s-row .s-item .t,.s-row.two .s-item .t,.s-row.pn .s-item .t,.s-row.three .s-item .t{padding-right:0}
   .s-new{display:none!important}
