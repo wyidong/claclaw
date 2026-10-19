@@ -183,7 +183,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item[aria-current="true"]{border-color:var(--accent)}
 .s-item .t{font-weight:600}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
-.s-item .m .id{font-family:var(--mono)}
+.s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
 @media (prefers-reduced-motion:reduce){.think i,.tool[data-k="run"] .st{animation:none}}
 #dock{position:relative}
@@ -223,6 +223,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #lightbox img{max-width:100%;max-height:100%;object-fit:contain}
 .sheet-p{overflow-x:hidden}
 .ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
+#sList .s-grp{display:flex;align-items:baseline;gap:8px;margin:14px 2px 6px;font-size:13px;color:var(--muted)}
+#sList .s-grp:first-child{margin-top:4px}
+#sList .s-grp .gn{font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-grp .gc{flex:none;font-size:12px}
 #soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}#soundPick[hidden]{display:none}
 #soundSel{font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .s-row{position:relative;margin-top:8px}
@@ -1110,7 +1114,26 @@ function openSheet(){
   fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(arr){
     list.innerHTML='';
     if(!arr.length){list.innerHTML='<div class="s-empty">没有找到会话</div>';return}
+    // 按目录分组：组按组里最近一次活动排序，组内按时间倒序；当前会话所在的组排最前
+    var groups={},order=[];
     arr.forEach(function(s){
+      var k=s.cwd||'';
+      if(!groups[k]){groups[k]={key:k,label:s.cwdShort||'（目录未知）',items:[],last:0};order.push(groups[k])}
+      var g=groups[k];g.items.push(s);g.last=Math.max(g.last,s.lastModified||0);
+      if(session&&s.id===session.id)g.cur=true;
+    });
+    order.sort(function(a,b){return (b.cur?1:0)-(a.cur?1:0)||b.last-a.last});
+    order.forEach(function(g){g.items.sort(function(a,b){return (b.lastModified||0)-(a.lastModified||0)})});
+    var flat=[];
+    order.forEach(function(g){flat.push({grp:g});g.items.forEach(function(s){flat.push(s)})});
+    flat.forEach(function(s){
+      if(s.grp){
+        var h=document.createElement('div');h.className='s-grp';
+        h.innerHTML='<span class="gn"></span><span class="gc"></span>';
+        h.querySelector('.gn').textContent=s.grp.label;
+        h.querySelector('.gc').textContent=s.grp.items.length+' 个会话';
+        list.appendChild(h);return;
+      }
       var row=document.createElement('div');row.className='s-row';
       var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
@@ -1119,7 +1142,7 @@ function openSheet(){
       b.innerHTML='<div class="t"></div><div class="m"><span class="id"></span><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
       b.querySelector('.id').textContent=s.id.slice(0,8);
-      b.querySelector('.cwd').textContent=s.cwdShort+(s.branch?' · '+s.branch:'');
+      b.querySelector('.cwd').textContent=s.branch||'';   // 目录已经在分组标题里了，这里只显示分支
       b.querySelector('.when').textContent=s.unsent?'新建 · 还没发消息':(s.openInWeb?'网页中 · ':'')+ago(s.lastModified);
       if(bz)b.querySelector('.bz').textContent=idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管');
       b.addEventListener('click',function(){
