@@ -241,6 +241,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-gpath{margin:-2px 2px 4px 22px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
 #sList .s-grp.recent .gn{font-family:var(--sans)}
+/* 状态和「多久前」共用行尾一个固定宽度的位置：干活时显示状态，不干活时显示冷却时间；
+   左边的分支 / 目录太长就截断，所以状态变化不会让这一行重新排版或换行 */
+#sList .s-item .m{flex-wrap:nowrap;align-items:baseline}
+#sList .s-item .m .id{flex:none}
+#sList .s-item .m .cwd{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-item .m .when{flex:none;width:7.2em;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden}
 /* 正在干活的会话：绿色边框，状态文字绿色、前面一个闪动的点；等确认的用橙色 */
 .s-row.working .s-item{border-color:var(--allow)!important}
 .s-row.working .s-item .when{color:var(--allow);font-weight:600}
@@ -381,11 +387,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
-  .s-ren,.s-new,.s-del{top:4px;width:30px;height:30px;opacity:0}
+  .s-ren,.s-new,.s-del{top:4px;width:30px;height:26px;opacity:0}
   .s-row:hover .s-ren,.s-row:hover .s-new,.s-row:hover .s-del,.s-row :focus-visible{opacity:1}
   /* 行的排版始终和鼠标移上去时一样（右边给按钮留好位置），移上去只变背景、露出改名/删除 */
-  .s-row .s-item,.s-row.pn .s-item{padding-right:44px}
-  .s-row.two .s-item,.s-row.three .s-item{padding-right:76px}
+  /* 按钮只出现在标题那一行：只给标题留位置，下面一行（ID、分支、状态）用满整行 */
+  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{padding-right:9px}
+  .s-row .s-item .t,.s-row.pn .s-item .t{padding-right:34px}
+  .s-row.two .s-item .t,.s-row.three .s-item .t{padding-right:66px}
   .s-new{display:none}   /* 新建在列表顶部的 ⊕，每行不再单独放 */
   .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:36px}.s-row.pn .s-ren{right:4px}
   .s-del{right:4px}
