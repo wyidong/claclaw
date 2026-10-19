@@ -241,6 +241,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-gpath{margin:-2px 2px 4px 22px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
 #sList .s-grp.recent .gn{font-family:var(--sans)}
+#sList .s-grp.unread .gn::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
 #setPane .set-sec{margin:0 0 18px}
 #setPane .set-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:13.5px;color:var(--ink)}
@@ -1482,7 +1483,7 @@ function openSheet(){
       }
       cur.appendChild(row);
     });
-    applySearch();
+    applySearch();renderUnread();
   }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
 // ---------- 未读红点 + 应用角标 ----------
@@ -1492,6 +1493,10 @@ function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false;
   ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id)other=true});
   document.querySelectorAll('#sList .s-row').forEach(function(r){r.classList.toggle('unread',!!unread[r.dataset.id])});
+  // 目录（组标题）：组里有未读的会话就亮红点，折叠着也看得到是哪个目录要处理
+  document.querySelectorAll('#sList .s-gbox').forEach(function(box){
+    var h=box.previousElementSibling;if(h)h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
+  });
   $('#railChats').classList.toggle('dot',other);
   $('#sessBtn').classList.toggle('unr',other);
   if(navigator.setAppBadge){(total?navigator.setAppBadge(total):navigator.clearAppBadge()).catch(function(){})}
