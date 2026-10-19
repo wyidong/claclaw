@@ -104,11 +104,17 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 // 历史记录里的图片总量上限，超过的只显示占位，免得打开会话时传几十 MB
 const HISTORY_IMAGE_BUDGET = 4 * 1024 * 1024;
 const HISTORY_MAX = 80;
-const IDLE_CLOSE_MS = 60_000;
+// 网页里的会话没人看、也没在跑多久后关掉进程（会话记录还在）；可在设置里改，默认 10 分钟
+const idleCloseMs = () => minutesSetting('idleCloseMin', 10, 1) * 60_000;
 // 新建后还没发过消息的会话：Claude Code 要等第一条消息才建会话文件，关掉就什么都不剩，所以多留一会儿
 const IDLE_CLOSE_NEW_MS = 30 * 60_000;
 // 原处（VS Code / 终端）闲置满这么久，网页端才能接管；反方向（原处收回）任何时候都行
-const TAKEOVER_MIN = Number(process.env.CLACLAW_TAKEOVER_MIN ?? 30);
+// 可在设置里改，默认 30 分钟（环境变量 CLACLAW_TAKEOVER_MIN 仍可给默认值）
+const takeoverMin = () => minutesSetting('takeoverMin', Number(process.env.CLACLAW_TAKEOVER_MIN ?? 30), 0);
+function minutesSetting(key, dflt, min) {
+  const v = Number(settings()[key]);
+  return Number.isFinite(v) && v >= min && v <= 1440 ? v : dflt;
+}
 const WATCH_MS = 3000;
 
 // 去掉从父 Claude 会话继承来的 CLAUDE* 变量，否则子进程会被当成那个会话的子进程，
@@ -167,7 +173,7 @@ function takeoverInfo(sessionId, jsonlPath, live) {
   const allIdle = holders.every(x => x.status === 'idle');
   return {
     pids: holders.map(x => x.pid), entrypoint: h.entrypoint, name: h.name, status: h.status,
-    idleMin, canTakeover: allIdle && idleMin >= TAKEOVER_MIN, needMin: TAKEOVER_MIN,
+    idleMin, canTakeover: allIdle && idleMin >= takeoverMin(), needMin: takeoverMin(),
   };
 }
 
@@ -644,7 +650,7 @@ class Runner {
 
   maybeScheduleClose() {
     if (this.subs.size || this.busy || this.pending.size || this.closeTimer) return;
-    this.closeTimer = setTimeout(() => this.dispose(), this.unsent() ? IDLE_CLOSE_NEW_MS : IDLE_CLOSE_MS);
+    this.closeTimer = setTimeout(() => this.dispose(), this.unsent() ? Math.max(IDLE_CLOSE_NEW_MS, idleCloseMs()) : idleCloseMs());
   }
   cancelClose() { clearTimeout(this.closeTimer); this.closeTimer = null; }
 
@@ -974,6 +980,19 @@ const handler = async (req, res) => {
         else push.unsubscribe(String(body.endpoint || ''));
         return sendJson(res, 200, { ok: true });
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
+    }
+    if (url.pathname === '/api/settings/session') {
+      if (req.method === 'POST') {
+        if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+        let body = {};
+        try { body = JSON.parse(await readBody(req, 1024)); } catch {}
+        const patch = {};
+        if (body.idleCloseMin != null) patch.idleCloseMin = Math.min(1440, Math.max(1, Math.round(Number(body.idleCloseMin) || 10)));
+        if (body.takeoverMin != null) patch.takeoverMin = Math.min(1440, Math.max(0, Math.round(Number(body.takeoverMin) || 0)));
+        saveSettings(patch);
+        log('session settings', JSON.stringify(patch));
+      }
+      return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin() });
     }
     if (url.pathname === '/api/sound') {
       if (req.method === 'POST') {

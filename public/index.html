@@ -243,6 +243,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-grp.recent .gn{font-family:var(--sans)}
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
 #setPane .set-sec{margin:0 0 18px}
+#setPane .set-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:13.5px;color:var(--ink)}
+#setPane .set-row select{flex:none;font:inherit;font-size:13.5px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 #setPane .set-sec:not(:has(> :not(.set-h):not([hidden]))){display:none}  /* 组里没有可见的设置项就整组隐藏 */
 #setPane .set-h{margin:0 6px 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
 #setPane .set-sec>.always{display:block;width:100%;text-align:left;margin:0 0 8px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-decoration:none;color:var(--ink);font-size:14px;cursor:pointer}
@@ -503,6 +505,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <div id="sList"></div>
       <div id="setPane">
       <h2>设置</h2>
+      <div class="set-sec">
+        <div class="set-h">会话</div>
+        <label class="set-row">网页里的会话空闲多久后关闭进程
+          <select id="setIdle"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="240">4 小时</option></select></label>
+        <label class="set-row">终端 / VS Code 里的会话闲置多久后可以接管
+          <select id="setTake"><option value="0">随时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select></label>
+      </div>
       <div class="set-sec">
         <div class="set-h">通知</div>
         <button type="button" class="always" id="pushBtn" hidden></button>
@@ -1551,6 +1560,22 @@ $('#soundSel').addEventListener('change',function(e){
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+(SOUND_CN[j.name]||j.name)+'」')});
 });
 syncSound();
+// 会话相关设置：空闲关闭时间、接管等待时间（存在服务器，所有设备共用）
+function showSessSet(j){
+  [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
+    var sel=$(x[0]),v=String(x[1]);
+    if(![].some.call(sel.options,function(o){return o.value===v})){var o=document.createElement('option');o.value=v;o.textContent=v+' 分钟';sel.appendChild(o)}
+    sel.value=v;
+  });
+}
+fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});
+['#setIdle','#setTake'].forEach(function(id){
+  $(id).addEventListener('change',function(){
+    var body={};body[id==='#setIdle'?'idleCloseMin':'takeoverMin']=Number(this.value);
+    fetch('/api/settings/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
+  });
+});
 // 排查用：直接在本机弹一条通知，不经苹果/微软的推送服务。
 // 这条能弹、推送的不弹 → 问题在推送送达；这条也不弹 → 问题在系统或浏览器的通知设置
 $('#pushLocal').addEventListener('click',function(){
