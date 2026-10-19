@@ -1393,11 +1393,20 @@ function openSheet(){
     order.sort(function(a,b){return b.last-a.last});
     var folded=foldedGroups();
     order.forEach(function(g){g.items.sort(function(a,b){return (b.lastModified||0)-(a.lastModified||0)})});
+    var fz=listFrozen&&!listResort?listFrozen:null;   // 正在用：沿用上次的顺序，只让新出现的排到前面
     var flat=[],cur=list;
     // 最上面「最近活跃」：30 分钟内在 claclaw 里活跃过的会话（打开、发消息、回复完），按活跃时间最多 5 个；
     // 和目录分组里的重复一份，方便直接点。终端 / VS Code 里的活动不算。没有就空着
     var since=Date.now()-30*60e3;
     var recent=arr.filter(function(s){return (s.webActive||0)>=since}).sort(function(a,b){return b.webActive-a.webActive}).slice(0,5);
+    if(fz){
+      keepOrder(order,fz.groups,function(g){return g.key});
+      order.forEach(function(g){keepOrder(g.items,fz.items[g.key]||[],function(x){return x.id})});
+      keepOrder(recent,fz.recent,function(x){return x.id});
+    }
+    listFrozen={groups:order.map(function(g){return g.key}),items:{},recent:recent.map(function(x){return x.id})};
+    order.forEach(function(g){listFrozen.items[g.key]=g.items.map(function(x){return x.id})});
+    listResort=false;
     var rg={key:'__recent',label:'最近活跃',items:recent,recent:true};
     flat.push({grp:rg});recent.forEach(function(s){flat.push({s:s,recent:true})});
     if(!recent.length)flat.push({empty:'30 分钟内没有在 claclaw 里活跃的会话'});
@@ -1490,6 +1499,27 @@ setInterval(resyncBadge,15000);
 document.addEventListener('visibilitychange',resyncBadge);
 window.addEventListener('focus',resyncBadge);
 if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('message',function(e){if(e.data&&e.data.t==='pushed')setTimeout(resyncBadge,800)});
+// ---------- 列表排序的时机 ----------
+// 正在用（最近 5 分钟内有操作）时目录和会话的位置固定，免得一边沟通一边跳来跳去；
+// 打开页面、离开 3 分钟以上再回来、或者 5 分钟没操作时，才按最新活跃时间重新排
+var listFrozen=null,listResort=true,lastTouch=Date.now(),hiddenAt=0;
+function keepOrder(arr,prev,key){
+  var pos={};prev.forEach(function(k,i){pos[k]=i});
+  arr.sort(function(a,b){
+    var pa=pos[key(a)],pb=pos[key(b)];
+    if(pa==null&&pb==null)return 0;
+    if(pa==null)return -1;if(pb==null)return 1;   // 新出现的排最前
+    return pa-pb;
+  });
+}
+['pointerdown','pointermove','keydown','wheel','touchstart'].forEach(function(ev){document.addEventListener(ev,function(){lastTouch=Date.now()},{passive:true,capture:true})});
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){hiddenAt=Date.now();return}
+  if(hiddenAt&&Date.now()-hiddenAt>=3*60e3){listResort=true;if(DESKTOP.matches)openSheet()}
+});
+setInterval(function(){
+  if(!listResort&&Date.now()-lastTouch>=5*60e3){listResort=true;if(DESKTOP.matches&&!document.hidden)openSheet()}
+},30000);
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
