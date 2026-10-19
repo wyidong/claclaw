@@ -504,6 +504,7 @@ class Runner {
         this.suggestion = m.suggestion;
         this.emit({ t: 'suggest', text: m.suggestion });
       } else if (m.type === 'result') {
+        touchWeb(this.id);
         if (!this.sawState) this.busy = false;   // 有 session_state 时以它的 idle 为准
         this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined });
         this.notify(m.subtype === 'success' ? '回复完了' : '这一轮出错结束了', 'done-' + this.id);
@@ -533,6 +534,7 @@ class Runner {
   // 正在工作时也能发：作为「插话」排队（priority next），Claude 在下一个合适的时机读到，和终端里边干边打字一样
   send(text, images = []) {
     const steering = this.busy;
+    touchWeb(this.id);
     this.busy = true;
     if (!steering) this.busySince = Date.now();   // 网页显示「已工作多久」从这里算，刷新页面也不归零
     this.suggestion = null;
@@ -707,6 +709,22 @@ function saveUnread(u) {
 function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveUnread(u); return unreadTotal(u); }
 function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); }
 
+// ---------- 在 claclaw 里的最近活动 ----------
+// 网页里打开、发消息、一轮结束都算「在 claclaw 活跃」；会话列表的「最近活跃」只看这个（不看终端 / VS Code）
+const WEB_ACTIVE_FILE = path.join(DATA, 'web-active.json');
+let webActive = (() => { try { return JSON.parse(fs.readFileSync(WEB_ACTIVE_FILE, 'utf8')) || {}; } catch { return {}; } })();
+let webActiveTimer = null;
+function touchWeb(id) {
+  if (!id) return;
+  webActive[id] = Date.now();
+  clearTimeout(webActiveTimer);
+  webActiveTimer = setTimeout(() => {
+    const cut = Date.now() - 7 * 86400e3;   // 只留最近 7 天的
+    for (const k of Object.keys(webActive)) if (webActive[k] < cut) delete webActive[k];
+    try { fs.writeFileSync(WEB_ACTIVE_FILE, JSON.stringify(webActive), { mode: 0o600 }); } catch {}
+  }, 2000);
+}
+
 let lastSound = 0;
 function localSound(force = false) {
   if (!SOUND_OK || (!force && !settings().localSound)) return;
@@ -758,12 +776,13 @@ async function sessionList() {
       openInWeb: ours,
       busyElsewhere: elsewhere,
       unread: unread[s.sessionId] || 0,
+      webActive: webActive[s.sessionId] || 0,
     };
   }).concat(
     // 网页里新建、还没发过消息的会话：没有会话文件，listSessions 看不到，也列出来
     [...runners.values()].filter(r => !r.closed && r.unsent()).map(r => ({
       id: r.id, title: r.info.customTitle || '新会话', cwd: r.cwd, cwdShort: relPath(r.cwd || '', null),
-      branch: '', lastModified: r.createdAt, openInWeb: true, busyElsewhere: null, unsent: true,
+      branch: '', lastModified: r.createdAt, openInWeb: true, busyElsewhere: null, unsent: true, webActive: webActive[r.id] || r.createdAt,
     })),
   ).sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
 }
@@ -1071,6 +1090,7 @@ wss.on('connection', (ws, req) => {
         runner = runners.get(m.id);
         runners.set(m.id, runner);
         runner.subscribe(ws);
+        touchWeb(m.id);
         if (ws.visible !== false) clearUnread(m.id);
         log('open', m.id.slice(0, 8), info.cwd);
         send({
