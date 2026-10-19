@@ -223,12 +223,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #ta{display:block;width:100%;resize:none;min-height:44px;max-height:132px;padding:11px 48px 11px 36px;border:0;border-radius:0;background:transparent;color:var(--ink);font:inherit;line-height:1.4;box-sizing:border-box;caret-color:var(--accent)}
 #ta:focus,#ta:focus-visible{outline:none}
 #ta::placeholder{color:var(--muted);opacity:.65}
-#taWrap.sug #ta{padding-right:88px}
+#taWrap.sug #ta{}
 #taWrap.sug #ta::placeholder{opacity:.9}
 #attachBtn,#send{position:absolute;top:2px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1}
 #attachBtn{left:-8px;color:var(--muted)}
 #send{right:2px;color:var(--accent)}
-#send:disabled{color:var(--muted);opacity:.45;cursor:default}
+#send:disabled,#send.sugfill{color:var(--muted);opacity:.45;cursor:default}
+#send.sugfill{cursor:pointer}
 #stopBtn{position:absolute;top:2px;right:42px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--deny)}
 #stopBtn[hidden]{display:none}
 #composer.busy #ta{padding-right:88px}
@@ -504,7 +505,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #attachBtn{top:auto;bottom:10px;left:12px;width:34px;height:34px;border-radius:8px}
   #attachBtn:hover{background:var(--bg);color:var(--ink)}
   #send{top:auto;bottom:12px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
-  #send:disabled{background:var(--code-bg);color:var(--muted);opacity:1}
+  #send:disabled,#send.sugfill{background:var(--code-bg);color:var(--muted);opacity:1}
   #stopBtn{top:auto;bottom:12px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
   #stopBtn:hover{background:var(--del-bg)}
   #composer.busy #ta{padding-right:20px}
@@ -960,7 +961,8 @@ function syncSuggestion(){
   var on=!!suggestion&&!ta.value&&!busy&&!!session;
   ta.placeholder=on?suggestion:PLACEHOLDER;
   taWrap.classList.toggle('sug',on);
-  sugBtn.hidden=!on;
+  sugBtn.hidden=true;   // 不再单独放「↵ 填入」按钮：输入框空着时点灰色的发送键就是填入建议
+  syncSend();
 }
 function acceptSuggestion(){
   if(!suggestion)return;
@@ -1087,6 +1089,9 @@ function syncSend(){
   var d=DESKTOP.matches,at=attachments||[];
   sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');
   sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data});
+  // 输入框空着、有建议（灰字）时：发送键保持灰色样子，但能点，点了把建议填进输入框（不直接发）
+  var sugOn=sendBtn.disabled&&!!suggestion&&!ta.value&&!at.length&&!!session;
+  sendBtn.classList.toggle('sugfill',sugOn);if(sugOn){sendBtn.disabled=false;sendBtn.setAttribute('aria-label','填入建议')}
   var sb=$('#stopBtn');sb.hidden=!busy;sb.innerHTML=d?'停止':ICON_STOP;
   $('#composer').classList.toggle('busy',busy);
 }
@@ -1467,7 +1472,7 @@ function outboxRestore(){
 }
 function stop(){wsSend({t:'interrupt'})}
 
-sendBtn.addEventListener('click',function(){run(ta.value)});
+sendBtn.addEventListener('click',function(){if(sendBtn.classList.contains('sugfill')){acceptSuggestion();return}run(ta.value)});
 $('#stopBtn').addEventListener('click',stop);
 ta.addEventListener('input',function(){
   ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';syncSend();
