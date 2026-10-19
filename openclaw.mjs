@@ -187,7 +187,7 @@ export class OcRunner {
         if (!this.subs.size) this.dispose();
       }
     } else if (ev === 'agent' && p.stream === 'run_status' && p.data?.phase === 'retrying') {
-      this.emit({ t: 'sys', text: p.data.message || '模型暂时不可用，重试中' });
+      this.emit({ t: 'status', text: '模型暂不可用，重试 ' + (p.data.retryAttempt || '') + '/' + (p.data.maxRetries || '') });
     } else if (ev === 'agent' && p.stream === 'tool') {
       const d = p.data || {};
       if (d.phase === 'start') { this.emit({ t: 'tool.start', id: d.toolCallId, name: d.name, target: toolTarget(d.name, d.args) }); this.onActivity?.(this.id, '运行命令'); }

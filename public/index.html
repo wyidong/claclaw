@@ -923,6 +923,8 @@ function addPeer(from,t){
   if(t){var b=document.createElement('div');b.className='body md';b.innerHTML=md(t);e.appendChild(b)}
   feed.appendChild(e);scrollDown();
 }
+// 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
+function shortId(id){id=String(id||'');if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':');return p[p.length-1]||p[0]}return id.slice(0,8)}
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
 // 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
@@ -941,7 +943,7 @@ function tickWork(){
   if(!busy){bar.hidden=true;return}
   var quiet=lastEvt?Math.floor((Date.now()-lastEvt)/1000):0,stuck=quiet>=90;
   bar.hidden=false;bar.classList.toggle('quiet',stuck);
-  $('#workT').textContent='Claude 正在工作 · '+workLabel+(sec?' · 已 '+fmtSec(sec):'')+
+  $('#workT').textContent=(session&&/^oc:/.test(session.id)?'OpenClaw':'Claude')+' 正在工作 · '+workLabel+(sec?' · 已 '+fmtSec(sec):'')+
     (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':'');
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
@@ -1298,12 +1300,13 @@ function onEvent(m){
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
+    $('#modeWrap').style.display=/^oc:/.test(m.id)?'none':'';   // OpenClaw 没有权限模式
     setMode(m.mode,false);
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
     renderHistory(m.history);
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
-    addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+m.id.slice(0,8)+'　'+(m.cwdShort||''));
+    addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||''));
     }
     localStorage.setItem('claclaw.session',m.id);
     refreshList();goChat();bgRefreshList();
@@ -1324,7 +1327,7 @@ function onEvent(m){
   case 'session.busy':
     openFailed();clearOpening();
     if(m.canTakeover){
-      if(confirmTakeover(m.name||m.id.slice(0,8),m))wsSend({t:'session.open',id:m.id,mode:mode,takeover:true});
+      if(confirmTakeover(m.name||shortId(m.id),m))wsSend({t:'session.open',id:m.id,mode:mode,takeover:true});
     }else{
       notice('这个会话'+idleText(m)+'（'+(m.name||'')+'）。原处闲置满 '+m.needMin+' 分钟后网页端才能接管；或者先在那边关掉它。');
     }
@@ -1382,6 +1385,8 @@ function onEvent(m){
   case 'busy':
     setBusy(!!m.on);
     break;
+  case 'status':   // 一条会被替换的状态（例如 OpenClaw 模型重试），只显示在工作状态条上，不进消息流
+    think(true,m.text);break;
   case 'turn.done':
     refreshList();
     if(m.error)addSys('本轮结束：'+m.error);
@@ -1440,7 +1445,7 @@ function setHeader(){
   var t=(session.title||'').trim(),dir=session.dir||'';
   $('#nm').textContent=t||dir||'会话';
   var sid=$('#sid');sid.textContent='';
-  var idEl=document.createElement('span');idEl.className='cpid';idEl.dataset.copy=session.id;idEl.title='点击复制完整会话 ID';idEl.textContent=session.id.slice(0,8);
+  var idEl=document.createElement('span');idEl.className='cpid';idEl.dataset.copy=session.id;idEl.title='点击复制完整会话 ID';idEl.textContent=shortId(session.id);
   sid.appendChild(idEl);if(t&&dir)sid.appendChild(document.createTextNode('　'+dir));
 }
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
@@ -1739,7 +1744,7 @@ function openSheet(silent){
       if(bz&&!bz.canTakeover)b.dataset.busy='1';
       b.innerHTML='<div class="t"></div><div class="m"><span class="id"></span><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
-      var idEl=b.querySelector('.id');idEl.textContent=s.id.slice(0,8);idEl.classList.add('cpid');idEl.dataset.copy=s.id;idEl.title='点击复制完整会话 ID';
+      var idEl=b.querySelector('.id');idEl.textContent=shortId(s.id);idEl.classList.add('cpid');idEl.dataset.copy=s.id;idEl.title='点击复制完整会话 ID';
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);if(!s.unsent&&s.lastModified)b.dataset.lm=s.lastModified;
@@ -1755,7 +1760,7 @@ function openSheet(silent){
         opening=s.id;openingAt=Date.now();row.classList.add('opening');
         var w=b.querySelector('.when');if(w)w.textContent='打开中…';
         if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
-          $('#nm').textContent=s.title;$('#sid').textContent=s.id.slice(0,8);$('#modeTag').textContent='';
+          $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#modeTag').textContent='';
           if(!restoreFeed(s.id))feed.innerHTML='<div class="sys">加载中…</div>';goChat();
         }
         wsSend({t:'session.open',id:s.id,mode:mode});
@@ -1961,7 +1966,7 @@ document.addEventListener('visibilitychange',function(){
 function openFromNotice(id){
   if(session&&session.id===id&&!mList)return;
   pendingOpen=id;
-  if(!DESKTOP.matches){if(!restoreFeed(id))feed.innerHTML='<div class="sys">加载中…</div>';$('#nm').textContent='';$('#sid').textContent=id.slice(0,8);goChat()}
+  if(!DESKTOP.matches){if(!restoreFeed(id))feed.innerHTML='<div class="sys">加载中…</div>';$('#nm').textContent='';$('#sid').textContent=shortId(id);goChat()}
   if(ws&&ws.readyState===1)wsSend({t:'session.open',id:id,mode:mode});else reconnectNow();
   setTimeout(function(){if(pendingOpen===id)reconnectNow()},3000);   // 3 秒没打开：连接多半是死的，重连（连上后会自动打开）
 }
