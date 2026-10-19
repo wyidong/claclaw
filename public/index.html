@@ -402,6 +402,22 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 }
 #mtabs{display:none}
 #setTop{display:none}
+#clawPane{display:none}
+@media (max-width:999px){
+  /* Claw 页：三张大卡片，选了哪个，会话页就显示哪一种的会话（现在只有 Claude） */
+  #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
+  #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + env(safe-area-inset-bottom,0px))}
+  .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
+  .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:2px solid transparent;border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+  .claw-card[aria-current="true"]{border-color:var(--accent)}
+  .claw-card:disabled{opacity:.45;cursor:default}
+  .claw-ic{flex:none;display:grid;place-items:center;width:48px;height:48px;border-radius:12px;color:#fff;font-size:22px;font-weight:700}
+  .claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+  .claw-tx b{font-size:17px}
+  .claw-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
+  .claw-st{flex:none;font-size:12.5px;color:var(--muted)}
+  .claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
+}
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
 #sSearch{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
@@ -573,6 +589,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
   <!-- 手机底部菜单（只在列表页显示，进入聊天隐藏，像微信） -->
   <nav id="mtabs" aria-label="底部菜单">
+    <button type="button" data-tab="claw"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="3.5" y="13.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="13.5" width="7" height="7" rx="2"/></svg><span>Claw</span></button>
     <button type="button" data-tab="chats" class="on"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span>会话</span></button>
     <button type="button" data-tab="set"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
   </nav>
@@ -614,6 +631,25 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <h2>会话</h2>
       <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
+      <!-- Claw：选择接管哪一种 AI 助手的会话（目前只实现了 Claude） -->
+      <div id="clawPane">
+        <div class="claw-h">选择 Claw</div>
+        <button type="button" class="claw-card" data-claw="claude" aria-current="true">
+          <span class="claw-ic" style="background:#D97757">C</span>
+          <span class="claw-tx"><b>Claude</b><small>Claude Code 会话：终端、VS Code、网页里开的都在这里</small></span>
+          <span class="claw-st">当前</span>
+        </button>
+        <button type="button" class="claw-card" data-claw="openclaw" disabled>
+          <span class="claw-ic" style="background:#E5484D">O</span>
+          <span class="claw-tx"><b>OpenClaw</b><small>本机 OpenClaw 网关的会话</small></span>
+          <span class="claw-st">即将支持</span>
+        </button>
+        <button type="button" class="claw-card" data-claw="deepseek" disabled>
+          <span class="claw-ic" style="background:#4D6BFE">D</span>
+          <span class="claw-tx"><b>DeepSeek Harness</b><small>DeepSeek Harness 的会话</small></span>
+          <span class="claw-st">即将支持</span>
+        </button>
+      </div>
       <div id="setPane">
       <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
       <div id="setBody">
@@ -1530,15 +1566,26 @@ function refreshList(){if(DESKTOP.matches)openSheet()}
 setInterval(function(){if(DESKTOP.matches&&!document.hidden)openSheet()},60000);
 DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.matches)openSheet();else closeSheet();syncSend()});
 // 图标栏：上面是会话，最下面是设置（退出登录在设置页里）
-function railTab(set){
-  $('#app').classList.toggle('set-on',set);$('#railSet').classList.toggle('on',set);$('#railChats').classList.toggle('on',!set);
-  document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',(b.dataset.tab==='set')===set)});
+function railTab(set){mTab(set?'set':'chats')}
+// 底部菜单：claw（选择哪种助手）/ chats（会话列表）/ set（设置，子页面）
+function mTab(t){
+  var app=$('#app');
+  app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');
+  $('#railSet').classList.toggle('on',t==='set');$('#railChats').classList.toggle('on',t!=='set');
+  document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t)});
   $('.sheet-p').scrollTop=0;
 }
+// 选了 Claw 就回到会话页（目前只有 Claude 可选，会话页就是 Claude 的会话列表）
+document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){
+  if(c.disabled)return;
+  document.querySelectorAll('.claw-card').forEach(function(x){x.setAttribute('aria-current',String(x===c))});
+  try{localStorage.setItem('claclaw.claw',c.dataset.claw)}catch(_){}
+  mTab('chats');
+})});
 document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){
-  var set=b.dataset.tab==='set';
-  if(set&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
-  railTab(set);
+  var t=b.dataset.tab;
+  if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
+  mTab(t);
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){railTab(false)});
