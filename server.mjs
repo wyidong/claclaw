@@ -103,7 +103,8 @@ const MAX_IMAGE_B64 = 7 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 // 历史记录里的图片总量上限，超过的只显示占位，免得打开会话时传几十 MB
 const HISTORY_IMAGE_BUDGET = 4 * 1024 * 1024;
-const HISTORY_MAX = 80;
+// 历史分页：打开时只发最后一页（约一屏），往上滑再按页要更早的；服务器最多保留最近 HISTORY_KEEP 条
+const HISTORY_PAGE = 30, HISTORY_MORE = 40, HISTORY_KEEP = 600;
 // 网页里的会话没人看、也没在跑多久后关掉进程（会话记录还在）；可在设置里改，默认 10 分钟
 const idleCloseMs = () => minutesSetting('idleCloseMin', 10, 1) * 60_000;
 // 新建后还没发过消息的会话：Claude Code 要等第一条消息才建会话文件，关掉就什么都不剩，所以多留一会儿
@@ -354,18 +355,25 @@ async function loadHistory(sessionId, cwd) {
       }
     }
   }
-  const shown = items.slice(-HISTORY_MAX);
-  // 图片预算从最新的往前分：近的图优先显示，超出的给 null（前端显示占位）
+  return { items: items.slice(-HISTORY_KEEP), total: items.length };
+}
+
+// 取一页：before 之前（绝对序号，不含）最多 count 条；图片按页从新到旧分预算，超出的给 null（前端显示占位）
+function historyPage(h, before, count) {
+  const base = h.total - h.items.length;
+  const end = Math.max(0, Math.min(h.items.length, before - base));
+  const start = Math.max(0, end - count);
+  const page = h.items.slice(start, end);
   let budget = HISTORY_IMAGE_BUDGET;
-  for (let i = shown.length - 1; i >= 0; i--) {
-    if (!shown[i].images) continue;
-    shown[i] = { ...shown[i], images: shown[i].images.map(src => {
+  for (let i = page.length - 1; i >= 0; i--) {
+    if (!page[i].images) continue;
+    page[i] = { ...page[i], images: page[i].images.map(src => {
       if (budget < src.data.length) return null;
       budget -= src.data.length;
       return 'data:' + src.media_type + ';base64,' + src.data;
     }) };
   }
-  return shown;
+  return { items: page, start: base + start, more: start > 0 };
 }
 
 // ---------- Runner：一个被网页打开的会话 = 一个常驻的 SDK query ----------
@@ -1142,6 +1150,13 @@ wss.on('connection', (ws, req) => {
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
       if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }
+      // 往上滑：要 before（绝对序号）之前的一页
+      if (m.t === 'history.more') {
+        if (!runner) return;
+        const hist = await loadHistoryCached(runner.id, runner.cwd);
+        const pg = historyPage(hist, Number(m.before) || 0, HISTORY_MORE);
+        return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
+      }
       if (m.t === 'session.new') {
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
         const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
@@ -1191,7 +1206,8 @@ wss.on('connection', (ws, req) => {
         }
         runner?.unsubscribe(ws);
         const tHist = Date.now();
-        const history = await loadHistoryCached(m.id, info.cwd);
+        const hist = await loadHistoryCached(m.id, info.cwd);
+        const pg = historyPage(hist, hist.total, HISTORY_PAGE);
         const histMs = Date.now() - tHist;
         if (!runners.has(m.id)) {
           const inherited = inheritedMode(info);
@@ -1207,7 +1223,8 @@ wss.on('connection', (ws, req) => {
         log('open', m.id.slice(0, 8), info.cwd, 'history ' + histMs + 'ms');
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
-          cwdShort: relPath(info.cwd || '', null), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy, history,
+          cwdShort: relPath(info.cwd || '', null), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,
+          history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: runner.busy && runner.busySince ? Date.now() - runner.busySince : 0,
           pending: [...runner.pending.values()].map(p => p.req),
           suggestion: runner.busy ? null : runner.suggestion || null,

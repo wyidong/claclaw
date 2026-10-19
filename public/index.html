@@ -1180,9 +1180,9 @@ function onEvent(m){
   case 'session.opened':
     if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
     session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
-    var hsig=histSig(m.history),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig);
+    var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig);
     delete feedCache[m.id];
-    if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null}   // 记录没变：直接用上次画好的，不重画、不闪
+    if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null;histStart=(m.historyTotal||0)-fc.kept;histMore=histStart>0}   // 记录没变：直接用上次画好的，不重画、不闪
     else{feed.innerHTML='';cards={};permQueue=[];aiEl=null}
     feedSig=hsig;feedDirty=false;
     session.dir=(m.cwdShort||'').split('/').pop()||'';
@@ -1192,13 +1192,8 @@ function onEvent(m){
     setMode(m.mode,false);
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
-    if(m.history.length)addSys('以下是最近 '+m.history.length+' 条记录');
-    m.history.forEach(function(it){
-      if(it.kind==='user')addUser(it.text,it.images);
-      else if(it.kind==='ai')addAi(it.text);
-      else if(it.kind==='peer')addPeer(it.from,it.text);
-      else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no')}
-    });
+    renderHistory(m.history);
+    histStart=m.historyStart||0;histMore=!!m.historyMore;
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+m.id.slice(0,8)+'　'+(m.cwdShort||''));
     }
     localStorage.setItem('claclaw.session',m.id);
@@ -1307,6 +1302,9 @@ function onEvent(m){
     break;
   case 'activity':
     activity=m.activity||{};renderActivity();
+    break;
+  case 'history.page':
+    prependHistory(m);
     break;
   case 'unread':
     unread=m.unread||{};renderUnread();
@@ -1748,9 +1746,9 @@ $('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)openSheet()
 var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
 function goList(){
   if(DESKTOP.matches)return;
+  if(session){wsSend({t:'session.leave'});saveFeed(session.id);session=null;setBusy(false)}   // 先存（聊天区还可见，量得出高度）再切到列表
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
-  if(session){wsSend({t:'session.leave'});saveFeed(session.id);session=null;setBusy(false)}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
   renderUnread();renderActivity();
@@ -1794,12 +1792,46 @@ function openFromNotice(id){
 }
 // ---------- 进过的会话：画好的聊天内容留在内存里，再进来直接放回去（最多 8 个）----------
 var feedCache={},feedSig=null,feedDirty=false;
-function histSig(h){var l=h[h.length-1]||{};return h.length+'|'+(l.kind||'')+'|'+(l.status||'')+'|'+String(l.text||l.output||l.target||l.name||'').slice(-120)}
+function histSig(h,total){var l=h[h.length-1]||{};return (total||h.length)+'|'+(l.kind||'')+'|'+(l.status||'')+'|'+String(l.text||l.output||l.target||l.name||'').slice(-120)}
+// 画一段历史；每条历史对应聊天区里一个元素，打上 data-h 好数「缓存里留了几条」
+function renderHistory(items){
+  items.forEach(function(it){
+    if(it.kind==='user')addUser(it.text,it.images);
+    else if(it.kind==='ai')addAi(it.text);
+    else if(it.kind==='peer')addPeer(it.from,it.text);
+    else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no')}
+    else return;
+    if(feed.lastElementChild)feed.lastElementChild.dataset.h='1';
+  });
+}
+// 往上滑到顶：向服务器要更早的一页，接到最上面，画面位置不跳
+var histStart=0,histMore=false,histLoading=false;
+feed.addEventListener('scroll',function(){
+  if(!session||!histMore||histLoading||feed.scrollTop>120)return;
+  histLoading=true;wsSend({t:'history.more',before:histStart});
+  setTimeout(function(){histLoading=false},4000);
+});
+function prependHistory(m){
+  histLoading=false;
+  if(!session||m.id!==session.id)return;
+  histStart=m.start;histMore=!!m.more;
+  if(!m.items.length)return;
+  var real=feed,tmp=document.createElement('div'),keepStick=stick;
+  feed=tmp;stick=false;try{renderHistory(m.items)}finally{feed=real;stick=keepStick}
+  var h0=feed.scrollHeight,top0=feed.scrollTop,f=document.createDocumentFragment();
+  while(tmp.firstChild)f.appendChild(tmp.firstChild);
+  feed.insertBefore(f,feed.firstChild);
+  feed.scrollTop=top0+(feed.scrollHeight-h0);   // 保持正在看的位置不动
+}
+// 离开会话：只留最后大约一屏半（手机内存省着用），再进来立刻显示；更早的往上滑时再从服务器取
 function saveFeed(id){
   if(!id||!feed.firstChild)return;
   if(thinkEl){thinkEl.remove();thinkEl=null}
+  var need=Math.max(600,feed.clientHeight*1.5),acc=0,kept=0,n=feed.lastElementChild;
+  while(n&&acc<need){acc+=n.offsetHeight||0;if(n.dataset.h)kept++;n=n.previousElementSibling}
+  while(n){var p=n.previousElementSibling;n.remove();n=p}   // 一屏以外的都扔掉
   var f=document.createDocumentFragment();while(feed.firstChild)f.appendChild(feed.firstChild);
-  delete feedCache[id];feedCache[id]={frag:f,cards:cards,sig:feedDirty?null:feedSig};   // 看的时候有新内容进来：回来时一定按服务器的重画
+  delete feedCache[id];feedCache[id]={frag:f,cards:cards,kept:kept,sig:feedDirty?null:feedSig};   // 看的时候有新内容进来：回来时一定按服务器的重画
   var ks=Object.keys(feedCache);while(ks.length>8)delete feedCache[ks.shift()];
 }
 function restoreFeed(id){
