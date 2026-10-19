@@ -426,7 +426,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
 #sSearch{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
 #sSearch:focus{outline:none;border-color:var(--accent)}
-#sNew,#sReload{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
+#sNew{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 #setPane{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
 /* 手机会话卡片：没有常驻按钮，像微信一样左滑露出「编辑 / 删除」 */
 .s-ren span,.s-del span{display:none}
@@ -476,7 +476,6 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #sNew:hover{color:var(--accent);background:var(--bg)}
   /* 设置页（点图标栏的齿轮）：会话列表和设置二选一显示 */
   #setPane{display:none;padding-top:16px;margin-top:0;border-top:0}
-  #sReload{display:none}
   #setPane h2{margin:0 6px 16px;font-size:17px}
   #app.set-on #sTop,#app.set-on #sList{display:none}
   /* 设置页：分组卡片；退出登录和页面版本沉到最底下，和其他设置拉开 */
@@ -633,7 +632,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   <div id="sheet" aria-hidden="true">
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2>会话</h2>
-      <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
+      <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话（目前只实现了 Claude） -->
       <div id="clawPane">
@@ -688,6 +687,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
         <div class="set-card">
           <button type="button" class="set-item" id="soundBtn" hidden><span class="lb">推送时电脑响一声<small>运行 claclaw 的那台电脑</small></span><span class="sw" aria-hidden="true"></span></button>
           <label class="set-item" id="soundPick" hidden><span class="lb">提示音<small>选了会先试听</small></span><select id="soundSel"></select></label>
+        </div>
+      </div>
+      <div class="set-sec">
+        <div class="set-h">客户端</div>
+        <div class="set-card">
+          <button type="button" class="set-item" id="setReload"><span class="lb">更新客户端<small id="setReloadSub">重新加载网页，用上电脑上的最新版本</small></span><span class="chev" aria-hidden="true"></span></button>
         </div>
       </div>
       <div class="set-foot">
@@ -942,7 +947,7 @@ var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[
 function checkVersion(){
   fetch('/',{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){
     var v=(h.match(/页面版本 ([0-9a-f]{7})/)||[])[1];
-    if(v&&PAGE_VER&&v!==PAGE_VER){updateReady=true;banner('claclaw 已更新 · 点这里刷新使用新版本');$('#bannerT').classList.add('link')}
+    if(v&&PAGE_VER&&v!==PAGE_VER){updateReady=true;$('#setReloadSub').textContent='有新版本，点这里更新';banner('claclaw 已更新 · 点这里刷新使用新版本');$('#bannerT').classList.add('link')}
   }).catch(function(){});
 }
 setInterval(function(){if(!document.hidden&&!updateReady)checkVersion()},300000);
@@ -1615,7 +1620,7 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){railTab(false)});
-$('#sReload').addEventListener('click',function(){$('#railReload').click()});
+$('#setReload').addEventListener('click',function(){$('#railReload').click()});
 // 刷新：重新加载页面（拿到最新版本）。输入框里没发的字先存起来，刷新后放回去
 $('#railReload').addEventListener('click',function(){
   try{if(ta.value)sessionStorage.setItem('claclaw.draft',ta.value)}catch(_){}
