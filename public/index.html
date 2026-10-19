@@ -652,10 +652,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
           <span class="claw-tx"><b>OpenClaw</b><small>本机 OpenClaw 网关的会话</small></span>
           <span class="claw-st">选择</span>
         </button>
-        <button type="button" class="claw-card" data-claw="deepseek" disabled>
+        <button type="button" class="claw-card" data-claw="deepseek">
           <img class="claw-ic" src="/icons/claw-deepseek.png?v=2" alt="">
-          <span class="claw-tx"><b>DeepSeek Harness</b><small>DeepSeek Harness 的会话</small></span>
-          <span class="claw-st">即将支持</span>
+          <span class="claw-tx"><b>DeepSeek Harness</b><small>dsh 的会话：网页版、终端里开的都在这里</small></span>
+          <span class="claw-st">选择</span>
         </button>
       </div>
       <div id="setPane">
@@ -925,7 +925,8 @@ function addPeer(from,t){
   feed.appendChild(e);scrollDown();
 }
 // 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
-function shortId(id){id=String(id||'');if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':');return p[p.length-1]||p[0]}return id.slice(0,8)}
+function clawName(id){return /^oc:/.test(id||'')?'OpenClaw':/^ds:/.test(id||'')?'DeepSeek':'Claude'}
+function shortId(id){id=String(id||'');if(/^ds:/.test(id))return id.replace(/^ds:(session-)?/,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':');return p[p.length-1]||p[0]}return id.slice(0,8)}
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
 // 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
@@ -944,7 +945,7 @@ function tickWork(){
   if(!busy){bar.hidden=true;return}
   var quiet=lastEvt?Math.floor((Date.now()-lastEvt)/1000):0,stuck=quiet>=90;
   bar.hidden=false;bar.classList.toggle('quiet',stuck);
-  $('#workT').textContent=(session&&/^oc:/.test(session.id)?'OpenClaw':'Claude')+' 正在工作 · '+workLabel+(sec?' · 已 '+fmtSec(sec):'')+
+  $('#workT').textContent=clawName(session&&session.id)+' 正在工作 · '+workLabel+(sec?' · 已 '+fmtSec(sec):'')+
     (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':'');
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
@@ -1301,7 +1302,7 @@ function onEvent(m){
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
-    $('#modeWrap').style.display=/^oc:/.test(m.id)?'none':'';   // OpenClaw 没有权限模式
+    $('#modeWrap').style.display=/^(oc|ds):/.test(m.id)?'none':'';   // OpenClaw 没有权限模式
     setMode(m.mode,false);
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
@@ -1599,7 +1600,7 @@ function mTab(t){
 }
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
 var clawSel=null;try{clawSel=localStorage.getItem('claclaw.claw')}catch(_){}
-if(clawSel!=='claude'&&clawSel!=='openclaw')clawSel=null;
+if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek')clawSel=null;
 function showClawSel(){
   document.querySelectorAll('.claw-card').forEach(function(x){
     var on=x.dataset.claw===clawSel;x.setAttribute('aria-current',String(on));
@@ -1662,6 +1663,10 @@ $('#sSearch').addEventListener('input',applySearch);
 $('#sNew').addEventListener('click',function(){
   var ref=(session&&session.cwd)?session:(lastSess||(lastList||[]).find(function(x){return x.cwd}));   // 手机列表页没有打开的会话：用最近打开过的、或列表里最近活跃的那个
   if(clawSel==='openclaw'||(ref&&/^oc:/.test(ref.id))){alert('OpenClaw 会话暂不支持在这里新建');return}
+  if(clawSel==='deepseek'){   // DeepSeek：参照当前打开的、或列表里最近的 DeepSeek 会话的目录；一个都没有就建在主目录
+    ref=(session&&/^ds:/.test(session.id))?session:(lastList||[]).find(function(x){return /^ds:/.test(x.id)&&x.cwd});
+    newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:'deepseek'}:{id:'',cwd:'~',claw:'deepseek'});return;
+  }
   if(!ref||!ref.cwd){alert('先打开一个会话，新会话会默认建在它的目录里');return}
   newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});
 });
@@ -1676,7 +1681,7 @@ function openSheet(silent){
   if(!silent&&DESKTOP.matches){sheet.classList.add('on');sheet.setAttribute('aria-hidden','false')}   // 手机列表页本身就是列表，不用弹出面板
   syncPushBtn();
   var claw=clawSel;
-  fetch('/api/sessions'+(clawSel==='openclaw'?'?claw=openclaw':'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
+  fetch('/api/sessions'+(clawSel==='openclaw'||clawSel==='deepseek'?'?claw='+clawSel:'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
     if(claw!==clawSel)return;   // 加载途中换了 Claw
     if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
     lastList=arr;
@@ -1813,7 +1818,7 @@ function renderActivity(){
     w.textContent=a||it.dataset.when||'';
   });
 }
-function clawOf(id){return /^oc:/.test(id)?'openclaw':'claude'}
+function clawOf(id){return /^oc:/.test(id)?'openclaw':/^ds:/.test(id)?'deepseek':'claude'}
 function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false,byClaw={};
   ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id){other=true;byClaw[clawOf(id)]=true}});
@@ -2203,6 +2208,7 @@ $('#newForm').addEventListener('submit',function(e){
   e.preventDefault();if(!newFrom)return;
   var dir=$('#newDir').value.trim(),orig=(newFrom.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   var msg={t:'session.new',from:newFrom.id,title:$('#newName').value};
+  if(newFrom.claw)msg.claw=newFrom.claw;
   if(dir&&dir!==orig)msg.cwd=dir;   // 改了目录才带上；服务器会检查目录是否存在
   closeNew();closeSheet();
   wsSend(msg);
@@ -2211,7 +2217,7 @@ $('#newForm').addEventListener('submit',function(e){
 // ---------- 会话改名 ----------
 
 function renameSess(s){
-  if(/^oc:/.test(s.id)){alert('OpenClaw 会话暂不支持在这里改名');return}
+  if(/^(oc|ds):/.test(s.id)){alert(clawName(s.id)+' 会话暂不支持在这里改名');return}
   var t=prompt('给会话改个名字',s.title);
   if(t===null)return;
   t=t.replace(/\s+/g,' ').trim();
@@ -2226,7 +2232,7 @@ function renameSess(s){
 
 var delDlg=$('#delDlg'),delTarget=null;
 function openDel(s){
-  if(/^oc:/.test(s.id)){alert('OpenClaw 会话暂不支持在这里删除');return}
+  if(/^(oc|ds):/.test(s.id)){alert(clawName(s.id)+' 会话暂不支持在这里删除');return}
   delTarget=s;
   $('#delTitle').textContent='删除「'+s.title+'」？';
   $('#delU').value='';$('#delP').value='';$('#delErr').textContent='';$('#delGo').disabled=false;

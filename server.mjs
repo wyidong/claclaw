@@ -12,6 +12,7 @@ import { query, listSessions, getSessionMessages, renameSession, createSdkMcpSer
 import { z } from 'zod';
 import * as push from './push.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList } from './openclaw.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown } from './dsh.mjs';
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
@@ -765,8 +766,16 @@ function ocTurnDone(r, ok) {
   if (r.watched()) return;
   localSound();
   const badge = markUnread(r.id);
-  push.sendAll({ title: r.title || 'OpenClaw', body: ok ? '回复完了' : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+  push.sendAll({ title: r.title || (isDs(r.id) ? 'DeepSeek' : 'OpenClaw'), body: ok ? '回复完了' : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
 }
+// DeepSeek 会话要你确认操作：没人看着就推送
+function dsAsk(r, body) {
+  if (r.watched()) return;
+  localSound();
+  const badge = markUnread(r.id);
+  push.sendAll({ title: r.title || 'DeepSeek', body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+}
+const dsOpts = () => ({ log, onActivity: setActivity, onTurnDone: ocTurnDone, onAsk: dsAsk });
 function setActivity(id, a) {
   if (a) activityMap[id] = a; else delete activityMap[id];
   if (activityTimer) return;   // 0.5 秒合并一次，流式输出时不刷屏
@@ -800,7 +809,7 @@ function detectClaws() {
   return [
     { id: 'claude', installed: fs.existsSync(path.join(HOME, '.claude', 'projects')), supported: true },
     { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: true },
-    { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: false },
+    { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: true },
   ];
 }
 
@@ -1124,6 +1133,10 @@ const handler = async (req, res) => {
       try { return sendJson(res, 200, await ocSessionList(log), { 'cache-control': 'no-store' }); }
       catch (e) { return sendJson(res, 502, { error: e.message }); }
     }
+    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'deepseek') {
+      try { return sendJson(res, 200, dsSessionList({ busy: id => !!dsRunners.get(id)?.busy }), { 'cache-control': 'no-store' }); }
+      catch (e) { return sendJson(res, 500, { error: e.message }); }
+    }
     if (url.pathname === '/api/sessions') {
       const list = await sessionList();
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -1180,6 +1193,10 @@ wss.on('connection', (ws, req) => {
       // 往上滑：要 before（绝对序号）之前的一页
       if (m.t === 'history.more') {
         if (!runner) return;
+        if (runner instanceof DsRunner) {
+          const pg = historyPage(runner.history(), Number(m.before) || 0, HISTORY_MORE);
+          return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
+        }
         if (runner instanceof OcRunner) {
           const pg = await runner.more();
           const start = Math.max(0, (Number(m.before) || 0) - pg.items.length);
@@ -1188,6 +1205,29 @@ wss.on('connection', (ws, req) => {
         const hist = await loadHistoryCached(runner.id, runner.cwd);
         const pg = historyPage(hist, Number(m.before) || 0, HISTORY_MORE);
         return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
+      }
+      if (m.t === 'session.new' && (isDs(m.from) || m.claw === 'deepseek')) {
+        // DeepSeek：用 dsh 的 ACP 在目录里新建会话；目录默认用参照会话的
+        let cwd = isDs(m.from) ? (dsRunners.get(m.from)?.cwd || dsSessionList().find(s => s.id === m.from)?.cwd) : '';
+        if (typeof m.cwd === 'string' && m.cwd.trim()) {
+          let d = m.cwd.trim();
+          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
+          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
+          cwd = path.resolve(d);
+        }
+        if (!cwd) cwd = HOME;
+        let st = null; try { st = fs.statSync(cwd); } catch {}
+        if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + cwd });
+        const r = await dsNewSession(cwd, dsOpts());
+        runner?.unsubscribe(ws);
+        runner = r;
+        r.subscribe(ws);
+        log('new dsh session', r.sid, 'in', cwd);
+        return send({
+          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'deepseek',
+          mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
+          commands: r.commands, isNew: true,
+        });
       }
       if (m.t === 'session.new') {
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
@@ -1221,6 +1261,24 @@ wss.on('connection', (ws, req) => {
           t: 'session.opened', id, title: info.summary, cwd: info.cwd, cwdShort: relPath(info.cwd, null),
           mode: runner.mode, modes: runner.allowedModes, busy: false, history: [], pending: [], suggestion: null,
           commands: runner.commands || null, isNew: true,
+        });
+      } else if (m.t === 'session.open' && isDs(m.id)) {
+        runner?.unsubscribe(ws);
+        let r = dsRunners.get(m.id);
+        if (!r) { r = new DsRunner(m.id, dsOpts()); dsRunners.set(m.id, r); }
+        const hist = r.history();
+        if (!hist.total && !r.attached) { dsRunners.delete(m.id); runner = null; return send({ t: 'error', message: '找不到这个会话' }); }
+        runner = r;
+        r.subscribe(ws);
+        if (ws.visible !== false) clearUnread(m.id);
+        const pg = historyPage(hist, hist.total, HISTORY_PAGE);
+        log('open dsh', r.sid, hist.total, 'items');
+        send({
+          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
+          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands,
+          history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
+          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
+          pending: [...r.pending.values()].map(p => p.req), suggestion: null,
         });
       } else if (m.t === 'session.open' && isOc(m.id)) {
         runner?.unsubscribe(ws);
@@ -1334,6 +1392,8 @@ for (const host of HOSTS) {
 function shutdown() {
   log('shutting down');
   for (const r of [...runners.values()]) r.dispose();
+  for (const r of [...dsRunners.values()]) r.dispose();
+  setTimeout(dsShutdown, 300);
   setTimeout(() => process.exit(0), 500);
 }
 process.on('SIGINT', shutdown);
