@@ -299,13 +299,25 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #sNew{flex:none;width:32px;height:32px;border:0;border-radius:8px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
   #sNew:hover{color:var(--accent);background:var(--bg)}
   /* 设置页（点图标栏的齿轮）：会话列表和设置二选一显示 */
-  #setPane{display:none;padding-top:14px}
-  #setPane h2{margin:0 4px 12px;font-size:16px}
+  #setPane{display:none;padding-top:16px}
+  #setPane h2{margin:0 6px 16px;font-size:17px}
   #app.set-on #sTop,#app.set-on #sList{display:none}
-  #app.set-on #setPane{display:block}
-  #setPane .always{display:block;width:100%;text-align:left;margin:0 0 8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-decoration:none;color:var(--ink);font-size:14px}
-  #setPane #soundPick{text-align:left;padding:0 4px}
-  #setPane .ver{text-align:left;padding:4px}
+  /* 设置页：分组卡片；退出登录和页面版本沉到最底下，和其他设置拉开 */
+  #app.set-on .sheet-p{display:flex;flex-direction:column}
+  #app.set-on #setPane{display:flex;flex-direction:column;flex:1}
+  #setPane .set-sec{margin:0 0 18px}
+  #setPane .set-sec:not(:has(> :not(.set-h):not([hidden]))){display:none}  /* 组里没有可见的设置项就整组隐藏 */
+  #setPane .set-h{margin:0 6px 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+  #setPane .set-sec>.always{display:block;width:100%;text-align:left;margin:0 0 8px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-decoration:none;color:var(--ink);font-size:14px;cursor:pointer}
+  #setPane .set-sec>.always[hidden]{display:none}
+  #setPane .set-sec>.always:hover{background:var(--surface);color:var(--accent)}
+  #setPane #soundPick{display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;margin:8px 6px 0;font-family:var(--sans);font-size:13px;color:var(--muted)}
+  #setPane #soundPick[hidden]{display:none}
+  #setPane #pushTip{text-align:left;padding:6px}
+  #setPane .set-foot{margin-top:auto;padding-top:28px}
+  #setPane .set-foot #logout{display:block;width:100%;margin:0 0 10px;padding:10px 14px;border:1px solid var(--deny);border-radius:10px;background:none;color:var(--deny);text-decoration:none;font-size:14px;text-align:center;cursor:pointer}
+  #setPane .set-foot #logout:hover{background:var(--del-bg)}
+  #setPane .set-foot .ver{text-align:center;padding:0}
 
   /* 会话行：紧凑，一行一个；操作按钮鼠标移上去才出现 */
   .s-row{margin-top:2px}
@@ -427,13 +439,21 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <div id="sList"></div>
       <div id="setPane">
       <h2 class="d-only-b">设置</h2>
-      <button type="button" class="always" id="pushBtn" hidden></button>
-      <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
-      <div class="ver" id="pushTip" hidden></div>
-      <button type="button" class="always" id="soundBtn" hidden></button>
-      <label class="ver" id="soundPick" hidden>提示音 <select id="soundSel"></select>（选了会先试听）</label>
-      <button type="button" class="always" id="logout">退出登录</button>
-      <div class="ver">页面版本 __PAGE_VERSION__</div>
+      <div class="set-sec">
+        <div class="set-h d-only-b">通知</div>
+        <button type="button" class="always" id="pushBtn" hidden></button>
+        <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
+        <div class="ver" id="pushTip" hidden></div>
+      </div>
+      <div class="set-sec">
+        <div class="set-h d-only-b">电脑提示音</div>
+        <button type="button" class="always" id="soundBtn" hidden></button>
+        <label class="ver" id="soundPick" hidden>提示音 <select id="soundSel"></select>（选了会先试听）</label>
+      </div>
+      <div class="set-foot">
+        <button type="button" class="always" id="logout">退出登录</button>
+        <div class="ver">页面版本 __PAGE_VERSION__</div>
+      </div>
       </div>
     </div>
   </div>
