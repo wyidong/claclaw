@@ -61,6 +61,8 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #modeSel{min-height:44px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
 #sessBtn .mtag{flex:none;margin-left:2px;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
 #sessBtn .mtag:empty{display:none}
+.cpid{cursor:copy;border-radius:4px}
+.cpid:hover{text-decoration:underline dotted;text-underline-offset:3px;color:var(--accent)}
 @media (max-width:599px){#sessBtn .mtag{display:none}}  /* 手机上太挤：右边下拉框已经显示模式 */
 #sessBtn .mtag[data-m="accept"]{color:var(--warn)}
 #sessBtn .mtag[data-m="plan"]{color:var(--accent)}
@@ -757,6 +759,12 @@ lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
 feed.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))showImage(e.target.src)});
 feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))scrollDown()},true);
 // 复制：http 访问（Tailscale IP）不是安全上下文，navigator.clipboard 不可用，退回 execCommand
+// 会话 ID（列表里、顶部标题后）：只显示前 8 位，点一下复制完整 ID；捕获阶段拦下，不触发打开会话 / 返回列表
+document.addEventListener('click',function(e){
+  var el=e.target.closest&&e.target.closest('.cpid');if(!el)return;
+  e.preventDefault();e.stopPropagation();
+  copyText(el.dataset.copy);
+},true);
 function copyText(t){
   function legacy(){
     var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');
@@ -1300,7 +1308,9 @@ function setHeader(){
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   $('#nm').textContent=t||dir||'会话';
-  $('#sid').textContent=session.id.slice(0,8)+(t&&dir?'　'+dir:'');
+  var sid=$('#sid');sid.textContent='';
+  var idEl=document.createElement('span');idEl.className='cpid';idEl.dataset.copy=session.id;idEl.title='点击复制完整会话 ID';idEl.textContent=session.id.slice(0,8);
+  sid.appendChild(idEl);if(t&&dir)sid.appendChild(document.createTextNode('　'+dir));
 }
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function connect(){
@@ -1541,7 +1551,7 @@ function openSheet(){
       if(bz&&!bz.canTakeover)b.dataset.busy='1';
       b.innerHTML='<div class="t"></div><div class="m"><span class="id"></span><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
-      b.querySelector('.id').textContent=s.id.slice(0,8);
+      var idEl=b.querySelector('.id');idEl.textContent=s.id.slice(0,8);idEl.classList.add('cpid');idEl.dataset.copy=s.id;idEl.title='点击复制完整会话 ID';
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);
