@@ -182,7 +182,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
    遮罩层不画到状态栏区域，保证那里永远是纯色，否则会看到一截灰色模糊 */
 #sheet{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:flex-end;background:rgba(0,0,0,.42);z-index:5}
 #sheet.on{display:flex}
-.sheet-p{width:100%;max-height:78%;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 12px calc(env(safe-area-inset-bottom,0px) + 16px)}
+.sheet-p{width:100%;max-height:88%;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 12px calc(env(safe-area-inset-bottom,0px) + 16px)}
 .sheet-p h2{margin:0 4px 4px;font-size:16px;font-weight:600}
 .sheet-p p{margin:0 4px 6px;font-size:13px;color:var(--muted)}
 .s-item{display:block;width:100%;min-height:56px;margin-top:8px;padding:10px 12px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
@@ -241,6 +241,21 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-gpath{margin:-2px 2px 4px 22px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
 #sList .s-grp.recent .gn{font-family:var(--sans)}
+/* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
+#setPane .set-sec{margin:0 0 18px}
+#setPane .set-sec:not(:has(> :not(.set-h):not([hidden]))){display:none}  /* 组里没有可见的设置项就整组隐藏 */
+#setPane .set-h{margin:0 6px 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+#setPane .set-sec>.always{display:block;width:100%;text-align:left;margin:0 0 8px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-decoration:none;color:var(--ink);font-size:14px;cursor:pointer}
+#setPane .set-sec>.always[hidden]{display:none}
+#setPane .set-sec>.always:hover{background:var(--surface);color:var(--accent)}
+#setPane #soundPick{display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;margin:8px 6px 0;font-family:var(--sans);font-size:13px;color:var(--muted)}
+#setPane #soundPick[hidden]{display:none}
+#setPane #pushTip{text-align:left;padding:6px}
+#setPane .set-foot{margin-top:auto;padding-top:28px}
+#setPane .set-foot #logout{display:block;width:100%;margin:0 0 10px;padding:10px 14px;border:1px solid var(--deny);border-radius:10px;background:none;color:var(--deny);text-decoration:none;font-size:14px;text-align:center;cursor:pointer}
+#setPane .set-foot #logout:hover{background:var(--del-bg)}
+#setPane .set-foot .ver{text-align:center;padding:0}
+
 #sList .s-rempty{padding:2px 10px 8px 24px;font-size:12px}
 /* 未读红点 */
 .s-row.unread .s-item .t::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
@@ -297,7 +312,25 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #bannerT.link{cursor:pointer;text-decoration:underline}
 
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
-#rail,#sTop,.d-only,.d-only-b{display:none}
+#rail,.d-only,.d-only-b{display:none}
+/* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
+#sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
+#sSearch{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+#sSearch:focus{outline:none;border-color:var(--accent)}
+#sNew,#sReload{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
+#setPane{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+/* 手机会话卡片紧凑一些：按钮小一点，时间不再挤到第三行 */
+@media (max-width:999px){
+  .s-row .s-item{min-height:0;padding:9px 10px;padding-right:44px}
+  .s-row.two .s-item,.s-row.pn .s-item{padding-right:80px}
+  .s-row.three .s-item{padding-right:114px}
+  .s-ren,.s-new,.s-del{top:4px;width:34px;height:34px}
+  .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:40px}.s-row.pn .s-ren{right:4px}
+  .s-new{right:40px}.s-row.three .s-new{right:76px}
+  .s-del{right:4px}
+  .s-item .m{font-size:12px;gap:8px}
+}
+#setPane .set-foot{padding-top:18px}
 @media (min-width:1000px){
   .d-only{display:inline}.d-only-b{display:block}.m-only{display:none}
   #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px 300px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto}
@@ -322,25 +355,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #sNew{flex:none;width:32px;height:32px;border:0;border-radius:8px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
   #sNew:hover{color:var(--accent);background:var(--bg)}
   /* 设置页（点图标栏的齿轮）：会话列表和设置二选一显示 */
-  #setPane{display:none;padding-top:16px}
+  #setPane{display:none;padding-top:16px;margin-top:0;border-top:0}
+  #sReload{display:none}
   #setPane h2{margin:0 6px 16px;font-size:17px}
   #app.set-on #sTop,#app.set-on #sList{display:none}
   /* 设置页：分组卡片；退出登录和页面版本沉到最底下，和其他设置拉开 */
   #app.set-on .sheet-p{display:flex;flex-direction:column}
   #app.set-on #setPane{display:flex;flex-direction:column;flex:1}
-  #setPane .set-sec{margin:0 0 18px}
-  #setPane .set-sec:not(:has(> :not(.set-h):not([hidden]))){display:none}  /* 组里没有可见的设置项就整组隐藏 */
-  #setPane .set-h{margin:0 6px 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
-  #setPane .set-sec>.always{display:block;width:100%;text-align:left;margin:0 0 8px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-decoration:none;color:var(--ink);font-size:14px;cursor:pointer}
-  #setPane .set-sec>.always[hidden]{display:none}
-  #setPane .set-sec>.always:hover{background:var(--surface);color:var(--accent)}
-  #setPane #soundPick{display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;margin:8px 6px 0;font-family:var(--sans);font-size:13px;color:var(--muted)}
-  #setPane #soundPick[hidden]{display:none}
-  #setPane #pushTip{text-align:left;padding:6px}
-  #setPane .set-foot{margin-top:auto;padding-top:28px}
-  #setPane .set-foot #logout{display:block;width:100%;margin:0 0 10px;padding:10px 14px;border:1px solid var(--deny);border-radius:10px;background:none;color:var(--deny);text-decoration:none;font-size:14px;text-align:center;cursor:pointer}
-  #setPane .set-foot #logout:hover{background:var(--del-bg)}
-  #setPane .set-foot .ver{text-align:center;padding:0}
 
   /* 会话行：紧凑，一行一个；操作按钮鼠标移上去才出现 */
   .s-row{margin-top:2px}
@@ -477,20 +498,19 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
   <div id="sheet" aria-hidden="true">
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
-      <h2><span class="m-only">恢复会话</span><span class="d-only">会话</span></h2>
-      <p class="m-only">对应命令行里的 claude --resume</p>
-      <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
+      <h2>会话</h2>
+      <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
       <div id="setPane">
-      <h2 class="d-only-b">设置</h2>
+      <h2>设置</h2>
       <div class="set-sec">
-        <div class="set-h d-only-b">通知</div>
+        <div class="set-h">通知</div>
         <button type="button" class="always" id="pushBtn" hidden></button>
         <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
         <div class="ver" id="pushTip" hidden></div>
       </div>
       <div class="set-sec">
-        <div class="set-h d-only-b">电脑提示音</div>
+        <div class="set-h">电脑提示音</div>
         <button type="button" class="always" id="soundBtn" hidden></button>
         <label class="ver" id="soundPick" hidden>提示音 <select id="soundSel"></select>（选了会先试听）</label>
       </div>
@@ -1321,6 +1341,7 @@ DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.mat
 // 图标栏：上面是会话，最下面是设置（退出登录在设置页里）
 function railTab(set){$('#app').classList.toggle('set-on',set);$('#railSet').classList.toggle('on',set);$('#railChats').classList.toggle('on',!set)}
 $('#railChats').addEventListener('click',function(){railTab(false)});
+$('#sReload').addEventListener('click',function(){$('#railReload').click()});
 // 刷新：重新加载页面（拿到最新版本）。输入框里没发的字先存起来，刷新后放回去
 $('#railReload').addEventListener('click',function(){
   try{if(ta.value)sessionStorage.setItem('claclaw.draft',ta.value)}catch(_){}
