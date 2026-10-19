@@ -606,6 +606,8 @@ function scrollDown(force){
   if(force)stick=true;if(stick)feed.scrollTop=feed.scrollHeight;
 }
 feed.addEventListener('scroll',function(){stick=feed.scrollHeight-feed.scrollTop-feed.clientHeight<80});
+// 消息区高度变化（状态条出现/消失、输入框变高、窗口缩放）时，原来停在底部就继续贴着底部，免得最后一条被挡住
+if(window.ResizeObserver)new ResizeObserver(function(){if(stick)feed.scrollTop=feed.scrollHeight}).observe(feed);
 
 function addUser(t,images){
   var e=document.createElement('div');e.className='msg user';
