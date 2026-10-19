@@ -666,13 +666,11 @@ function addPeer(from,t){
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
 // 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
+// 工作状态只在输入框上方的状态条显示（以前消息区底部还有一个「思考中」，和状态条重复）
 function think(on,label){
   if(label)workLabel=label;
-  if(on){
-    if(!thinkEl){thinkEl=document.createElement('div');thinkEl.className='think';thinkEl.innerHTML='<i></i><i></i><i></i><span class="tt"></span>'}
-    feed.appendChild(thinkEl);tickWork();scrollDown();
-  }
-  if(!on&&thinkEl){thinkEl.remove();thinkEl=null}
+  if(thinkEl){thinkEl.remove();thinkEl=null}
+  tickWork();
 }
 function fmtSec(sec){return sec<60?sec+'s':Math.floor(sec/60)+'m'+('0'+sec%60).slice(-2)+'s'}
 var lastEvt=0;   // 最近一次收到这个会话的事件（输出、工具开始/结束……）
