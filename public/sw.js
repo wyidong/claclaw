@@ -18,6 +18,8 @@ self.addEventListener('push', e => {
   if (typeof d.badge === 'number' && self.navigator && self.navigator.setAppBadge) {
     jobs.push((d.badge ? self.navigator.setAppBadge(d.badge) : self.navigator.clearAppBadge()).catch(() => {}));
   }
+  // 告诉打开着的页面：推送到了，让它按服务器的未读表把角标再对一次（推送可能比「已读」晚到）
+  jobs.push(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => list.forEach(c => c.postMessage({ t: 'pushed' }))));
   e.waitUntil(Promise.all(jobs));
 });
 

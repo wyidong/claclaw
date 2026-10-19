@@ -1430,6 +1430,13 @@ function renderUnread(){
   $('#sessBtn').classList.toggle('unr',other);
   if(navigator.setAppBadge){(total?navigator.setAppBadge(total):navigator.clearAppBadge()).catch(function(){})}
 }
+// 角标以服务器的未读表为准：推送晚到时后台脚本可能把角标设回旧数字，
+// 所以页面在前台时定期、回到前台时、收到推送后都按当前未读表重设一次
+function resyncBadge(){if(!document.hidden)renderUnread()}
+setInterval(resyncBadge,15000);
+document.addEventListener('visibilitychange',resyncBadge);
+window.addEventListener('focus',resyncBadge);
+if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('message',function(e){if(e.data&&e.data.t==='pushed')setTimeout(resyncBadge,800)});
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
