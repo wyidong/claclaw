@@ -71,6 +71,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #banner button{flex:none;width:36px;height:36px;border:0;background:none;color:inherit;font-size:20px;line-height:1}
 
 #feed{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:16px 14px 10px;display:flex;flex-direction:column;gap:14px}
+#feed>*{flex-shrink:0}   /* 消息多了也不许被压扁（工具卡片 overflow:hidden，以前会被压成 0 高，只剩两条边框）*/
 .msg{white-space:pre-wrap;word-break:break-word;max-width:100%}
 .msg.user{align-self:flex-end;max-width:86%;padding:9px 13px;background:var(--user-bg);border-radius:16px 16px 4px 16px}
 .msg.ai{align-self:stretch}
@@ -1044,6 +1045,7 @@ function onEvent(m){
     suggestion=m.suggestion||null;
     commands=m.commands||[];
     setBusy(m.busy);
+    if(m.busy&&m.busyFor)workSince=Date.now()-m.busyFor;   // 用服务器记的开始时间（只传经过的毫秒数，不受手机时钟偏差影响）
     (m.pending||[]).forEach(onPermRequest);
     if(outbox){
       var lastUser=m.history.filter(function(it){return it.kind==='user'}).pop();

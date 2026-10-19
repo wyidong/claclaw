@@ -494,7 +494,7 @@ class Runner {
         } else if (m.subtype === 'session_state_changed') {
           // CLI 自己报的忙/闲，比 result 更准：插话的消息可能在 result 之后又开一轮，idle 才是真正结束
           this.sawState = true;
-          if (m.state === 'running' && !this.busy) { this.busy = true; this.cancelClose(); this.emit({ t: 'busy', on: true }); }
+          if (m.state === 'running' && !this.busy) { this.busy = true; this.busySince = Date.now(); this.cancelClose(); this.emit({ t: 'busy', on: true }); }
           else if (m.state === 'idle' && this.busy) { this.busy = false; this.emit({ t: 'busy', on: false }); this.maybeScheduleClose(); }
         } else if (m.subtype === 'status') {
           // 不需要显示
@@ -534,6 +534,7 @@ class Runner {
   send(text, images = []) {
     const steering = this.busy;
     this.busy = true;
+    if (!steering) this.busySince = Date.now();   // 网页显示「已工作多久」从这里算，刷新页面也不归零
     this.suggestion = null;
     this.cancelClose();
     // 有图片时用内容块数组：图片在前、文字在后（Claude 看图再读问题效果更好）
@@ -1075,6 +1076,7 @@ wss.on('connection', (ws, req) => {
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
           cwdShort: relPath(info.cwd || '', null), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy, history,
+          busyFor: runner.busy && runner.busySince ? Date.now() - runner.busySince : 0,
           pending: [...runner.pending.values()].map(p => p.req),
           suggestion: runner.busy ? null : runner.suggestion || null,
           commands: runner.commands || null,
