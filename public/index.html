@@ -1173,17 +1173,24 @@ $('#bAlways').addEventListener('click',function(){reply('allow_session')});
 // ---------- 服务端事件 ----------
 
 function onEvent(m){
+  if(/^(user|ai\.|tool\.|peer|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;
   if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
   switch(m.t){
   case 'session.opened':
+    if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
     session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
-    feed.innerHTML='';cards={};permQueue=[];aiEl=null;
+    var hsig=histSig(m.history),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig);
+    delete feedCache[m.id];
+    if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null}   // 记录没变：直接用上次画好的，不重画、不闪
+    else{feed.innerHTML='';cards={};permQueue=[];aiEl=null}
+    feedSig=hsig;feedDirty=false;
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
     setMode(m.mode,false);
+    if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
     if(m.history.length)addSys('以下是最近 '+m.history.length+' 条记录');
     m.history.forEach(function(it){
@@ -1193,6 +1200,7 @@ function onEvent(m){
       else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no')}
     });
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+m.id.slice(0,8)+'　'+(m.cwdShort||''));
+    }
     localStorage.setItem('claclaw.session',m.id);
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
@@ -1592,7 +1600,7 @@ function openSheet(silent){
         var w=b.querySelector('.when');if(w)w.textContent='打开中…';
         if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
           $('#nm').textContent=s.title;$('#sid').textContent=s.id.slice(0,8);$('#modeTag').textContent='';
-          feed.innerHTML='<div class="sys">加载中…</div>';goChat();
+          if(!restoreFeed(s.id))feed.innerHTML='<div class="sys">加载中…</div>';goChat();
         }
         wsSend({t:'session.open',id:s.id,mode:mode});
         // 8 秒没回应：连接多半已经悄悄断了（手机切后台后常见），重连并提示再点一次
@@ -1742,7 +1750,7 @@ function goList(){
   if(DESKTOP.matches)return;
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
-  if(session){wsSend({t:'session.leave'});session=null;setBusy(false)}
+  if(session){wsSend({t:'session.leave'});saveFeed(session.id);session=null;setBusy(false)}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
   renderUnread();renderActivity();
@@ -1780,9 +1788,24 @@ var pendingOpen=null;
 function openFromNotice(id){
   if(session&&session.id===id&&!mList)return;
   pendingOpen=id;
-  if(!DESKTOP.matches){feed.innerHTML='<div class="sys">加载中…</div>';$('#nm').textContent='';$('#sid').textContent=id.slice(0,8);goChat()}
+  if(!DESKTOP.matches){if(!restoreFeed(id))feed.innerHTML='<div class="sys">加载中…</div>';$('#nm').textContent='';$('#sid').textContent=id.slice(0,8);goChat()}
   if(ws&&ws.readyState===1)wsSend({t:'session.open',id:id,mode:mode});else reconnectNow();
   setTimeout(function(){if(pendingOpen===id)reconnectNow()},3000);   // 3 秒没打开：连接多半是死的，重连（连上后会自动打开）
+}
+// ---------- 进过的会话：画好的聊天内容留在内存里，再进来直接放回去（最多 8 个）----------
+var feedCache={},feedSig=null,feedDirty=false;
+function histSig(h){var l=h[h.length-1]||{};return h.length+'|'+(l.kind||'')+'|'+(l.status||'')+'|'+String(l.text||l.output||l.target||l.name||'').slice(-120)}
+function saveFeed(id){
+  if(!id||!feed.firstChild)return;
+  if(thinkEl){thinkEl.remove();thinkEl=null}
+  var f=document.createDocumentFragment();while(feed.firstChild)f.appendChild(feed.firstChild);
+  delete feedCache[id];feedCache[id]={frag:f,cards:cards,sig:feedDirty?null:feedSig};   // 看的时候有新内容进来：回来时一定按服务器的重画
+  var ks=Object.keys(feedCache);while(ks.length>8)delete feedCache[ks.shift()];
+}
+function restoreFeed(id){
+  var c=feedCache[id];if(!c)return false;
+  if(c.inDom){delete feedCache[id];return false}   // 上次放回去后没打开成功：作废，按服务器的重画
+  feed.innerHTML='';feed.appendChild(c.frag);c.inDom=true;stick=true;feed.scrollTop=feed.scrollHeight;return true;
 }
 function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
