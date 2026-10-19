@@ -140,6 +140,9 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .think i{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.5;animation:blink 1.1s infinite}
 .think i:nth-child(2){animation-delay:.18s}.think i:nth-child(3){animation-delay:.36s}
 @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+#setPane .rl-ic{flex:none;color:var(--muted)}
+#setPane .rl-ic.spin{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
+@keyframes rlspin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
 .tool{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
@@ -692,7 +695,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <div class="set-sec">
         <div class="set-h">客户端</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setReload"><span class="lb">更新客户端<small id="setReloadSub">重新加载网页，用上电脑上的最新版本</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setReload"><span class="lb">更新客户端<small id="setReloadSub">重新加载网页，用上电脑上的最新版本</small></span><svg class="rl-ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
         </div>
       </div>
       <div class="set-foot">
@@ -1620,7 +1623,15 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){railTab(false)});
-$('#setReload').addEventListener('click',function(){$('#railReload').click()});
+// 设置里的「更新客户端」：图标转两圈再刷新，刷新后停在设置页
+$('#setReload').addEventListener('click',function(){
+  var ic=$('#setReload .rl-ic');if(ic.classList.contains('spin'))return;
+  ic.classList.add('spin');
+  try{sessionStorage.setItem('claclaw.reloadTo','set')}catch(_){}
+  setTimeout(function(){$('#railReload').click()},1150);
+});
+var reloadToSet=false;try{reloadToSet=sessionStorage.getItem('claclaw.reloadTo')==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
+if(reloadToSet&&DESKTOP.matches){reloadToSet=false;railTab(true)}
 // 刷新：重新加载页面（拿到最新版本）。输入框里没发的字先存起来，刷新后放回去
 $('#railReload').addEventListener('click',function(){
   try{if(ta.value)sessionStorage.setItem('claclaw.draft',ta.value)}catch(_){}
@@ -1898,6 +1909,7 @@ function goList(){
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
   if(!clawSel)mTab('claw');   // 首次使用：先选 Claw
+  if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：刷新后回到设置页
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
   renderUnread();renderActivity();
 }
