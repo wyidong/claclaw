@@ -413,7 +413,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:2px solid transparent;border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
   .claw-card[aria-current="true"]{border-color:var(--accent)}
   .claw-card:disabled{opacity:.45;cursor:default}
-  .claw-ic{flex:none;display:block;width:48px;height:48px;border-radius:12px;object-fit:cover}
+  .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
   .claw-card[hidden]{display:none}
   .claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
   .claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
@@ -645,12 +645,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
           <span class="claw-st">选择</span>
         </button>
         <button type="button" class="claw-card" data-claw="openclaw">
-          <img class="claw-ic" src="/icons/claw-openclaw.png?v=1" alt="">
+          <img class="claw-ic" src="/icons/claw-openclaw.png?v=2" alt="">
           <span class="claw-tx"><b>OpenClaw</b><small>本机 OpenClaw 网关的会话</small></span>
           <span class="claw-st">选择</span>
         </button>
         <button type="button" class="claw-card" data-claw="deepseek" disabled>
-          <img class="claw-ic" src="/icons/claw-deepseek.png?v=1" alt="">
+          <img class="claw-ic" src="/icons/claw-deepseek.png?v=2" alt="">
           <span class="claw-tx"><b>DeepSeek Harness</b><small>DeepSeek Harness 的会话</small></span>
           <span class="claw-st">即将支持</span>
         </button>
