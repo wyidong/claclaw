@@ -1198,7 +1198,7 @@ function onEvent(m){
     scrollDown(true);
     break;
   case 'session.busy':
-    clearOpening();
+    openFailed();clearOpening();
     if(m.canTakeover){
       if(confirmTakeover(m.name||m.id.slice(0,8),m))wsSend({t:'session.open',id:m.id,mode:mode,takeover:true});
     }else{
@@ -1297,7 +1297,7 @@ function onEvent(m){
     addSys(m.text);
     break;
   case 'error':
-    clearOpening();
+    openFailed();clearOpening();
     if(outbox){outboxRestore();setBusy(false)}
     notice('⚠ '+m.message);
     break;
@@ -1569,9 +1569,13 @@ function openSheet(){
         if(opening===s.id&&Date.now()-openingAt<4000)return;   // 正在打开：重复点不再发请求
         opening=s.id;openingAt=Date.now();row.classList.add('opening');
         var w=b.querySelector('.when');if(w)w.textContent='打开中…';
+        if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
+          $('#nm').textContent=s.title;$('#sid').textContent=s.id.slice(0,8);$('#modeTag').textContent='';
+          feed.innerHTML='<div class="sys">加载中…</div>';goChat();
+        }
         wsSend({t:'session.open',id:s.id,mode:mode});
         // 8 秒没回应：连接多半已经悄悄断了（手机切后台后常见），重连并提示再点一次
-        setTimeout(function(){if(opening===s.id){clearOpening();reconnectNow();toast('连接刚才断了，已重连，请再点一次')}},8000);
+        setTimeout(function(){if(opening===s.id){openFailed();clearOpening();reconnectNow();toast('连接刚才断了，已重连，请再点一次')}},8000);
       });
       // 改名：任何会话都行（只是往记录末尾追加一条标题）
       var rn=document.createElement('button');rn.type='button';rn.className='s-ren';rn.setAttribute('aria-label','改名');
@@ -1688,6 +1692,7 @@ window.addEventListener('popstate',function(){
   else if(!mList)goList();                                     // 从聊天页返回会话列表
 });
 setInterval(function(){if(mList&&!document.hidden)openSheet()},60000);   // 列表页每分钟刷新时间
+function openFailed(){if(opening&&!session&&!DESKTOP.matches)goList()}
 function clearOpening(){opening=null;document.querySelectorAll('#sList .s-row.opening').forEach(function(r){r.classList.remove('opening')});renderActivity()}
 function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});

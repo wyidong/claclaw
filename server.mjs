@@ -291,6 +291,28 @@ function peerMessages(text) {
 
 // ---------- 历史消息 → 前端条目 ----------
 
+// 打开会话时的历史记录：大会话要把整个记录文件读一遍（100MB 级的要 0.7 秒），
+// 所以按「文件大小 + 修改时间」缓存，没变就直接用；列表刷新时顺手把最近几个会话预读好
+const historyCache = new Map();
+async function loadHistoryCached(sessionId, cwd) {
+  let key = null;
+  try { const st = fs.statSync(jsonlPathOf({ sessionId, cwd })); key = st.size + ':' + st.mtimeMs; } catch {}
+  const hit = historyCache.get(sessionId);
+  if (key && hit && hit.key === key) return hit.items;
+  const items = await loadHistory(sessionId, cwd);
+  if (key) {
+    historyCache.delete(sessionId); historyCache.set(sessionId, { key, items });
+    while (historyCache.size > 40) historyCache.delete(historyCache.keys().next().value);
+  }
+  return items;
+}
+let prewarming = false;
+async function prewarmHistory(list) {
+  if (prewarming) return;
+  prewarming = true;
+  try { for (const s of list.slice(0, 6)) if (s.cwd && !s.unsent) await loadHistoryCached(s.id, s.cwd); } catch {} finally { prewarming = false; }
+}
+
 async function loadHistory(sessionId, cwd) {
   const msgs = await getSessionMessages(sessionId, cwd ? { dir: cwd } : undefined);
   const items = [];
@@ -1068,8 +1090,11 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/sessions/delete' && req.method === 'POST') return handleDelete(req, res);
     if (url.pathname === '/api/sessions/rename' && req.method === 'POST') return handleRename(req, res);
     if (url.pathname === '/api/sessions') {
+      const list = await sessionList();
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(JSON.stringify(await sessionList()));
+      res.end(JSON.stringify(list));
+      setTimeout(() => prewarmHistory(list), 50);   // 回到列表后点进去就快
+      return;
     }
     res.writeHead(404).end('not found');
   } catch (e) {
@@ -1165,7 +1190,9 @@ wss.on('connection', (ws, req) => {
           }
         }
         runner?.unsubscribe(ws);
-        const history = await loadHistory(m.id, info.cwd);
+        const tHist = Date.now();
+        const history = await loadHistoryCached(m.id, info.cwd);
+        const histMs = Date.now() - tHist;
         if (!runners.has(m.id)) {
           const inherited = inheritedMode(info);
           const allowed = MODES.includes(inherited) ? MODES : [...MODES, inherited];
@@ -1177,7 +1204,7 @@ wss.on('connection', (ws, req) => {
         runner.subscribe(ws);
         touchWeb(m.id);
         if (ws.visible !== false) clearUnread(m.id);
-        log('open', m.id.slice(0, 8), info.cwd);
+        log('open', m.id.slice(0, 8), info.cwd, 'history ' + histMs + 'ms');
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
           cwdShort: relPath(info.cwd || '', null), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy, history,
