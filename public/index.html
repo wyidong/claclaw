@@ -338,7 +338,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
   #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
   #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;padding-top:calc(env(safe-area-inset-top,0px) + 10px)}
-  #app.m-list .sheet-p>h2:first-child{text-align:center;font-size:17px;margin:0 0 8px}
+  .sheet-p>h2:first-child{display:none}   /* 会话列表顶部不要「会话」标题，搜索栏直接在最上面 */
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
     padding:4px max(6px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
@@ -352,7 +352,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   /* 「设置」页：只显示设置；「会话」页：只显示列表 */
   #app.m-list #setPane{display:none;margin-top:0;padding-top:0;border-top:0}
   #app.m-list.set-on #setPane{display:block}
-  #app.m-list.set-on #sTop,#app.m-list.set-on #sList,#app.m-list.set-on .sheet-p>h2:first-child{display:none}
+  #app.m-list.set-on #sTop,#app.m-list.set-on #sList{display:none}
   #app.m-list.set-on #setPane>h2{text-align:center;font-size:17px;margin:0 0 14px}
 }
 #mtabs{display:none}
