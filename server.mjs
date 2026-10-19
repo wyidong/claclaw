@@ -1047,19 +1047,30 @@ wss.on('connection', (ws, req) => {
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
         const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
         const from = list.find(s => s.sessionId === m.from) || runners.get(m.from)?.info;
-        if (!from?.cwd) return send({ t: 'error', message: '找不到要参照的会话' });
-        if (!fs.existsSync(from.cwd)) return send({ t: 'error', message: '会话目录已不存在：' + from.cwd });
+        // 目录：默认用参照会话的目录；也可以指定别的目录（新建对话框里点目录可以改）
+        let cwd = from?.cwd;
+        if (typeof m.cwd === 'string' && m.cwd.trim()) {
+          let d = m.cwd.trim();
+          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
+          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
+          d = path.resolve(d);
+          let st = null; try { st = fs.statSync(d); } catch {}
+          if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + d });
+          cwd = d;
+        }
+        if (!cwd) return send({ t: 'error', message: '找不到要参照的会话' });
+        if (!fs.existsSync(cwd)) return send({ t: 'error', message: '会话目录已不存在：' + cwd });
         const title = String(m.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
         const id = crypto.randomUUID();
-        const inherited = (runners.get(from.sessionId)?.mode) || inheritedMode(from);
+        const inherited = from ? ((runners.get(from.sessionId)?.mode) || inheritedMode(from)) : 'default';
         const allowed = MODES.includes(inherited) ? MODES : [...MODES, inherited];
-        const info = { sessionId: id, cwd: from.cwd, summary: title || '新会话', customTitle: title || undefined };
+        const info = { sessionId: id, cwd, summary: title || '新会话', customTitle: title || undefined };
         runner?.unsubscribe(ws);
         runner = new Runner(info, inherited, allowed, { isNew: true });
         runners.set(id, runner);
         rememberWebSession(id, inherited);
         runner.subscribe(ws);
-        log('new session', id.slice(0, 8), 'in', from.cwd, 'mode', inherited, 'sibling of', from.sessionId.slice(0, 8));
+        log('new session', id.slice(0, 8), 'in', cwd, 'mode', inherited, from ? 'sibling of ' + from.sessionId.slice(0, 8) : '');
         send({
           t: 'session.opened', id, title: info.summary, cwd: info.cwd, cwdShort: relPath(info.cwd, null),
           mode: runner.mode, modes: runner.allowedModes, busy: false, history: [], pending: [], suggestion: null,

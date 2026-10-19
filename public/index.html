@@ -267,6 +267,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
 #delDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:6}
 #delDlg.on{display:flex}
+#newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:6}
+#newDlg.on{display:flex}
+#newDlg .newIn{margin:4px 0 8px;font-size:14px;color:var(--muted);line-height:1.6}
+/* 目录看起来就是一段文字；点进去才发现能改（不主动提示） */
+.dlg input.plainIn{display:inline;width:auto;min-height:0;padding:0 2px;border:0;border-bottom:1px solid transparent;border-radius:0;background:none;color:var(--ink);font-family:var(--mono);font-size:13.5px}
+.dlg input.plainIn:focus{outline:none;border-bottom-color:var(--accent)}
 .dlg{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 16px}
 .dlg h3{margin:0 0 6px;font-size:17px;overflow-wrap:anywhere}
 .dlg p{margin:0 0 12px;font-size:13px;color:var(--muted)}
@@ -438,6 +444,20 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   </div>
 
   <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""></div>
+
+  <div id="newDlg" aria-hidden="true">
+    <form class="dlg" id="newForm" role="dialog" aria-label="新建会话">
+      <h3>新建会话</h3>
+      <p class="newIn">在 <input id="newDir" class="plainIn" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="目录"> 新建</p>
+      <label for="newName">名字（可以留空）</label>
+      <input id="newName" autocomplete="off">
+      <div class="row">
+        <button type="button" class="btn cancel" id="newNo">取消</button>
+        <button type="submit" class="btn allow" id="newGo">新建</button>
+      </div>
+      <div class="err" id="newErr" role="alert"></div>
+    </form>
+  </div>
 
   <div id="delDlg" aria-hidden="true">
     <form class="dlg" id="delForm" role="dialog" aria-label="删除会话">
@@ -1444,7 +1464,7 @@ function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.fold
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 $('#sessBtn').addEventListener('click',openSheet);
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else closeSheet()}});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
 
@@ -1548,12 +1568,27 @@ document.addEventListener('visibilitychange',function(){wsSend({t:'visible',on:!
 
 // ---------- 新建同目录会话 ----------
 
+var newDlg=$('#newDlg'),newFrom=null;
 function newSibling(s){
-  var t=prompt('在「'+(s.cwdShort||s.cwd)+'」新建会话\n名字（可以留空）','');
-  if(t===null)return;
-  closeSheet();
-  wsSend({t:'session.new',from:s.id,title:t});
+  newFrom=s;
+  var d=$('#newDir');d.value=(s.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
+  d.style.width=Math.max(8,d.value.length+1)+'ch';
+  $('#newName').value='';$('#newErr').textContent='';
+  newDlg.classList.add('on');newDlg.setAttribute('aria-hidden','false');
+  $('#newName').focus();
 }
+function closeNew(){newDlg.classList.remove('on');newDlg.setAttribute('aria-hidden','true');newFrom=null}
+$('#newDir').addEventListener('input',function(e){e.target.style.width=Math.max(8,e.target.value.length+1)+'ch'});
+$('#newNo').addEventListener('click',closeNew);
+newDlg.addEventListener('click',function(e){if(e.target===newDlg)closeNew()});
+$('#newForm').addEventListener('submit',function(e){
+  e.preventDefault();if(!newFrom)return;
+  var dir=$('#newDir').value.trim(),orig=(newFrom.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
+  var msg={t:'session.new',from:newFrom.id,title:$('#newName').value};
+  if(dir&&dir!==orig)msg.cwd=dir;   // 改了目录才带上；服务器会检查目录是否存在
+  closeNew();closeSheet();
+  wsSend(msg);
+});
 
 // ---------- 会话改名 ----------
 
