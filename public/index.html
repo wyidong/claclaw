@@ -311,11 +311,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .s-item .bz{font-size:11.5px}
   .s-ren,.s-new,.s-del{top:4px;width:30px;height:30px;opacity:0}
   .s-row:hover .s-ren,.s-row:hover .s-new,.s-row:hover .s-del,.s-row :focus-visible{opacity:1}
-  .s-row:hover .s-item{padding-right:44px}
-  .s-row.two:hover .s-item,.s-row.pn:hover .s-item{padding-right:76px}
-  .s-row.three:hover .s-item{padding-right:108px}
+  /* 行的排版始终和鼠标移上去时一样（右边给按钮留好位置），移上去只变背景、露出改名/删除 */
+  .s-row .s-item,.s-row.pn .s-item{padding-right:44px}
+  .s-row.two .s-item,.s-row.three .s-item{padding-right:76px}
+  .s-new{display:none}   /* 新建在列表顶部的 ⊕，每行不再单独放 */
   .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:36px}.s-row.pn .s-ren{right:4px}
-  .s-new{right:36px}.s-row.three .s-new{right:68px}
   .s-del{right:4px}
   #sList .s-row[hidden],#sList .s-grp[hidden]{display:none}
 
