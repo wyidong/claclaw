@@ -66,7 +66,7 @@ function rawCall(sock, method, params) {
     sock.send(JSON.stringify({ type: 'req', id, method, params }));
   });
 }
-async function call(method, params, log) { return rawCall(await connect(log), method, params); }
+export async function call(method, params, log) { return rawCall(await connect(log), method, params); }
 
 // ---------- 会话列表 ----------
 export async function ocSessionList(log) {
@@ -227,11 +227,16 @@ export class OcRunner {
     } catch {}
   }
 
-  send(text) {
+  send(text, images = []) {
     const idem = crypto.randomUUID();
     this.myRuns.add(idem);
     this.setBusy(true);
-    call('chat.send', { sessionKey: this.key, message: text, deliver: false, idempotencyKey: idem }, this.log)
+    const params = { sessionKey: this.key, message: text, deliver: false, idempotencyKey: idem };
+    // OpenClaw 收 base64 附件；模型不支持看图时它会把图存成文件、在消息里留引用
+    if (images.length) params.attachments = images.map((i, n) => ({
+      type: 'image', mimeType: i.media_type, fileName: 'image-' + (n + 1) + '.' + (i.media_type.split('/')[1] || 'png').replace('jpeg', 'jpg'), content: i.data,
+    }));
+    call('chat.send', params, this.log)
       .catch(e => { this.busy = false; this.emit({ t: 'error', message: '发送到 OpenClaw 失败：' + e.message }); this.emit({ t: 'turn.done', subtype: 'error', error: e.message }); });
     return true;
   }

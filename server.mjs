@@ -1290,7 +1290,6 @@ wss.on('connection', (ws, req) => {
           if (i.data.length > MAX_IMAGE_B64) return send({ t: 'error', message: '图片太大了' });
         }
         if (!text && !images.length) return;
-        if (runner instanceof OcRunner && images.length) return send({ t: 'error', message: 'OpenClaw 会话暂不支持发图片' });
         if (!runner.send(text, images)) send({ t: 'error', message: '上一条还在处理中' });
         else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data) });
       } else if (m.t === 'permission.reply') {
