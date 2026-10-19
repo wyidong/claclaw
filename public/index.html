@@ -59,9 +59,6 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* 会话模式：右上角下拉选择；标题后面显示模式的英文名（无边框，颜色跟模式走） */
 #modeWrap{flex:none;display:flex;align-items:center;gap:2px;font-size:14px;color:var(--muted);white-space:nowrap}
 #modeSel{min-height:44px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
-#modeWrap[data-m="accept"] #modeSel{border-color:var(--warn);color:var(--warn)}
-#modeWrap[data-m="plan"] #modeSel{border-color:var(--accent);color:var(--accent)}
-#modeWrap[data-m="bypass"] #modeSel{border-color:var(--deny);color:var(--deny);font-weight:600}
 #sessBtn .mtag{flex:none;margin-left:2px;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
 #sessBtn .mtag:empty{display:none}
 @media (max-width:599px){#sessBtn .mtag{display:none}}  /* 手机上太挤：右边下拉框已经显示模式 */
@@ -851,8 +848,11 @@ function pickCmd(i){
 }
 function setDock(s){dock.dataset.state=s;syncSend()}
 function syncSend(){
-  var d=DESKTOP.matches;sendBtn.classList.toggle('stop',busy&&d);
-  if(busy){sendBtn.innerHTML=d?'停止':ICON_STOP;sendBtn.setAttribute('aria-label','停止');sendBtn.disabled=false}
+  var d=DESKTOP.matches;
+  var steer=busy&&(ta.value.trim()||(attachments||[]).length);
+  sendBtn.classList.toggle('stop',busy&&!steer&&d);
+  if(busy&&!steer){sendBtn.innerHTML=d?'停止':ICON_STOP;sendBtn.setAttribute('aria-label','停止');sendBtn.disabled=false}
+  else if(steer){sendBtn.innerHTML=d?'插话':ICON_SEND;sendBtn.setAttribute('aria-label','插话');sendBtn.disabled=(attachments||[]).some(function(a){return !a.data})}
   else{sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');var at=attachments||[];sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data})}
 }
 function setBusy(b){
@@ -1083,6 +1083,9 @@ function onEvent(m){
     dropPerm(m.requestId,m.decision==='deny'?'deny':'allow');
     if(busy&&!permQueue.length)think(true);
     break;
+  case 'busy':
+    setBusy(!!m.on);
+    break;
   case 'turn.done':
     refreshList();
     if(m.error)addSys('本轮结束：'+m.error);
@@ -1165,12 +1168,13 @@ function connect(){
 
 function run(text){
   text=(text||'').trim();
-  if((!text&&!attachments.length)||busy||!session)return;
+  if((!text&&!attachments.length)||!session)return;   // 正在工作时也能发：作为插话排队
   if(attachments.some(function(a){return !a.data}))return; // 还在压缩
   cmdMenu.hidden=true;
   var images=attachments.map(function(a){return {media_type:a.media_type,data:a.data}});
   attachments.forEach(function(a){URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
   ta.value='';ta.style.height='auto';
+  if(busy)addSys('插话已排队，Claude 会在下一个合适的时机读到');
   busy=true;setDock('busy');
   outbox={text:text,images:images,sid:session.id};trySend();
 }
@@ -1200,7 +1204,7 @@ function outboxRestore(){
 }
 function stop(){wsSend({t:'interrupt'})}
 
-sendBtn.addEventListener('click',function(){busy?stop():run(ta.value)});
+sendBtn.addEventListener('click',function(){(busy&&!ta.value.trim()&&!attachments.length)?stop():run(ta.value)});
 ta.addEventListener('input',function(){
   ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';syncSend();
   if(ta.value)suggestion=null; // 开始自己打字就作废

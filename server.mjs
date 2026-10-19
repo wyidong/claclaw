@@ -491,7 +491,12 @@ class Runner {
           this.emit({ t: 'sys', text: (c.trigger === 'auto' ? '已自动压缩会话历史' : '已压缩会话历史') + '（' + k(c.pre_tokens) + (c.post_tokens != null ? ' → ' + k(c.post_tokens) : '') + ' tokens）' });
         } else if (m.subtype === 'commands_changed') {
           this.loadCommands();
-        } else if (m.subtype === 'session_state_changed' || m.subtype === 'status') {
+        } else if (m.subtype === 'session_state_changed') {
+          // CLI 自己报的忙/闲，比 result 更准：插话的消息可能在 result 之后又开一轮，idle 才是真正结束
+          this.sawState = true;
+          if (m.state === 'running' && !this.busy) { this.busy = true; this.cancelClose(); this.emit({ t: 'busy', on: true }); }
+          else if (m.state === 'idle' && this.busy) { this.busy = false; this.emit({ t: 'busy', on: false }); this.maybeScheduleClose(); }
+        } else if (m.subtype === 'status') {
           // 不需要显示
         }
       } else if (m.type === 'prompt_suggestion') {
@@ -499,9 +504,11 @@ class Runner {
         this.suggestion = m.suggestion;
         this.emit({ t: 'suggest', text: m.suggestion });
       } else if (m.type === 'result') {
-        this.busy = false;
+        if (!this.sawState) this.busy = false;   // 有 session_state 时以它的 idle 为准
         this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined });
         this.notify(m.subtype === 'success' ? '回复完了' : '这一轮出错结束了', 'done-' + this.id);
+        // 有插话排着时 CLI 可能接着干：网页端的「工作中」以 CLI 的 idle 为准，这里先把状态同步回去
+        if (this.sawState && this.busy) this.emit({ t: 'busy', on: true });
         this.maybeScheduleClose();
       }
     }
@@ -523,8 +530,9 @@ class Runner {
     }
   }
 
+  // 正在工作时也能发：作为「插话」排队（priority next），Claude 在下一个合适的时机读到，和终端里边干边打字一样
   send(text, images = []) {
-    if (this.busy) return false;
+    const steering = this.busy;
     this.busy = true;
     this.suggestion = null;
     this.cancelClose();
@@ -533,7 +541,8 @@ class Runner {
       ? [...images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } })),
          ...(text ? [{ type: 'text', text }] : [])]
       : text;
-    this.queue.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null });
+    this.queue.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, ...(steering ? { priority: 'next' } : {}) });
+    if (steering) log('steer', this.id.slice(0, 8));
     this.wake?.();
     return true;
   }
