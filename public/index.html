@@ -250,6 +250,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-item .m .cwd{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-item .m .when{flex:none;width:7.2em;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden}
 /* 正在干活的会话：绿色边框，状态文字绿色、前面一个闪动的点；等确认的用橙色 */
+.s-row.opening .s-item{background:var(--user-bg)!important}
 .s-row.working .s-item{border-color:var(--allow)!important}
 .s-row.working .s-item .when{color:var(--allow);font-weight:600}
 .s-row.working .s-item .when::before{content:'';display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:currentColor;vertical-align:middle;animation:pulse 1.2s infinite}
@@ -1164,7 +1165,7 @@ function onEvent(m){
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
   switch(m.t){
   case 'session.opened':
-    session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};
+    session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};clearOpening();
     feed.innerHTML='';cards={};permQueue=[];aiEl=null;
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     setHeader();
@@ -1197,6 +1198,7 @@ function onEvent(m){
     scrollDown(true);
     break;
   case 'session.busy':
+    clearOpening();
     if(m.canTakeover){
       if(confirmTakeover(m.name||m.id.slice(0,8),m))wsSend({t:'session.open',id:m.id,mode:mode,takeover:true});
     }else{
@@ -1295,6 +1297,7 @@ function onEvent(m){
     addSys(m.text);
     break;
   case 'error':
+    clearOpening();
     if(outbox){outboxRestore();setBusy(false)}
     notice('⚠ '+m.message);
     break;
@@ -1481,7 +1484,7 @@ function openSheet(){
   if(!(DESKTOP.matches&&list.querySelector('.s-row')))list.innerHTML='<div class="s-empty">加载中…</div>';
   sheet.classList.add('on');sheet.setAttribute('aria-hidden','false');
   syncPushBtn();
-  fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(arr){
+  fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
     lastList=arr;
     var sp=$('.sheet-p'),keepTop=sp.scrollTop;   // 电脑端定时刷新时保持滚动位置
     list.innerHTML='';
@@ -1563,7 +1566,12 @@ function openSheet(){
         closeSheet();
         if(bz&&!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
         if(bz){if(confirmTakeover(s.title,bz))wsSend({t:'session.open',id:s.id,mode:mode,takeover:true});return}
+        if(opening===s.id&&Date.now()-openingAt<4000)return;   // 正在打开：重复点不再发请求
+        opening=s.id;openingAt=Date.now();row.classList.add('opening');
+        var w=b.querySelector('.when');if(w)w.textContent='打开中…';
         wsSend({t:'session.open',id:s.id,mode:mode});
+        // 8 秒没回应：连接多半已经悄悄断了（手机切后台后常见），重连并提示再点一次
+        setTimeout(function(){if(opening===s.id){clearOpening();reconnectNow();toast('连接刚才断了，已重连，请再点一次')}},8000);
       });
       // 改名：任何会话都行（只是往记录末尾追加一条标题）
       var rn=document.createElement('button');rn.type='button';rn.className='s-ren';rn.setAttribute('aria-label','改名');
@@ -1648,12 +1656,19 @@ document.addEventListener('visibilitychange',function(){
 setInterval(function(){
   if(!listResort&&Date.now()-lastTouch>=5*60e3){listResort=true;if(DESKTOP.matches&&!document.hidden)openSheet()}
 },30000);
+// 手指 / 鼠标按着的时候不要重建列表：按下和抬起不在同一个元素上，手机就不算一次点击（以前要点两三次才进得去）
+var pressing=false,pressWait=[];
+document.addEventListener('pointerdown',function(){pressing=true},true);
+['pointerup','pointercancel'].forEach(function(ev){document.addEventListener(ev,function(){
+  setTimeout(function(){pressing=false;var w=pressWait;pressWait=[];w.forEach(function(f){f()})},400);   // 等 click 先触发
+},true)});
+function whenNotPressing(v){return pressing?new Promise(function(res){pressWait.push(function(){res(v)})}):v}
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 $('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)openSheet();else goList()});
 // ---------- 手机：列表页 ⇄ 聊天页 ----------
-var mList=false,lastSess=null,lastList=null;
+var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
 function goList(){
   if(DESKTOP.matches)return;
   if(!mList){mList=true;$('#app').classList.add('m-list')}
@@ -1673,6 +1688,7 @@ window.addEventListener('popstate',function(){
   else if(!mList)goList();                                     // 从聊天页返回会话列表
 });
 setInterval(function(){if(mList&&!document.hidden)openSheet()},60000);   // 列表页每分钟刷新时间
+function clearOpening(){opening=null;document.querySelectorAll('#sList .s-row.opening').forEach(function(r){r.classList.remove('opening')});renderActivity()}
 function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
