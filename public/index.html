@@ -295,9 +295,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item .t,.s-item .m span,.s-item .bz{overflow-wrap:anywhere;word-break:break-word;min-width:0}
 .s-del{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 .s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
-#delDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:6}
+#delDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #delDlg.on{display:flex}
-#newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:6}
+#newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #newDlg.on{display:flex}
 #newDlg .newIn{margin:4px 0 8px;font-size:14px;color:var(--muted);line-height:1.6}
 /* 目录看起来就是一段文字；点进去才发现能改（不主动提示） */
@@ -353,7 +353,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #app.m-list #setPane{display:none;margin-top:0;padding-top:0;border-top:0}
   #app.m-list.set-on #setPane{display:block}
   #app.m-list.set-on #sTop,#app.m-list.set-on #sList{display:none}
-  #app.m-list.set-on #setPane>h2{text-align:center;font-size:17px;margin:0 0 14px}
+  #app.m-list #setPane>h2{display:none}   /* 和会话页一样，不要标题；底部菜单已经标明在哪一页 */
 }
 #mtabs{display:none}
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
