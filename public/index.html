@@ -1783,6 +1783,20 @@ function clearOpening(){opening=null;document.querySelectorAll('#sList .s-row.op
 // 点通知进入对应会话：手机上立刻切到聊天页；App 在后台待久了连接常常已经断了，
 // 所以先记下要打开的会话，连接正常就马上发，断了就重连、连上后第一件事打开它
 var pendingOpen=null;
+// 读后台脚本记下的「点通知要打开的会话」（1 分钟内有效，读完就删）
+function takePendingOpen(){
+  if(!window.caches)return Promise.resolve(null);
+  return caches.open('claclaw-nav').then(function(c){
+    return c.match('/__pending-open').then(function(r){
+      if(!r)return null;
+      return r.json().then(function(j){c.delete('/__pending-open');return j&&j.id&&Date.now()-j.at<60000?j.id:null});
+    });
+  }).catch(function(){return null});
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden)return;
+  takePendingOpen().then(function(id){if(id)openFromNotice(id)});   // 从后台回来：消息可能丢了，以这条记录为准
+});
 function openFromNotice(id){
   if(session&&session.id===id&&!mList)return;
   pendingOpen=id;
@@ -2046,7 +2060,8 @@ if(window.visualViewport){
 
 $('#sessBtn .dot').classList.add('off');
 syncSend();
-connect();
+// 启动时先看是不是点通知启动的，再连服务器（这样第一屏就直接是那个会话，不先落在列表）
+takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});
 })();
 </script>
 </body>
