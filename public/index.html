@@ -347,6 +347,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
     <img class="logo" src="/icons/icon-192.png?v=4" alt="Claclaw">
     <button type="button" id="railChats" class="on" aria-label="会话" title="会话"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg></button>
     <span class="gap"></span>
+    <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
   <header>
@@ -1207,6 +1208,12 @@ DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.mat
 // 图标栏：上面是会话，最下面是设置（退出登录在设置页里）
 function railTab(set){$('#app').classList.toggle('set-on',set);$('#railSet').classList.toggle('on',set);$('#railChats').classList.toggle('on',!set)}
 $('#railChats').addEventListener('click',function(){railTab(false)});
+// 刷新：重新加载页面（拿到最新版本）。输入框里没发的字先存起来，刷新后放回去
+$('#railReload').addEventListener('click',function(){
+  try{if(ta.value)sessionStorage.setItem('claclaw.draft',ta.value)}catch(_){}
+  location.reload();
+});
+try{var dr=sessionStorage.getItem('claclaw.draft');if(dr){sessionStorage.removeItem('claclaw.draft');ta.value=dr;ta.dispatchEvent(new Event('input'))}}catch(_){}
 $('#railSet').addEventListener('click',function(){railTab(true)});
 // 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
 function applySearch(){
