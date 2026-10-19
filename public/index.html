@@ -277,6 +277,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-empty{padding:16px 4px;color:var(--muted);font-size:14px}
 .plan{margin:0;padding:10px 12px;white-space:pre-wrap;font-size:14px;max-height:40vh;overflow-y:auto}
 #sessBtn .dot.off{background:var(--muted)}
+/* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
+#workBar{display:flex;align-items:center;gap:8px;padding:2px 2px 8px;font-size:12.5px;color:var(--muted)}
+#workBar[hidden]{display:none}
+#workBar .wdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite}
+#workBar.quiet{color:var(--warn)}
+#workBar.quiet .wdot{background:var(--warn)}
+#bannerT.link{cursor:pointer;text-decoration:underline}
 
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
 #rail,#sTop,.d-only,.d-only-b{display:none}
@@ -355,6 +362,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
   #dock{padding:0;border-top:1px solid var(--line)}
   #dock>#perm,#dock>#ask,#dock>#cmdMenu,#dock>#atts{margin:10px max(20px,calc((100% - 960px) / 2)) 0}
+  #dock>#workBar{padding:8px 20px 0}
   #composer{height:190px;display:flex;flex-direction:column}
   #taWrap{flex:1;min-height:0}
   #ta{height:100%!important;min-height:0;max-height:none;padding:14px 20px 52px;font-size:15px;line-height:1.6}
@@ -406,6 +414,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
         <button type="button" class="btn allow" id="askGo" disabled>提交</button>
       </div>
     </div>
+    <div id="workBar" hidden><span class="wdot"></span><span id="workT"></span></div>
     <div id="cmdMenu" role="listbox" aria-label="斜杠命令" hidden></div>
     <div id="atts" hidden></div>
     <div id="composer">
@@ -664,11 +673,28 @@ function think(on,label){
   }
   if(!on&&thinkEl){thinkEl.remove();thinkEl=null}
 }
+function fmtSec(sec){return sec<60?sec+'s':Math.floor(sec/60)+'m'+('0'+sec%60).slice(-2)+'s'}
+var lastEvt=0;   // 最近一次收到这个会话的事件（输出、工具开始/结束……）
 function tickWork(){
-  if(!thinkEl)return;
   var sec=workSince?Math.floor((Date.now()-workSince)/1000):0;
-  thinkEl.querySelector('.tt').textContent=workLabel+(sec?' · '+(sec<60?sec+'s':Math.floor(sec/60)+'m'+('0'+sec%60).slice(-2)+'s'):'');
+  if(thinkEl)thinkEl.querySelector('.tt').textContent=workLabel+(sec?' · '+fmtSec(sec):'');
+  var bar=$('#workBar');
+  if(!busy){bar.hidden=true;return}
+  var quiet=lastEvt?Math.floor((Date.now()-lastEvt)/1000):0,stuck=quiet>=90;
+  bar.hidden=false;bar.classList.toggle('quiet',stuck);
+  $('#workT').textContent='Claude 正在工作 · '+workLabel+(sec?' · 已 '+fmtSec(sec):'')+
+    (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':' · 可以继续输入，作为插话发给它');
 }
+// 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
+var connectedOnce=false,updateReady=false;
+var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[1])||'';
+function checkVersion(){
+  fetch('/',{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){
+    var v=(h.match(/页面版本 ([0-9a-f]{7})/)||[])[1];
+    if(v&&PAGE_VER&&v!==PAGE_VER){updateReady=true;banner('claclaw 已更新 · 点这里刷新使用新版本');$('#bannerT').classList.add('link')}
+  }).catch(function(){});
+}
+setInterval(function(){if(!document.hidden&&!updateReady)checkVersion()},300000);
 function banner(t){if(t){$('#bannerT').textContent=t;$('#banner').hidden=false}else{$('#banner').hidden=true}}
 
 function toolCard(name,target){
@@ -858,8 +884,8 @@ function syncSend(){
 function setBusy(b){
   if(b&&!busy){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
   if(!b){clearInterval(workTimer);workTimer=null;workSince=0}
-  busy=b;
-  $('#sessBtn .dot').classList.toggle('busy',b);
+  busy=b;if(b&&!lastEvt)lastEvt=Date.now();
+  $('#sessBtn .dot').classList.toggle('busy',b);tickWork();
   if(b)cmdMenu.hidden=true;
   if(b)suggestion=null;
   syncSuggestion();
@@ -993,6 +1019,7 @@ $('#bAlways').addEventListener('click',function(){reply('allow_session')});
 // ---------- 服务端事件 ----------
 
 function onEvent(m){
+  if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
   switch(m.t){
   case 'session.opened':
@@ -1143,6 +1170,7 @@ function connect(){
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
   ws.onopen=function(){
     retry=0;banner(null);
+    if(connectedOnce)checkVersion();connectedOnce=true;
     wsSend({t:'visible',on:!document.hidden});
     var fromUrl=new URLSearchParams(location.search).get('s');
     if(fromUrl)history.replaceState(null,'','/');
@@ -1551,6 +1579,7 @@ $('#delForm').addEventListener('submit',function(e){
 });
 
 $('#bannerX').addEventListener('click',function(){$('#banner').hidden=true});
+$('#bannerT').addEventListener('click',function(){if(updateReady)$('#railReload').click()});
 $('#logout').addEventListener('click',function(){
   fetch('/api/logout',{method:'POST'}).finally(function(){localStorage.removeItem('claclaw.session');location.replace('/login')});
 });
