@@ -56,10 +56,18 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn .sid{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn svg{flex:none;color:var(--muted)}
-#modeBtn{flex:none;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px}
-#modeBtn[data-m="accept"]{border-color:var(--warn);color:var(--warn)}
-#modeBtn[data-m="plan"]{border-color:var(--accent);color:var(--accent)}
-#modeBtn[data-m="bypass"]{border-color:var(--deny);color:var(--deny);font-weight:600}
+/* 会话模式：右上角下拉选择；标题后面显示模式的英文名（无边框，颜色跟模式走） */
+#modeWrap{flex:none;display:flex;align-items:center;gap:2px;font-size:14px;color:var(--muted);white-space:nowrap}
+#modeSel{min-height:44px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+#modeWrap[data-m="accept"] #modeSel{border-color:var(--warn);color:var(--warn)}
+#modeWrap[data-m="plan"] #modeSel{border-color:var(--accent);color:var(--accent)}
+#modeWrap[data-m="bypass"] #modeSel{border-color:var(--deny);color:var(--deny);font-weight:600}
+#sessBtn .mtag{flex:none;margin-left:2px;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
+#sessBtn .mtag:empty{display:none}
+@media (max-width:599px){#sessBtn .mtag{display:none}}  /* 手机上太挤：右边下拉框已经显示模式 */
+#sessBtn .mtag[data-m="accept"]{color:var(--warn)}
+#sessBtn .mtag[data-m="plan"]{color:var(--accent)}
+#sessBtn .mtag[data-m="bypass"]{color:var(--deny);font-weight:600}
 
 #banner{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;background:var(--banner-bg);color:var(--warn);font-size:13px;line-height:1.4}
 #banner span{flex:1}
@@ -343,7 +351,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #sessBtn{border:0;background:none;padding:0;min-height:56px;cursor:default}
   #sessBtn .nm{font-size:17px}
   #sessBtn>svg{display:none}
-  #modeBtn{min-height:34px}
+  #modeSel{min-height:34px}
+  #sessBtn .sid{flex:0 1 auto}
   #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
 
   /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
@@ -373,10 +382,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   </nav>
   <header>
     <button id="sessBtn" type="button" aria-label="切换会话">
-      <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span>
+      <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
     </button>
-    <button id="modeBtn" type="button" data-m="default" aria-label="切换模式">默认</button>
+    <label id="modeWrap" data-m="default"><span class="d-only">会话模式：</span><select id="modeSel" aria-label="会话模式"></select></label>
   </header>
 
   <div id="banner" role="note"><span id="bannerT">正在连接…</span><button type="button" id="bannerX" aria-label="关闭提示">×</button></div>
@@ -1214,14 +1223,24 @@ ta.addEventListener('keydown',function(e){
 function setMode(key,announce){
   var m=MODES.find(function(x){return x.key===key})||MODES[0];
   mode=m.key;
-  var b=$('#modeBtn');b.textContent=m.label;b.dataset.m=m.key==='acceptEdits'?'accept':m.key==='bypassPermissions'?'bypass':m.key;
+  var dm=m.key==='acceptEdits'?'accept':m.key==='bypassPermissions'?'bypass':m.key;
+  // 下拉框：只列这个会话能切换的模式（继承来的特殊模式也在里面）
+  var sel=$('#modeSel'),want=sessionModes.indexOf(m.key)<0?sessionModes.concat(m.key):sessionModes;
+  if(sel.dataset.opts!==want.join(',')){
+    sel.innerHTML='';
+    want.forEach(function(k){var x=MODES.find(function(y){return y.key===k});if(!x)return;var o=document.createElement('option');o.value=k;o.textContent=x.label;sel.appendChild(o)});
+    sel.dataset.opts=want.join(',');
+  }
+  sel.value=m.key;$('#modeWrap').dataset.m=dm;
+  var tag=$('#modeTag');tag.textContent=session?m.key:'';tag.dataset.m=dm;
   if(announce)addSys('模式：'+m.label+'。'+m.note);
 }
-$('#modeBtn').addEventListener('click',function(){
-  var i=sessionModes.indexOf(mode);
-  var next=sessionModes[(i+1)%sessionModes.length];
+$('#modeSel').addEventListener('change',function(e){
+  var next=e.target.value;
+  e.target.value=mode;   // 等服务器确认后再真正切过去（setMode 会更新显示）
   if(session)wsSend({t:'mode.set',mode:next});else setMode(next,true);
 });
+setMode(mode,false);
 
 // ---------- 会话列表 ----------
 
