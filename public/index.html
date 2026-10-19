@@ -424,6 +424,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .claw-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
   .claw-st{flex:none;font-size:12.5px;color:var(--muted)}
   .claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
+  .claw-card.unread .claw-tx b::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 3px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 }
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
@@ -1622,7 +1623,7 @@ document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('
   if(c.disabled)return;
   if(clawSel!==c.dataset.claw){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
   clawSel=c.dataset.claw;try{localStorage.setItem('claclaw.claw',clawSel)}catch(_){}
-  showClawSel();mTab('chats');openSheet();
+  showClawSel();renderUnread();mTab('chats');openSheet();
 })});
 document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){
   var t=b.dataset.tab;
@@ -1812,16 +1813,22 @@ function renderActivity(){
     w.textContent=a||it.dataset.when||'';
   });
 }
+function clawOf(id){return /^oc:/.test(id)?'openclaw':'claude'}
 function renderUnread(){
-  var ids=Object.keys(unread),total=0,other=false;
-  ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id)other=true});
+  var ids=Object.keys(unread),total=0,other=false,byClaw={};
+  ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id){other=true;byClaw[clawOf(id)]=true}});
   document.querySelectorAll('#sList .s-row').forEach(function(r){r.classList.toggle('unread',!!unread[r.dataset.id])});
   // 目录（组标题）：组里有未读的会话就亮红点，折叠着也看得到是哪个目录要处理
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
     var h=box.previousElementSibling;   // 「最近活跃」是特殊的组，不亮红点
     if(h&&!h.classList.contains('recent'))h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
   });
-  $('#railChats').classList.toggle('dot',other);$('#mtabs [data-tab="chats"]').classList.toggle('dot',other);
+  // 手机底栏：当前 Claw 的未读亮在「会话」上，别的 Claw 的未读亮在「Claw」上，Claw 页里对应的卡片也亮
+  var otherClaw=Object.keys(byClaw).some(function(c){return c!==clawSel});
+  $('#railChats').classList.toggle('dot',other);
+  $('#mtabs [data-tab="chats"]').classList.toggle('dot',!!byClaw[clawSel]||(!clawSel&&other));
+  $('#mtabs [data-tab="claw"]').classList.toggle('dot',!!clawSel&&otherClaw);
+  document.querySelectorAll('.claw-card').forEach(function(c){c.classList.toggle('unread',!!byClaw[c.dataset.claw])});
   $('#sessBtn').classList.toggle('unr',other);$('#backBtn').classList.toggle('unr',other);
   if(navigator.setAppBadge){(total?navigator.setAppBadge(total):navigator.clearAppBadge()).catch(function(){})}
 }
