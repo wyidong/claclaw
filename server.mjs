@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
@@ -618,6 +618,7 @@ class Runner {
   notify(body, tag) {
     if (this.watched()) return;
     const title = this.info.customTitle || this.title || path.basename(this.cwd || '') || '会话';
+    localSound();
     push.sendAll({ title, body, tag, url: '/?s=' + this.id }, log)
       .then(n => n && log('push sent', this.id.slice(0, 8), body, '→', n));
   }
@@ -663,6 +664,26 @@ function resumable(s) {
 // 不记的话关掉再打开就掉回 default
 // 文件格式 { id: { mode } }；旧版是 id 数组，读的时候兼容
 const WEB_SESSIONS = path.join(DATA, 'web-sessions.json');
+
+// ---------- 本机提示音 ----------
+// Edge / Chrome 在 Mac 上弹的网页通知常常不带声音。claclaw 就跑在这台电脑上，
+// 所以推送时可以顺便用系统直接响一声（只在 macOS 上有效）。开关存在 data/settings.json，网页上可开关。
+const SETTINGS = path.join(DATA, 'settings.json');
+const SOUND_OK = process.platform === 'darwin';
+function settings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
+function saveSettings(patch) {
+  const next = { ...settings(), ...patch };
+  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(SETTINGS, JSON.stringify(next, null, 2), { mode: 0o600 });
+  return next;
+}
+let lastSound = 0;
+function localSound(force = false) {
+  if (!SOUND_OK || (!force && !settings().localSound)) return;
+  if (Date.now() - lastSound < 1500) return; // 几条通知挤在一起时只响一声
+  lastSound = Date.now();
+  execFile('afplay', ['/System/Library/Sounds/Glass.aiff'], () => {});
+}
 function webSessions() {
   try {
     const o = JSON.parse(fs.readFileSync(WEB_SESSIONS, 'utf8'));
@@ -903,7 +924,19 @@ const handler = async (req, res) => {
         return sendJson(res, 200, { ok: true });
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
     }
+    if (url.pathname === '/api/sound') {
+      if (req.method === 'POST') {
+        if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+        let body = {};
+        try { body = JSON.parse(await readBody(req, 1024)); } catch {}
+        saveSettings({ localSound: !!body.on });
+        log('local sound', body.on ? 'on' : 'off');
+        if (body.on) localSound(true); // 打开时响一声给你听
+      }
+      return sendJson(res, 200, { supported: SOUND_OK, on: SOUND_OK && !!settings().localSound });
+    }
     if (url.pathname === '/api/push/test' && req.method === 'POST') {
+      localSound();
       const n = await push.sendAll({ title: 'Claclaw', body: '测试通知：推送已经通了', tag: 'test', url: '/' }, log);
       return sendJson(res, 200, { sent: n });
     }

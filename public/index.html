@@ -327,6 +327,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <button type="button" class="always" id="pushBtn" hidden></button>
       <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
       <div class="ver" id="pushTip" hidden></div>
+      <button type="button" class="always" id="soundBtn" hidden></button>
       <button type="button" class="always" id="logout">退出登录</button>
       <div class="ver">页面版本 __PAGE_VERSION__</div>
     </div>
@@ -1190,6 +1191,19 @@ function syncPushBtn(){
     });
   }).catch(function(){});
 }
+// 电脑提示音：推送时由运行 claclaw 的那台 Mac 直接响一声（浏览器的网页通知常常没声音）
+var soundBtn=$('#soundBtn');
+function showSound(j){
+  soundBtn.hidden=!j.supported;
+  soundBtn.dataset.on=j.on?'1':'';
+  soundBtn.textContent=j.on?'电脑提示音已开启 · 点这里关闭':'开启电脑提示音（推送时运行 claclaw 的电脑会响一声）';
+}
+function syncSound(){fetch('/api/sound').then(function(r){return r.json()}).then(showSound).catch(function(){})}
+soundBtn.addEventListener('click',function(){
+  fetch('/api/sound',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:!soundBtn.dataset.on})})
+    .then(function(r){return r.json()}).then(function(j){showSound(j);toast(j.on?'已开启，刚才应该响了一声':'已关闭电脑提示音')});
+});
+syncSound();
 // 排查用：直接在本机弹一条通知，不经苹果/微软的推送服务。
 // 这条能弹、推送的不弹 → 问题在推送送达；这条也不弹 → 问题在系统或浏览器的通知设置
 $('#pushLocal').addEventListener('click',function(){
