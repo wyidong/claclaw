@@ -1228,15 +1228,16 @@ wss.on('connection', (ws, req) => {
         if (!r) { r = new OcRunner(m.id, { log, onActivity: setActivity, onTurnDone: ocTurnDone }); ocRunners.set(m.id, r); }
         runner = r;
         r.subscribe(ws);
+        if (ws.visible !== false) clearUnread(m.id);
         const pg = await r.open();
         // 历史条目没有全局序号：给一个足够大的虚拟起点，往上翻一页就往前挪一页
         const total = 100000;
         log('open openclaw', r.key, pg.items.length, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: 'OpenClaw', cwdShort: 'OpenClaw' + (r.model ? ' · ' + r.model : ''),
-          mode: 'default', modes: ['default'], busy: r.busy, claw: 'openclaw',
+          mode: 'default', modes: ['default'], busy: r.busy, claw: 'openclaw', commands: r.commands || [],
           history: pg.items, historyStart: total - pg.items.length, historyTotal: total, historyMore: pg.more,
-          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0, pending: [], suggestion: null, commands: null,
+          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0, pending: [], suggestion: null,
         });
       } else if (m.t === 'session.open') {
         const list = await listSessions({ includeProgrammatic: true, limit: 500 });

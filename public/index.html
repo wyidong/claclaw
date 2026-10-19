@@ -1311,7 +1311,7 @@ function onEvent(m){
     localStorage.setItem('claclaw.session',m.id);
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
-    commands=m.commands||[];
+    commands=m.commands||[];syncCmdMenu();   // 输入框里已经有「/」时，弹层立刻换成这个会话的命令
     setBusy(m.busy);
     if(m.busy&&m.busyFor)workSince=Date.now()-m.busyFor;   // 用服务器记的开始时间（只传经过的毫秒数，不受手机时钟偏差影响）
     (m.pending||[]).forEach(onPermRequest);
@@ -1384,6 +1384,9 @@ function onEvent(m){
     break;
   case 'busy':
     setBusy(!!m.on);
+    break;
+  case 'session.meta':   // 会话信息变了（OpenClaw 换了模型）：更新标题栏
+    if(session&&m.cwdShort){session.cwdShort=m.cwdShort;session.dir=m.cwdShort.split('/').pop()||'';setHeader()}
     break;
   case 'status':   // 一条会被替换的状态（例如 OpenClaw 模型重试），只显示在工作状态条上，不进消息流
     think(true,m.text);break;

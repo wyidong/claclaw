@@ -83,6 +83,18 @@ export async function ocSessionList(log) {
   })).sort((a, b) => b.lastModified - a.lastModified);
 }
 
+let cmdCache = null;
+async function ocCommands(log) {
+  if (cmdCache) return cmdCache;
+  try {
+    const r = await call('commands.list', { scope: 'text', includeArgs: false }, log);
+    const seen = new Set();
+    cmdCache = (r.commands || []).filter(c => c.name && !seen.has(c.name) && seen.add(c.name))
+      .map(c => ({ name: c.name, description: c.description || '', hint: '', builtin: c.source === 'native' }));
+  } catch (e) { log?.('openclaw commands.list failed', e.message); return []; }
+  return cmdCache;
+}
+
 // ---------- 消息 → 网页的条目（和 Claude 会话的历史同一套格式） ----------
 const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.filter(b => b.type === 'text').map(b => b.text).join('\n') : '';
 const cleanAi = t => String(t || '').replace(/\[\[reply_to:[^\]]*\]\]/g, '').trim();
@@ -140,6 +152,8 @@ export class OcRunner {
     this.nextOffset = h.nextOffset;
     this.title = h.sessionInfo?.displayName || h.sessionInfo?.label || (h.sessionInfo?.isMain ? '主会话' : this.key);
     this.model = [h.sessionInfo?.modelProvider, h.sessionInfo?.model].filter(Boolean).join('/');
+    // 斜杠命令（/model、/status……）：网关自己的命令清单，取一次缓存起来
+    this.commands = await ocCommands(this.log);
     const run = !!h.sessionInfo?.hasActiveRun;
     if (run && !this.busy) { this.busy = true; this.busySince = Date.now(); }
     return { items: toItems(h.messages || []), more: !!h.hasMore };
@@ -184,6 +198,7 @@ export class OcRunner {
         this.emit({ t: 'turn.done', subtype: p.state === 'final' ? 'success' : p.state, error: err });
         this.onActivity?.(this.id, null);
         this.onTurnDone?.(this, p.state === 'final');
+        this.refreshMeta();
         if (!this.subs.size) this.dispose();
       }
     } else if (ev === 'agent' && p.stream === 'run_status' && p.data?.phase === 'retrying') {
@@ -201,6 +216,15 @@ export class OcRunner {
       const t = textOf(m.content).trim();
       if (t) this.emit({ t: 'user', text: t });
     }
+  }
+
+  // 一轮结束后看看模型有没有换（比如发了 /model），换了就更新标题栏
+  async refreshMeta() {
+    try {
+      const h = await call('chat.history', { sessionKey: this.key, limit: 1 }, this.log);
+      const model = [h.sessionInfo?.modelProvider, h.sessionInfo?.model].filter(Boolean).join('/');
+      if (model && model !== this.model) { this.model = model; this.emit({ t: 'session.meta', cwdShort: 'OpenClaw · ' + model }); }
+    } catch {}
   }
 
   send(text) {
