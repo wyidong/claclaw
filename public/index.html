@@ -230,6 +230,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-gbox[hidden]{display:none}
 #sList .s-grp .gn{font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-grp .gc{flex:none;font-size:12px}
+#sList .s-grp.recent .gn{font-family:var(--sans)}
 #soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}#soundPick[hidden]{display:none}
 #soundSel{font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .s-row{position:relative;margin-top:8px}
@@ -1251,14 +1252,23 @@ function openSheet(){
     var folded=foldedGroups();
     order.forEach(function(g){g.items.sort(function(a,b){return (b.lastModified||0)-(a.lastModified||0)})});
     var flat=[],cur=list;
+    // 最上面「最近活跃」：全部会话里最近活动的 3 个，和目录分组里的重复一份，方便直接点
+    var recent=arr.slice().sort(function(a,b){return (b.lastModified||0)-(a.lastModified||0)}).slice(0,3);
+    if(arr.length>3){
+      var rg={key:'__recent',label:'最近活跃',items:recent,recent:true};
+      flat.push({grp:rg});recent.forEach(function(s){flat.push({s:s,recent:true})});
+    }
     order.forEach(function(g){flat.push({grp:g});g.items.forEach(function(s){flat.push(s)})});
     flat.forEach(function(s){
+      var inRecent=false;
+      if(s.recent&&s.s){inRecent=true;s=s.s}
       if(s.grp){
         var g=s.grp,h=document.createElement('button');h.type='button';h.className='s-grp';
         var box=document.createElement('div');box.className='s-gbox';
         h.innerHTML='<svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="gn"></span><span class="gc"></span>';
         h.querySelector('.gn').textContent=g.label;
-        h.querySelector('.gc').textContent=g.items.length+' 个会话';
+        h.querySelector('.gc').textContent=g.recent?'':g.items.length+' 个会话';
+        if(g.recent)h.classList.add('recent');
         var shut=!!folded[g.key];
         h.setAttribute('aria-expanded',String(!shut));box.hidden=shut;
         h.addEventListener('click',function(){
@@ -1276,7 +1286,8 @@ function openSheet(){
       b.innerHTML='<div class="t"></div><div class="m"><span class="id"></span><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
       b.querySelector('.id').textContent=s.id.slice(0,8);
-      b.querySelector('.cwd').textContent=s.branch||'';   // 目录已经在分组标题里了，这里只显示分支
+      // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
+      b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');
       b.querySelector('.when').textContent=s.unsent?'新建 · 还没发消息':(s.openInWeb?'网页中 · ':'')+ago(s.lastModified);
       if(bz)b.querySelector('.bz').textContent=idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管');
       b.addEventListener('click',function(){
