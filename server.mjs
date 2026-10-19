@@ -441,6 +441,24 @@ class Runner {
   emit(ev) {
     const s = JSON.stringify({ ...ev, sessionId: this.id });
     for (const ws of this.subs) if (ws.readyState === 1) ws.send(s);
+    this.trackActivity(ev);
+  }
+
+  // 会话列表里显示的「正在做什么」（3～4 个字）；所有打开的页面都会收到，可以同时看多个会话的状态
+  trackActivity(ev) {
+    let a = this.activity;
+    switch (ev.t) {
+      case 'user': case 'tool.result': case 'perm.done': a = '思考中'; break;
+      case 'ai.start': case 'ai.delta': a = '回复中'; break;
+      case 'tool.start': a = toolActivity(ev.name); break;
+      case 'perm.request': a = '等你确认'; break;
+      case 'busy': a = ev.on ? (a || '思考中') : null; break;
+      case 'turn.done': if (!this.busy) a = null; break;
+      case 'session.closed': a = null; break;
+      default: return;
+    }
+    if (!this.busy && ev.t !== 'perm.request') a = ev.t === 'user' ? '思考中' : null;
+    if (a !== this.activity) { this.activity = a; setActivity(this.id, a); }
   }
 
   async pump() {
@@ -657,6 +675,7 @@ class Runner {
   dispose(reason) {
     if (this.closed) return;
     this.closed = true;
+    if (this.activity) { this.activity = null; setActivity(this.id, null); }
     this.cancelClose();
     for (const id of [...this.pending.keys()]) this.replyPermission(id, 'deny');
     try { this.q.close(); } catch {}
@@ -700,6 +719,32 @@ function saveSettings(patch) {
 const SOUND_DIR = '/System/Library/Sounds';
 const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.endsWith('.aiff')).map(f => f.slice(0, -5)).sort(); } catch { return []; } })() : [];
 const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soundName : 'Glass');
+// ---------- 各会话正在做什么（会话列表实时显示）----------
+const activityMap = {};
+let activityTimer = null;
+function setActivity(id, a) {
+  if (a) activityMap[id] = a; else delete activityMap[id];
+  if (activityTimer) return;   // 0.5 秒合并一次，流式输出时不刷屏
+  activityTimer = setTimeout(() => {
+    activityTimer = null;
+    const msg = JSON.stringify({ t: 'activity', activity: activityMap });
+    for (const c of wss.clients) if (c.readyState === 1) c.send(msg);
+  }, 500);
+}
+function toolActivity(name = '') {
+  if (name === 'Bash' || name === 'BashOutput') return '运行命令';
+  if (name === 'Read' || name === 'NotebookRead') return '读文件';
+  if (name === 'Edit' || name === 'Write' || name === 'MultiEdit' || name === 'NotebookEdit') return '改文件';
+  if (name === 'Grep' || name === 'Glob' || name === 'LS') return '查找中';
+  if (name === 'WebFetch' || name === 'WebSearch') return '查网页';
+  if (name === 'Agent' || name === 'Task') return '派子任务';
+  if (name === 'SendMessage') return '发消息';
+  if (name === 'ListAgents') return '找会话';
+  if (name === 'TodoWrite') return '列计划';
+  if (/playwright|browser/i.test(name)) return '操作浏览器';
+  return '用工具';
+}
+
 // ---------- 未读 ----------
 // 推送通知（回复完了 / 等你确认）时记一条未读；任何设备打开并正在看这个会话时清掉。
 // 服务器统一记，手机和电脑看到的红点、角标是同一份；存在 data/unread.json，重启不丢。
@@ -786,7 +831,7 @@ async function sessionList() {
     };
   }).concat(
     // 网页里新建、还没发过消息的会话：没有会话文件，listSessions 看不到，也列出来
-    [...runners.values()].filter(r => !r.closed && r.unsent()).map(r => ({
+    [...runners.values()].filter(r => !r.closed && r.unsent() && !list.some(s => s.sessionId === r.id)).map(r => ({
       id: r.id, title: r.info.customTitle || '新会话', cwd: r.cwd, cwdShort: relPath(r.cwd || '', null),
       branch: '', lastModified: r.createdAt, openInWeb: true, busyElsewhere: null, unsent: true, webActive: webActive[r.id] || r.createdAt,
     })),
@@ -1056,6 +1101,7 @@ wss.on('connection', (ws, req) => {
   let runner = null;
   const send = o => ws.readyState === 1 && ws.send(JSON.stringify(o));
   send({ t: 'unread', unread: unreadMap() });
+  send({ t: 'activity', activity: activityMap });
 
   ws.on('message', async raw => {
     let m;

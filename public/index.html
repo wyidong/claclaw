@@ -241,6 +241,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-gpath{margin:-2px 2px 4px 22px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
 #sList .s-grp.recent .gn{font-family:var(--sans)}
+/* 正在干活的会话：绿色边框，状态文字绿色、前面一个闪动的点；等确认的用橙色 */
+.s-row.working .s-item{border-color:var(--allow)!important}
+.s-row.working .s-item .when{color:var(--allow);font-weight:600}
+.s-row.working .s-item .when::before{content:'';display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:currentColor;vertical-align:middle;animation:pulse 1.2s infinite}
+.s-row.waiting .s-item{border-color:var(--warn)!important}
+.s-row.waiting .s-item .when{color:var(--warn)}
 #sList .s-grp.unread .gn::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
 #setPane .set-sec{margin:0 0 18px}
@@ -1200,6 +1206,9 @@ function onEvent(m){
   case 'cmd.out':
     var po=document.createElement('pre');po.className='cmdout';po.textContent=m.text;feed.appendChild(po);scrollDown();
     break;
+  case 'activity':
+    activity=m.activity||{};renderActivity();
+    break;
   case 'unread':
     unread=m.unread||{};renderUnread();
     break;
@@ -1450,7 +1459,10 @@ function openSheet(){
       b.querySelector('.id').textContent=s.id.slice(0,8);
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');
-      b.querySelector('.when').textContent=s.unsent?'新建 · 还没发消息':(s.openInWeb?'网页中 · ':'')+ago(s.lastModified);
+      var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);
+      b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
+      // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
+      if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'等待确认':'在'+where(bz.entrypoint)+'工作';
       if(bz)b.querySelector('.bz').textContent=idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管');
       b.addEventListener('click',function(){
         closeSheet();
@@ -1483,19 +1495,31 @@ function openSheet(){
       }
       cur.appendChild(row);
     });
-    applySearch();renderUnread();
+    applySearch();renderUnread();renderActivity();
   }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
 // ---------- 未读红点 + 应用角标 ----------
 // 服务器推来未读表（会话 ID → 条数）：会话行红点、图标栏「会话」红点、手机顶部红点、Dock/主屏幕图标角标
 var unread={};
+// ---------- 会话列表里的工作状态 ----------
+// 服务器推来「会话 → 正在做什么」（思考中 / 回复中 / 运行命令 / 等你确认……），正在干活的行变绿，时间换成状态
+var activity={};
+function renderActivity(){
+  document.querySelectorAll('#sList .s-row').forEach(function(r){
+    var it=r.querySelector('.s-item'),w=it&&it.querySelector('.when');if(!w)return;
+    var a=activity[r.dataset.id]||r.dataset.ext||'';
+    r.classList.toggle('working',!!a);r.classList.toggle('waiting',/确认/.test(a));
+    w.textContent=a||it.dataset.when||'';
+  });
+}
 function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false;
   ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id)other=true});
   document.querySelectorAll('#sList .s-row').forEach(function(r){r.classList.toggle('unread',!!unread[r.dataset.id])});
   // 目录（组标题）：组里有未读的会话就亮红点，折叠着也看得到是哪个目录要处理
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
-    var h=box.previousElementSibling;if(h)h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
+    var h=box.previousElementSibling;   // 「最近活跃」是特殊的组，不亮红点
+    if(h&&!h.classList.contains('recent'))h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
   });
   $('#railChats').classList.toggle('dot',other);
   $('#sessBtn').classList.toggle('unr',other);
