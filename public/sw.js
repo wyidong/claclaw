@@ -6,14 +6,19 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'Claclaw', {
+  const jobs = [self.registration.showNotification(d.title || 'Claclaw', {
     body: d.body || '',
     tag: d.tag || 'claclaw',
     renotify: true,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     data: { url: d.url || '/' },
-  }));
+  })];
+  // 应用图标角标（Dock / 主屏幕）：未读总数；浏览器不支持就算了
+  if (typeof d.badge === 'number' && self.navigator && self.navigator.setAppBadge) {
+    jobs.push((d.badge ? self.navigator.setAppBadge(d.badge) : self.navigator.clearAppBadge()).catch(() => {}));
+  }
+  e.waitUntil(Promise.all(jobs));
 });
 
 self.addEventListener('notificationclick', e => {

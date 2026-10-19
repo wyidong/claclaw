@@ -620,7 +620,8 @@ class Runner {
     if (this.watched()) return;
     const title = this.info.customTitle || this.title || path.basename(this.cwd || '') || '会话';
     localSound();
-    push.sendAll({ title, body, tag, url: '/?s=' + this.id }, log)
+    const badge = markUnread(this.id);
+    push.sendAll({ title, body, tag, url: '/?s=' + this.id, badge }, log)
       .then(n => n && log('push sent', this.id.slice(0, 8), body, '→', n));
   }
   unsubscribe(ws) { this.subs.delete(ws); this.maybeScheduleClose(); }
@@ -681,6 +682,21 @@ function saveSettings(patch) {
 const SOUND_DIR = '/System/Library/Sounds';
 const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.endsWith('.aiff')).map(f => f.slice(0, -5)).sort(); } catch { return []; } })() : [];
 const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soundName : 'Glass');
+// ---------- 未读 ----------
+// 推送通知（回复完了 / 等你确认）时记一条未读；任何设备打开并正在看这个会话时清掉。
+// 服务器统一记，手机和电脑看到的红点、角标是同一份；存在 data/unread.json，重启不丢。
+const UNREAD_FILE = path.join(DATA, 'unread.json');
+function unreadMap() { try { return JSON.parse(fs.readFileSync(UNREAD_FILE, 'utf8')) || {}; } catch { return {}; } }
+const unreadTotal = u => Object.values(u).reduce((a, n) => a + (n || 0), 0);
+function saveUnread(u) {
+  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(UNREAD_FILE, JSON.stringify(u), { mode: 0o600 });
+  const msg = JSON.stringify({ t: 'unread', unread: u });
+  for (const c of wss.clients) if (c.readyState === 1) c.send(msg);
+}
+function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveUnread(u); return unreadTotal(u); }
+function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); }
+
 let lastSound = 0;
 function localSound(force = false) {
   if (!SOUND_OK || (!force && !settings().localSound)) return;
@@ -718,6 +734,7 @@ async function sessionList() {
   ];
   const seen = new Set(normal.map(s => s.sessionId));
   const list = normal.concat(all.filter(s => ours.has(s.sessionId) && !seen.has(s.sessionId)));
+  const unread = unreadMap();
   return list.filter(resumable).map(s => {
     const ours = runners.has(s.sessionId);
     const elsewhere = ours ? null : takeoverInfo(s.sessionId, jsonlPathOf(s), live);
@@ -730,6 +747,7 @@ async function sessionList() {
       lastModified: s.lastModified,
       openInWeb: ours,
       busyElsewhere: elsewhere,
+      unread: unread[s.sessionId] || 0,
     };
   }).concat(
     // 网页里新建、还没发过消息的会话：没有会话文件，listSessions 看不到，也列出来
@@ -989,12 +1007,13 @@ wss.on('connection', (ws, req) => {
   ws.visible = true; // 页面会在切到后台 / 回到前台时告诉我们
   let runner = null;
   const send = o => ws.readyState === 1 && ws.send(JSON.stringify(o));
+  send({ t: 'unread', unread: unreadMap() });
 
   ws.on('message', async raw => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     try {
-      if (m.t === 'visible') { ws.visible = !!m.on; return; }
+      if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       if (m.t === 'session.new') {
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
         const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
@@ -1042,6 +1061,7 @@ wss.on('connection', (ws, req) => {
         runner = runners.get(m.id);
         runners.set(m.id, runner);
         runner.subscribe(ws);
+        if (ws.visible !== false) clearUnread(m.id);
         log('open', m.id.slice(0, 8), info.cwd);
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,

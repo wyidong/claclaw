@@ -232,6 +232,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-gpath{margin:-2px 2px 4px 22px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
 #sList .s-grp.recent .gn{font-family:var(--sans)}
+/* 未读红点 */
+.s-row.unread .s-item .t::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
+#railChats{position:relative}
+#railChats.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+#sessBtn{position:relative}
+#sessBtn.unr::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
 #soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}#soundPick[hidden]{display:none}
 #soundSel{font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .s-row{position:relative;margin-top:8px}
@@ -1075,6 +1081,9 @@ function onEvent(m){
   case 'cmd.out':
     var po=document.createElement('pre');po.className='cmdout';po.textContent=m.text;feed.appendChild(po);scrollDown();
     break;
+  case 'unread':
+    unread=m.unread||{};renderUnread();
+    break;
   case 'peer':
     addPeer(m.from,m.text);
     break;
@@ -1283,7 +1292,8 @@ function openSheet(){
         });
         list.appendChild(h);list.appendChild(box);cur=box;return;
       }
-      var row=document.createElement('div');row.className='s-row';
+      var row=document.createElement('div');row.className='s-row';row.dataset.id=s.id;
+      if(unread[s.id]||s.unread)row.classList.add('unread');
       var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
       var bz=s.busyElsewhere;
@@ -1328,6 +1338,17 @@ function openSheet(){
     });
     applySearch();
   }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
+}
+// ---------- 未读红点 + 应用角标 ----------
+// 服务器推来未读表（会话 ID → 条数）：会话行红点、图标栏「会话」红点、手机顶部红点、Dock/主屏幕图标角标
+var unread={};
+function renderUnread(){
+  var ids=Object.keys(unread),total=0,other=false;
+  ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id)other=true});
+  document.querySelectorAll('#sList .s-row').forEach(function(r){r.classList.toggle('unread',!!unread[r.dataset.id])});
+  $('#railChats').classList.toggle('dot',other);
+  $('#sessBtn').classList.toggle('unr',other);
+  if(navigator.setAppBadge){(total?navigator.setAppBadge(total):navigator.clearAppBadge()).catch(function(){})}
 }
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
