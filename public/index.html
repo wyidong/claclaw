@@ -16,6 +16,10 @@
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#161B21" media="(prefers-color-scheme: dark)">
 <title>Claclaw</title>
+<script>
+// 主题：跟随系统（默认）/ 普通 / 深色，按设备记在本机；在页面画出来之前就设好，免得先闪一下
+(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}})();
+</script>
 <style>
 :root{
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
@@ -588,6 +592,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <div id="setPane">
       <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
       <h2>设置</h2>
+      <div class="set-sec">
+        <div class="set-h">外观</div>
+        <div class="set-card">
+          <label class="set-item"><span class="lb">主题<small>跟随系统：随这台设备的深浅色自动切换</small></span>
+            <select id="setTheme"><option value="">跟随系统</option><option value="light">普通</option><option value="dark">深色</option></select></label>
+        </div>
+      </div>
       <div class="set-sec">
         <div class="set-h">会话</div>
         <div class="set-card">
@@ -1871,6 +1882,24 @@ function restoreFeed(id){
   if(c.inDom){delete feedCache[id];return false}   // 上次放回去后没打开成功：作废，按服务器的重画
   feed.innerHTML='';feed.appendChild(c.frag);c.inDom=true;stick=true;feed.scrollTop=feed.scrollHeight;return true;
 }
+// ---------- 主题 ----------
+function applyTheme(t){
+  var root=document.documentElement;
+  if(t==='light'||t==='dark')root.setAttribute('data-theme',t);else root.removeAttribute('data-theme');
+  var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=t==='light'?'light':t==='dark'?'dark':'light dark';
+  // 状态栏 / 浏览器顶栏颜色：选了固定主题就两条 theme-color 都用那个颜色
+  document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){
+    var dark=/dark/.test(m.media);m.content=t==='light'?'#FFFFFF':t==='dark'?'#161B21':(dark?'#161B21':'#FFFFFF');
+  });
+}
+(function(){
+  var sel=$('#setTheme'),t='';try{t=localStorage.getItem('claclaw.theme')||''}catch(_){}
+  sel.value=t;applyTheme(t);
+  sel.addEventListener('change',function(){
+    try{if(sel.value)localStorage.setItem('claclaw.theme',sel.value);else localStorage.removeItem('claclaw.theme')}catch(_){}
+    applyTheme(sel.value);
+  });
+})();
 function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
