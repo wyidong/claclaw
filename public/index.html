@@ -1184,7 +1184,7 @@ function onEvent(m){
     delete feedCache[m.id];
     if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null;histStart=(m.historyTotal||0)-fc.kept;histMore=histStart>0}   // 记录没变：直接用上次画好的，不重画、不闪
     else{feed.innerHTML='';cards={};permQueue=[];aiEl=null}
-    feedSig=hsig;feedDirty=false;
+    feedSig=hsig;feedDirty=false;histArmed=false;lastTop=0;histLoading=false;   // 刚打开不算「滑到顶」，要先离开顶部
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
@@ -1193,7 +1193,7 @@ function onEvent(m){
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
     renderHistory(m.history);
-    histStart=m.historyStart||0;histMore=!!m.historyMore;
+    histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+m.id.slice(0,8)+'　'+(m.cwdShort||''));
     }
     localStorage.setItem('claclaw.session',m.id);
@@ -1819,12 +1819,22 @@ function renderHistory(items){
   });
 }
 // 往上滑到顶：向服务器要更早的一页，接到最上面，画面位置不跳
-var histStart=0,histMore=false,histLoading=false;
+// 一次上滑（包括它的惯性）最多加载一页：加载后要等滚动停下来（0.25 秒没动）才允许下一页；只在往上滑时触发
+var histStart=0,histMore=false,histLoading=false,histArmed=true,lastTop=0,scrollIdle=null;
 feed.addEventListener('scroll',function(){
-  if(!session||!histMore||histLoading||feed.scrollTop>120)return;
-  histLoading=true;wsSend({t:'history.more',before:histStart});
-  setTimeout(function(){histLoading=false},4000);
+  var top=feed.scrollTop,up=top<lastTop;lastTop=top;
+  clearTimeout(scrollIdle);scrollIdle=setTimeout(function(){
+    histArmed=true;
+    if(feed.scrollTop<=120)loadOlder();   // 停在顶部：加载一页（插入后位置会离开顶部，不会连环加载）
+  },250);
+  if(!histArmed||!up||top>120)return;
+  loadOlder();
 });
+function loadOlder(){
+  if(!session||!histMore||histLoading)return;
+  histLoading=true;histArmed=false;wsSend({t:'history.more',before:histStart});
+  setTimeout(function(){histLoading=false},4000);
+}
 function prependHistory(m){
   histLoading=false;
   if(!session||m.id!==session.id)return;
@@ -1834,8 +1844,16 @@ function prependHistory(m){
   feed=tmp;stick=false;try{renderHistory(m.items)}finally{feed=real;stick=keepStick}
   var h0=feed.scrollHeight,top0=feed.scrollTop,f=document.createDocumentFragment();
   while(tmp.firstChild)f.appendChild(tmp.firstChild);
+  // iPhone 惯性滚动时直接改 scrollTop 会被忽略，惯性会一路冲到顶、接着连续加载：先短暂停掉滚动，再放回原位
+  feed.style.overflowY='hidden';
   feed.insertBefore(f,feed.firstChild);
   feed.scrollTop=top0+(feed.scrollHeight-h0);   // 保持正在看的位置不动
+  lastTop=feed.scrollTop;
+  requestAnimationFrame(function(){feed.style.overflowY='';feed.scrollTop=lastTop;fillShort()});
+}
+// 内容还不够一屏（滑不动就收不到 scroll）：自动再要一页，直到能滑为止
+function fillShort(){
+  if(session&&histMore&&!histLoading&&feed.scrollHeight<=feed.clientHeight+80){histLoading=true;wsSend({t:'history.more',before:histStart});setTimeout(function(){histLoading=false},4000)}
 }
 // 离开会话：只留最后大约一屏半（手机内存省着用），再进来立刻显示；更早的往上滑时再从服务器取
 function saveFeed(id){
