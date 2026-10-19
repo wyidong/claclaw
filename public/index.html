@@ -55,14 +55,17 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 @media (min-width:800px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 
 header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;border-bottom:1px solid var(--line);background:var(--surface)}
-#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-align:left}
+#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 0;border:0;background:none;text-align:left}
 #sessBtn .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
 #sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn .sid{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn svg{flex:none;color:var(--muted)}
 /* 会话模式：右上角下拉选择；标题后面显示模式的英文名（无边框，颜色跟模式走） */
 #modeWrap{flex:none;display:flex;align-items:center;gap:2px;font-size:14px;color:var(--muted);white-space:nowrap}
-#modeSel{min-height:44px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+/* 和设置页的选择一样：没有边框，灰色文字靠右，后面一个 › */
+#modeSel{min-height:44px;max-width:9em;padding:4px 18px 4px 4px;border:0;background:none;color:var(--muted);font:inherit;font-size:14.5px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
+#modeWrap .d-only{display:none!important}
 #sessBtn .mtag{flex:none;margin-left:2px;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
 #sessBtn .mtag:empty{display:none}
 .cpid{cursor:copy;border-radius:4px}
@@ -475,6 +478,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #sessBtn .nm{font-size:17px}
   #sessBtn>svg{display:none}
   #modeSel{min-height:34px}
+  header{gap:12px}
   #sessBtn .sid{flex:0 1 auto}
   #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
 
