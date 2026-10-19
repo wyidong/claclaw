@@ -223,6 +223,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #lightbox img{max-width:100%;max-height:100%;object-fit:contain}
 .sheet-p{overflow-x:hidden}
 .ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
+#soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}#soundPick[hidden]{display:none}
+#soundSel{font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .s-row{position:relative;margin-top:8px}
 .s-row .s-item{margin-top:0;padding-right:52px;overflow:hidden}
 .s-row.two .s-item{padding-right:92px}
@@ -328,6 +330,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
       <div class="ver" id="pushTip" hidden></div>
       <button type="button" class="always" id="soundBtn" hidden></button>
+      <label class="ver" id="soundPick" hidden>提示音 <select id="soundSel"></select>（选了会先试听）</label>
       <button type="button" class="always" id="logout">退出登录</button>
       <div class="ver">页面版本 __PAGE_VERSION__</div>
     </div>
@@ -1198,8 +1201,16 @@ function syncPushBtn(){
 }
 // 电脑提示音：推送时由运行 claclaw 的那台 Mac 直接响一声（浏览器的网页通知常常没声音）
 var soundBtn=$('#soundBtn');
+var SOUND_CN={Basso:'低沉',Blow:'吹气',Bottle:'瓶子',Frog:'蛙鸣',Funk:'放克',Glass:'玻璃',Hero:'英雄',Morse:'摩斯',Ping:'乒',Pop:'啵',Purr:'呼噜',Sosumi:'Sosumi',Submarine:'潜水艇',Tink:'叮'};
 function showSound(j){
   soundBtn.hidden=!j.supported;
+  var sel=$('#soundSel');
+  $('#soundPick').hidden=!(j.supported&&j.on);
+  if(j.sounds&&sel.options.length!==j.sounds.length){
+    sel.innerHTML='';
+    j.sounds.forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=(SOUND_CN[n]||n)+(SOUND_CN[n]&&SOUND_CN[n]!==n?'（'+n+'）':'');sel.appendChild(o)});
+  }
+  if(j.name)sel.value=j.name;
   soundBtn.dataset.on=j.on?'1':'';
   soundBtn.textContent=j.on?'电脑提示音已开启 · 点这里关闭':'开启电脑提示音（推送时运行 claclaw 的电脑会响一声）';
 }
@@ -1207,6 +1218,10 @@ function syncSound(){fetch('/api/sound').then(function(r){return r.json()}).then
 soundBtn.addEventListener('click',function(){
   fetch('/api/sound',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:!soundBtn.dataset.on})})
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast(j.on?'已开启，刚才应该响了一声':'已关闭电脑提示音')});
+});
+$('#soundSel').addEventListener('change',function(e){
+  fetch('/api/sound',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:e.target.value})})
+    .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+(SOUND_CN[j.name]||j.name)+'」')});
 });
 syncSound();
 // 排查用：直接在本机弹一条通知，不经苹果/微软的推送服务。

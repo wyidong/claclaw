@@ -677,12 +677,15 @@ function saveSettings(patch) {
   fs.writeFileSync(SETTINGS, JSON.stringify(next, null, 2), { mode: 0o600 });
   return next;
 }
+const SOUND_DIR = '/System/Library/Sounds';
+const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.endsWith('.aiff')).map(f => f.slice(0, -5)).sort(); } catch { return []; } })() : [];
+const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soundName : 'Glass');
 let lastSound = 0;
 function localSound(force = false) {
   if (!SOUND_OK || (!force && !settings().localSound)) return;
-  if (Date.now() - lastSound < 1500) return; // 几条通知挤在一起时只响一声
+  if (!force && Date.now() - lastSound < 1500) return; // 几条通知挤在一起时只响一声
   lastSound = Date.now();
-  execFile('afplay', ['/System/Library/Sounds/Glass.aiff'], () => {});
+  execFile('afplay', [path.join(SOUND_DIR, soundName() + '.aiff')], () => {});
 }
 function webSessions() {
   try {
@@ -929,11 +932,14 @@ const handler = async (req, res) => {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         let body = {};
         try { body = JSON.parse(await readBody(req, 1024)); } catch {}
-        saveSettings({ localSound: !!body.on });
-        log('local sound', body.on ? 'on' : 'off');
-        if (body.on) localSound(true); // 打开时响一声给你听
+        if (typeof body.name === 'string' && SOUNDS.includes(body.name)) { saveSettings({ soundName: body.name }); localSound(true); } // 换声音：试听
+        if (typeof body.on === 'boolean') {
+          saveSettings({ localSound: body.on });
+          log('local sound', body.on ? 'on' : 'off');
+          if (body.on) localSound(true); // 打开时响一声给你听
+        }
       }
-      return sendJson(res, 200, { supported: SOUND_OK, on: SOUND_OK && !!settings().localSound });
+      return sendJson(res, 200, { supported: SOUND_OK, on: SOUND_OK && !!settings().localSound, name: soundName(), sounds: SOUNDS });
     }
     if (url.pathname === '/api/push/test' && req.method === 'POST') {
       localSound();
