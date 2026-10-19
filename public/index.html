@@ -1479,10 +1479,10 @@ $('#sNew').addEventListener('click',function(){
   if(!ref||!ref.cwd){alert('先打开一个会话，新会话会默认建在它的目录里');return}
   newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});
 });
-function openSheet(){
+function openSheet(silent){
   var list=$('#sList');
-  if(!(DESKTOP.matches&&list.querySelector('.s-row')))list.innerHTML='<div class="s-empty">加载中…</div>';
-  sheet.classList.add('on');sheet.setAttribute('aria-hidden','false');
+  if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载中…</div>';
+  if(!silent){sheet.classList.add('on');sheet.setAttribute('aria-hidden','false')}
   syncPushBtn();
   fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
     lastList=arr;
@@ -1557,7 +1557,7 @@ function openSheet(){
       var idEl=b.querySelector('.id');idEl.textContent=s.id.slice(0,8);idEl.classList.add('cpid');idEl.dataset.copy=s.id;idEl.title='点击复制完整会话 ID';
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');
-      var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);
+      var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);if(!s.unsent&&s.lastModified)b.dataset.lm=s.lastModified;
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
       // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
       if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';   // 具体在哪下面那行写着
@@ -1678,11 +1678,23 @@ function goList(){
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   if(session){wsSend({t:'session.leave'});session=null;setBusy(false)}
-  openSheet();renderUnread();
+  // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
+  if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
+  renderUnread();renderActivity();
+}
+// 手机：只在聊天页（列表被挡着）时后台刷新、重新排序；列表页里顺序完全不动
+function bgRefreshList(){if(!DESKTOP.matches&&!mList&&!document.hidden){listResort=true;openSheet(true)}}
+setInterval(bgRefreshList,30000);
+// 列表页里只在原位更新「几分钟前」
+function tickTimes(){
+  document.querySelectorAll('#sList .s-item[data-lm]').forEach(function(it){
+    var t=ago(+it.dataset.lm);it.dataset.when=t;
+    var r=it.parentNode;if(!r.classList.contains('working')&&!r.classList.contains('opening')){var w=it.querySelector('.when');if(w)w.textContent=t}
+  });
 }
 function goChat(){
   if(DESKTOP.matches)return;
-  if(mList){mList=false;$('#app').classList.remove('m-list');history.pushState({chat:1},'')}
+  if(mList){mList=false;$('#app').classList.remove('m-list');history.pushState({chat:1},'');setTimeout(bgRefreshList,1500)}
   try{sessionStorage.setItem('claclaw.view','chat')}catch(_){}
 }
 $('#backBtn').addEventListener('click',function(){if(history.state&&history.state.chat)history.back();else goList()});
@@ -1691,7 +1703,7 @@ window.addEventListener('popstate',function(){
   if($('#app').classList.contains('set-on'))railTab(false);   // 从设置子页面返回会话列表
   else if(!mList)goList();                                     // 从聊天页返回会话列表
 });
-setInterval(function(){if(mList&&!document.hidden)openSheet()},60000);   // 列表页每分钟刷新时间
+setInterval(function(){if(mList&&!document.hidden)tickTimes()},60000);   // 列表页每分钟只更新时间文字，不重排
 function openFailed(){if(opening&&!session&&!DESKTOP.matches)goList()}
 function clearOpening(){opening=null;document.querySelectorAll('#sList .s-row.opening').forEach(function(r){r.classList.remove('opening')});renderActivity()}
 function notice(t){if(mList)toast(t);else addSys(t)}
