@@ -1393,7 +1393,7 @@ function openSheet(){
     order.sort(function(a,b){return b.last-a.last});
     var folded=foldedGroups();
     order.forEach(function(g){g.items.sort(function(a,b){return (b.lastModified||0)-(a.lastModified||0)})});
-    var fz=listFrozen&&!listResort?listFrozen:null;   // 正在用：沿用上次的顺序，只让新出现的排到前面
+    var fz=listFrozen&&!listResort?listFrozen:null;   // 正在用：已经显示的位置一个不动，新出现的只加在末尾
     var flat=[],cur=list;
     // 最上面「最近活跃」：30 分钟内在 claclaw 里活跃过的会话（打开、发消息、回复完），按活跃时间最多 5 个；
     // 和目录分组里的重复一份，方便直接点。终端 / VS Code 里的活动不算。没有就空着
@@ -1402,7 +1402,11 @@ function openSheet(){
     if(fz){
       keepOrder(order,fz.groups,function(g){return g.key});
       order.forEach(function(g){keepOrder(g.items,fz.items[g.key]||[],function(x){return x.id})});
-      keepOrder(recent,fz.recent,function(x){return x.id});
+      // 最近活跃：上次显示的照旧留着（哪怕刚过 30 分钟），新的只在还有空位时加到末尾；不会挤掉、也不会插队
+      var byId={};arr.forEach(function(x){byId[x.id]=x});
+      var keep=fz.recent.map(function(id){return byId[id]}).filter(Boolean);
+      recent.forEach(function(x){if(keep.length<5&&keep.indexOf(x)<0)keep.push(x)});
+      recent=keep;
     }
     listFrozen={groups:order.map(function(g){return g.key}),items:{},recent:recent.map(function(x){return x.id})};
     order.forEach(function(g){listFrozen.items[g.key]=g.items.map(function(x){return x.id})});
@@ -1508,7 +1512,7 @@ function keepOrder(arr,prev,key){
   arr.sort(function(a,b){
     var pa=pos[key(a)],pb=pos[key(b)];
     if(pa==null&&pb==null)return 0;
-    if(pa==null)return -1;if(pb==null)return 1;   // 新出现的排最前
+    if(pa==null)return 1;if(pb==null)return -1;   // 新出现的加在末尾，已经显示的位置不受影响
     return pa-pb;
   });
 }
