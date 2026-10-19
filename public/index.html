@@ -1182,7 +1182,7 @@ function onEvent(m){
     });
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+m.id.slice(0,8)+'　'+(m.cwdShort||''));
     localStorage.setItem('claclaw.session',m.id);
-    refreshList();goChat();
+    refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
     commands=m.commands||[];
     setBusy(m.busy);
@@ -1682,9 +1682,9 @@ function goList(){
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
   renderUnread();renderActivity();
 }
-// 手机：只在聊天页（列表被挡着）时后台刷新、重新排序；列表页里顺序完全不动
-function bgRefreshList(){if(!DESKTOP.matches&&!mList&&!document.hidden){listResort=true;openSheet(true)}}
-setInterval(bgRefreshList,30000);
+// 手机：进入会话、内容加载完的那一刻在后台刷新一次列表并重新排序（列表被聊天页挡着看不到）；
+// 服务器此时已把这次打开记为活跃，返回列表时当前会话就在「最近活跃」第一位。列表页里顺序完全不动
+function bgRefreshList(){if(!DESKTOP.matches&&!mList){listResort=true;openSheet(true)}}
 // 列表页里只在原位更新「几分钟前」
 function tickTimes(){
   document.querySelectorAll('#sList .s-item[data-lm]').forEach(function(it){
@@ -1694,7 +1694,7 @@ function tickTimes(){
 }
 function goChat(){
   if(DESKTOP.matches)return;
-  if(mList){mList=false;$('#app').classList.remove('m-list');history.pushState({chat:1},'');setTimeout(bgRefreshList,1500)}
+  if(mList){mList=false;$('#app').classList.remove('m-list');history.pushState({chat:1},'')}
   try{sessionStorage.setItem('claclaw.view','chat')}catch(_){}
 }
 $('#backBtn').addEventListener('click',function(){if(history.state&&history.state.chat)history.back();else goList()});
