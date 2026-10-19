@@ -782,6 +782,20 @@ function toolActivity(name = '') {
   return '用工具';
 }
 
+// ---------- 这台电脑装了哪些 Claw（没装的不在网页上列出来）----------
+function inPath(name) {
+  const dirs = new Set([...(process.env.PATH || '').split(':'), '/usr/local/bin', '/opt/homebrew/bin', path.join(HOME, '.local', 'bin')]);
+  for (const d of dirs) if (d && fs.existsSync(path.join(d, name))) return true;
+  return false;
+}
+function detectClaws() {
+  return [
+    { id: 'claude', installed: fs.existsSync(path.join(HOME, '.claude', 'projects')), supported: true },
+    { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: false },
+    { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: false },
+  ];
+}
+
 // ---------- 未读 ----------
 // 推送通知（回复完了 / 等你确认）时记一条未读；任何设备打开并正在看这个会话时清掉。
 // 服务器统一记，手机和电脑看到的红点、角标是同一份；存在 data/unread.json，重启不丢。
@@ -1076,6 +1090,7 @@ const handler = async (req, res) => {
       }
       return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin() });
     }
+    if (url.pathname === '/api/claws') return sendJson(res, 200, detectClaws());
     if (url.pathname === '/api/sound') {
       if (req.method === 'POST') {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });

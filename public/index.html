@@ -413,7 +413,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:2px solid transparent;border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
   .claw-card[aria-current="true"]{border-color:var(--accent)}
   .claw-card:disabled{opacity:.45;cursor:default}
-  .claw-ic{flex:none;display:grid;place-items:center;width:48px;height:48px;border-radius:12px;color:#fff;font-size:22px;font-weight:700}
+  .claw-ic{flex:none;display:block;width:48px;height:48px;border-radius:12px;object-fit:cover}
+  .claw-card[hidden]{display:none}
+  .claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
   .claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
   .claw-tx b{font-size:17px}
   .claw-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
@@ -636,18 +638,19 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <!-- Claw：选择接管哪一种 AI 助手的会话（目前只实现了 Claude） -->
       <div id="clawPane">
         <div class="claw-h">选择 Claw</div>
+        <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code 后再来。</div>
         <button type="button" class="claw-card" data-claw="claude">
-          <span class="claw-ic" style="background:#D97757">C</span>
+          <img class="claw-ic" src="/icons/claw-claude.png?v=1" alt="">
           <span class="claw-tx"><b>Claude</b><small>Claude Code 会话：终端、VS Code、网页里开的都在这里</small></span>
           <span class="claw-st">选择</span>
         </button>
         <button type="button" class="claw-card" data-claw="openclaw" disabled>
-          <span class="claw-ic" style="background:#E5484D">O</span>
+          <img class="claw-ic" src="/icons/claw-openclaw.png?v=1" alt="">
           <span class="claw-tx"><b>OpenClaw</b><small>本机 OpenClaw 网关的会话</small></span>
           <span class="claw-st">即将支持</span>
         </button>
         <button type="button" class="claw-card" data-claw="deepseek" disabled>
-          <span class="claw-ic" style="background:#4D6BFE">D</span>
+          <img class="claw-ic" src="/icons/claw-deepseek.png?v=1" alt="">
           <span class="claw-tx"><b>DeepSeek Harness</b><small>DeepSeek Harness 的会话</small></span>
           <span class="claw-st">即将支持</span>
         </button>
@@ -1587,6 +1590,17 @@ function showClawSel(){
   });
 }
 showClawSel();
+// 只列出这台电脑装了的 Claw；之前选过、现在卸载了的就清掉选择
+fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
+  var any=false;
+  list.forEach(function(c){
+    var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
+    card.hidden=!c.installed;if(c.installed)any=true;
+    if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem('claclaw.claw')}catch(_){}}
+  });
+  document.querySelector('.claw-none').hidden=any;
+  showClawSel();
+}).catch(function(){});
 document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){
   if(c.disabled)return;
   clawSel=c.dataset.claw;try{localStorage.setItem('claclaw.claw',clawSel)}catch(_){}
