@@ -45,6 +45,10 @@
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
+/* 页面本身不许滚：iOS 弹键盘时会把整个页面往上推，收起后不一定推回来，顶栏就一直压在状态栏下面被模糊。
+   只让聊天区、列表这些自己的区域滚动 */
+html,body{overflow:hidden;overscroll-behavior:none}
+body{position:fixed;inset:0;width:100%}
 html{background:var(--surface)}
 body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
@@ -367,7 +371,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #sessBtn.unr::after{display:none}
   #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
   #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
-  #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;padding-top:calc(env(safe-area-inset-top,0px) + 10px)}
+  /* 列表页：搜索栏是固定的顶栏，只有下面的列表滚动。
+     新版 iOS 会在「顶到状态栏的可滚动区域」上加一层渐变模糊，整页滚动时顶部会一直发虚 */
+  #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
+  #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--surface)}
+  #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + env(safe-area-inset-bottom,0px))}
   .sheet-p>h2:first-child{display:none}   /* 会话列表顶部不要「会话」标题，搜索栏直接在最上面 */
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
@@ -378,16 +386,16 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #mtabs .ti .f{fill:currentColor;fill-opacity:0;transition:fill-opacity .15s}
   #mtabs button.on .ti .f{fill-opacity:.22}
   #mtabs button.dot::after{content:'';position:absolute;top:3px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:#F23C3C}
-  #app.m-list .sheet-p{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
   /* 「设置」页：只显示设置；「会话」页：只显示列表 */
   #app.m-list #setPane{display:none;margin-top:0;padding-top:0;border-top:0}
   #app.m-list.set-on #setPane{display:block}
   #app.m-list.set-on #sTop,#app.m-list.set-on #sList{display:none}
-  #app.m-list #setPane>h2{display:none}
+  #app.m-list #setBody>h2{display:none}
   /* 设置是子页面（像点进一个会话）：没有底部菜单，左上角返回，退出登录和版本沉到页面最底下 */
   #app.m-list.set-on #mtabs{display:none}
-  #app.m-list.set-on .sheet-p{display:flex;flex-direction:column;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px)}
-  #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1}
+  #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
+  #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 6px;background:var(--surface)}
+  #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 14px)}
   #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600}
   #setBack{position:absolute;left:-8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:40px;height:44px;border:0;background:none;color:var(--ink)}
 }
@@ -453,6 +461,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   /* 设置页：分组卡片；退出登录和页面版本沉到最底下，和其他设置拉开 */
   #app.set-on .sheet-p{display:flex;flex-direction:column}
   #app.set-on #setPane{display:flex;flex-direction:column;flex:1}
+  #app.set-on #setBody{display:flex;flex-direction:column;flex:1}
 
   /* 会话行：紧凑，一行一个；操作按钮鼠标移上去才出现 */
   .s-row{margin-top:2px}
@@ -606,6 +615,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <div id="sList"></div>
       <div id="setPane">
       <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
+      <div id="setBody">
       <h2>设置</h2>
       <div class="set-sec">
         <div class="set-h">外观</div>
@@ -641,6 +651,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <div class="set-foot">
         <button type="button" class="always" id="logout">退出登录</button>
         <div class="ver">页面版本 __PAGE_VERSION__</div>
+      </div>
       </div>
       </div>
     </div>
@@ -1553,11 +1564,11 @@ $('#sNew').addEventListener('click',function(){
 function openSheet(silent){
   var list=$('#sList');
   if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载中…</div>';
-  if(!silent){sheet.classList.add('on');sheet.setAttribute('aria-hidden','false')}
+  if(!silent&&DESKTOP.matches){sheet.classList.add('on');sheet.setAttribute('aria-hidden','false')}   // 手机列表页本身就是列表，不用弹出面板
   syncPushBtn();
   fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
     lastList=arr;
-    var sp=$('.sheet-p'),keepTop=sp.scrollTop;   // 电脑端定时刷新时保持滚动位置
+    var sp=mList?$('#sList'):$('.sheet-p'),keepTop=sp.scrollTop;   // 电脑端定时刷新时保持滚动位置
     list.innerHTML='';
     if(!arr.length){list.innerHTML='<div class="s-empty">没有找到会话</div>';return}
     setTimeout(function(){sp.scrollTop=keepTop},0);
@@ -1809,6 +1820,7 @@ function tickTimes(){
 }
 function goChat(){
   if(DESKTOP.matches)return;
+  closeSheet();   // 旧的弹出面板一定收起，免得带着遮罩盖在聊天页上
   if(mList){mList=false;$('#app').classList.remove('m-list');history.pushState({chat:1},'')}
   try{sessionStorage.setItem('claclaw.view','chat')}catch(_){}
 }
@@ -2126,16 +2138,36 @@ $('#logout').addEventListener('click',function(){
 
 if(window.visualViewport){
   var app=$('#app');
+  var wasKb=false;
   var fit=function(){
-    var vh=window.visualViewport.height;
+    var vh=window.visualViewport.height,kb=window.innerHeight-vh>120;
     document.documentElement.style.setProperty('--vvh',vh+'px');
-    document.body.classList.toggle('kb',window.innerHeight-vh>120);
+    document.body.classList.toggle('kb',kb);
+    if(wasKb&&!kb)setTimeout(rebuildScrollers,80);   // 键盘刚收起
+    wasKb=kb;
     app.style.height=Math.max(200,vh)+'px';
-    window.scrollTo(0,0);scrollDown();
+    window.scrollTo(0,0);follow();scrollDown();
+  };
+  // 键盘弹出时 iOS 会把可视区域往下挪（页面本身不动），顶栏就有一截钻到状态栏下面、被新版 iOS 加上模糊；
+  // 让整个界面跟着可视区域走，顶栏始终贴在状态栏下面
+  var follow=function(){
+    var off=Math.max(0,Math.round(window.visualViewport.offsetTop||0));
+    app.style.transform=off?'translateY('+off+'px)':'';
   };
   fit();
+  // 键盘收起（输入框失焦）时主动复位，别等 iOS
+  document.addEventListener('focusout',function(){setTimeout(function(){window.scrollTo(0,0);follow()},60);setTimeout(function(){window.scrollTo(0,0);follow();rebuildScrollers()},350)});
+  // 键盘弹出时 iOS 把聊天区推到状态栏底下、给它加了顶部模糊，收起后不撤；返回列表（聊天区被隐藏）才会消失。
+  // 所以键盘收起时让 iOS 重建这个滚动区域：先关掉滚动再打开，滚动位置原样恢复
+  function rebuildScrollers(){
+    [feed,$('#sList')].forEach(function(el){
+      if(!el||!el.offsetParent)return;
+      var st=el.scrollTop;el.style.overflowY='hidden';void el.offsetHeight;
+      requestAnimationFrame(function(){el.style.overflowY='';el.scrollTop=st});
+    });
+  }
   window.visualViewport.addEventListener('resize',fit);
-  window.visualViewport.addEventListener('scroll',function(){window.scrollTo(0,0)});
+  window.visualViewport.addEventListener('scroll',function(){window.scrollTo(0,0);follow()});
 }
 
 $('#sessBtn .dot').classList.add('off');
