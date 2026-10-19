@@ -255,17 +255,27 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.waiting .s-item .when{color:var(--warn)}
 #sList .s-grp.unread .gn::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
-#setPane .set-sec{margin:0 0 18px}
-#setPane .set-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:13.5px;color:var(--ink)}
-#setPane .set-row select{flex:none;font:inherit;font-size:13.5px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
-#setPane .set-sec:not(:has(> :not(.set-h):not([hidden]))){display:none}  /* 组里没有可见的设置项就整组隐藏 */
-#setPane .set-h{margin:0 6px 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em}
-#setPane .set-sec>.always{display:block;width:100%;text-align:left;margin:0 0 8px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);text-decoration:none;color:var(--ink);font-size:14px;cursor:pointer}
-#setPane .set-sec>.always[hidden]{display:none}
-#setPane .set-sec>.always:hover{background:var(--surface);color:var(--accent)}
-#setPane #soundPick{display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;margin:8px 6px 0;font-family:var(--sans);font-size:13px;color:var(--muted)}
-#setPane #soundPick[hidden]{display:none}
-#setPane #pushTip{text-align:left;padding:6px}
+#setPane .set-sec{margin:0 0 20px}
+/* 设置：一组一张圆角卡片，每行左边名称 + 灰色说明，右边开关或「当前值 ›」，行间细线（参考常见 App 的设置页） */
+#setPane .set-h{margin:0 14px 7px;font-size:12.5px;color:var(--muted)}
+#setPane .set-card{background:var(--bg);border-radius:12px;overflow:hidden}
+#setPane .set-card:not(:has(> :not([hidden]))){display:none}
+#setPane .set-sec:not(:has(.set-card > :not([hidden]))):not(:has(.set-note:not([hidden]))){display:none}
+#setPane .set-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:54px;margin:0;padding:11px 14px;border:0;background:none;text-align:left;font:inherit;font-size:15px;color:var(--ink);cursor:pointer;box-sizing:border-box}
+#setPane .set-item[hidden]{display:none}
+#setPane .set-item:not([hidden]) ~ .set-item:not([hidden])::before{content:'';position:absolute;top:0;left:14px;right:0;border-top:1px solid var(--line)}
+#setPane .set-item:active{background:var(--surface)}
+#setPane .lb{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;line-height:1.35}
+#setPane .lb small{font-size:12.5px;color:var(--muted)}
+#setPane .set-item select{flex:none;max-width:45%;border:0;background:none;color:var(--muted);font:inherit;font-size:14.5px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;padding:4px 18px 4px 4px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
+#setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
+/* 开关 */
+#setPane .sw{flex:none;position:relative;width:50px;height:30px;border-radius:15px;background:var(--line);transition:background .2s}
+#setPane .sw::after{content:'';position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+#setPane [data-on="1"] .sw{background:var(--allow)}
+#setPane [data-on="1"] .sw::after{transform:translateX(20px)}
+#setPane .set-note{margin:8px 14px 0;font-size:12.5px;color:var(--muted);text-align:left}
 #setPane .set-foot{margin-top:auto;padding-top:28px}
 #setPane .set-foot #logout{display:block;width:100%;margin:0 0 10px;padding:10px 14px;border:1px solid var(--deny);border-radius:10px;background:none;color:var(--deny);text-decoration:none;font-size:14px;text-align:center;cursor:pointer}
 #setPane .set-foot #logout:hover{background:var(--del-bg)}
@@ -358,8 +368,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #app.m-list.set-on #mtabs{display:none}
   #app.m-list.set-on .sheet-p{display:flex;flex-direction:column;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px)}
   #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1}
-  #app.m-list.set-on #setTop{display:flex;align-items:center;gap:2px;margin:-4px 0 12px -6px;font-size:17px;font-weight:600}
-  #setBack{display:grid;place-items:center;width:36px;height:40px;border:0;background:none;color:var(--ink)}
+  #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600}
+  #setBack{position:absolute;left:-8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:40px;height:44px;border:0;background:none;color:var(--ink)}
 }
 #mtabs{display:none}
 #setTop{display:none}
@@ -566,21 +576,27 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <h2>设置</h2>
       <div class="set-sec">
         <div class="set-h">会话</div>
-        <label class="set-row">网页里的会话空闲多久后关闭进程
-          <select id="setIdle"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="240">4 小时</option></select></label>
-        <label class="set-row">终端 / VS Code 里的会话闲置多久后可以接管
-          <select id="setTake"><option value="0">随时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select></label>
+        <div class="set-card">
+          <label class="set-item"><span class="lb">空闲关闭<small>网页里的会话没人看、也没在干活，多久后关掉进程</small></span>
+            <select id="setIdle"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="240">4 小时</option></select></label>
+          <label class="set-item"><span class="lb">接管等待<small>终端 / VS Code 里的会话闲置多久后可以接管</small></span>
+            <select id="setTake"><option value="0">随时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select></label>
+        </div>
       </div>
       <div class="set-sec">
         <div class="set-h">通知</div>
-        <button type="button" class="always" id="pushBtn" hidden></button>
-        <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
-        <div class="ver" id="pushTip" hidden></div>
+        <div class="set-card">
+          <button type="button" class="set-item" id="pushBtn" hidden><span class="lb">推送通知<small id="pushSub">回复完了、要你确认时提醒</small></span><span class="sw" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="pushLocal" hidden><span class="lb">本机测试通知<small>不经推送服务，检查这台设备能不能弹出</small></span><span class="chev" aria-hidden="true"></span></button>
+        </div>
+        <div class="set-note" id="pushTip" hidden></div>
       </div>
       <div class="set-sec">
         <div class="set-h">电脑提示音</div>
-        <button type="button" class="always" id="soundBtn" hidden></button>
-        <label class="ver" id="soundPick" hidden>提示音 <select id="soundSel"></select>（选了会先试听）</label>
+        <div class="set-card">
+          <button type="button" class="set-item" id="soundBtn" hidden><span class="lb">推送时电脑响一声<small>运行 claclaw 的那台电脑</small></span><span class="sw" aria-hidden="true"></span></button>
+          <label class="set-item" id="soundPick" hidden><span class="lb">提示音<small>选了会先试听</small></span><select id="soundSel"></select></label>
+        </div>
       </div>
       <div class="set-foot">
         <button type="button" class="always" id="logout">退出登录</button>
@@ -1653,6 +1669,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
 
 var pushBtn=$('#pushBtn'),pushTip=$('#pushTip');
+function pushUI(on){pushBtn.dataset.on=on?'1':'';$('#pushSub').textContent=on?'回复完了、要你确认时会提醒这台设备':'关着：这台设备收不到提醒'}
 var swReg=null;
 if('serviceWorker' in navigator&&window.isSecureContext){
   navigator.serviceWorker.register('/sw.js').then(function(r){swReg=r}).catch(function(e){console.warn('sw',e)});
@@ -1681,11 +1698,11 @@ function syncPushBtn(){
     return;
   }
   if(Notification.permission==='denied'){pushBtn.hidden=true;pushTip.hidden=false;pushTip.textContent='通知被拒绝了：到 iPhone 设置 → 通知 → Claclaw 里打开';return}
-  pushBtn.textContent='开启通知';pushBtn.dataset.on='';$('#pushLocal').hidden=true;
+  pushUI(false);$('#pushLocal').hidden=true;
   navigator.serviceWorker.ready.then(function(r){return r.pushManager.getSubscription()}).then(function(sub){
     if(!sub)return;
     return fetch('/api/push/status?endpoint='+encodeURIComponent(sub.endpoint)).then(function(r){return r.json()}).then(function(j){
-      if(j.subscribed){pushBtn.textContent='通知已开启 · 点这里关闭';pushBtn.dataset.on='1';$('#pushLocal').hidden=false}
+      if(j.subscribed){pushUI(true);$('#pushLocal').hidden=false}
     });
   }).catch(function(){});
 }
@@ -1702,7 +1719,6 @@ function showSound(j){
   }
   if(j.name)sel.value=j.name;
   soundBtn.dataset.on=j.on?'1':'';
-  soundBtn.textContent=j.on?'电脑提示音已开启 · 点这里关闭':'开启电脑提示音（推送时运行 claclaw 的电脑会响一声）';
 }
 function syncSound(){fetch('/api/sound').then(function(r){return r.json()}).then(showSound).catch(function(){})}
 soundBtn.addEventListener('click',function(){
@@ -1747,7 +1763,7 @@ pushBtn.addEventListener('click',function(){
   }
   // 每一步都显示在按钮上、并且有超时：卡住时能看出卡在哪一步，不会一直「正在开启…」
   function step(label,p,sec){
-    pushBtn.textContent=label;
+    $('#pushSub').textContent=label;
     return Promise.race([p,new Promise(function(_,rej){setTimeout(function(){rej(new Error(label.replace(/…$/,'')+'超时（'+sec+' 秒没反应）'))},sec*1000)})]);
   }
   // iOS 要求：请求通知权限必须直接由这次点击触发
