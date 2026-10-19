@@ -70,7 +70,9 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* 会话 ID：浅底小胶囊 + 透明扩大的点击范围（四周各多 8px），点 ID 复制时不容易误点成「打开会话」 */
 #sList .s-item .m .id.cpid,#sid .cpid{position:relative;display:inline-block;padding:1px 6px;margin:-1px 0;border-radius:6px;background:var(--code-bg);line-height:1.4}
 #sList .s-item .m .id.cpid::after,#sid .cpid::after{content:'';position:absolute;inset:-8px -8px}
-.cpid:active{background:var(--user-bg)!important;color:var(--accent)}
+@media (pointer:fine){.cpid:active{background:var(--user-bg)!important;color:var(--accent)}}   /* 手机上短按是打开会话，不给「要复制」的反馈 */
+.cpid{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}   /* 长按时不弹系统的选字菜单 */
+.cpid.lp{background:var(--accent)!important;color:var(--accent-ink)!important}
 @media (max-width:599px){#sessBtn .mtag{display:none}}  /* 手机上太挤：右边下拉框已经显示模式 */
 #sessBtn .mtag[data-m="accept"]{color:var(--warn)}
 #sessBtn .mtag[data-m="plan"]{color:var(--accent)}
@@ -787,12 +789,30 @@ lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
 feed.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))showImage(e.target.src)});
 feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))scrollDown()},true);
 // 复制：http 访问（Tailscale IP）不是安全上下文，navigator.clipboard 不可用，退回 execCommand
-// 会话 ID（列表里、顶部标题后）：只显示前 8 位，点一下复制完整 ID；捕获阶段拦下，不触发打开会话 / 返回列表
+// 会话 ID（列表里、顶部标题后）：只显示前 8 位。
+// 电脑：单击复制完整 ID。手机：长按 0.5 秒才复制（上下滑列表时手指扫过 ID 不会误复制），短按和点这一行别处一样
+var TOUCH=window.matchMedia('(pointer:coarse)').matches,lpTimer=null,lpStart=null,lpFiredAt=0;
 document.addEventListener('click',function(e){
-  var el=e.target.closest&&e.target.closest('.cpid');if(!el)return;
+  if(Date.now()-lpFiredAt<700){e.preventDefault();e.stopPropagation();return}   // 长按复制后松手产生的 click：吞掉，不打开会话
+  var el=e.target.closest&&e.target.closest('.cpid');if(!el||TOUCH)return;
   e.preventDefault();e.stopPropagation();
   copyText(el.dataset.copy);
 },true);
+document.addEventListener('touchstart',function(e){
+  var el=e.target.closest&&e.target.closest('.cpid');if(!el||e.touches.length!==1)return;
+  var t=e.touches[0];lpStart={x:t.clientX,y:t.clientY};clearTimeout(lpTimer);
+  lpTimer=setTimeout(function(){
+    lpTimer=null;lpFiredAt=Date.now();
+    if(navigator.vibrate)try{navigator.vibrate(15)}catch(_){}
+    el.classList.add('lp');setTimeout(function(){el.classList.remove('lp')},300);
+    copyText(el.dataset.copy);toast('已复制会话 ID');
+  },500);
+},{passive:true,capture:true});
+document.addEventListener('touchmove',function(e){
+  if(!lpTimer||!lpStart)return;var t=e.touches[0];
+  if(Math.abs(t.clientX-lpStart.x)>10||Math.abs(t.clientY-lpStart.y)>10){clearTimeout(lpTimer);lpTimer=null}   // 在滑动：不是长按
+},{passive:true,capture:true});
+['touchend','touchcancel'].forEach(function(ev){document.addEventListener(ev,function(){clearTimeout(lpTimer);lpTimer=null},{passive:true,capture:true})});
 function copyText(t){
   function legacy(){
     var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');
