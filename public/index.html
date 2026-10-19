@@ -325,6 +325,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <p>对应命令行里的 claude --resume</p>
       <div id="sList"></div>
       <button type="button" class="always" id="pushBtn" hidden></button>
+      <button type="button" class="always" id="pushLocal" hidden>本机测试通知（不经推送服务）</button>
       <div class="ver" id="pushTip" hidden></div>
       <button type="button" class="always" id="logout">退出登录</button>
       <div class="ver">页面版本 __PAGE_VERSION__</div>
@@ -1181,14 +1182,21 @@ function syncPushBtn(){
     return;
   }
   if(Notification.permission==='denied'){pushBtn.hidden=true;pushTip.hidden=false;pushTip.textContent='通知被拒绝了：到 iPhone 设置 → 通知 → Claclaw 里打开';return}
-  pushBtn.textContent='开启通知';pushBtn.dataset.on='';
+  pushBtn.textContent='开启通知';pushBtn.dataset.on='';$('#pushLocal').hidden=true;
   navigator.serviceWorker.ready.then(function(r){return r.pushManager.getSubscription()}).then(function(sub){
     if(!sub)return;
     return fetch('/api/push/status?endpoint='+encodeURIComponent(sub.endpoint)).then(function(r){return r.json()}).then(function(j){
-      if(j.subscribed){pushBtn.textContent='通知已开启 · 点这里关闭';pushBtn.dataset.on='1'}
+      if(j.subscribed){pushBtn.textContent='通知已开启 · 点这里关闭';pushBtn.dataset.on='1';$('#pushLocal').hidden=false}
     });
   }).catch(function(){});
 }
+// 排查用：直接在本机弹一条通知，不经苹果/微软的推送服务。
+// 这条能弹、推送的不弹 → 问题在推送送达；这条也不弹 → 问题在系统或浏览器的通知设置
+$('#pushLocal').addEventListener('click',function(){
+  navigator.serviceWorker.ready.then(function(r){
+    return r.showNotification('Claclaw 本机测试',{body:'能看到这条，说明系统通知设置没问题 '+new Date().toTimeString().slice(0,8),tag:'local-test',icon:'/icons/icon-192.png'});
+  }).then(function(){toast('已弹出本机测试通知')},function(e){alert('弹通知失败：'+e.message)});
+});
 pushBtn.addEventListener('click',function(){
   if(pushBtn.dataset.on){
     navigator.serviceWorker.ready.then(function(r){return r.pushManager.getSubscription()}).then(function(sub){
