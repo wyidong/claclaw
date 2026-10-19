@@ -1171,7 +1171,7 @@ function onEvent(m){
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
   switch(m.t){
   case 'session.opened':
-    session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};clearOpening();
+    session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     feed.innerHTML='';cards={};permQueue=[];aiEl=null;
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     setHeader();
@@ -1330,6 +1330,7 @@ function connect(){
     wsSend({t:'visible',on:!document.hidden});
     var fromUrl=new URLSearchParams(location.search).get('s');
     if(fromUrl)history.replaceState(null,'','/');
+    if(pendingOpen)fromUrl=pendingOpen;
     var last=fromUrl||(session?session.id:localStorage.getItem('claclaw.session'));
     if(!DESKTOP.matches&&!fromUrl){
       var view='';try{view=sessionStorage.getItem('claclaw.view')||''}catch(_){}
@@ -1754,8 +1755,21 @@ window.addEventListener('popstate',function(){
   else if(!mList)goList();                                     // 从聊天页返回会话列表
 });
 setInterval(function(){if(mList&&!document.hidden)tickTimes()},60000);   // 列表页每分钟只更新时间文字，不重排
-function openFailed(){if(opening&&!session&&!DESKTOP.matches)goList()}
+function openFailed(){
+  var was=opening||pendingOpen;pendingOpen=null;   // 打不开（被别处占着、不存在……）：不要每次重连都再试
+  if(was&&!session&&!DESKTOP.matches)goList();
+}
 function clearOpening(){opening=null;document.querySelectorAll('#sList .s-row.opening').forEach(function(r){r.classList.remove('opening')});renderActivity()}
+// 点通知进入对应会话：手机上立刻切到聊天页；App 在后台待久了连接常常已经断了，
+// 所以先记下要打开的会话，连接正常就马上发，断了就重连、连上后第一件事打开它
+var pendingOpen=null;
+function openFromNotice(id){
+  if(session&&session.id===id&&!mList)return;
+  pendingOpen=id;
+  if(!DESKTOP.matches){feed.innerHTML='<div class="sys">加载中…</div>';$('#nm').textContent='';$('#sid').textContent=id.slice(0,8);goChat()}
+  if(ws&&ws.readyState===1)wsSend({t:'session.open',id:id,mode:mode});else reconnectNow();
+  setTimeout(function(){if(pendingOpen===id)reconnectNow()},3000);   // 3 秒没打开：连接多半是死的，重连（连上后会自动打开）
+}
 function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
@@ -1770,7 +1784,7 @@ if('serviceWorker' in navigator&&window.isSecureContext){
   navigator.serviceWorker.addEventListener('message',function(e){
     var d=e.data||{};if(d.t!=='open')return;
     var s=new URL(d.url,location.href).searchParams.get('s');
-    if(s&&(!session||session.id!==s))wsSend({t:'session.open',id:s,mode:mode});
+    if(s)openFromNotice(s);
   });
 }
 function b64ToU8(b){var p='='.repeat((4-b.length%4)%4),r=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,function(c){return c.charCodeAt(0)})}
