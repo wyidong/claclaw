@@ -1473,6 +1473,7 @@ function openSheet(){
           var f=foldedGroups(),open=box.hidden;box.hidden=!open;h.setAttribute('aria-expanded',String(open));
           if(open)delete f[g.key];else f[g.key]=1;
           localStorage.setItem('claclaw.folded',JSON.stringify(f));
+          h.blur();   // 不留焦点：免得之后按空格 / 回车时被意外折叠或展开
         });
         list.appendChild(h);list.appendChild(box);cur=box;return;
       }
