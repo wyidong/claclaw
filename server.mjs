@@ -1108,6 +1108,8 @@ wss.on('connection', (ws, req) => {
     try { m = JSON.parse(raw); } catch { return; }
     try {
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
+      // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
+      if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }
       if (m.t === 'session.new') {
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
         const list = await listSessions({ includeProgrammatic: true, limit: 2000 });

@@ -328,6 +328,18 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
 #rail,.d-only,.d-only-b{display:none}
+/* ---------- 手机：像微信，首页是会话列表，点进去是聊天页，左上角返回 ---------- */
+#backBtn{display:none}
+@media (max-width:999px){
+  #backBtn{position:relative;display:grid;place-items:center;flex:none;width:36px;height:44px;margin-left:-6px;border:0;background:none;color:var(--ink)}
+  #backBtn.unr::after{content:'';position:absolute;top:9px;right:3px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
+  #sessBtn>svg{display:none}
+  #sessBtn.unr::after{display:none}
+  #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
+  #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
+  #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;padding-top:calc(env(safe-area-inset-top,0px) + 10px)}
+  #app.m-list .sheet-p>h2:first-child{text-align:center;font-size:17px;margin:0 0 8px}
+}
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
 #sSearch{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
@@ -336,10 +348,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #setPane{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
 /* 手机会话卡片紧凑一些：按钮小一点，时间不再挤到第三行 */
 @media (max-width:999px){
-  .s-row .s-item{min-height:0;padding:9px 10px;padding-right:44px}
-  .s-row.two .s-item,.s-row.pn .s-item{padding-right:80px}
-  .s-row.three .s-item{padding-right:114px}
-  .s-ren,.s-new,.s-del{top:4px;width:34px;height:34px}
+  .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{min-height:0;padding:9px 10px}
+  .s-row .s-item .t{padding-right:40px}
+  .s-row.two .s-item .t,.s-row.pn .s-item .t{padding-right:76px}
+  .s-row.three .s-item .t{padding-right:110px}
+  .s-ren,.s-new,.s-del{top:3px;width:34px;height:30px}
   .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:40px}.s-row.pn .s-ren{right:4px}
   .s-new{right:40px}.s-row.three .s-new{right:76px}
   .s-del{right:4px}
@@ -437,6 +450,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
   <header>
+    <button id="backBtn" type="button" aria-label="返回会话列表"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <button id="sessBtn" type="button" aria-label="切换会话">
       <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
@@ -1096,7 +1110,7 @@ function onEvent(m){
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
   switch(m.t){
   case 'session.opened':
-    session={id:m.id,title:m.title,cwd:m.cwd};
+    session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};
     feed.innerHTML='';cards={};permQueue=[];aiEl=null;
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     setHeader();
@@ -1113,7 +1127,7 @@ function onEvent(m){
     });
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+m.id.slice(0,8)+'　'+(m.cwdShort||''));
     localStorage.setItem('claclaw.session',m.id);
-    refreshList();
+    refreshList();goChat();
     suggestion=m.suggestion||null;
     commands=m.commands||[];
     setBusy(m.busy);
@@ -1132,7 +1146,7 @@ function onEvent(m){
     if(m.canTakeover){
       if(confirmTakeover(m.name||m.id.slice(0,8),m))wsSend({t:'session.open',id:m.id,mode:mode,takeover:true});
     }else{
-      addSys('这个会话'+idleText(m)+'（'+(m.name||'')+'）。原处闲置满 '+m.needMin+' 分钟后网页端才能接管；或者先在那边关掉它。');
+      notice('这个会话'+idleText(m)+'（'+(m.name||'')+'）。原处闲置满 '+m.needMin+' 分钟后网页端才能接管；或者先在那边关掉它。');
     }
     break;
   case 'session.reclaimed':
@@ -1228,7 +1242,7 @@ function onEvent(m){
     break;
   case 'error':
     if(outbox){outboxRestore();setBusy(false)}
-    addSys('⚠ '+m.message);
+    notice('⚠ '+m.message);
     break;
   }
 }
@@ -1252,6 +1266,10 @@ function connect(){
     var fromUrl=new URLSearchParams(location.search).get('s');
     if(fromUrl)history.replaceState(null,'','/');
     var last=fromUrl||(session?session.id:localStorage.getItem('claclaw.session'));
+    if(!DESKTOP.matches&&!fromUrl){
+      var view='';try{view=sessionStorage.getItem('claclaw.view')||''}catch(_){}
+      if(mList||view!=='chat'||!last){goList();return}   // 手机：打开 App 先到会话列表（像微信）
+    }
     if(last)wsSend({t:'session.open',id:last,mode:mode});
     if(!last||DESKTOP.matches)openSheet();   // 电脑端会话列表常驻：连上就加载，不管上次的会话能不能打开
   };
@@ -1388,8 +1406,9 @@ function applySearch(){
 }
 $('#sSearch').addEventListener('input',applySearch);
 $('#sNew').addEventListener('click',function(){
-  if(!session||!session.cwd){alert('先在左边打开一个会话，新会话会建在它的目录里');return}
-  newSibling({id:session.id,cwd:session.cwd,cwdShort:session.cwd});
+  var ref=(session&&session.cwd)?session:(lastSess||(lastList||[]).find(function(x){return x.cwd}));   // 手机列表页没有打开的会话：用最近打开过的、或列表里最近活跃的那个
+  if(!ref||!ref.cwd){alert('先打开一个会话，新会话会默认建在它的目录里');return}
+  newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});
 });
 function openSheet(){
   var list=$('#sList');
@@ -1397,6 +1416,7 @@ function openSheet(){
   sheet.classList.add('on');sheet.setAttribute('aria-hidden','false');
   syncPushBtn();
   fetch('/api/sessions').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(arr){
+    lastList=arr;
     var sp=$('.sheet-p'),keepTop=sp.scrollTop;   // 电脑端定时刷新时保持滚动位置
     list.innerHTML='';
     if(!arr.length){list.innerHTML='<div class="s-empty">没有找到会话</div>';return}
@@ -1470,11 +1490,11 @@ function openSheet(){
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
       // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
-      if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'等待确认':'在'+where(bz.entrypoint)+'工作';
+      if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';   // 具体在哪下面那行写着
       if(bz)b.querySelector('.bz').textContent=idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管');
       b.addEventListener('click',function(){
         closeSheet();
-        if(bz&&!bz.canTakeover){addSys('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
+        if(bz&&!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
         if(bz){if(confirmTakeover(s.title,bz))wsSend({t:'session.open',id:s.id,mode:mode,takeover:true});return}
         wsSend({t:'session.open',id:s.id,mode:mode});
       });
@@ -1530,7 +1550,7 @@ function renderUnread(){
     if(h&&!h.classList.contains('recent'))h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
   });
   $('#railChats').classList.toggle('dot',other);
-  $('#sessBtn').classList.toggle('unr',other);
+  $('#sessBtn').classList.toggle('unr',other);$('#backBtn').classList.toggle('unr',other);
   if(navigator.setAppBadge){(total?navigator.setAppBadge(total):navigator.clearAppBadge()).catch(function(){})}
 }
 // 角标以服务器的未读表为准：推送晚到时后台脚本可能把角标设回旧数字，
@@ -1564,7 +1584,25 @@ setInterval(function(){
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
-$('#sessBtn').addEventListener('click',openSheet);
+$('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)openSheet();else goList()});
+// ---------- 手机：列表页 ⇄ 聊天页 ----------
+var mList=false,lastSess=null,lastList=null;
+function goList(){
+  if(DESKTOP.matches)return;
+  if(!mList){mList=true;$('#app').classList.add('m-list')}
+  try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
+  if(session){wsSend({t:'session.leave'});session=null;setBusy(false)}
+  openSheet();renderUnread();
+}
+function goChat(){
+  if(DESKTOP.matches)return;
+  if(mList){mList=false;$('#app').classList.remove('m-list');history.pushState({chat:1},'')}
+  try{sessionStorage.setItem('claclaw.view','chat')}catch(_){}
+}
+$('#backBtn').addEventListener('click',function(){if(history.state&&history.state.chat)history.back();else goList()});
+window.addEventListener('popstate',function(){if(!DESKTOP.matches&&!mList)goList()});   // 安卓返回键 / 侧滑返回
+setInterval(function(){if(mList&&!document.hidden)openSheet()},60000);   // 列表页每分钟刷新时间
+function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
