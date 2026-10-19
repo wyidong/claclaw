@@ -206,6 +206,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #attachBtn{left:-8px;color:var(--muted)}
 #send{right:2px;color:var(--accent)}
 #send:disabled{color:var(--muted);opacity:.45;cursor:default}
+#stopBtn{position:absolute;top:2px;right:42px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--deny)}
+#stopBtn[hidden]{display:none}
+#composer.busy #ta{padding-right:88px}
 #sugBtn{position:absolute;right:42px;top:2px;width:40px;height:40px;padding:0;border:0;background:none;color:var(--accent);display:grid;place-items:center;z-index:1}
 #cmdMenu{position:absolute;left:10px;right:10px;bottom:calc(100% + 6px);max-height:46vh;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.14);z-index:4;padding:4px}
 .cmd{display:block;width:100%;min-height:48px;padding:7px 10px;border:0;border-radius:9px;background:none;text-align:left}
@@ -279,7 +282,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .plan{margin:0;padding:10px 12px;white-space:pre-wrap;font-size:14px;max-height:40vh;overflow-y:auto}
 #sessBtn .dot.off{background:var(--muted)}
 /* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
-#workBar{display:flex;align-items:center;gap:8px;padding:2px 2px 8px;font-size:12.5px;color:var(--muted)}
+#workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
 #workBar[hidden]{display:none}
 #workBar .wdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite}
 #workBar.quiet{color:var(--warn)}
@@ -290,9 +293,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #rail,#sTop,.d-only,.d-only-b{display:none}
 @media (min-width:1000px){
   .d-only{display:inline}.d-only-b{display:block}.m-only{display:none}
-  #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px 300px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto}
+  #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px 300px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto}
   header,#banner,#feed,#dock{grid-column:3}
-  header{grid-row:1}#banner{grid-row:2}#feed{grid-row:3}#dock{grid-row:4}
+  header{grid-row:1}#banner{grid-row:2}#feed{grid-row:3}#dock{grid-row:5}
 
   /* 图标栏 */
   #rail{grid-column:1;grid-row:1 / -1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 12px;background:var(--code-bg);border-right:1px solid var(--line)}
@@ -363,7 +366,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
   #dock{padding:0;border-top:1px solid var(--line)}
   #dock>#perm,#dock>#ask,#dock>#cmdMenu,#dock>#atts{margin:10px max(20px,calc((100% - 960px) / 2)) 0}
-  #dock>#workBar{padding:8px 20px 0}
+  #workBar{grid-column:3;grid-row:4;padding:4px max(28px,calc((100% - 960px) / 2)) 10px}
   #composer{height:190px;display:flex;flex-direction:column}
   #taWrap{flex:1;min-height:0}
   #ta{height:100%!important;min-height:0;max-height:none;padding:14px 20px 52px;font-size:15px;line-height:1.6}
@@ -371,7 +374,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #attachBtn:hover{background:var(--bg);color:var(--ink)}
   #send{top:auto;bottom:12px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
   #send:disabled{background:var(--code-bg);color:var(--muted);opacity:1}
-  #send.stop{background:var(--deny)}
+  #stopBtn{top:auto;bottom:12px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
+  #stopBtn:hover{background:var(--del-bg)}
+  #composer.busy #ta{padding-right:20px}
   #sugBtn{bottom:10px;top:auto;right:110px}
 }
 </style>
@@ -397,6 +402,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   <div id="banner" role="note"><span id="bannerT">正在连接…</span><button type="button" id="bannerX" aria-label="关闭提示">×</button></div>
 
   <main id="feed" aria-live="polite"></main>
+  <!-- 工作状态：在聊天区底部、输入框外面（输入框是用户自己的地方） -->
+  <div id="workBar" hidden><span class="wdot"></span><span id="workT"></span></div>
 
   <div id="dock" data-state="idle">
     <div id="perm">
@@ -415,7 +422,6 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
         <button type="button" class="btn allow" id="askGo" disabled>提交</button>
       </div>
     </div>
-    <div id="workBar" hidden><span class="wdot"></span><span id="workT"></span></div>
     <div id="cmdMenu" role="listbox" aria-label="斜杠命令" hidden></div>
     <div id="atts" hidden></div>
     <div id="composer">
@@ -425,6 +431,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
         <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
         <button type="button" id="sugBtn" hidden aria-label="填入建议" title="填入建议"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 5v5.5a2.5 2.5 0 0 1-2.5 2.5H5"/><path d="M8.5 9.5 5 13l3.5 3.5"/></svg></button>
       </div>
+      <button type="button" id="stopBtn" aria-label="停止" title="停止 Claude 当前的工作" hidden></button>
       <button type="button" id="send" aria-label="发送" disabled></button>
     </div>
   </div>
@@ -872,13 +879,13 @@ function pickCmd(i){
   syncSend();syncSuggestion();
 }
 function setDock(s){dock.dataset.state=s;syncSend()}
+// 「发送」永远是发送；工作中另外放出一个「停止」，两个按钮不会因为打字变来变去
 function syncSend(){
-  var d=DESKTOP.matches;
-  var steer=busy&&(ta.value.trim()||(attachments||[]).length);
-  sendBtn.classList.toggle('stop',busy&&!steer&&d);
-  if(busy&&!steer){sendBtn.innerHTML=d?'停止':ICON_STOP;sendBtn.setAttribute('aria-label','停止');sendBtn.disabled=false}
-  else if(steer){sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');sendBtn.disabled=(attachments||[]).some(function(a){return !a.data})}
-  else{sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');var at=attachments||[];sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data})}
+  var d=DESKTOP.matches,at=attachments||[];
+  sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');
+  sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data});
+  var sb=$('#stopBtn');sb.hidden=!busy;sb.innerHTML=d?'停止':ICON_STOP;
+  $('#composer').classList.toggle('busy',busy);
 }
 function setBusy(b){
   if(b&&!busy){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
@@ -1231,7 +1238,8 @@ function outboxRestore(){
 }
 function stop(){wsSend({t:'interrupt'})}
 
-sendBtn.addEventListener('click',function(){(busy&&!ta.value.trim()&&!attachments.length)?stop():run(ta.value)});
+sendBtn.addEventListener('click',function(){run(ta.value)});
+$('#stopBtn').addEventListener('click',stop);
 ta.addEventListener('input',function(){
   ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';syncSend();
   if(ta.value)suggestion=null; // 开始自己打字就作废
