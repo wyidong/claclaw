@@ -303,9 +303,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
   /* 会话行：紧凑，一行一个；操作按钮鼠标移上去才出现 */
   .s-row{margin-top:2px}
-  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding:8px 10px;border:0;border-radius:8px;background:none;cursor:pointer}
+  /* 每行始终有一条最细的边框，颜色就是鼠标移上去时的背景色：移上去时边框和背景融为一体，尺寸不变、不跳动 */
+  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding-top:7px;padding-bottom:7px;padding-left:9px;border:1px solid var(--bg);border-radius:8px;background:none;cursor:pointer}
   .s-row:hover .s-item{background:var(--bg)}
-  .s-item[aria-current="true"]{background:var(--user-bg)!important;border:0}
+  .s-item[aria-current="true"]{background:var(--user-bg)!important;border-color:var(--user-bg)!important}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
