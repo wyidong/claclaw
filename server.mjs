@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
+import { isOc, OcRunner, ocRunners, ocSessionList } from './openclaw.mjs';
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
@@ -759,6 +760,13 @@ const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soun
 // ---------- 各会话正在做什么（会话列表实时显示）----------
 const activityMap = {};
 let activityTimer = null;
+// OpenClaw 会话一轮结束：没人看着就推送（和 Claude 会话一样）
+function ocTurnDone(r, ok) {
+  if (r.watched()) return;
+  localSound();
+  const badge = markUnread(r.id);
+  push.sendAll({ title: r.title || 'OpenClaw', body: ok ? '回复完了' : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+}
 function setActivity(id, a) {
   if (a) activityMap[id] = a; else delete activityMap[id];
   if (activityTimer) return;   // 0.5 秒合并一次，流式输出时不刷屏
@@ -791,7 +799,7 @@ function inPath(name) {
 function detectClaws() {
   return [
     { id: 'claude', installed: fs.existsSync(path.join(HOME, '.claude', 'projects')), supported: true },
-    { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: false },
+    { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: true },
     { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: false },
   ];
 }
@@ -1112,6 +1120,10 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/sessions/delete' && req.method === 'POST') return handleDelete(req, res);
     if (url.pathname === '/api/sessions/rename' && req.method === 'POST') return handleRename(req, res);
+    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'openclaw') {
+      try { return sendJson(res, 200, await ocSessionList(log), { 'cache-control': 'no-store' }); }
+      catch (e) { return sendJson(res, 502, { error: e.message }); }
+    }
     if (url.pathname === '/api/sessions') {
       const list = await sessionList();
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -1168,6 +1180,11 @@ wss.on('connection', (ws, req) => {
       // 往上滑：要 before（绝对序号）之前的一页
       if (m.t === 'history.more') {
         if (!runner) return;
+        if (runner instanceof OcRunner) {
+          const pg = await runner.more();
+          const start = Math.max(0, (Number(m.before) || 0) - pg.items.length);
+          return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.more ? Math.max(1, start) : 0, more: pg.more });
+        }
         const hist = await loadHistoryCached(runner.id, runner.cwd);
         const pg = historyPage(hist, Number(m.before) || 0, HISTORY_MORE);
         return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
@@ -1204,6 +1221,22 @@ wss.on('connection', (ws, req) => {
           t: 'session.opened', id, title: info.summary, cwd: info.cwd, cwdShort: relPath(info.cwd, null),
           mode: runner.mode, modes: runner.allowedModes, busy: false, history: [], pending: [], suggestion: null,
           commands: runner.commands || null, isNew: true,
+        });
+      } else if (m.t === 'session.open' && isOc(m.id)) {
+        runner?.unsubscribe(ws);
+        let r = ocRunners.get(m.id);
+        if (!r) { r = new OcRunner(m.id, { log, onActivity: setActivity, onTurnDone: ocTurnDone }); ocRunners.set(m.id, r); }
+        runner = r;
+        r.subscribe(ws);
+        const pg = await r.open();
+        // 历史条目没有全局序号：给一个足够大的虚拟起点，往上翻一页就往前挪一页
+        const total = 100000;
+        log('open openclaw', r.key, pg.items.length, 'items');
+        send({
+          t: 'session.opened', id: m.id, title: r.title, cwd: 'OpenClaw', cwdShort: 'OpenClaw' + (r.model ? ' · ' + r.model : ''),
+          mode: 'default', modes: ['default'], busy: r.busy, claw: 'openclaw',
+          history: pg.items, historyStart: total - pg.items.length, historyTotal: total, historyMore: pg.more,
+          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0, pending: [], suggestion: null, commands: null,
         });
       } else if (m.t === 'session.open') {
         const list = await listSessions({ includeProgrammatic: true, limit: 500 });
@@ -1256,6 +1289,7 @@ wss.on('connection', (ws, req) => {
           if (i.data.length > MAX_IMAGE_B64) return send({ t: 'error', message: '图片太大了' });
         }
         if (!text && !images.length) return;
+        if (runner instanceof OcRunner && images.length) return send({ t: 'error', message: 'OpenClaw 会话暂不支持发图片' });
         if (!runner.send(text, images)) send({ t: 'error', message: '上一条还在处理中' });
         else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data) });
       } else if (m.t === 'permission.reply') {
