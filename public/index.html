@@ -353,9 +353,16 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #app.m-list #setPane{display:none;margin-top:0;padding-top:0;border-top:0}
   #app.m-list.set-on #setPane{display:block}
   #app.m-list.set-on #sTop,#app.m-list.set-on #sList{display:none}
-  #app.m-list #setPane>h2{display:none}   /* 和会话页一样，不要标题；底部菜单已经标明在哪一页 */
+  #app.m-list #setPane>h2{display:none}
+  /* 设置是子页面（像点进一个会话）：没有底部菜单，左上角返回，退出登录和版本沉到页面最底下 */
+  #app.m-list.set-on #mtabs{display:none}
+  #app.m-list.set-on .sheet-p{display:flex;flex-direction:column;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px)}
+  #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1}
+  #app.m-list.set-on #setTop{display:flex;align-items:center;gap:2px;margin:-4px 0 12px -6px;font-size:17px;font-weight:600}
+  #setBack{display:grid;place-items:center;width:36px;height:40px;border:0;background:none;color:var(--ink)}
 }
 #mtabs{display:none}
+#setTop{display:none}
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
 #sSearch{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
@@ -555,6 +562,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
       <div id="setPane">
+      <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
       <h2>设置</h2>
       <div class="set-sec">
         <div class="set-h">会话</div>
@@ -1411,7 +1419,12 @@ function railTab(set){
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',(b.dataset.tab==='set')===set)});
   $('.sheet-p').scrollTop=0;
 }
-document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){railTab(b.dataset.tab==='set')})});
+document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){
+  var set=b.dataset.tab==='set';
+  if(set&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
+  railTab(set);
+})});
+$('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){railTab(false)});
 $('#sReload').addEventListener('click',function(){$('#railReload').click()});
 // 刷新：重新加载页面（拿到最新版本）。输入框里没发的字先存起来，刷新后放回去
@@ -1628,7 +1641,11 @@ function goChat(){
   try{sessionStorage.setItem('claclaw.view','chat')}catch(_){}
 }
 $('#backBtn').addEventListener('click',function(){if(history.state&&history.state.chat)history.back();else goList()});
-window.addEventListener('popstate',function(){if(!DESKTOP.matches&&!mList)goList()});   // 安卓返回键 / 侧滑返回
+window.addEventListener('popstate',function(){
+  if(DESKTOP.matches)return;
+  if($('#app').classList.contains('set-on'))railTab(false);   // 从设置子页面返回会话列表
+  else if(!mList)goList();                                     // 从聊天页返回会话列表
+});
 setInterval(function(){if(mList&&!document.hidden)openSheet()},60000);   // 列表页每分钟刷新时间
 function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
