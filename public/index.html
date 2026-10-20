@@ -422,7 +422,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .h-link:active{background:var(--surface)}
 .h-link .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-left:2px}
 .pe-back{display:inline-flex;align-items:center;gap:4px;margin:0 0 10px;padding:4px 6px;border:0;background:none;color:var(--accent);font:inherit;font-size:14px;cursor:pointer}
-.pe-in{flex:1;min-width:0;max-width:62%;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right}
+.pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
+.pe-in::placeholder{text-align:right}
+.pe-in[type=number]{-moz-appearance:textfield}
+.pe-in[type=number]::-webkit-inner-spin-button,.pe-in[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .pe-in.mono,.pe-mono{font-family:var(--mono)}
 select.pe-in{text-align-last:right}
 .pe-ss{display:flex;flex-direction:column}
