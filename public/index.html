@@ -2567,11 +2567,13 @@ function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(tts.want)||Date.now()-ttsWar
 function ttsStream(raw,end){
   if(!tts.on)return;
   if(end){var rest=raw.slice(ttsPos);ttsPos=raw.length;if(rest.trim())ttsSay(rest);return}
-  var cut=-1,re=/[。！？!?；;\n]/g,mm;re.lastIndex=ttsPos;
+  // 句末标点 / 换行：攒够 8 个字就切；逗号、冒号：攒够 16 个字也切（长句不用等整句写完，第二句也能快点接上）
+  var cut=-1,re=/[。！？!?；;\n，,：:]/g,mm;re.lastIndex=ttsPos;
   while((mm=re.exec(raw))){
     var upto=raw.slice(0,mm.index+1);
     if(((upto.match(/```/g)||[]).length%2))continue;        // 代码块里面的标点不算句末：等整块写完
-    if(raw.slice(ttsPos,mm.index+1).replace(/\s/g,'').length>=8)cut=mm.index+1;
+    var n=raw.slice(ttsPos,mm.index+1).replace(/\s/g,'').length;
+    if(n>=(/[，,：:]/.test(mm[0])?16:8))cut=mm.index+1;
   }
   if(cut<0)return;
   var piece=raw.slice(ttsPos,cut);ttsPos=cut;ttsSay(piece);
