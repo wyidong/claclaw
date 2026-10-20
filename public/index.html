@@ -2463,13 +2463,13 @@ function ttsScore(v){
   if(/eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|祖|奶奶|爷爷/i.test(n))s-=20;   // 苹果的趣味声音
   return s;
 }
-// iPhone 的 getVoices() 常把同一个语音列两遍：按 voiceURI（没有就按名字 + 语言）去重
+// iPhone 的 getVoices() 常把同一个语音列两遍（编号还不一样）：按名字 + 语言 + 版本去重
 function ttsVoices(){
   if(!ttsOk())return [];
   var seen={};
   return speechSynthesis.getVoices().filter(function(v){
     if(!/^zh/i.test(v.lang||''))return false;
-    var k=(v.voiceURI||'')+'|'+v.name+'|'+v.lang;if(seen[k])return false;seen[k]=1;return true;
+    var k=v.name+'|'+v.lang+'|'+ttsTier(v);if(seen[k])return false;seen[k]=1;return true;   // 同名同语言同版本只留一个
   }).sort(function(a,b){return ttsScore(b)-ttsScore(a)});
 }
 function ttsLabel(v){
