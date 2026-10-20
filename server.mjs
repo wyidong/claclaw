@@ -208,6 +208,26 @@ async function endHolders(sessionId) {
   return !holders.some(h => pidAlive(h.pid));
 }
 
+// 会话最后一条用户消息：Claude Code 每轮都往会话文件末尾写 {"type":"last-prompt"}，只读文件尾部找最后一条；按文件大小 + 修改时间缓存
+const lastPromptCache = new Map();
+function lastPromptOf(file) {
+  let st; try { st = fs.statSync(file); } catch { return ''; }
+  const key = st.size + ':' + st.mtimeMs, c = lastPromptCache.get(file);
+  if (c && c.key === key) return c.text;
+  let text = '';
+  try {
+    const n = Math.min(st.size, 512 * 1024), buf = Buffer.alloc(n), fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, n, st.size - n); } finally { fs.closeSync(fd); }
+    const lines = buf.toString('utf8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (!lines[i].includes('"type":"last-prompt"')) continue;
+      try { text = String(JSON.parse(lines[i]).lastPrompt || ''); break; } catch {}
+    }
+  } catch {}
+  text = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+  lastPromptCache.set(file, { key, text });
+  return text;
+}
 function jsonlPathOf(info) {
   // ~/.claude/projects/<cwd 中非字母数字换成 -> /<id>.jsonl
   return path.join(HOME, '.claude', 'projects', String(info.cwd || '').replace(/[^A-Za-z0-9]/g, '-'), info.sessionId + '.jsonl');
@@ -904,6 +924,8 @@ async function sessionList() {
       cwd: s.cwd || '',
       cwdShort: relPath(s.cwd || '', null),
       branch: s.gitBranch === 'HEAD' ? '' : s.gitBranch || '',   // HEAD：不是 git 目录（或没在任何分支上），不显示
+      // 没有分支的会话：列表里标题下面显示最后一条用户消息
+      lastPrompt: s.gitBranch && s.gitBranch !== 'HEAD' ? undefined : lastPromptOf(jsonlPathOf(s)) || s.firstPrompt || undefined,
       lastModified: s.lastModified,
       openInWeb: ours,
       busyElsewhere: elsewhere,

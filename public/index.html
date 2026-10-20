@@ -275,6 +275,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #sList .s-item .m{flex-wrap:nowrap;align-items:baseline}
 #sList .s-item .m .id{flex:none}
 #sList .s-item .m .cwd{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-item .m .cwd.lp{font-family:inherit}   /* 最后一条消息用正文字体，不用等宽 */
 #sList .s-item .m .when{flex:none;width:7.2em;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden}
 /* 正在干活的会话：绿色边框，状态文字绿色、前面一个闪动的点；等确认的用橙色 */
 .s-row.opening .s-item{background:var(--user-bg)!important}
@@ -1916,7 +1917,8 @@ function openSheet(silent){
       b.querySelector('.t').textContent=s.title;
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
-      b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');
+      b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||s.lastPrompt||'');   // 非 git 目录没有分支：显示最后一条用户消息（放不下就截断）
+      b.querySelector('.cwd').classList.toggle('lp',!inRecent&&!s.branch&&!!s.lastPrompt);
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);if(!s.unsent&&s.lastModified)b.dataset.lm=s.lastModified;
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
       // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
