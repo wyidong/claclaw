@@ -197,7 +197,7 @@ export class OcRunner {
         this.busy = false;
         this.emit({ t: 'turn.done', subtype: p.state === 'final' ? 'success' : p.state, error: err });
         this.onActivity?.(this.id, null);
-        this.onTurnDone?.(this, p.state === 'final');
+        this.onTurnDone?.(this, p.state === 'final', finalText || this.streamText);
         this.refreshMeta();
         if (!this.subs.size) this.dispose();
       }

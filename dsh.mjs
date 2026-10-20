@@ -331,7 +331,8 @@ export class DsRunner {
       case 'agent_message_chunk': {
         const t = u.content?.type === 'text' ? u.content.text : '';
         if (!t) return;
-        if (!this.textOpen || u.messageId !== this.msgId) { this.closeText(); this.textOpen = true; this.msgId = u.messageId; this.emit({ t: 'ai.start' }); }
+        if (!this.textOpen || u.messageId !== this.msgId) { this.closeText(); this.textOpen = true; this.msgId = u.messageId; this.lastText = ''; this.emit({ t: 'ai.start' }); }
+        this.lastText += t;   // 这一轮最后一段回复：推送通知里显示开头
         this.emit({ t: 'ai.delta', text: t });
         this.onActivity?.(this.id, '回复中');
         return;
@@ -385,6 +386,7 @@ export class DsRunner {
   send(text, images = []) {
     if (this.busy) return false;
     const cmd = text.match(/^\/(model|effort)(?:\s+(.*))?$/);
+    this.lastText = '';
     this.setBusy(true);
     (async () => {
       try {
@@ -414,7 +416,7 @@ export class DsRunner {
     this.busy = false;
     this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
     this.onActivity?.(this.id, null);
-    if (reason !== 'command') this.onTurnDone?.(this, ok);
+    if (reason !== 'command') this.onTurnDone?.(this, ok, this.lastText);
     if (!this.subs.size) this.dispose();
   }
 

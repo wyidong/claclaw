@@ -573,7 +573,7 @@ class Runner {
         touchWeb(this.id);
         if (!this.sawState) this.busy = false;   // 有 session_state 时以它的 idle 为准
         this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined });
-        this.notify(m.subtype === 'success' ? '回复完了' : '这一轮出错结束了', 'done-' + this.id);
+        this.notify(m.subtype === 'success' ? snippet(m.result, '回复完了') : '这一轮出错结束了', 'done-' + this.id);
         // 有插话排着时 CLI 可能接着干：网页端的「工作中」以 CLI 的 idle 为准，这里先把状态同步回去
         if (this.sawState && this.busy) this.emit({ t: 'busy', on: true });
         this.maybeScheduleClose();
@@ -765,11 +765,21 @@ const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soun
 const activityMap = {};
 let activityTimer = null;
 // OpenClaw 会话一轮结束：没人看着就推送（和 Claude 会话一样）
-function ocTurnDone(r, ok) {
+// 推送正文：回复的开头（去掉 Markdown 记号，压成一行，最多 80 字）；没有文字就退回「回复完了」
+function snippet(text, fallback) {
+  const t = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' [代码] ').replace(/`([^`]*)`/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '').replace(/\*\*|__|~~|\|/g, '')
+    .replace(/\s+/g, ' ').trim();
+  if (!t) return fallback;
+  return t.length > 80 ? t.slice(0, 80) + '…' : t;
+}
+function ocTurnDone(r, ok, text) {
   if (r.watched()) return;
   localSound();
   const badge = markUnread(r.id);
-  push.sendAll({ title: r.title || (isDs(r.id) ? 'DeepSeek' : 'OpenClaw'), body: ok ? '回复完了' : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+  push.sendAll({ title: r.title || (isDs(r.id) ? 'DeepSeek' : 'OpenClaw'), body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
 }
 // DeepSeek 会话要你确认操作：没人看着就推送
 function dsAsk(r, body) {
