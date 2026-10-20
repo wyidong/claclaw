@@ -1324,8 +1324,11 @@ const handler = async (req, res) => {
       if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x)).slice(0, 50);
       if (b.regenerate || (b.enabled && !c.code)) c.code = newCode();
       if (b.remote && typeof b.remote === 'object') {
-        const nr = { ip: String(b.remote.ip || '').trim().slice(0, 300), port: Number(b.remote.port) || 8788, code: String(b.remote.code || '').trim().slice(0, 64) };
-        const same = nr.ip === c.remote.ip && nr.port === c.remote.port && nr.code === c.remote.code;
+        const url = String(b.remote.url || '').trim();
+        if (url && !/^https?:\/\/[^\s]+$/i.test(url)) return sendJson(res, 400, { error: '完整地址要以 http:// 或 https:// 开头，中间不能有空格' });
+        if (url.length > 4000) return sendJson(res, 400, { error: '地址太长（最多 4000 个字符）' });
+        const nr = { ip: String(b.remote.ip || '').trim().slice(0, 300), port: Number(b.remote.port) || 8788, code: String(b.remote.code || '').trim().slice(0, 64), url };
+        const same = nr.ip === c.remote.ip && nr.port === c.remote.port && nr.code === c.remote.code && nr.url === (c.remote.url || '');
         c.remote = { ...nr, pairedAt: same ? c.remote.pairedAt || 0 : 0 };   // 对方地址改了就要重新验证
       }
       if (typeof b.enabled === 'boolean') c.enabled = b.enabled;

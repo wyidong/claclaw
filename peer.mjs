@@ -13,7 +13,7 @@ import { DATA } from './auth.mjs';
 
 const FILE = path.join(DATA, 'peer.json');
 export const PEER_PATH = '/claclaw-peer/';
-const DEFAULTS = { enabled: false, port: 8788, code: '', dir: '', sessions: [], remote: { ip: '', port: 8788, code: '' } };
+const DEFAULTS = { enabled: false, port: 8788, code: '', dir: '', sessions: [], remote: { ip: '', port: 8788, code: '', url: '' } };
 
 export function loadPeer() {
   try { const c = JSON.parse(fs.readFileSync(FILE, 'utf8')); return { ...DEFAULTS, ...c, remote: { ...DEFAULTS.remote, ...(c.remote || {}) } }; }
@@ -49,9 +49,10 @@ export function lanIp() {
   return null;
 }
 export const ourUrl = c => { const ip = lanIp(); return ip && c.code ? 'http://' + ip + ':' + c.port + PEER_PATH + c.code : ''; };
-// 对方地址：填了完整网址就直接用；否则按 IP + 端口 + 配对码拼（和我们的格式一样）
+// 对方地址：填了完整网址（再长都行，可以带 ?参数）就直接用；否则按 IP + 端口 + 配对码拼（和我们的格式一样）
 export function remoteUrl(c) {
   const r = c.remote || {};
+  if (r.url) return r.url;
   if (/^https?:\/\//i.test(r.ip || '')) return r.ip.replace(/\/+$/, '');
   if (!r.ip || !r.code) return '';
   return 'http://' + r.ip + ':' + (r.port || 8788) + PEER_PATH + r.code;
@@ -78,7 +79,10 @@ export async function remoteCall(c, sub, body, ms = 10 * 60 * 1000) {
   if (!url) throw new Error('还没填对方的地址');
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
   try {
-    const r = await fetch(url + sub, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal } : { signal: ctl.signal });
+    // 子路径（/sessions）接在路径后面，保留网址里原有的 ?参数
+    const u = new URL(url);
+    if (sub) u.pathname = u.pathname.replace(/\/+$/, '') + sub;
+    const r = await fetch(u, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal } : { signal: ctl.signal });
     const text = await r.text();
     let j; try { j = JSON.parse(text); } catch { j = { ok: r.ok, reply: text }; }
     if (!r.ok && !j.error) j.error = 'HTTP ' + r.status;

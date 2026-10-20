@@ -424,6 +424,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-back{display:inline-flex;align-items:center;gap:4px;margin:0 0 10px;padding:4px 6px;border:0;background:none;color:var(--accent);font:inherit;font-size:14px;cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
+.pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
+.pe-ta::placeholder{text-align:left}
+.pe-urlrow{align-items:flex-start}
 .pe-in[type=number]{-moz-appearance:textfield}
 .pe-in[type=number]::-webkit-inner-spin-button,.pe-in[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .pe-in.mono,.pe-mono{font-family:var(--mono)}
@@ -1770,7 +1773,17 @@ function peerForm(enabled){
   var ss=[].map.call(document.querySelectorAll('#hostBody .pe-ss input:checked'),function(x){return x.value});
   return {enabled:enabled,port:port,dir:($('#peDir')||{}).value||'',sessions:ss};
 }
-function peerRemoteForm(){return {ip:$('#peRip').value.trim(),port:+$('#peRport').value||8788,code:$('#peRcode').value.trim()}}
+function peerRemoteForm(){return {url:$('#peRurl').value.replace(/\s+/g,''),ip:$('#peRip').value.trim(),port:+$('#peRport').value||8788,code:$('#peRcode').value.trim()}}
+// 粘贴对方发来的一整段（「复制全部」那种：IP / 端口 / 配对码 / 地址）：自动拆到各个框里
+$('#hostBody').addEventListener('paste',function(e){
+  if(e.target.id!=='peRurl')return;
+  var t=(e.clipboardData||window.clipboardData).getData('text')||'';
+  var ip=t.match(/IP\s*[：:]\s*([\d.]+)/i),port=t.match(/端口\s*[：:]\s*(\d+)/),code=t.match(/配对码\s*[：:]\s*([A-Z0-9-]{8,})/i),url=t.match(/https?:\/\/\S+/);
+  if(!ip&&!port&&!code)return;   // 只是一个网址：照常粘贴
+  e.preventDefault();
+  $('#peRurl').value=url?url[0]:'';
+  if(ip)$('#peRip').value=ip[1];if(port)$('#peRport').value=port[1];if(code)$('#peRcode').value=code[1];
+});
 function peerSave(body,okText,then){
   fetch('/api/peer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x.ok){peerMsg={err:x.j.error||'保存失败'};renderPeer();return}
@@ -1812,6 +1825,21 @@ function loadPeerPage(){
     renderPeer();
   }).catch(function(e){$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
+// 「复制全部」：除了 IP / 端口 / 配对码 / 地址，再附上怎么连的说明，对方（或对方的 AI）照着就能接上
+function peerInvite(c){
+  return 'claclaw 协同邀请（局域网）\n'+
+    'IP：'+c.ip+'\n端口：'+c.port+'\n配对码：'+c.code+'\n地址：'+c.url+'\n\n'+
+    '怎么连（任何能发 HTTP 请求的程序都行）：\n'+
+    '1. 验证 / 查看我们开放的会话：GET '+c.url+'/sessions\n'+
+    '   返回 {"ok":true,"sessions":[{"id":"会话 id 前 8 位","title":"标题","busy":false}]}\n'+
+    '2. 发消息：POST '+c.url+'\n'+
+    '   Content-Type: application/json\n'+
+    '   {"from":"你是谁","text":"正文（4000 字内）","session":"可选，会话 id；只开放一个会话时可省略"}\n'+
+    '   返回 {"ok":true,"reply":"我们这边这一轮的回复原文"}（最多等 10 分钟）\n'+
+    '   示例：curl -X POST \''+c.url+'\' -H \'content-type: application/json\' -d \'{"from":"对方","text":"你好"}\'\n'+
+    '3. 错误码：400 消息为空或没指定会话，404 地址或配对码不对，409 会话正忙，413 太长，429 上一条还在处理，504 超时。\n\n'+
+    '回连：请把你们的收件地址（同样支持 GET …/sessions 和 POST 发消息）发给我们，我们填进 claclaw 后会自动验证。用 claclaw 的话，在「宿主 → claclaw 协同」里开启后点「复制全部」发回来即可。';
+}
 function renderPeer(){
   if(hostView!=='peer'||!peerCfg)return;
   var c=peerCfg,h='<button type="button" class="pe-back" data-act="peer-back">‹ 宿主</button>';
@@ -1836,18 +1864,20 @@ function renderPeer(){
   if(c.enabled&&c.code){
     h+='<div><div class="h-h">发给对方（第一版只支持局域网）</div><div class="h-card">'+
       hRow('IP',esc(c.ip||'没找到局域网 IP'))+hRow('端口',String(c.port))+hRow('配对码','<span class="pe-mono">'+esc(c.code)+'</span>')+
-      (c.url?'<span class="pe-url">'+esc(c.url)+'</span><div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.url)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc('IP：'+c.ip+'\n端口：'+c.port+'\n配对码：'+c.code+'\n地址：'+c.url)+'">复制全部</button></div>':'')+
+      (c.url?'<span class="pe-url">'+esc(c.url)+'</span><div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.url)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制全部（含连接说明）</button></div>':'')+
       '</div><div class="pe-note">配对码就是授权：拿到它的人能往上面这些会话发消息。只发给信任的人；要作废就点「重新生成配对码」。</div></div>';
   }
   var r=c.remote||{};
   h+='<div><div class="h-h">对方</div><div class="h-card">'+
     '<div class="h-row"><span class="k">状态</span><span class="v" id="peLive">'+peerLiveHtml()+'</span></div>'+
+    '<div class="h-row pe-urlrow"><span class="k">完整地址</span><textarea id="peRurl" class="pe-in pe-ta mono" rows="2" placeholder="http://… 再长都行；也可以直接粘贴对方发来的整段">'+esc(r.url||'')+'</textarea></div>'+
+    '<div class="pe-note" style="margin:0 14px 4px">填了完整地址就用它；没填才用下面的 IP、端口、配对码拼出地址。</div>'+
     '<div class="h-row"><span class="k">IP</span><input id="peRip" class="pe-in mono" placeholder="192.168.1.x" value="'+esc(r.ip||'')+'"></div>'+
     '<div class="h-row"><span class="k">端口</span><input id="peRport" class="pe-in mono" type="number" value="'+esc(r.port||8788)+'"></div>'+
     '<div class="h-row"><span class="k">配对码</span><input id="peRcode" class="pe-in mono" placeholder="XXXX-XXXX-XXXX-XXXX" value="'+esc(r.code||'')+'"></div>'+
-    (c.remoteUrl?'<span class="pe-url">'+esc(c.remoteUrl)+'</span>':'')+
+    (c.remoteUrl?'<div class="pe-note" style="margin:6px 14px 0">实际使用的地址：</div><span class="pe-url">'+esc(c.remoteUrl)+'</span>':'')+
     '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-remote">保存并验证</button><button type="button" class="pe-btn" data-act="peer-test">重新检查</button></div>'+
-    '</div><div class="pe-note">填对方给的 IP、端口、配对码（对方不是 claclaw 时，IP 一栏可以直接填完整地址）。保存后，加入协同的会话里会多两个工具：查看对方的会话、给对方发消息。</div></div>';
+    '</div><div class="pe-note">对方给的是完整地址就填「完整地址」，给的是 IP、端口、配对码就填下面三项；直接粘贴对方发来的整段也会自动拆开。保存后，加入协同的会话里会多两个工具：查看对方的会话、给对方发消息。</div></div>';
   $('#hostBody').innerHTML=h+msg;
 }
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
