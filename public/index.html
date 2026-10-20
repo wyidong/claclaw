@@ -430,8 +430,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .h-dot.on{background:var(--allow)}
   .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
   .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
-  .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid transparent;border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
-  .claw-card[aria-current="true"]{border-color:var(--accent)}
+  .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+  .claw-card[aria-current="true"]{border-color:var(--user-bg);background:var(--user-bg)}   /* 选中：浅绿底，和会话列表一致 */
   .claw-card:disabled{opacity:.45;cursor:default}
   .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
   .claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
@@ -458,7 +458,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .s-row{overflow:hidden;border:.5px solid var(--line);border-radius:12px;background:var(--bg)}
   .s-row.working{border-color:var(--allow)}
   .s-row.waiting{border-color:var(--warn)}
-  .s-row:has(> .s-item[aria-current="true"]){border-color:var(--accent)}
+  /* 选中的会话：和电脑端一样，整张卡片浅绿底、不再画绿框 */
+  .s-row:has(> .s-item[aria-current="true"]){border-color:var(--user-bg);background:var(--user-bg)}
+  .s-row > .s-item[aria-current="true"]{background:var(--user-bg)}
   .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
   .s-row.dragging .s-item{transition:none}
   .s-row .s-item .t,.s-row.two .s-item .t,.s-row.pn .s-item .t,.s-row.three .s-item .t{padding-right:0}
