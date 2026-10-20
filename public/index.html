@@ -424,6 +424,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .claw-tx b{font-size:17px}
   .claw-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
   .claw-st{flex:none;font-size:12.5px;color:var(--muted)}
+  .claw-st:empty{display:none}   /* 选中靠边框表示；只有「即将支持」这类说明才显示 */
   .claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
   .claw-card.unread .claw-tx b::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 3px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 }
@@ -647,17 +648,17 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
         <button type="button" class="claw-card" data-claw="claude">
           <img class="claw-ic tile" src="https://claude.com/apple-touch-icon.png" alt="">
           <span class="claw-tx"><b>Claude</b><small>Claude Code 会话：终端、VS Code、网页里开的都在这里</small></span>
-          <span class="claw-st">选择</span>
+          <span class="claw-st"></span>
         </button>
         <button type="button" class="claw-card" data-claw="openclaw">
           <img class="claw-ic" src="https://openclaw.ai/apple-touch-icon.png" alt="">
           <span class="claw-tx"><b>OpenClaw</b><small>本机 OpenClaw 网关的会话</small></span>
-          <span class="claw-st">选择</span>
+          <span class="claw-st"></span>
         </button>
         <button type="button" class="claw-card" data-claw="deepseek">
           <img class="claw-ic tile" src="https://cdn.deepseek.com/chat/icon.png" alt="">
           <span class="claw-tx"><b>DeepSeek Harness</b><small>dsh 的会话：网页版、终端里开的都在这里</small></span>
-          <span class="claw-st">选择</span>
+          <span class="claw-st"></span>
         </button>
       </div>
       <div id="setPane">
@@ -1608,7 +1609,6 @@ if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek')clawSel=null;
 function showClawSel(){
   document.querySelectorAll('.claw-card').forEach(function(x){
     var on=x.dataset.claw===clawSel;x.setAttribute('aria-current',String(on));
-    if(!x.disabled)x.querySelector('.claw-st').textContent=on?'当前':'选择';
   });
 }
 showClawSel();
