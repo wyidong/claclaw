@@ -2449,13 +2449,15 @@ try{tts.on=localStorage.getItem('claclaw.tts')==='1';tts.rate=+localStorage.getI
 function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
 // 声音：列出这台设备上的中文语音，好听的排前面（和 dsh-tts-reader 的经验一样：默认取第一个中文语音往往最难听）。
 // Edge 里有微软的自然语音（晓伊、晓晓、云希…）；iPhone / Mac 上是苹果语音，系统设置里下载了「增强 / 高级」版本会更自然。
+// 苹果语音的版本写在 voiceURI 里（com.apple.voice.premium / enhanced / compact.zh-CN.Tingting），名字可能一模一样
+function ttsTier(v){var u=String(v.voiceURI||'')+' '+v.name;return /premium|高级|优化/i.test(u)?'高级':/enhanced|增强/i.test(u)?'增强':''}
 function ttsScore(v){
-  var n=v.name,l=String(v.lang||'').toLowerCase(),s=0;
+  var n=v.name,l=String(v.lang||'').toLowerCase(),s=0,t=ttsTier(v);
+  if(t==='高级')s+=45;else if(t==='增强')s+=35;
   if(/^zh[-_]cn/.test(l))s+=100;else if(/^zh/.test(l))s+=40;
   if(/sichuan|四川|粤|cantonese|hong ?kong|台|taiwan/i.test(n+l))s-=30;
   if(/natural|online|neural/i.test(n))s+=50;
   if(/晓伊|xiaoyi/i.test(n))s+=30;else if(/晓晓|xiaoxiao/i.test(n))s+=25;else if(/云希|yunxi/i.test(n))s+=20;else if(/云扬|yunyang/i.test(n))s+=15;
-  if(/premium|高级|enhanced|增强|优化/i.test(n))s+=40;
   if(/婷婷|tingting/i.test(n))s+=10;
   if(/eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|祖|奶奶|爷爷/i.test(n))s-=20;   // 苹果的趣味声音
   return s;
@@ -2463,6 +2465,7 @@ function ttsScore(v){
 function ttsVoices(){return ttsOk()?speechSynthesis.getVoices().filter(function(v){return /^zh/i.test(v.lang||'')}).sort(function(a,b){return ttsScore(b)-ttsScore(a)}):[]}
 function ttsLabel(v){
   var n=v.name.replace(/^Microsoft\s+/i,'').replace(/\s*Online\s*\(Natural\)\s*-\s*Chinese.*$/i,'（自然）').replace(/\s+-\s+Chinese.*$/i,'');
+  var t=ttsTier(v);if(t&&n.indexOf(t)<0)n=n.replace(/\s*[（(](premium|enhanced|高级|增强|优化)[)）]\s*$/i,'')+'（'+t+'）';
   var region=/HK/i.test(v.lang)?' · 粤语/香港':/TW/i.test(v.lang)?' · 台湾':'';
   return n+region;
 }
@@ -2472,7 +2475,7 @@ function ttsPickVoice(){
   var sel=$('#setTtsVoice');if(!sel)return;
   sel.innerHTML=vs.length?vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(ttsLabel(v))+'</option>'}).join(''):'<option value="">没有中文语音</option>';
   if(tts.voice)sel.value=tts.voice.voiceURI;
-  var good=vs.some(function(v){return /natural|online|neural|premium|高级|enhanced|增强|优化/i.test(v.name)});
+  var good=vs.some(function(v){return /natural|online|neural/i.test(v.name)||ttsTier(v)});
   $('#setTtsVoiceSub').textContent=good||!/iPhone|iPad|Mac/i.test(navigator.userAgent)?'选了会试听一句':'选了会试听一句。想更自然：系统设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载「高级」或「增强」版本';
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
@@ -2524,7 +2527,8 @@ $('#setTtsVoice').addEventListener('change',function(e){
 });
 $('#setTtsRate').addEventListener('change',function(e){tts.rate=+e.target.value||1.1;try{localStorage.setItem('claclaw.ttsRate',String(tts.rate))}catch(_){}});
 $('#ttsStop').addEventListener('click',ttsStop);
-document.addEventListener('visibilitychange',function(){if(document.hidden)ttsStop();else ttsWake()});
+document.addEventListener('visibilitychange',function(){if(document.hidden)ttsStop();else{ttsWake();ttsPickVoice()}});   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
+$('#mtabs [data-tab="set"]').addEventListener('click',ttsPickVoice);$('#railSet').addEventListener('click',ttsPickVoice);
 document.addEventListener('pointerdown',ttsUnlock,{capture:true});
 ttsSync();
 (function(){
