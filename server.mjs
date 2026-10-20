@@ -1422,8 +1422,8 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/tts' && req.method === 'POST') {
       let b = {}; try { b = JSON.parse(await readBody(req, 8192)); } catch {}
       try {
-        const buf = await ttsSynth(b.text, String(b.voice || ''), b.rate);
-        res.writeHead(200, { 'content-type': 'audio/mp4', 'content-length': buf.length, 'cache-control': 'no-store' });
+        const { buf, type } = await ttsSynth(b.text, String(b.voice || ''), b.rate);
+        res.writeHead(200, { 'content-type': type, 'content-length': buf.length, 'cache-control': 'no-store' });
         return res.end(buf);
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
     }

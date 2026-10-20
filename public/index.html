@@ -2480,13 +2480,16 @@ function ttsLabel(v){
 }
 // 电脑合成的声音（Mac 上 say 能用的中文语音），值写成 srv:名字
 var SRV_NAMES={Tingting:'婷婷',Meijia:'美佳 · 台湾',Sinji:'善怡 · 粤语/香港',Binbin:'彬彬',Bobo:'波波',Han:'瀚',Lanlan:'岚岚',Lilian:'黎潋',LiLian:'黎潋','Li-Mu':'李牧',Lili:'莉莉','Yu-shu':'语舒',Panpan:'盼盼',Haohao:'浩浩',Shanshan:'珊珊',Yue:'悦',Dongmei:'冬梅',Lele:'乐乐'};
+// 微软在线语音（Edge 的自然语音）：edge:zh-CN-XiaoyiNeural 这种
+var EDGE_NAMES={Xiaoxiao:'晓晓',Xiaoyi:'晓伊',Yunjian:'云健',Yunxi:'云希',Yunxia:'云夏',Yunyang:'云扬','liaoning-Xiaobei':'晓北 · 东北话','shaanxi-Xiaoni':'晓妮 · 陕西话',HiuGaai:'晓佳 · 粤语',HiuMaan:'晓曼 · 粤语',WanLung:'云龙 · 粤语',HsiaoChen:'晓臻 · 台湾',HsiaoYu:'晓雨 · 台湾',YunJhe:'云哲 · 台湾'};
 function srvLabel(v){
+  if(/^edge:/.test(v.name)){var k=v.name.replace(/^edge:zh-[A-Z]{2}-/,'').replace(/Neural$/,'');return (EDGE_NAMES[k]||k)+'（微软'+(v.gender==='Female'?' · 女':v.gender==='Male'?' · 男':'')+'）'}
   var m=v.name.match(/^(.*?)\s*\((Enhanced|Premium)\)\s*$/i),base=m?m[1]:v.name,tier=m?(/premium/i.test(m[2])?'高级':'优化音质'):'';
   var zh=SRV_NAMES[base]||base;
   if(!SRV_NAMES[base]&&/TW/.test(v.lang))zh+=' · 台湾';else if(!SRV_NAMES[base]&&/HK/.test(v.lang))zh+=' · 香港';
   return zh+(tier?'（'+tier+'）':'');
 }
-function srvScore(v){var n=v.name;return (/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
+function srvScore(v){var n=v.name;return (/^edge:/.test(n)?200:0)+(/Xiaoyi/.test(n)?20:/Xiaoxiao/.test(n)?15:/Yunxi/.test(n)?10:0)-(/liaoning|shaanxi/.test(n)?50:0)+(/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
 function ttsLoadSrv(){
   return fetch('/api/tts/voices').then(function(r){return r.ok?r.json():[]}).then(function(list){
     tts.srv=(Array.isArray(list)?list:[]).sort(function(a,b){return srvScore(b)-srvScore(a)});ttsPickVoice();
@@ -2499,7 +2502,7 @@ function ttsPickVoice(){
   var sel=$('#setTtsVoice');if(!sel)return;
   var dev=vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(ttsLabel(v))+'</option>'}).join('');
   var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(srvLabel(v))+'</option>'}).join('');
-  sel.innerHTML=(pc?'<optgroup label="电脑合成（Mac 上的声音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
+  sel.innerHTML=(pc?'<optgroup label="电脑合成（微软在线语音 / Mac 上的声音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
   sel.value=ttsSrvVoice()?tts.want:tts.voice?tts.voice.voiceURI:'';
   var good=vs.some(function(v){return /natural|online|neural/i.test(v.name)||ttsTier(v)});
   $('#setTtsVoiceSub').textContent=good||!/iPhone|iPad|Mac/i.test(navigator.userAgent)?'选了会试听一句':'选了会试听一句。想更自然：系统设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载「高级」或「增强」版本';
@@ -2520,7 +2523,7 @@ function srvNext(){
   var it=srvQ.shift();
   if(!it){if(srvUrl){URL.revokeObjectURL(srvUrl);srvUrl=null}ttsShowStop();return}
   srvBusy=true;
-  if(srvQ[0])srvFetch(srvQ[0]);
+  srvQ.slice(0,3).forEach(srvFetch);   // 微软语音一句要 2 秒左右：后面几句先并行合成，念完一句下一句已经好了
   srvFetch(it).then(function(b){
     if(it.dead){srvBusy=false;return srvNext()}
     if(srvUrl)URL.revokeObjectURL(srvUrl);srvUrl=URL.createObjectURL(b);
