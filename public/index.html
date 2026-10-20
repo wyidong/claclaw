@@ -368,6 +368,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
 #rail,.d-only,.d-only-b{display:none}
+#sheetGrip{display:none}
+@media (min-width:1000px){
+  /* 会话列表右边缘：拖动改宽度（像微信：往左有最窄限制，往右可以拉宽） */
+  #sheetGrip{display:block;position:absolute;top:0;bottom:0;right:-4px;width:8px;z-index:5;cursor:col-resize}
+  #sheetGrip:hover,#sheetGrip.drag{background:linear-gradient(to right,transparent 3px,var(--accent) 3px,var(--accent) 5px,transparent 5px)}
+  body.col-drag{cursor:col-resize;user-select:none}
+}
 /* ---------- 手机：像微信，首页是会话列表，点进去是聊天页，左上角返回 ---------- */
 #backBtn{display:none}
 @media (max-width:999px){
@@ -481,7 +488,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #setPane .set-foot{padding-top:18px}
 @media (min-width:1000px){
   .d-only{display:inline}.d-only-b{display:block}.m-only{display:none}
-  #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px 300px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto}
+  #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px var(--listW,300px) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto}
   header,#banner,#feed,#dock{grid-column:3}
   header{grid-row:1}#banner{grid-row:2}#feed{grid-row:3}#dock{grid-row:5}
 
@@ -511,7 +518,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #rail .rsep{width:24px;margin:4px 0;border-top:1px solid var(--line)}
 
   /* 会话列表栏 */
-  #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:static;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
+  #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:relative;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
   .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:0 10px 16px;overflow-y:auto}
   .sheet-p>h2:first-child{display:none}
   #sTop{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:2;margin:0 -10px 4px;padding:14px 12px 10px;background:var(--surface)}
@@ -692,6 +699,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   </div>
 
   <div id="sheet" aria-hidden="true">
+    <div id="sheetGrip" title="拖动调整宽度，双击恢复默认" aria-hidden="true"></div>
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2>会话</h2>
       <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
@@ -1783,6 +1791,25 @@ $('#railReload').addEventListener('click',function(){
 try{var dr=sessionStorage.getItem('claclaw.draft');if(dr){sessionStorage.removeItem('claclaw.draft');ta.value=dr;ta.dispatchEvent(new Event('input'))}}catch(_){}
 $('#railSet').addEventListener('click',function(){railTab(true)});
 $('#railHost').addEventListener('click',function(){mTab('host')});
+// 会话列表宽度：拖右边缘调整，记在本机；最窄 240，最宽到聊天区还剩 420
+(function(){
+  var MIN=240,DEF=300,g=$('#sheetGrip'),app=$('#app');
+  var max=function(){return Math.max(MIN,Math.min(720,innerWidth-64-420))};
+  var apply=function(w){w=Math.round(Math.min(max(),Math.max(MIN,w)));app.style.setProperty('--listW',w+'px');return w};
+  var saved=0;try{saved=+localStorage.getItem('claclaw.listW')||0}catch(_){}
+  if(saved)apply(saved);
+  g.addEventListener('pointerdown',function(e){
+    if(e.button!==0)return;e.preventDefault();
+    var left=$('#sheet').getBoundingClientRect().left,w=DEF;
+    g.setPointerCapture(e.pointerId);g.classList.add('drag');document.body.classList.add('col-drag');
+    var mv=function(ev){w=apply(ev.clientX-left)};
+    var up=function(){g.removeEventListener('pointermove',mv);g.removeEventListener('pointerup',up);g.removeEventListener('pointercancel',up);
+      g.classList.remove('drag');document.body.classList.remove('col-drag');try{localStorage.setItem('claclaw.listW',String(w))}catch(_){}};
+    g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);
+  });
+  g.addEventListener('dblclick',function(){apply(DEF);try{localStorage.removeItem('claclaw.listW')}catch(_){}});
+  addEventListener('resize',function(){var cur=parseInt(getComputedStyle(app).getPropertyValue('--listW'))||0;if(cur)apply(cur)});
+})();
 // 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
 function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
