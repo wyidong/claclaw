@@ -2520,85 +2520,49 @@ function ttsPickVoice(){
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
 ttsLoadSrv();
-// 电脑合成的播放：一句一句向电脑要音频，用 Web Audio 无缝拼接着播。
-// 微软的音频每段前面带 0.15 秒、后面带 0.85 秒左右的静音，直接一段接一段放，每个切口就会停顿 1 秒；
-// 这里解码后把首尾静音裁掉，按标点留一点自然的停顿（逗号 0.12 秒、句号 0.3 秒），下一段排在上一段刚结束的时刻开始。
-var srvLogAt=0,srvQ=[],srvBusy=false,srvBlocked=false,srvAC=null,srvNextAt=0,srvSrcs=[],srvGen=0,srvResumeAt=0;
-function srvCtx(){
-  if(!srvAC){
-    var C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
-    // iPhone 开着静音键时，网页的 Web Audio 默认也被静音；声明成「播放」类型就和音乐 App 一样照常出声
-    try{if(navigator.audioSession)navigator.audioSession.type='playback'}catch(_){}
-    srvAC=new C();
-  }
-  return srvAC;
-}
+// 电脑合成的播放：一句一句向电脑要音频（电脑已经把首尾静音裁掉、按标点留好了停顿），
+// 用两个 <audio> 轮流放：放这一句时，下一句已经在另一个里面加载好，这句一完立刻接上。
+// 用 <audio> 而不是 Web Audio：iPhone 上 Web Audio 会被静音键、睡眠模式、来电打断等各种情况弄得没声音。
+var srvQ=[],srvBusy=false,srvBlocked=false,srvGen=0,srvLogAt=0,srvCur=null;
+var srvEls=[new Audio(),new Audio()],srvTurn=0;
+srvEls.forEach(function(a){a.preload='auto';a.addEventListener('ended',function(){if(a===srvCur){srvCur=null;srvBusy=false;srvNext()}})});
 function srvFetch(it){
   if(!it.p)it.p=fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:tts.rate})})
-    .then(function(r){if(!r.ok)throw new Error('合成失败');return r.arrayBuffer()})
-    .then(function(ab){var ac=srvCtx();return new Promise(function(ok,no){ac.decodeAudioData(ab,ok,no)})});
+    .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
+    .then(function(b){it.url=URL.createObjectURL(b);return it});
   return it.p;
 }
-// 有声音的范围：前后各找第一个超过阈值的采样
-function srvTrim(buf,pause){
-  var d=buf.getChannelData(0),n=d.length,sr=buf.sampleRate,th=0.012,a=0,b=n-1;
-  while(a<n&&Math.abs(d[a])<th)a++;
-  while(b>a&&Math.abs(d[b])<th)b--;
-  if(a>=b)return {off:0,dur:0};
-  var off=Math.max(0,a/sr-0.03),end=Math.min(n/sr,b/sr+0.06);
-  return {off:off,dur:end-off,gap:pause};
-}
-function srvPause(text){return /[。！？!?；;\n]\s*$/.test(text)?0.3:/[，,：:、]\s*$/.test(text)?0.12:0.2}
-// 按顺序把已经解码好的段排进时间线（不等上一段放完就排好下一段，所以是无缝的）
+function srvFree(it){if(it&&it.url){URL.revokeObjectURL(it.url);it.url=null}}
 function srvNext(){
   if(srvBusy)return;
   var it=srvQ[0];if(!it){ttsShowStop();return}
-  var ac=srvCtx();if(!ac)return;
-  if(ac.state!=='running'){
-    // 被挂起（去过后台、来电打断……）：先试着恢复；0.7 秒还没恢复，才请你点一下「继续朗读」
-    if(Date.now()-srvResumeAt>1500){
-      srvResumeAt=Date.now();
-      ac.resume().then(function(){if(ac.state==='running')srvNext()},function(){});
-      setTimeout(function(){if(srvAC.state!=='running'&&srvQ.length){srvBlocked=true;tts.srvUnlocked=false;ttsShowStop();ttsDbg('blocked, ctx '+srvAC.state)}},700);
-    }
-    return;
-  }
   srvBusy=true;
-  srvQ.slice(0,4).forEach(srvFetch);   // 微软语音一句约 1 秒：后面几句先并行合成
+  srvQ.slice(0,4).forEach(srvFetch);   // 后面几句先并行合成，念完一句下一句已经好了
   var gen=srvGen;
-  srvFetch(it).then(function(buf){
+  srvFetch(it).then(function(){
     if(gen!==srvGen)return;
-    srvQ.shift();
-    var t=srvTrim(buf,srvPause(it.text));
-    if(t.dur>0){
-      var s=ac.createBufferSource();s.buffer=buf;s.connect(ac.destination);
-      var at=Math.max(ac.currentTime+0.02,srvNextAt);
-      s.start(at,t.off,t.dur);srvNextAt=at+t.dur+t.gap;srvKeepAlive();if(Date.now()-(srvLogAt||0)>10000){srvLogAt=Date.now();ttsDbg('playing, ctx '+ac.state+', sampleRate '+ac.sampleRate+', session '+(navigator.audioSession?navigator.audioSession.type:'none'))}
-      srvSrcs.push(s);s.onended=function(){srvSrcs=srvSrcs.filter(function(x){return x!==s});ttsShowStop()};
-    }
-    srvBusy=false;srvNext();
-  }).catch(function(e){ttsDbg('fetch/decode failed: '+(e&&e.message));if(gen!==srvGen)return;srvQ.shift();srvBusy=false;srvNext()});
+    var a=srvEls[srvTurn];srvTurn=1-srvTurn;
+    a.src=it.url;srvCur=a;
+    // 下一句提前装进另一个 <audio>，切换时不用再加载
+    var nx=srvQ[1];if(nx)srvFetch(nx).then(function(){if(gen===srvGen&&nx.url){var b=srvEls[srvTurn];if(b!==srvCur){b.src=nx.url;b.load()}}}).catch(function(){});
+    return a.play().then(function(){
+      srvQ.shift();var prev=it;setTimeout(function(){srvFree(prev)},60000);
+      if(Date.now()-srvLogAt>10000){srvLogAt=Date.now();ttsDbg('playing <audio>')}
+      ttsShowStop();
+    },function(e){
+      srvCur=null;srvBusy=false;
+      // iPhone 不让网页自己出声：这句留在队首，等点一下「继续」
+      if(e&&e.name==='NotAllowedError'){srvBlocked=true;tts.srvUnlocked=false;ttsShowStop();ttsDbg('blocked: '+e.name);return}
+      ttsDbg('play failed: '+(e&&e.name)+' '+(e&&e.message));srvQ.shift();srvNext();
+    });
+  }).catch(function(e){if(gen!==srvGen)return;ttsDbg('fetch failed: '+(e&&e.message));srvQ.shift();srvBusy=false;srvNext()});
   ttsShowStop();
 }
 function srvSay(parts,voice){parts.forEach(function(p){srvQ.push({text:p,voice:voice})});srvNext()}
-function srvStop(){srvKeepIdle();srvGen++;srvQ=[];srvBusy=false;srvBlocked=false;srvSrcs.forEach(function(s){try{s.stop()}catch(_){}});srvSrcs=[];srvNextAt=0}
-function srvPlaying(){return srvSrcs.length>0}
-// iPhone：声音第一次也要由点击触发；点一下时恢复 AudioContext 并放一小段静音
-// 老版本 iPhone 没有 audioSession：放一个静音的 <audio> 把声音通道切到「播放」，静音键下也能出声
-// 只在念的时候放，念完就停：一直放着，锁屏和控制中心会一直挂着一个「正在播放」的播放器
-var srvKeep=null;
-function srvKeepAlive(){
-  if(navigator.audioSession)return;
-  try{
-    if(!srvKeep){srvKeep=new Audio(SILENT_WAV());srvKeep.loop=true;srvKeep.volume=0.01}
-    if(srvKeep.paused){var p=srvKeep.play();if(p&&p.catch)p.catch(function(){})}
-    if('mediaSession' in navigator){
-      try{navigator.mediaSession.metadata=new MediaMetadata({title:'claclaw 朗读',artist:(session&&session.title)||''})}catch(_){}
-      try{navigator.mediaSession.setActionHandler('pause',function(){ttsStop()});navigator.mediaSession.setActionHandler('stop',function(){ttsStop()})}catch(_){}
-    }
-  }catch(_){}
-}
-function srvKeepIdle(){if(srvKeep&&!srvKeep.paused)srvKeep.pause()}
+function srvStop(){srvGen++;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}})}
+function srvPlaying(){return !!srvCur&&!srvCur.paused}
+function srvKeepIdle(){}
+// iPhone：<audio> 第一次播放要由点击触发；点一下时两个都放一小段静音，之后就能自己播
 function SILENT_WAV(){
   var n=800,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
   w(0,'RIFF');d.setUint32(4,36+n,true);w(8,'WAVEfmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
@@ -2606,11 +2570,12 @@ function SILENT_WAV(){
   for(var i=0;i<n;i++)b[44+i]=128;
   var str='';for(var j=0;j<b.length;j++)str+=String.fromCharCode(b[j]);return 'data:audio/wav;base64,'+btoa(str);
 }
+var SILENT_SRC=SILENT_WAV();
 function srvUnlock(force){
   if(tts.srvUnlocked&&!force)return;
-  var ac=srvCtx();if(!ac)return;
-  tts.srvUnlocked=true;srvKeepAlive();setTimeout(function(){if(!(srvBusy||srvQ.length||srvPlaying()))srvKeepIdle()},500);   // 点一下时先「激活」它，没在念就马上停
-  try{ac.resume();var b=ac.createBuffer(1,1,22050),s=ac.createBufferSource();s.buffer=b;s.connect(ac.destination);s.start(0)}catch(_){tts.srvUnlocked=false}
+  if(srvPlaying())return;
+  tts.srvUnlocked=true;
+  srvEls.forEach(function(a){try{if(a===srvCur)return;a.src=SILENT_SRC;var p=a.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}});
 }
 function ttsText(src){
   return String(src||'')
@@ -2719,11 +2684,11 @@ $('#setTtsRate').addEventListener('change',function(e){
   ttsRateLabel();tts.srvUnlocked=false;ttsUnlock();ttsPreview('现在是这个语速，听听合不合适。');
 });
 $('#ttsStop').addEventListener('click',function(){
-  if(srvBlocked){srvBlocked=false;srvResumeAt=0;srvUnlock(true);srvNext();setTimeout(srvNext,300);ttsShowStop();ttsDbg('tap continue, ctx '+(srvAC&&srvAC.state));return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
+  if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
   if(ttsSpeaking()){ttsStop();return}
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice())srvUnlock(true);else ttsUnlock();
-  ttsDbg('tap say, ctx '+(srvAC&&srvAC.state));
+  ttsDbg('tap say');
   ttsSay(ttsLastReply(),true);ttsShowStop();
 });
 setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
