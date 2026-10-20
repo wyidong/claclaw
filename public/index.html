@@ -304,6 +304,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 /* 开关 */
 #ttsStop{position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);z-index:30;height:34px;padding:0 14px;border:0;border-radius:17px;background:var(--ink);color:var(--bg);font:inherit;font-size:13.5px;box-shadow:0 2px 10px rgba(0,0,0,.2);cursor:pointer}
 #ttsStop[hidden]{display:none}
+#ttsStop.go{background:var(--accent);color:var(--accent-ink)}
 #setPane .sw{flex:none;position:relative;width:50px;height:30px;border-radius:15px;background:var(--line);transition:background .2s}
 #setPane .sw::after{content:'';position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
 #setPane [data-on="1"] .sw{background:var(--allow)}
@@ -2528,12 +2529,17 @@ function srvNext(){
     if(it.dead){srvBusy=false;return srvNext()}
     if(srvUrl)URL.revokeObjectURL(srvUrl);srvUrl=URL.createObjectURL(b);
     srvAudio.src=srvUrl;srvAudio.playbackRate=1;
-    return srvAudio.play();
+    return srvAudio.play().catch(function(e){
+      // iPhone 不让网页自己出声（页面去过后台、很久没点过屏幕）：这句放回队首，等点一下「继续朗读」
+      if(e&&e.name==='NotAllowedError'){it.p=Promise.resolve(b);srvQ.unshift(it);srvBlocked=true;tts.srvUnlocked=false;srvBusy=false;ttsShowStop();return}
+      throw e;
+    });
   }).catch(function(){srvBusy=false;srvNext()});
   ttsShowStop();
 }
+var srvBlocked=false;
 function srvSay(parts,voice){parts.forEach(function(p){srvQ.push({text:p,voice:voice})});srvNext()}
-function srvStop(){srvQ.forEach(function(it){it.dead=true});srvQ=[];srvAudio.pause();srvBusy=false}
+function srvStop(){srvQ.forEach(function(it){it.dead=true});srvQ=[];srvAudio.pause();srvBusy=false;srvBlocked=false}
 // iPhone：<audio> 第一次播放也要由点击触发；点一下时放一小段静音，之后同一个 <audio> 就能自己播
 var SILENT=(function(){   // 0.1 秒静音 WAV（8kHz、8 位）
   var n=800,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
@@ -2542,7 +2548,7 @@ var SILENT=(function(){   // 0.1 秒静音 WAV（8kHz、8 位）
   for(var i=0;i<n;i++)b[44+i]=128;
   var str='';for(var j=0;j<b.length;j++)str+=String.fromCharCode(b[j]);return 'data:audio/wav;base64,'+btoa(str);
 })();
-function srvUnlock(){if(tts.srvUnlocked)return;tts.srvUnlocked=true;try{srvAudio.src=SILENT;var p=srvAudio.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}}
+function srvUnlock(force){if(tts.srvUnlocked&&!force)return;if(srvBusy&&!srvAudio.paused)return;tts.srvUnlocked=true;try{srvAudio.src=SILENT;var p=srvAudio.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}}
 function ttsText(src){
   return String(src||'')
     .replace(/```[\s\S]*?```/g,'，代码略，')
@@ -2573,7 +2579,10 @@ function ttsPreview(text){
   var sv=ttsSrvVoice();if(sv){srvUnlock();srvSay([text],sv);return}
   if(!ttsOk())return;var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u);
 }
-function ttsShowStop(){$('#ttsStop').hidden=!(srvBusy||srvQ.length||(ttsOk()&&(speechSynthesis.speaking||speechSynthesis.pending)))}
+function ttsShowStop(){
+  var b=$('#ttsStop');b.textContent=srvBlocked?'点一下继续朗读':'停止朗读';b.classList.toggle('go',srvBlocked);
+  b.hidden=!(srvBlocked||srvBusy||srvQ.length||(ttsOk()&&(speechSynthesis.speaking||speechSynthesis.pending)));
+}
 function ttsStop(){srvStop();if(ttsOk())speechSynthesis.cancel();$('#ttsStop').hidden=true}
 function ttsUnlock(){if(tts.on&&ttsSrvVoice())srvUnlock();if(!tts.on||!ttsOk()||tts.unlocked)return;tts.unlocked=true;var u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}
 function ttsWake(){
@@ -2603,9 +2612,12 @@ $('#setTtsVoice').addEventListener('change',function(e){
   tts.srvUnlocked=false;ttsUnlock();ttsPreview('你好，以后就用这个声音给你念回复。');
 });
 $('#setTtsRate').addEventListener('change',function(e){tts.rate=+e.target.value||1.1;try{localStorage.setItem('claclaw.ttsRate',String(tts.rate))}catch(_){}});
-$('#ttsStop').addEventListener('click',ttsStop);
+$('#ttsStop').addEventListener('click',function(){
+  if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
+  ttsStop();
+});
 document.addEventListener('visibilitychange',function(){
-  if(document.hidden){if(!ttsSrvVoice())ttsStop()}   // 电脑合成的是普通音频：锁屏 / 切走时让它把正在念的念完
+  if(document.hidden){if(!ttsSrvVoice())ttsStop();else if(!srvBusy)tts.srvUnlocked=false}   // 去过后台：下次点屏幕时重新解锁一次   // 电脑合成的是普通音频：锁屏 / 切走时让它把正在念的念完
   else{ttsWake();ttsPickVoice()}
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
 $('#mtabs [data-tab="set"]').addEventListener('click',ttsLoadSrv);$('#railSet').addEventListener('click',ttsLoadSrv);

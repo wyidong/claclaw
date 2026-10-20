@@ -1425,7 +1425,7 @@ const handler = async (req, res) => {
         const { buf, type } = await ttsSynth(b.text, String(b.voice || ''), b.rate);
         res.writeHead(200, { 'content-type': type, 'content-length': buf.length, 'cache-control': 'no-store' });
         return res.end(buf);
-      } catch (e) { return sendJson(res, 400, { error: e.message }); }
+      } catch (e) { log('tts failed', String(b.voice || ''), e.message); return sendJson(res, 400, { error: e.message }); }
     }
     if (url.pathname === '/api/host') {
       const live = m => [...m.values()].filter(r => !r.closed);
