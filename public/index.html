@@ -2603,7 +2603,7 @@ function SILENT_WAV(){
 function srvUnlock(force){
   if(tts.srvUnlocked&&!force)return;
   var ac=srvCtx();if(!ac)return;
-  tts.srvUnlocked=true;srvKeepAlive();
+  tts.srvUnlocked=true;srvKeepAlive();setTimeout(function(){if(!(srvBusy||srvQ.length||srvPlaying()))srvKeepIdle()},500);   // 点一下时先「激活」它，没在念就马上停
   try{ac.resume();var b=ac.createBuffer(1,1,22050),s=ac.createBufferSource();s.buffer=b;s.connect(ac.destination);s.start(0)}catch(_){tts.srvUnlocked=false}
 }
 function ttsText(src){
