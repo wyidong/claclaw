@@ -1472,18 +1472,18 @@ function onEvent(m){
     addUser(m.text,m.images);think(true);
     break;
   case 'ai.start':
-    aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);
+    aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);ttsPos=0;
     if(busy)think(true,'输出中');
     break;
   case 'ai.delta':
-    if(!aiEl){aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl)}
-    aiText+=m.text;
+    if(!aiEl){aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);ttsPos=0}
+    aiText+=m.text;ttsStream(aiText,false);
     // 边输出边排版：最多每 80ms 渲染一次
     if(!aiRender)aiRender=setTimeout(function(){aiRender=null;if(aiEl){aiEl.innerHTML=md(aiText);scrollDown()}},80);
     break;
   case 'ai.end':
     clearTimeout(aiRender);aiRender=null;
-    if(aiEl){aiEl.innerHTML=md(aiText);aiEl=null;scrollDown();ttsSay(aiText)}
+    if(aiEl){aiEl.innerHTML=md(aiText);aiEl=null;scrollDown();ttsStream(aiText,true)}
     if(busy)think(true,'思考中');
     break;
   case 'tool.start':
@@ -2558,6 +2558,21 @@ function ttsText(src){
     .replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|~~/g,'')
     .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'')
     .replace(/\n{2,}/g,'。\n').replace(/\s+/g,' ').trim();
+}
+// 边写边念：文字每出来完整的一句（句末标点或换行）就交去念，不等整段写完。
+// 代码块没写完时不切（等它写完整块念成「代码略」）；太短的碎句先攒着，和下一句一起念。
+var ttsPos=0;
+function ttsStream(raw,end){
+  if(!tts.on)return;
+  if(end){var rest=raw.slice(ttsPos);ttsPos=raw.length;if(rest.trim())ttsSay(rest);return}
+  var cut=-1,re=/[。！？!?；;\n]/g,mm;re.lastIndex=ttsPos;
+  while((mm=re.exec(raw))){
+    var upto=raw.slice(0,mm.index+1);
+    if(((upto.match(/```/g)||[]).length%2))continue;        // 代码块里面的标点不算句末：等整块写完
+    if(raw.slice(ttsPos,mm.index+1).replace(/\s/g,'').length>=8)cut=mm.index+1;
+  }
+  if(cut<0)return;
+  var piece=raw.slice(ttsPos,cut);ttsPos=cut;ttsSay(piece);
 }
 function ttsSay(src){
   if(!tts.on||!ttsOk()||document.hidden)return;
