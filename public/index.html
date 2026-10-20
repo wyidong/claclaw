@@ -1842,7 +1842,7 @@ function renderPeer(){
   var r=c.remote||{};
   h+='<div><div class="h-h">对方</div><div class="h-card">'+
     '<div class="h-row"><span class="k">状态</span><span class="v" id="peLive">'+peerLiveHtml()+'</span></div>'+
-    '<div class="h-row"><span class="k">IP</span><input id="peRip" class="pe-in mono" placeholder="192.168.1.x 或完整地址" value="'+esc(r.ip||'')+'"></div>'+
+    '<div class="h-row"><span class="k">IP</span><input id="peRip" class="pe-in mono" placeholder="192.168.1.x" value="'+esc(r.ip||'')+'"></div>'+
     '<div class="h-row"><span class="k">端口</span><input id="peRport" class="pe-in mono" type="number" value="'+esc(r.port||8788)+'"></div>'+
     '<div class="h-row"><span class="k">配对码</span><input id="peRcode" class="pe-in mono" placeholder="XXXX-XXXX-XXXX-XXXX" value="'+esc(r.code||'')+'"></div>'+
     (c.remoteUrl?'<span class="pe-url">'+esc(c.remoteUrl)+'</span>':'')+
