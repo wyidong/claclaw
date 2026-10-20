@@ -1571,6 +1571,7 @@ function connect(){
     retry=0;banner(null);
     if(connectedOnce)checkVersion();connectedOnce=true;
     wsSend({t:'visible',on:!document.hidden});
+    if(wantPeer){wantPeer=false;history.replaceState(null,'','/');if(!DESKTOP.matches){goList();openPeerView();return}openPeerView()}
     var fromUrl=new URLSearchParams(location.search).get('s');
     if(fromUrl)history.replaceState(null,'','/');
     if(pendingOpen)fromUrl=pendingOpen;
@@ -1730,7 +1731,7 @@ function loadHost(){
   if(hostView)return;
   fetch('/api/peer').then(function(r){return r.json()}).then(function(j){peerSt=j}).catch(function(){});
   fetch('/api/host').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(x){
-    if(!$('#app').classList.contains('host-on'))return;
+    if(!$('#app').classList.contains('host-on')||hostView)return;
     var c=x.computer,L=x.load,h='';
     h+=hSec('电脑',hRow('名称',esc(c.name))+hRow('系统',esc(c.os),c.model)+hRow('处理器',esc(c.cpu),c.cores+' 核')+hRow('已开机',fmtDur(c.uptime)));
     var mem=x.mem,dk=x.disk,b=x.battery,load=L.avg[0]/L.cores;
@@ -1806,6 +1807,12 @@ function peerCheckNow(){
   fetch('/api/peer/check',{method:'POST'}).then(function(r){return r.json()}).then(function(list){
     (list||[]).forEach(function(x){peerOnline[x.id]=x});paintPeerLive();
   }).catch(function(){});
+}
+// 点「配对申请」通知：直接打开 宿主 → claclaw 协同
+var wantPeer=new URLSearchParams(location.search).get('view')==='peer';
+function openPeerView(){
+  if(!DESKTOP.matches&&!mList)goList();
+  mTab('host');hostView='peer';peerMsg={};peerOnline={};loadPeerPage();
 }
 function loadPeerPage(){
   $('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';
@@ -2329,13 +2336,13 @@ function takePendingOpen(){
   return caches.open('claclaw-nav').then(function(c){
     return c.match('/__pending-open').then(function(r){
       if(!r)return null;
-      return r.json().then(function(j){c.delete('/__pending-open');return j&&j.id&&Date.now()-j.at<60000?j.id:null});
+      return r.json().then(function(j){c.delete('/__pending-open');if(!j||Date.now()-j.at>=60000)return null;return j.view==='peer'?'view:peer':j.id||null});
     });
   }).catch(function(){return null});
 }
 document.addEventListener('visibilitychange',function(){
   if(document.hidden)return;
-  takePendingOpen().then(function(id){if(id)openFromNotice(id)});   // 从后台回来：消息可能丢了，以这条记录为准
+  takePendingOpen().then(function(id){if(id==='view:peer')openPeerView();else if(id)openFromNotice(id)});   // 从后台回来：消息可能丢了，以这条记录为准
 });
 function openFromNotice(id){
   if(session&&session.id===id&&!mList)return;
@@ -2442,8 +2449,8 @@ if('serviceWorker' in navigator&&window.isSecureContext){
   // 点通知 → Service Worker 发来要打开的地址（/?s=会话ID）
   navigator.serviceWorker.addEventListener('message',function(e){
     var d=e.data||{};if(d.t!=='open')return;
-    var s=new URL(d.url,location.href).searchParams.get('s');
-    if(s)openFromNotice(s);
+    var q=new URL(d.url,location.href).searchParams,s=q.get('s');
+    if(q.get('view')==='peer')openPeerView();else if(s)openFromNotice(s);
   });
 }
 function b64ToU8(b){var p='='.repeat((4-b.length%4)%4),r=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,function(c){return c.charCodeAt(0)})}

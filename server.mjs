@@ -539,7 +539,7 @@ async function peerHandler(req, res) {
       let p; try { p = addPending(name, ip, inbox); } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }
       log('peer pair request from', ip, name);
       localSound();
-      push.sendAll({ title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/' }, log).catch(() => {});
+      push.sendAll({ title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/?view=peer' }, log).catch(() => {});
       return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要两位数配对码，然后调用 pair/confirm' });
     }
     if (route === '/pair/confirm') {
