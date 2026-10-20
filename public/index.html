@@ -1526,6 +1526,7 @@ function onEvent(m){
   case 'status':   // 一条会被替换的状态（例如 OpenClaw 模型重试），只显示在工作状态条上，不进消息流
     think(true,m.text);break;
   case 'turn.done':
+    ttsHush=false;
     refreshList();
     if(m.error)addSys('本轮结束：'+m.error);
     document.querySelectorAll('.tool[data-k="run"],.tool[data-k="wait"]').forEach(function(n){
@@ -1634,7 +1635,7 @@ function run(text){
   attachments.forEach(function(a){URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
   ta.value='';ta.style.height='auto';
   busy=true;setDock('busy');
-  outbox={text:text,images:images,sid:session.id};outboxShow();trySend();ttsUnlock();
+  outbox={text:text,images:images,sid:session.id};outboxShow();trySend();ttsUnlock();ttsHush=false;
 }
 // 待确认的消息：发出去后要等服务器回显（'user' 事件）才算送达。
 // 手机切后台、换网络后 WebSocket 常常「看着连着、其实已断」，消息会被悄悄吞掉：
@@ -2592,8 +2593,9 @@ function ttsText(src){
 var ttsPos=0,ttsWarmAt=0;
 // 开始回复时让电脑先连好微软语音（30 秒内只叫一次）
 function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(tts.want)||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
+var ttsHush=false;   // 用户在这一轮里点了停止：这一轮剩下的不再自动念，下一轮回复照常自动念
 function ttsStream(raw,end){
-  if(!tts.on)return;
+  if(!tts.on||ttsHush){if(end)ttsPos=raw.length;return}
   if(end){var rest=raw.slice(ttsPos);ttsPos=raw.length;if(rest.trim())ttsSay(rest);return}
   // 句末标点 / 换行：攒够 8 个字就切；逗号、冒号：攒够 16 个字也切（长句不用等整句写完，第二句也能快点接上）
   var cut=-1,re=/[。！？!?；;\n，,：:]/g,mm;re.lastIndex=ttsPos;
@@ -2685,7 +2687,7 @@ $('#setTtsRate').addEventListener('change',function(e){
 });
 $('#ttsStop').addEventListener('click',function(){
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
-  if(ttsSpeaking()){ttsStop();return}
+  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice())srvUnlock(true);else ttsUnlock();
   ttsDbg('tap say');
