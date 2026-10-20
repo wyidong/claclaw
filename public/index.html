@@ -761,6 +761,8 @@ var COPY_BTN='<button class="ic" type="button" aria-label="复制">'+COPY_ICON+'
 function mdInline(s){
   var keep=[];
   var put=function(h){keep.push(h);return '\u0000'+(keep.length-1)+'\u0000'};
+  // 整行就是一条斜杠命令（「/model 4sapi/gemini-2.5-flash」）但没加反引号：也当代码显示，带复制图标
+  if(/^\s*\/[a-z][\w:-]*(\s+[^`\s][^`]*)?$/i.test(s)&&s.trim().length<=160)return '<code>'+esc(s.trim())+'</code>'+COPY_BTN;
   s=esc(s);
   // 像 ID、命令、路径的行内代码后面跟一个复制图标（太短或纯单词的只是强调，不加）
   s=s.replace(/`([^`\n]+)`/g,function(_,c){return put('<code>'+c+'</code>'+(c.trim().length>=6&&/[0-9\/._:@=-]/.test(c)?COPY_BTN:''))});
