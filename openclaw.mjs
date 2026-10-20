@@ -281,3 +281,12 @@ export async function ocGatewayUp(log) {
   try { await Promise.race([connect(log), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]); return true; }
   catch { return false; }
 }
+
+// 新建：在 main 这个 agent 下建一个会话；名字可以不填（OpenClaw 会按第一条消息起名）
+export async function ocCreate(title, log) {
+  const params = { agentId: 'main' };   // 不带 idempotencyKey：网关要求设备身份才收，我们是共享令牌连接
+  if (title) params.label = title;
+  const r = await call('sessions.create', params, log);
+  if (!r?.key) throw new Error('OpenClaw 没有返回会话');
+  return OC_PREFIX + r.key;
+}

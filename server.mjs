@@ -11,7 +11,7 @@ import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
-import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp } from './openclaw.mjs';
+import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning } from './dsh.mjs';
 const STARTED_AT = Date.now();
@@ -1248,6 +1248,25 @@ wss.on('connection', (ws, req) => {
         const hist = await loadHistoryCached(runner.id, runner.cwd);
         const pg = historyPage(hist, Number(m.before) || 0, HISTORY_MORE);
         return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
+      }
+      if (m.t === 'session.new' && (isOc(m.from) || m.claw === 'openclaw')) {
+        // OpenClaw：网关新建会话（没有目录的概念），建好直接打开
+        const title = String(m.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+        let id;
+        try { id = await ocCreate(title, log); } catch (e) { return send({ t: 'error', message: 'OpenClaw 新建会话失败：' + e.message }); }
+        runner?.unsubscribe(ws);
+        const r = new OcRunner(id, { log, onActivity: setActivity, onTurnDone: ocTurnDone });
+        ocRunners.set(id, r);
+        runner = r;
+        r.subscribe(ws);
+        const pg = await r.open();
+        log('new openclaw session', r.key);
+        return send({
+          t: 'session.opened', id, title: title || r.title || '新会话', cwd: 'OpenClaw', cwdShort: 'OpenClaw' + (r.model ? ' · ' + r.model : ''),
+          mode: 'default', modes: ['default'], busy: false, claw: 'openclaw', commands: r.commands || [],
+          history: pg.items, historyStart: 100000 - pg.items.length, historyTotal: 100000, historyMore: pg.more,
+          pending: [], suggestion: null, isNew: true,
+        });
       }
       if (m.t === 'session.new' && (isDs(m.from) || m.claw === 'deepseek')) {
         // DeepSeek：用 dsh 的 ACP 在目录里新建会话；目录默认用参照会话的

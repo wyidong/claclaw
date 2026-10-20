@@ -1796,7 +1796,7 @@ function applySearch(){
 $('#sSearch').addEventListener('input',applySearch);
 $('#sNew').addEventListener('click',function(){
   var ref=(session&&session.cwd)?session:(lastSess||(lastList||[]).find(function(x){return x.cwd}));   // 手机列表页没有打开的会话：用最近打开过的、或列表里最近活跃的那个
-  if(clawSel==='openclaw'||(ref&&/^oc:/.test(ref.id))){alert('OpenClaw 会话暂不支持在这里新建');return}
+  if(clawSel==='openclaw'){newSibling({id:'',cwd:'',claw:'openclaw'});return}   // OpenClaw 没有目录，只填名字
   if(clawSel==='deepseek'){   // DeepSeek：参照当前打开的、或列表里最近的 DeepSeek 会话的目录；一个都没有就建在主目录
     ref=(session&&/^ds:/.test(session.id))?session:(lastList||[]).find(function(x){return /^ds:/.test(x.id)&&x.cwd});
     newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:'deepseek'}:{id:'',cwd:'~',claw:'deepseek'});return;
@@ -2333,7 +2333,10 @@ document.addEventListener('visibilitychange',function(){wsSend({t:'visible',on:!
 
 var newDlg=$('#newDlg'),newFrom=null;
 function newSibling(s){
+  if(/^oc:/.test(s.id||''))s={id:s.id,cwd:'',claw:'openclaw'};
   newFrom=s;
+  var oc=s.claw==='openclaw';
+  $('#newForm .newIn').hidden=oc;$('#newForm h3').textContent=oc?'新建 OpenClaw 会话':'新建会话';
   var d=$('#newDir');d.value=(s.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   d.style.width=Math.max(8,d.value.length+1)+'ch';
   $('#newName').value='';$('#newErr').textContent='';
