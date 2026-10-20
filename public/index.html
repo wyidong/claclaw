@@ -601,7 +601,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
     <!-- 电脑端的 Claw 切换：点哪个，会话列表就显示哪一种的会话（只列这台电脑装了、能用的） -->
     <div id="rclaws">
     <button type="button" id="rclawMore" aria-label="更多 Claw" title="更多 Claw" aria-expanded="false" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
-    <button type="button" class="rclaw" data-claw="claude" aria-label="Claude" title="Claude"><img class="tile" src="https://claude.com/apple-touch-icon.png" alt=""></button>
+    <button type="button" class="rclaw" data-claw="claude" aria-label="Claude Code" title="Claude Code"><img class="tile" src="https://claude.com/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="openclaw" aria-label="OpenClaw" title="OpenClaw"><img src="https://openclaw.ai/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="deepseek" aria-label="DeepSeek Harness" title="DeepSeek Harness"><img class="tile" src="https://cdn.deepseek.com/chat/icon.png" alt=""></button>
     </div>
@@ -712,7 +712,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
         <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code 后再来。</div>
         <button type="button" class="claw-card" data-claw="claude">
           <img class="claw-ic tile" src="https://claude.com/apple-touch-icon.png" alt="">
-          <span class="claw-tx"><b>Claude</b><small>Claude Code 会话：终端、VS Code、网页里开的都在这里</small></span>
+          <span class="claw-tx"><b>Claude Code</b><small>终端、VS Code、网页里开的会话都在这里</small></span>
           <span class="claw-st"></span>
         </button>
         <button type="button" class="claw-card" data-claw="openclaw">
