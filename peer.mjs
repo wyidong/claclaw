@@ -1,9 +1,16 @@
 // claclaw 协同：两台电脑上的 AI 会话直接互发消息（第一版只走局域网）。
-// - 我们这边在局域网 IP 的一个端口（默认 8788）上开收件地址：http://<局域网 IP>:<端口>/claclaw-peer/<配对码>
-//     GET  …/sessions  → 加入协同的会话列表
-//     POST …            {from, text, session?} → 送进会话，等这一轮回复完，返回 {ok, reply}
-// - 对方的地址（IP、端口、配对码）填进来以后，加入协同的会话里多两个工具：查看对方会话、给对方发消息。
-// 配置只能在本机（127.0.0.1）打开网页时修改；配对码就是授权，存在 data/peer.json（只有本人可读）。
+//
+// 对外只有一个固定地址：http://<局域网 IP>:<端口>/claclaw-peer（地址里不含密码）。
+// 配对（像蓝牙）：
+//   1. 对方 POST /claclaw-peer/pair {name, inbox?}           → {requestId}；我们这边页面上出现申请（对方 IP、名字、两位数配对码）
+//   2. 我们的人核对后，把两位数配对码告诉对方（微信 / 口头）
+//   3. 对方 POST /claclaw-peer/pair/confirm {requestId, code, token?} → {token, name, inbox}
+//      token：以后对方找我们用的钥匙；对方带上的 token：以后我们找对方用的钥匙（双向一次配好）
+//   配对码只对这一次申请有效，5 分钟过期，最多输错 3 次。
+// 配对后（请求头 Authorization: Bearer <token>）：
+//   GET  /claclaw-peer/sessions → 加入协同的会话
+//   POST /claclaw-peer {from, text, session?} → 送进会话，等这一轮回复完，返回 {ok, reply}
+// 配置只能在本机（127.0.0.1）打开网页时修改；存在 data/peer.json（只有本人可读），我们发出去的钥匙只存哈希。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,33 +19,31 @@ import crypto from 'node:crypto';
 import { DATA } from './auth.mjs';
 
 const FILE = path.join(DATA, 'peer.json');
-export const PEER_PATH = '/claclaw-peer/';
-const DEFAULTS = { enabled: false, port: 8788, code: '', dir: '', sessions: [], remote: { ip: '', port: 8788, code: '', url: '' } };
+export const PEER_BASE = '/claclaw-peer';
+const DEFAULTS = { enabled: false, port: 8788, dir: '', sessions: [], name: '', peers: [] };
 
 export function loadPeer() {
-  try { const c = JSON.parse(fs.readFileSync(FILE, 'utf8')); return { ...DEFAULTS, ...c, remote: { ...DEFAULTS.remote, ...(c.remote || {}) } }; }
-  catch { return { ...DEFAULTS, remote: { ...DEFAULTS.remote } }; }
+  let c = {};
+  try { c = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+  return { ...DEFAULTS, ...c, peers: Array.isArray(c.peers) ? c.peers : [] };
 }
 export function savePeer(c) {
+  const { code, remote, ...keep } = c;   // 旧版的「地址里带配对码」配置不再保存
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(FILE, JSON.stringify(c, null, 2), { mode: 0o600 });
+  fs.writeFileSync(FILE, JSON.stringify(keep, null, 2), { mode: 0o600 });
+}
+export const myName = c => c.name || os.hostname().replace(/\.local$/, '');
+
+export const newToken = () => crypto.randomBytes(32).toString('base64url');
+export const hashToken = t => crypto.createHash('sha256').update(String(t)).digest('hex');
+export const newId = () => crypto.randomBytes(6).toString('hex');
+export function findPeerByToken(c, token) {
+  if (!token) return null;
+  const h = Buffer.from(hashToken(token));
+  return c.peers.find(p => p.tokenHash && p.tokenHash.length === h.length && crypto.timingSafeEqual(Buffer.from(p.tokenHash), h)) || null;
 }
 
-// 配对码：16 位（去掉易混的 0/O/1/I），四位一组，约 80 位随机
-const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-export function newCode() {
-  const b = crypto.randomBytes(16);
-  let s = '';
-  for (let i = 0; i < 16; i++) s += ALPHA[b[i] % ALPHA.length];
-  return s.match(/.{4}/g).join('-');
-}
-const norm = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-export function codeMatches(given, code) {
-  const a = Buffer.from(norm(given)), b = Buffer.from(norm(code));
-  return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
-}
-
-// 局域网 IP：en* 网卡上的私有 IPv4（第一版只支持局域网）
+// 局域网 IP：en* 网卡上的私有 IPv4
 export function lanIp() {
   for (const [ifn, list] of Object.entries(os.networkInterfaces())) {
     if (!/^en\d/.test(ifn)) continue;
@@ -48,15 +53,26 @@ export function lanIp() {
   }
   return null;
 }
-export const ourUrl = c => { const ip = lanIp(); return ip && c.code ? 'http://' + ip + ':' + c.port + PEER_PATH + c.code : ''; };
-// 对方地址：填了完整网址（再长都行，可以带 ?参数）就直接用；否则按 IP + 端口 + 配对码拼（和我们的格式一样）
-export function remoteUrl(c) {
-  const r = c.remote || {};
-  if (r.url) return r.url;
-  if (/^https?:\/\//i.test(r.ip || '')) return r.ip.replace(/\/+$/, '');
-  if (!r.ip || !r.code) return '';
-  return 'http://' + r.ip + ':' + (r.port || 8788) + PEER_PATH + r.code;
+export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + ':' + c.port + PEER_BASE : ''; };
+
+// ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
+export const PAIR_TTL = 5 * 60 * 1000;
+const pending = new Map();   // requestId → {id, name, ip, inbox, code, expiresAt, tries}
+export function pendingList() {
+  const now = Date.now();
+  for (const [k, p] of pending) if (p.expiresAt < now) pending.delete(k);
+  return [...pending.values()];
 }
+export function addPending(name, ip, inbox) {
+  const list = pendingList();
+  if (list.length >= 5) throw Object.assign(new Error('配对申请太多，稍后再试'), { code: 429 });
+  for (const p of list) if (p.ip === ip) pending.delete(p.id);   // 同一台电脑只保留最新一条
+  const p = { id: newId(), name, ip, inbox, code: String(10 + crypto.randomInt(90)), expiresAt: Date.now() + PAIR_TTL, tries: 0 };
+  pending.set(p.id, p);
+  return p;
+}
+export const getPending = id => (pendingList(), pending.get(id) || null);
+export const dropPending = id => pending.delete(id);
 
 // ---------- 收件服务 ----------
 let srv = null, srvKey = '', srvErr = '';
@@ -73,19 +89,22 @@ export function applyListener(c, handler, log) {
   srv.listen(c.port, ip, () => log?.('peer listener on', key));
 }
 
-// ---------- 发给对方 ----------
-export async function remoteCall(c, sub, body, ms = 10 * 60 * 1000) {
-  const url = remoteUrl(c);
-  if (!url) throw new Error('还没填对方的地址');
+// ---------- 请求对方 ----------
+// base：对方的协同地址（可以带 ?参数）；sub 接在路径后面；token 放请求头
+export async function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } = {}) {
+  if (!base) throw new Error('没有对方的地址');
+  const u = new URL(base);
+  if (sub) u.pathname = u.pathname.replace(/\/+$/, '') + sub;
+  const headers = {};
+  if (token) headers.authorization = 'Bearer ' + token;
+  if (body) headers['content-type'] = 'application/json';
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
   try {
-    // 子路径（/sessions）接在路径后面，保留网址里原有的 ?参数
-    const u = new URL(url);
-    if (sub) u.pathname = u.pathname.replace(/\/+$/, '') + sub;
-    const r = await fetch(u, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal } : { signal: ctl.signal });
+    const r = await fetch(u, { method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined, signal: ctl.signal });
     const text = await r.text();
     let j; try { j = JSON.parse(text); } catch { j = { ok: r.ok, reply: text }; }
-    if (!r.ok && !j.error) j.error = 'HTTP ' + r.status;
+    if (!r.ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + r.status; }
+    j.status = r.status;
     return j;
   } catch (e) {
     throw new Error(e.name === 'AbortError' ? '对方超时没有回复' : '连不上对方：' + (e.cause?.code || e.message));

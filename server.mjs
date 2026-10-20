@@ -13,7 +13,7 @@ import { z } from 'zod';
 import * as push from './push.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
-import { loadPeer, savePeer, newCode, codeMatches, lanIp, ourUrl, remoteUrl, applyListener, peerStatus, remoteCall, PEER_PATH } from './peer.mjs';
+import { loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning } from './dsh.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
@@ -435,30 +435,39 @@ function claclawMcp(sessionId) {
       // claclaw 协同：只有加入协同的会话能用（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
-        '查看协同对方（另一台电脑上的 claclaw 或兼容服务）有哪些会话可以对话。只在用户要你和「对方 / 另一台电脑的会话」沟通时使用。',
-        {},
-        async () => {
+        '查看协同对方（局域网里另一台电脑上、已经和我们配对的 claclaw 或兼容服务）有哪些会话可以对话。只在用户要你和「对方 / 另一台电脑的会话」沟通时使用。不填 peer 就列出所有已配对的对方。',
+        { peer: z.string().optional().describe('对方名字（已配对列表里的名字），可省略') },
+        async ({ peer }) => {
           const c = loadPeer();
           if (!c.enabled || !c.sessions.includes(sessionId)) return { content: [{ type: 'text', text: '这个会话没有加入 claclaw 协同' }], isError: true };
-          try { const j = await remoteCall(c, '/sessions', null, 15000); return { content: [{ type: 'text', text: JSON.stringify(j, null, 2) }] }; }
-          catch (e) { return { content: [{ type: 'text', text: e.message }], isError: true }; }
+          const list = c.peers.filter(p => p.inbox && p.theirToken && (!peer || p.name === peer));
+          if (!list.length) return { content: [{ type: 'text', text: peer ? '没有叫「' + peer + '」的已配对对方' : '还没有可以联系的已配对对方（对方配对时没有提供收件地址的话，只能由对方来找我们）' }], isError: true };
+          const out = [];
+          for (const p of list) {
+            try { const j = await callPeer(p.inbox, '/sessions', { token: p.theirToken, ms: 15000 }); out.push({ peer: p.name, ok: j.ok, sessions: j.sessions, error: j.error }); }
+            catch (e) { out.push({ peer: p.name, ok: false, error: e.message }); }
+          }
+          return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
         },
         { alwaysLoad: true },
       ),
       tool(
         'peer_send',
-        '给协同对方（另一台电脑上的 AI 会话）发一条消息，等对方这一轮回复完，返回对方的回复原文（最多等 10 分钟）。' +
+        '给协同对方（局域网里另一台电脑上、已配对的 AI 会话）发一条消息，等对方这一轮回复完，返回对方的回复原文（最多等 10 分钟）。' +
         '用于和对方的会话沟通、提问、交付结果。不要在消息里发送密码、令牌、密钥。' +
-        '对方有多个会话时用 session 指定（peer_sessions 列出的 id），只有一个时可以不填。',
-        { text: z.string().describe('消息正文，4000 字以内'), session: z.string().optional().describe('对方会话 id，可省略') },
-        async ({ text, session }) => {
+        '有多个已配对对方时用 peer 指定名字；对方有多个会话时用 session 指定（peer_sessions 列出的 id），只有一个时可以不填。',
+        { text: z.string().describe('消息正文，4000 字以内'), peer: z.string().optional().describe('对方名字，只配对了一个时可省略'), session: z.string().optional().describe('对方会话 id，可省略') },
+        async ({ text, peer, session }) => {
           const c = loadPeer();
           if (!c.enabled || !c.sessions.includes(sessionId)) return { content: [{ type: 'text', text: '这个会话没有加入 claclaw 协同' }], isError: true };
+          const can = c.peers.filter(p => p.inbox && p.theirToken);
+          const p = peer ? can.find(x => x.name === peer) : can.length === 1 ? can[0] : null;
+          if (!p) return { content: [{ type: 'text', text: peer ? '没有叫「' + peer + '」的已配对对方' : can.length ? '有多个已配对对方，用 peer 指定：' + can.map(x => x.name).join('、') : '还没有可以联系的已配对对方' }], isError: true };
           const r = runners.get(sessionId);
-          const from = (r?.info?.customTitle || r?.info?.summary || '会话') + ' · ' + os.hostname().replace(/\.local$/, '');
+          const from = (r?.info?.customTitle || r?.info?.summary || '会话') + ' · ' + myName(c);
           try {
-            const j = await remoteCall(c, '', { from, text: String(text).slice(0, 4000), session });
-            log('peer send', sessionId.slice(0, 8), j.ok ? 'ok' : 'fail');
+            const j = await callPeer(p.inbox, '', { token: p.theirToken, body: { from, text: String(text).slice(0, 4000), session } });
+            log('peer send', sessionId.slice(0, 8), '→', p.name, j.ok ? 'ok' : 'fail');
             return { content: [{ type: 'text', text: j.ok ? (j.reply || '（对方这一轮没有文字回复）') : '对方返回错误：' + (j.error || '未知') }], isError: !j.ok };
           } catch (e) { return { content: [{ type: 'text', text: e.message }], isError: true }; }
         },
@@ -491,7 +500,7 @@ async function peerDeliver(info, text, from) {
   }
   const r = runners.get(id);
   if (r.busy) return [409, { ok: false, error: '这个会话正在忙，稍后再发' }];
-  const msg = '【claclaw 协同 · 来自对方：' + (from || '未署名') + '】\n' + text;
+  const msg = '【claclaw 协同 · 来自对方：' + from + '】\n' + text;
   return new Promise(resolve => {
     let reply = '', cur = '', done = false;
     const sub = { readyState: 1, visible: false, send(raw) {
@@ -510,16 +519,58 @@ async function peerDeliver(info, text, from) {
   });
 }
 const peerBusy = new Set();
+const cleanIp = ip => String(ip || '').replace(/^::ffff:/, '');
 async function peerHandler(req, res) {
   const out = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
   const c = loadPeer();
   const u = new URL(req.url, 'http://x');
-  const m = u.pathname.match(/^\/claclaw-peer\/([^/]+)(\/sessions)?\/?$/);
-  if (!c.enabled || !m || !codeMatches(decodeURIComponent(m[1]), c.code)) { res.writeHead(404); return res.end(); }
+  const sub = u.pathname.replace(/\/+$/, '');
+  if (!c.enabled || (sub !== PEER_BASE && !sub.startsWith(PEER_BASE + '/'))) { res.writeHead(404); return res.end(); }
+  const route = sub.slice(PEER_BASE.length) || '/';
+  const ip = cleanIp(req.socket.remoteAddress);
+  const readJson = async () => { try { return JSON.parse(await readBody(req, 64 * 1024)); } catch { return null; } };
   try {
+    // 1. 配对申请：谁都可以申请，但要我们这边的人把两位数配对码告诉对方才能完成
+    if (route === '/pair') {
+      if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
+      const b = await readJson() || {};
+      const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || ip;
+      const inbox = /^https?:\/\/\S+$/i.test(String(b.inbox || '')) ? String(b.inbox).slice(0, 2000) : '';
+      let p; try { p = addPending(name, ip, inbox); } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }
+      log('peer pair request from', ip, name);
+      localSound();
+      push.sendAll({ title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/' }, log).catch(() => {});
+      return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要两位数配对码，然后调用 pair/confirm' });
+    }
+    if (route === '/pair/confirm') {
+      if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
+      const b = await readJson() || {};
+      const p = getPending(String(b.requestId || ''));
+      if (!p) return out(404, { ok: false, error: '配对申请不存在或已过期，请重新申请' });
+      if (String(b.code || '').trim() !== p.code) {
+        p.tries++;
+        if (p.tries >= 3) { dropPending(p.id); return out(403, { ok: false, error: '配对码错了 3 次，这次申请作废，请重新申请' }); }
+        return out(403, { ok: false, error: '配对码不对，还能试 ' + (3 - p.tries) + ' 次' });
+      }
+      dropPending(p.id);
+      const token = newToken();
+      const theirToken = typeof b.token === 'string' && b.token.length >= 16 ? b.token.slice(0, 200) : '';
+      const c2 = loadPeer();
+      c2.peers = c2.peers.filter(x => !(x.inbox && x.inbox === p.inbox && p.inbox));   // 同一个对方地址重新配对：替换旧的
+      c2.peers.push({ id: newId(), name: p.name, ip: p.ip, inbox: p.inbox, tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
+      savePeer(c2);
+      log('peer paired', p.ip, p.name, theirToken ? 'two-way' : 'one-way');
+      return out(200, { ok: true, token, name: myName(c2), inbox: ourBase(c2) });
+    }
+    // 2. 配对后的正常收发：请求头带钥匙
+    const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const peer = findPeerByToken(c, auth);
+    if (!peer) return out(401, { ok: false, error: '还没配对，或钥匙不对：先 POST ' + PEER_BASE + '/pair 申请配对' });
+    if (peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
     const infos = await peerSessionInfos(c);
     const brief = infos.map(s => ({ id: s.sessionId.slice(0, 8), title: s.customTitle || s.summary || '', busy: !!runners.get(s.sessionId)?.busy }));
-    if (m[2]) return out(200, { ok: true, sessions: brief });
+    if (route === '/sessions') return out(200, { ok: true, name: myName(c), sessions: brief });
+    if (route !== '/') return out(404, { ok: false, error: '没有这个接口' });
     if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST 发消息' });
     let body = ''; try { body = await readBody(req, 64 * 1024); } catch { return out(413, { ok: false, error: '消息太长' }); }
     let text = body, from = '', want = '';
@@ -531,17 +582,20 @@ async function peerHandler(req, res) {
     if (!info) return out(400, { ok: false, error: want ? '没有这个会话' : '有多个会话，用 session 指定一个', sessions: brief });
     if (peerBusy.has(info.sessionId)) return out(429, { ok: false, error: '上一条还在处理，稍后再发' });
     peerBusy.add(info.sessionId);
-    log('peer in', req.socket.remoteAddress, '→', info.sessionId.slice(0, 8), text.length + ' chars');
-    try { const [code, obj] = await peerDeliver(info, text, from); out(code, obj); }
+    log('peer in', peer.name, ip, '→', info.sessionId.slice(0, 8), text.length + ' chars');
+    try { const [code, obj] = await peerDeliver(info, text, peer.name + (from && from !== peer.name ? ' · ' + from : '')); out(code, obj); }
     finally { peerBusy.delete(info.sessionId); }
   } catch (e) { out(500, { ok: false, error: e.message }); }
 }
+// 我们向对方发起的配对（只放内存）
+let outPair = null;   // {base, requestId, token, expiresAt}
 function peerPublic(c, local) {
   return {
-    local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions,
-    ip: lanIp(), code: local ? c.code : undefined, url: local ? ourUrl(c) : undefined,
-    remote: local ? c.remote : { ip: c.remote.ip ? '已设置' : '' }, remoteUrl: local ? remoteUrl(c) : undefined,
-    ...peerStatus(),
+    local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c),
+    ip: lanIp(), base: ourBase(c), ...peerStatus(),
+    pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
+    peers: c.peers.map(p => ({ id: p.id, name: p.name, ip: p.ip, inbox: local ? p.inbox : undefined, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt } : null,
   };
 }
 setTimeout(() => applyListener(loadPeer(), peerHandler, log), 1000);
@@ -1306,31 +1360,54 @@ const handler = async (req, res) => {
       try { return sendJson(res, 200, await ocSessionList(log), { 'cache-control': 'no-store' }); }
       catch (e) { return sendJson(res, 502, { error: e.message }); }
     }
-    if (url.pathname === '/api/peer' || url.pathname === '/api/peer/test') {
+    if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
       const local = isLocalReq(req), c = loadPeer();
-      if (req.method === 'GET') return sendJson(res, 200, peerPublic(c, local));
+      if (req.method === 'GET' && url.pathname === '/api/peer') return sendJson(res, 200, peerPublic(c, local));
       if (!local) return sendJson(res, 403, { error: '只能在这台电脑上用 127.0.0.1 打开网页时设置协同' });
-      if (url.pathname === '/api/peer/test') {
-        // 验证对方：能列出会话就算配对成功，记下时间（页面上显示「已配对」）
-        try {
-          const j = await remoteCall(c, '/sessions', null, 8000);
-          if (j.ok && !c.remote.pairedAt) { c.remote.pairedAt = Date.now(); savePeer(c); }
-          return sendJson(res, 200, { ...j, pairedAt: c.remote.pairedAt || 0 });
-        } catch (e) { return sendJson(res, 200, { ok: false, error: e.message, pairedAt: c.remote.pairedAt || 0 }); }
+      let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024) || '{}'); } catch {}
+      const act = url.pathname.slice('/api/peer'.length);
+      if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
+      if (act === '/revoke') { c.peers = c.peers.filter(p => p.id !== b.id); savePeer(c); log('peer revoked', b.id); return sendJson(res, 200, peerPublic(c, true)); }
+      if (act === '/check') {
+        // 已配对的对方在不在线：能用钥匙列出对方的会话就算在线
+        const out = await Promise.all(c.peers.map(async p => {
+          if (!p.inbox || !p.theirToken) return { id: p.id, online: null };
+          try { const j = await callPeer(p.inbox, '/sessions', { token: p.theirToken, ms: 6000 }); return { id: p.id, online: !!j.ok, sessions: j.sessions || [], error: j.ok ? undefined : j.error }; }
+          catch (e) { return { id: p.id, online: false, error: e.message }; }
+        }));
+        return sendJson(res, 200, out);
       }
-      let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024)); } catch {}
+      if (act === '/pair-start') {
+        // 我们向对方申请配对：对方页面会出现申请和两位数配对码，对方的人把码告诉你
+        const base = String(b.url || '').trim().replace(/\/+$/, '');
+        if (!/^https?:\/\/\S+$/i.test(base)) return sendJson(res, 400, { error: '对方地址要以 http:// 开头，例如 http://192.168.1.x:8788/claclaw-peer' });
+        if (!c.enabled) return sendJson(res, 400, { error: '先开启我们这边的协同（对方要能回连我们）' });
+        try {
+          const j = await callPeer(base, '/pair', { body: { name: myName(c), inbox: ourBase(c) }, ms: 8000 });
+          if (!j.ok || !j.requestId) return sendJson(res, 200, { error: '对方没有接受申请：' + (j.error || 'HTTP ' + j.status) });
+          outPair = { base, requestId: j.requestId, token: newToken(), expiresAt: Date.now() + (Number(j.expiresIn) || 300) * 1000 };
+          return sendJson(res, 200, peerPublic(c, true));
+        } catch (e) { return sendJson(res, 200, { error: e.message }); }
+      }
+      if (act === '/pair-finish') {
+        if (!outPair || outPair.expiresAt < Date.now()) return sendJson(res, 400, { error: '配对申请已过期，请重新发起' });
+        try {
+          const j = await callPeer(outPair.base, '/pair/confirm', { body: { requestId: outPair.requestId, code: String(b.code || '').trim(), token: outPair.token }, ms: 8000 });
+          if (!j.ok || !j.token) { if (/作废|过期|不存在/.test(j.error || '')) outPair = null; return sendJson(res, 200, { error: j.error || '配对失败' }); }
+          const c2 = loadPeer();
+          c2.peers = c2.peers.filter(p => p.inbox !== outPair.base);
+          c2.peers.push({ id: newId(), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox: outPair.base, tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
+          savePeer(c2); outPair = null;
+          log('peer paired (we asked)', c2.peers.at(-1).name);
+          return sendJson(res, 200, { ...peerPublic(c2, true), paired: c2.peers.at(-1).name });
+        } catch (e) { return sendJson(res, 200, { error: e.message }); }
+      }
+      if (act === '/pair-cancel') { outPair = null; return sendJson(res, 200, peerPublic(c, true)); }
+      if (act !== '') return sendJson(res, 404, { error: 'not found' });
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
       if (typeof b.dir === 'string') c.dir = b.dir;
+      if (typeof b.name === 'string') c.name = b.name.replace(/\s+/g, ' ').trim().slice(0, 40);
       if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x)).slice(0, 50);
-      if (b.regenerate || (b.enabled && !c.code)) c.code = newCode();
-      if (b.remote && typeof b.remote === 'object') {
-        const url = String(b.remote.url || '').trim();
-        if (url && !/^https?:\/\/[^\s]+$/i.test(url)) return sendJson(res, 400, { error: '完整地址要以 http:// 或 https:// 开头，中间不能有空格' });
-        if (url.length > 4000) return sendJson(res, 400, { error: '地址太长（最多 4000 个字符）' });
-        const nr = { ip: String(b.remote.ip || '').trim().slice(0, 300), port: Number(b.remote.port) || 8788, code: String(b.remote.code || '').trim().slice(0, 64), url };
-        const same = nr.ip === c.remote.ip && nr.port === c.remote.port && nr.code === c.remote.code && nr.url === (c.remote.url || '');
-        c.remote = { ...nr, pairedAt: same ? c.remote.pairedAt || 0 : 0 };   // 对方地址改了就要重新验证
-      }
       if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
       if (c.enabled && !c.sessions.length) return sendJson(res, 400, { error: '先选至少一个会话加入协同' });
       savePeer(c);
