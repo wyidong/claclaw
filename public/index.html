@@ -418,6 +418,26 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #clawPane{display:none}
 #hostPane{display:none}
 /* 宿主页的分组卡片（手机和电脑共用） */
+.h-link{cursor:pointer}
+.h-link:active{background:var(--surface)}
+.h-link .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-left:2px}
+.pe-back{display:inline-flex;align-items:center;gap:4px;margin:0 0 10px;padding:4px 6px;border:0;background:none;color:var(--accent);font:inherit;font-size:14px;cursor:pointer}
+.pe-in{flex:1;min-width:0;max-width:62%;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right}
+.pe-in.mono,.pe-mono{font-family:var(--mono)}
+select.pe-in{text-align-last:right}
+.pe-ss{display:flex;flex-direction:column}
+.pe-ss label{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:14px;cursor:pointer}
+.pe-ss label+label{border-top:.5px solid var(--line)}
+.pe-ss label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-ss small{flex:none;color:var(--muted);font-family:var(--mono);font-size:12px}
+.pe-btns{display:flex;gap:10px;flex-wrap:wrap;padding:12px 14px}
+.pe-btn{height:34px;padding:0 14px;border:0;border-radius:9px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.pe-btn.pri{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.pe-btn.del{color:var(--deny)}
+.pe-note{margin:8px 14px 0;font-size:12.5px;line-height:1.6;color:var(--muted)}
+.pe-err{margin:8px 14px 0;font-size:13px;color:var(--deny)}
+.pe-ok{margin:8px 14px 0;font-size:13px;color:var(--allow)}
+.pe-url{display:block;padding:10px 14px;font-family:var(--mono);font-size:13px;word-break:break-all;user-select:all}
 #hostBody{display:flex;flex-direction:column;gap:18px}
 .h-empty{padding:40px 16px;text-align:center;color:var(--muted)}
 .h-h{margin:0 14px 7px;font-size:12.5px;color:var(--muted)}
@@ -1671,6 +1691,7 @@ function railTab(set){mTab(set?'set':'chats')}
 function mTab(t){
   var app=$('#app');
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
+  if(t!=='host'){hostView='';peerWatch(false)}
   hostLive(t==='host');
   $('#railSet').classList.toggle('on',t==='set');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host');
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t)});
@@ -1690,7 +1711,10 @@ function hRow(k,v,sub,bar,low){   // bar：0~1 的占用条；low：越低越要
     (bar!=null?'<span class="h-bar'+((low?bar<=0.2:bar>=0.85)?' hi':'')+'"><i style="width:'+Math.round(bar*100)+'%"></i></span>':'')+'</span></div>';
 }
 function hSec(h,rows){return rows?'<div><div class="h-h">'+esc(h)+'</div><div class="h-card">'+rows+'</div></div>':''}
+var hostView='',peerSt=null;   // hostView='peer'：宿主页里打开了「claclaw 协同」子页面，暂停自动刷新
 function loadHost(){
+  if(hostView)return;
+  fetch('/api/peer').then(function(r){return r.json()}).then(function(j){peerSt=j}).catch(function(){});
   fetch('/api/host').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(x){
     if(!$('#app').classList.contains('host-on'))return;
     var c=x.computer,L=x.load,h='';
@@ -1701,7 +1725,8 @@ function loadHost(){
       hRow('内存',fmtBytes(mem.used)+' / '+fmtBytes(mem.total),'',mem.used/mem.total)+
       (dk?hRow('磁盘',fmtBytes(dk.total-dk.free)+' / '+fmtBytes(dk.total),'剩余 '+fmtBytes(dk.free),(dk.total-dk.free)/dk.total):'')+
       (b?hRow('电池',b.percent+'%',(b.ac?'接着电源':'用电池')+(b.state&&b.state!=='AC attached'?' · '+({charging:'充电中',discharging:'放电中',charged:'已充满','finishing charge':'即将充满'}[b.state]||b.state):''),b.percent/100,true):''));
-    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip))}).join('')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、')));
+    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip))}).join('')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、'))
+      +'<div class="h-row h-link" data-act="peer"><span class="k">claclaw 协同</span><span class="v">'+(peerSt?(peerSt.enabled?(peerSt.listening?'已开启 · '+peerSt.sessions.length+' 个会话':'已开启 · 未在监听'):'未开启'):'')+'</span><span class="chev" aria-hidden="true"></span></div>');
     var k=x.claclaw;
     h+=hSec('claclaw',
       hRow('版本',esc(k.commit||'未知'),k.commitAt?new Date(k.commitAt).toLocaleString():'')+
@@ -1717,6 +1742,110 @@ function loadHost(){
     }).join(''));
     $('#hostBody').innerHTML=h;
   }).catch(function(e){if(!$('#hostBody .h-row'))$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
+}
+// ---------- 宿主 → claclaw 协同 ----------
+// 两台电脑的会话互发消息。只有在本机用 127.0.0.1 打开时能改设置；第一版只走局域网
+var peerCfg=null,peerList=null,peerMsg={};
+$('#hostBody').addEventListener('click',function(e){
+  var a=e.target.closest('[data-act]');if(!a)return;
+  var act=a.dataset.act;
+  if(act==='peer'){hostView='peer';peerMsg={};loadPeerPage();return}
+  if(act==='peer-back'){hostView='';peerWatch(false);$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return}
+  if(act==='peer-copy'){copyText(a.dataset.copy);return}
+  if(act==='peer-regen'){peerSave({regenerate:true},'已生成新的配对码，记得把新地址发给对方');return}
+  if(act==='peer-on'){peerSave(peerForm(true),'协同已开启')}
+  if(act==='peer-save'){peerSave(peerForm(peerCfg&&peerCfg.enabled),'已保存')}
+  if(act==='peer-off'){peerSave({enabled:false},'协同已关闭')}
+  if(act==='peer-remote'){peerSave({remote:peerRemoteForm()},'',peerTest)}
+  if(act==='peer-test'){peerTest()}
+});
+$('#hostBody').addEventListener('change',function(e){
+  if(e.target.id==='peDir'){peerCfg.dir=e.target.value;peerCfg.sessions=[];renderPeer()}
+});
+function peerForm(enabled){
+  var port=+(($('#pePort')||{}).value||8788);
+  var ss=[].map.call(document.querySelectorAll('#hostBody .pe-ss input:checked'),function(x){return x.value});
+  return {enabled:enabled,port:port,dir:($('#peDir')||{}).value||'',sessions:ss};
+}
+function peerRemoteForm(){return {ip:$('#peRip').value.trim(),port:+$('#peRport').value||8788,code:$('#peRcode').value.trim()}}
+function peerSave(body,okText,then){
+  fetch('/api/peer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+    if(!x.ok){peerMsg={err:x.j.error||'保存失败'};renderPeer();return}
+    peerCfg=x.j;peerSt=x.j;peerMsg=x.j.error?{err:x.j.error}:okText?{ok:okText}:{};renderPeer();
+    if(then&&!x.j.error)then();
+  }).catch(function(e){peerMsg={err:e.message};renderPeer()});
+}
+// 验证 / 检查对方：能列出对方的会话 = 配对成功、对方在线
+var peerOnline=null,peerTimer=null,peerSessions=[];
+function peerTest(silent){
+  if(!silent){peerMsg={ok:'正在连接对方…'};renderPeer()}
+  return fetch('/api/peer/test',{method:'POST'}).then(function(r){return r.json()}).then(function(j){
+    peerOnline=!!j.ok;if(j.ok)peerSessions=j.sessions||[];
+    if(peerCfg&&peerCfg.remote)peerCfg.remote.pairedAt=j.pairedAt||0;
+    if(!silent)peerMsg=j.ok?{ok:'配对成功'}:{err:'配对失败：'+(j.error||'连不上对方')};
+    if(silent)paintPeerLive();else renderPeer();
+  }).catch(function(e){peerOnline=false;if(silent)paintPeerLive();else{peerMsg={err:e.message};renderPeer()}});
+}
+// 页面开着时每 10 秒查一次对方在不在线，只更新那一行，不动正在填的输入框
+function peerWatch(on){
+  clearInterval(peerTimer);peerTimer=null;
+  if(on)peerTimer=setInterval(function(){if(hostView==='peer'&&!document.hidden&&peerCfg&&peerCfg.remoteUrl)peerTest(true)},10000);
+}
+function peerLiveHtml(){
+  var r=(peerCfg&&peerCfg.remote)||{};
+  if(!peerCfg||!peerCfg.remoteUrl)return '还没填';
+  var dot='<i class="h-dot'+(peerOnline?' on':'')+'"></i>';
+  return dot+(peerOnline===null?'检查中…':peerOnline?(r.pairedAt?'已配对 · 在线':'在线'):(r.pairedAt?'已配对 · 离线':'连不上'))+
+    (peerOnline&&peerSessions.length?'<small>对方会话：'+esc(peerSessions.map(function(s){return s.title||s.id}).join('、'))+'</small>':'');
+}
+function paintPeerLive(){var el=$('#peLive');if(el)el.innerHTML=peerLiveHtml()}
+function loadPeerPage(){
+  $('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';
+  Promise.all([fetch('/api/peer').then(function(r){return r.json()}),fetch('/api/sessions').then(function(r){return r.json()})]).then(function(x){
+    peerCfg=x[0];peerList=Array.isArray(x[1])?x[1]:[];peerOnline=null;peerSessions=[];
+    if(peerCfg.local&&peerCfg.remoteUrl)peerTest(true);
+    peerWatch(!!peerCfg.local);
+    if(!peerCfg.dir&&peerCfg.sessions.length){var f=peerList.find(function(s){return s.id===peerCfg.sessions[0]});if(f)peerCfg.dir=f.cwd}
+    renderPeer();
+  }).catch(function(e){$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
+}
+function renderPeer(){
+  if(hostView!=='peer'||!peerCfg)return;
+  var c=peerCfg,h='<button type="button" class="pe-back" data-act="peer-back">‹ 宿主</button>';
+  var msg=(peerMsg.err?'<div class="pe-err">'+esc(peerMsg.err)+'</div>':'')+(peerMsg.ok?'<div class="pe-ok">'+esc(peerMsg.ok)+'</div>':'');
+  if(!c.local){
+    h+=hSec('claclaw 协同',hRow('状态',c.enabled?(c.listening?'已开启':'已开启 · 未在监听'):'未开启')+hRow('加入的会话',String(c.sessions.length)))+
+      '<div class="pe-note">协同要在这台电脑上用 <span class="pe-mono">http://127.0.0.1:'+location.port+'</span> 打开网页时设置（配对码只在本机显示）。</div>';
+    $('#hostBody').innerHTML=h;return;
+  }
+  // 会话目录：Claude 会话按目录归组，最近用过的目录在前
+  var dirs=[];peerList.forEach(function(s){if(s.cwd&&!s.claw&&dirs.indexOf(s.cwd)<0)dirs.push(s.cwd)});
+  if(c.dir&&dirs.indexOf(c.dir)<0)dirs.unshift(c.dir);
+  var dirSel='<select id="peDir" class="pe-in"><option value="">选择目录</option>'+dirs.map(function(d){return '<option value="'+esc(d)+'"'+(d===c.dir?' selected':'')+'>'+esc(d.replace(/^\/(Users|home)\/[^\/]+/,'~'))+'</option>'}).join('')+'</select>';
+  var ss=peerList.filter(function(s){return s.cwd===c.dir&&!s.claw});
+  var ssHtml=c.dir?(ss.length?'<div class="pe-ss">'+ss.map(function(s){return '<label><input type="checkbox" value="'+esc(s.id)+'"'+(c.sessions.indexOf(s.id)>=0?' checked':'')+'><span>'+esc(s.title||'(无标题)')+'</span><small>'+esc(s.id.slice(0,8))+'</small></label>'}).join('')+'</div>':'<div class="pe-note" style="margin-bottom:10px">这个目录下没有会话</div>'):'';
+  h+='<div><div class="h-h">我们这边</div><div class="h-card">'+
+    '<div class="h-row"><span class="k">状态</span><span class="v">'+(c.enabled?(c.listening?'已开启，正在接收':'已开启，但没在监听'):'未开启')+'</span></div>'+
+    '<div class="h-row"><span class="k">端口</span><input id="pePort" class="pe-in mono" type="number" min="1024" max="65535" value="'+c.port+'"></div>'+
+    '<div class="h-row"><span class="k">会话目录</span>'+dirSel+'</div>'+ssHtml+
+    '<div class="pe-btns">'+(c.enabled?'<button type="button" class="pe-btn pri" data-act="peer-save">保存</button><button type="button" class="pe-btn" data-act="peer-regen">重新生成配对码</button><button type="button" class="pe-btn del" data-act="peer-off">关闭协同</button>':'<button type="button" class="pe-btn pri" data-act="peer-on">生成配对码并开启</button>')+'</div>'+
+    '</div><div class="pe-note">只能选一个会话目录，可以勾选这个目录下的多个会话。对方发来的消息会送进这些会话，回复自动返回给对方。</div></div>';
+  if(c.enabled&&c.code){
+    h+='<div><div class="h-h">发给对方（第一版只支持局域网）</div><div class="h-card">'+
+      hRow('IP',esc(c.ip||'没找到局域网 IP'))+hRow('端口',String(c.port))+hRow('配对码','<span class="pe-mono">'+esc(c.code)+'</span>')+
+      (c.url?'<span class="pe-url">'+esc(c.url)+'</span><div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.url)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc('IP：'+c.ip+'\n端口：'+c.port+'\n配对码：'+c.code+'\n地址：'+c.url)+'">复制全部</button></div>':'')+
+      '</div><div class="pe-note">配对码就是授权：拿到它的人能往上面这些会话发消息。只发给信任的人；要作废就点「重新生成配对码」。</div></div>';
+  }
+  var r=c.remote||{};
+  h+='<div><div class="h-h">对方</div><div class="h-card">'+
+    '<div class="h-row"><span class="k">状态</span><span class="v" id="peLive">'+peerLiveHtml()+'</span></div>'+
+    '<div class="h-row"><span class="k">IP</span><input id="peRip" class="pe-in mono" placeholder="192.168.1.x 或完整地址" value="'+esc(r.ip||'')+'"></div>'+
+    '<div class="h-row"><span class="k">端口</span><input id="peRport" class="pe-in mono" type="number" value="'+esc(r.port||8788)+'"></div>'+
+    '<div class="h-row"><span class="k">配对码</span><input id="peRcode" class="pe-in mono" placeholder="XXXX-XXXX-XXXX-XXXX" value="'+esc(r.code||'')+'"></div>'+
+    (c.remoteUrl?'<span class="pe-url">'+esc(c.remoteUrl)+'</span>':'')+
+    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-remote">保存并验证</button><button type="button" class="pe-btn" data-act="peer-test">重新检查</button></div>'+
+    '</div><div class="pe-note">填对方给的 IP、端口、配对码（对方不是 claclaw 时，IP 一栏可以直接填完整地址）。保存后，加入协同的会话里会多两个工具：查看对方的会话、给对方发消息。</div></div>';
+  $('#hostBody').innerHTML=h+msg;
 }
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
 var clawSel=null;try{clawSel=localStorage.getItem('claclaw.claw')}catch(_){}
