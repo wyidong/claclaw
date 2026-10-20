@@ -491,3 +491,6 @@ export function dsSessionDir(id) {
   const f = isDs(id) ? fileOf(sidOf(id)) : null;
   return f ? path.dirname(f) : null;
 }
+
+// dsh 的 ACP 进程在不在跑（宿主页用）
+export const dsAcpRunning = () => !!proc;

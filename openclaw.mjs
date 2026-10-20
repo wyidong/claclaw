@@ -274,3 +274,10 @@ export async function ocDelete(id, log) {
   if (!row.archived) await call('sessions.patch', { key, archived: true, expectedSessionId: row.sessionId }, log);
   await call('sessions.delete', { key, archivedOnly: true }, log);
 }
+
+// 网关连得上吗（宿主页用；最多等 2 秒）
+export async function ocGatewayUp(log) {
+  if (!config()) return false;
+  try { await Promise.race([connect(log), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]); return true; }
+  catch { return false; }
+}

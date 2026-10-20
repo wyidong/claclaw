@@ -11,8 +11,10 @@ import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
-import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete } from './openclaw.mjs';
-import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir } from './dsh.mjs';
+import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp } from './openclaw.mjs';
+import { hostInfo } from './host.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning } from './dsh.mjs';
+const STARTED_AT = Date.now();
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
@@ -1159,6 +1161,19 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'openclaw') {
       try { return sendJson(res, 200, await ocSessionList(log), { 'cache-control': 'no-store' }); }
       catch (e) { return sendJson(res, 502, { error: e.message }); }
+    }
+    if (url.pathname === '/api/host') {
+      const live = m => [...m.values()].filter(r => !r.closed);
+      const count = m => ({ open: live(m).length, busy: live(m).filter(r => r.busy).length });
+      const claws = Object.fromEntries(detectClaws().map(c => [c.id, { installed: c.installed }]));
+      claws.openclaw.up = claws.openclaw.installed ? await ocGatewayUp(log) : false;
+      claws.deepseek.up = dsAcpRunning();
+      const info = await hostInfo({
+        root: ROOT, port: PORT, hosts: HOSTS, https: getHttpsUrl(), startedAt: STARTED_AT,
+        sessions: { claude: count(runners), openclaw: count(ocRunners), deepseek: count(dsRunners), push: push.subscriptionCount() },
+        claws: { claude: { ...claws.claude, ...count(runners) }, openclaw: { ...claws.openclaw, ...count(ocRunners) }, deepseek: { ...claws.deepseek, ...count(dsRunners) } },
+      });
+      return sendJson(res, 200, info, { 'cache-control': 'no-store' });
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'deepseek') {
       try { return sendJson(res, 200, dsSessionList({ busy: id => !!dsRunners.get(id)?.busy }), { 'cache-control': 'no-store' }); }
