@@ -59,7 +59,9 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 @media (min-width:800px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 
 header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;border-bottom:1px solid var(--line);background:var(--surface)}
-#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 0;border:0;background:none;text-align:left}
+#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
+/* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
+#sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:bottom;margin:0 6px;line-height:1.4;border-radius:2px;background:var(--code-bg);box-shadow:0 0 0 1px var(--code-bg),-6px 0 0 1px var(--code-bg),6px 0 0 1px var(--code-bg)}   /* 底色用阴影往两边延伸：padding 会把被裁掉的字露出来 */
 #sessBtn .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
 #sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn .sid{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -531,7 +533,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
   /* 聊天区标题：像微信，只有名字加粗，没有框 */
   header{padding:0 20px;min-height:56px;background:var(--surface)}
-  #sessBtn{border:0;background:none;padding:0;min-height:56px;cursor:default}
+  #sessBtn{border:0;background:none;padding:0;min-height:56px;cursor:text}
   #sessBtn .nm{font-size:17px}
   #sessBtn>svg{display:none}
   #modeSel{min-height:34px}
@@ -570,10 +572,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   <header>
     <button id="backBtn" type="button" aria-label="返回会话列表"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <div id="hdCard">
-    <button id="sessBtn" type="button" aria-label="切换会话">
+    <!-- 不用 <button>：按钮里的字不能用鼠标选中复制。会话名、ID、目录、分支都可以直接拖选 -->
+    <div id="sessBtn" role="button" tabindex="0" aria-label="切换会话">
       <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
-    </button>
+    </div>
     <label id="modeWrap" data-m="default"><span class="d-only">会话模式：</span><select id="modeSel" aria-label="会话模式"></select></label>
     </div>
   </header>
@@ -1477,7 +1480,8 @@ function setHeader(){
   var t=(session.title||'').trim(),dir=session.dir||'';
   $('#nm').textContent=t||dir||'会话';
   var sid=$('#sid');sid.textContent='';
-  var idEl=document.createElement('span');idEl.className='cpid';idEl.dataset.copy=session.id;idEl.title='点击复制完整会话 ID';idEl.textContent=shortId(session.id);
+  var full=/^[0-9a-f]{8}-/i.test(session.id);   // Claude 的 UUID：放完整 ID、只露出前 8 位；其它的直接放短 ID
+  var idEl=document.createElement('span');idEl.className='hid';idEl.title=session.id;idEl.textContent=full?session.id:shortId(session.id);
   sid.appendChild(idEl);
   // 目录 · 分支：标题栏放不下会被截断，鼠标停留看完整的；「已恢复会话」那行也写全了
   var where=(t?dir:'')+(session.branch?(t&&dir?' · ':'')+session.branch:'');
@@ -1992,7 +1996,8 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
-$('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)openSheet();else goList()});
+// 电脑上会话列表常驻，点标题栏不用做什么（留给拖选复制）；手机上点标题栏回会话列表，刚选了字就不跳
+$('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)return;if(String(getSelection()||'').trim())return;goList()});
 // ---------- 手机：列表页 ⇄ 聊天页 ----------
 var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
 function goList(){
