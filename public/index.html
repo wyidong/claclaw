@@ -2219,7 +2219,7 @@ $('#newForm').addEventListener('submit',function(e){
 // ---------- 会话改名 ----------
 
 function renameSess(s){
-  if(/^(oc|ds):/.test(s.id)){alert(clawName(s.id)+' 会话暂不支持在这里改名');return}
+  if(/^ds:/.test(s.id)){alert('DeepSeek 会话暂不支持在这里改名');return}
   var t=prompt('给会话改个名字',s.title);
   if(t===null)return;
   t=t.replace(/\s+/g,' ').trim();
@@ -2234,7 +2234,6 @@ function renameSess(s){
 
 var delDlg=$('#delDlg'),delTarget=null;
 function openDel(s){
-  if(/^(oc|ds):/.test(s.id)){alert(clawName(s.id)+' 会话暂不支持在这里删除');return}
   delTarget=s;
   $('#delTitle').textContent='删除「'+s.title+'」？';
   $('#delU').value='';$('#delP').value='';$('#delErr').textContent='';$('#delGo').disabled=false;

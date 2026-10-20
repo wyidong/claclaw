@@ -11,8 +11,8 @@ import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
-import { isOc, OcRunner, ocRunners, ocSessionList } from './openclaw.mjs';
-import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown } from './dsh.mjs';
+import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete } from './openclaw.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir } from './dsh.mjs';
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
@@ -988,6 +988,26 @@ async function handleDelete(req, res) {
     return sendJson(res, 401, { error: n >= MAX_FAILS ? '失败次数太多，10 分钟内不能再试' : '初始用户名或密码不对' });
   }
   fails.delete(ip);
+  if (isOc(body.id) || isDs(body.id)) {
+    const r = (isOc(body.id) ? ocRunners : dsRunners).get(body.id);
+    if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
+    if (r?.busy) return sendJson(res, 409, { error: '这个会话还在回复，等它结束再删' });
+    r?.dispose();
+    if (isOc(body.id)) {
+      try { await ocDelete(body.id, log); } catch (e) { return sendJson(res, 502, { error: 'OpenClaw 删除失败：' + e.message }); }
+    } else {
+      // dsh：整个会话目录挪进 claclaw 的回收站（和 Claude 会话一样能找回）
+      const dir = dsSessionDir(body.id);
+      if (!dir) return sendJson(res, 404, { error: '找不到这个会话' });
+      if (r) await new Promise(ok => setTimeout(ok, 500));   // 等 dsh 关掉会话、写完收尾
+      const dest = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_dsh_' + path.basename(dir));
+      fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 });
+      fs.renameSync(dir, dest);
+      fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: body.id, from: dir, deletedAt: new Date().toISOString() }, null, 2));
+    }
+    log('deleted session', body.id);
+    return sendJson(res, 200, { ok: true });
+  }
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
   const info = list.find(s => s.sessionId === body.id);
   if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
@@ -1025,6 +1045,13 @@ async function handleRename(req, res) {
   const title = String(body.title ?? '').replace(/\s+/g, ' ').trim();
   if (!title) return sendJson(res, 400, { error: '名字不能为空' });
   if (title.length > 100) return sendJson(res, 400, { error: '名字太长了（最多 100 个字）' });
+  if (isOc(body.id)) {
+    try { await ocRename(body.id, title, log); } catch (e) { return sendJson(res, 502, { error: 'OpenClaw 改名失败：' + e.message }); }
+    const r = ocRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
+    log('renamed openclaw session', body.id);
+    return sendJson(res, 200, { ok: true, title });
+  }
+  if (isDs(body.id)) return sendJson(res, 400, { error: 'DeepSeek 会话暂不支持改名' });
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
   const info = list.find(s => s.sessionId === body.id);
   if (!info) return sendJson(res, 404, { error: '找不到这个会话' });

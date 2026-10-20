@@ -485,3 +485,9 @@ function toolLabel(name = '') {
   if (/todo/i.test(name)) return '列计划';
   return '用工具';
 }
+
+// 会话目录（删除时整个挪走）
+export function dsSessionDir(id) {
+  const f = isDs(id) ? fileOf(sidOf(id)) : null;
+  return f ? path.dirname(f) : null;
+}

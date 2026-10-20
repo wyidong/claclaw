@@ -259,3 +259,18 @@ export class OcRunner {
     call('sessions.messages.unsubscribe', { key: this.key }).catch(() => {});
   }
 }
+
+// ---------- 改名、删除 ----------
+// 改名 = 设置会话的 label。删除：普通操作员权限只能删已归档的会话，所以先归档再删（和 OpenClaw 界面的「归档后删除」一样）
+export async function ocRename(id, title, log) {
+  await call('sessions.patch', { key: keyOf(id), label: title }, log);
+}
+export async function ocDelete(id, log) {
+  const key = keyOf(id);
+  // 归档要带上当前的 sessionId（防止删到刚被重置/替换的会话）
+  const r = await call('sessions.list', { limit: 500 }, log);
+  const row = (r.sessions || []).find(s => s.key === key);
+  if (!row) throw new Error('找不到这个会话');
+  if (!row.archived) await call('sessions.patch', { key, archived: true, expectedSessionId: row.sessionId }, log);
+  await call('sessions.delete', { key, archivedOnly: true }, log);
+}
