@@ -417,6 +417,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .claw-card[aria-current="true"]{border-color:var(--accent)}
   .claw-card:disabled{opacity:.45;cursor:default}
   .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
+  .claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
   .claw-card[hidden]{display:none}
   .claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
   .claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
@@ -638,22 +639,23 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
       <h2>会话</h2>
       <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
-      <!-- Claw：选择接管哪一种 AI 助手的会话（目前只实现了 Claude） -->
+      <!-- Claw：选择接管哪一种 AI 助手的会话。logo 不放仓库，直接用各家官网公开的图标地址，
+           Service Worker 第一次取到后缓存在手机上（见 sw.js） -->
       <div id="clawPane">
         <div class="claw-h">选择 Claw</div>
         <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code 后再来。</div>
         <button type="button" class="claw-card" data-claw="claude">
-          <img class="claw-ic" src="/icons/claw-claude.png?v=1" alt="">
+          <img class="claw-ic tile" src="https://claude.com/apple-touch-icon.png" alt="">
           <span class="claw-tx"><b>Claude</b><small>Claude Code 会话：终端、VS Code、网页里开的都在这里</small></span>
           <span class="claw-st">选择</span>
         </button>
         <button type="button" class="claw-card" data-claw="openclaw">
-          <img class="claw-ic" src="/icons/claw-openclaw.png?v=2" alt="">
+          <img class="claw-ic" src="https://openclaw.ai/apple-touch-icon.png" alt="">
           <span class="claw-tx"><b>OpenClaw</b><small>本机 OpenClaw 网关的会话</small></span>
           <span class="claw-st">选择</span>
         </button>
         <button type="button" class="claw-card" data-claw="deepseek">
-          <img class="claw-ic" src="/icons/claw-deepseek.png?v=2" alt="">
+          <img class="claw-ic tile" src="https://cdn.deepseek.com/chat/icon.png" alt="">
           <span class="claw-tx"><b>DeepSeek Harness</b><small>dsh 的会话：网页版、终端里开的都在这里</small></span>
           <span class="claw-st">选择</span>
         </button>

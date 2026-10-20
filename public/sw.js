@@ -1,7 +1,17 @@
 // claclaw 的 Service Worker：只负责推送通知 —— 收到推送就弹通知，点通知回到对应会话。
-// 不做离线缓存（页面每次都要连本机服务，缓存旧页面只会添乱）。
+// 不做离线缓存（页面每次都要连本机服务，缓存旧页面只会添乱）。只有 Claw logo 例外，见下面。
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+
+// 例外：Claw 页的三个官方 logo（各家官网的公开地址）第一次取到就存下来，之后直接用缓存，离线也有
+const LOGOS = ['https://claude.com/apple-touch-icon.png', 'https://openclaw.ai/apple-touch-icon.png', 'https://cdn.deepseek.com/chat/icon.png'];
+self.addEventListener('fetch', e => {
+  if (!LOGOS.includes(e.request.url)) return;
+  e.respondWith(caches.open('claclaw-logos').then(c => c.match(e.request).then(hit => hit || fetch(e.request).then(r => {
+    if (r.ok || r.type === 'opaque') c.put(e.request, r.clone()).catch(() => {});
+    return r;
+  }))));
+});
 
 self.addEventListener('push', e => {
   let d = {};
