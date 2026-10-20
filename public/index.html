@@ -2517,7 +2517,7 @@ ttsLoadSrv();
 // 电脑合成的播放：一句一句向电脑要音频，用 Web Audio 无缝拼接着播。
 // 微软的音频每段前面带 0.15 秒、后面带 0.85 秒左右的静音，直接一段接一段放，每个切口就会停顿 1 秒；
 // 这里解码后把首尾静音裁掉，按标点留一点自然的停顿（逗号 0.12 秒、句号 0.3 秒），下一段排在上一段刚结束的时刻开始。
-var srvQ=[],srvBusy=false,srvBlocked=false,srvAC=null,srvNextAt=0,srvSrcs=[],srvGen=0;
+var srvQ=[],srvBusy=false,srvBlocked=false,srvAC=null,srvNextAt=0,srvSrcs=[],srvGen=0,srvResumeAt=0;
 function srvCtx(){
   if(!srvAC){
     var C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
@@ -2549,9 +2549,12 @@ function srvNext(){
   var it=srvQ[0];if(!it){ttsShowStop();return}
   var ac=srvCtx();if(!ac)return;
   if(ac.state!=='running'){
-    // 被挂起（去过后台、来电打断……）：先试着恢复；恢复不了才请你点一下「继续朗读」
-    if(!it.resuming){it.resuming=true;ac.resume().then(function(){srvNext()},function(){});
-      setTimeout(function(){if(srvAC.state!=='running'&&srvQ[0]===it){srvBlocked=true;tts.srvUnlocked=false;ttsShowStop()}},600);}
+    // 被挂起（去过后台、来电打断……）：先试着恢复；0.7 秒还没恢复，才请你点一下「继续朗读」
+    if(Date.now()-srvResumeAt>1500){
+      srvResumeAt=Date.now();
+      ac.resume().then(function(){if(ac.state==='running')srvNext()},function(){});
+      setTimeout(function(){if(srvAC.state!=='running'&&srvQ.length){srvBlocked=true;tts.srvUnlocked=false;ttsShowStop()}},700);
+    }
     return;
   }
   srvBusy=true;
@@ -2679,7 +2682,7 @@ $('#setTtsRate').addEventListener('change',function(e){
   ttsRateLabel();tts.srvUnlocked=false;ttsUnlock();ttsPreview('现在是这个语速，听听合不合适。');
 });
 $('#ttsStop').addEventListener('click',function(){
-  if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
+  if(srvBlocked){srvBlocked=false;srvResumeAt=0;srvUnlock(true);srvNext();setTimeout(srvNext,300);ttsShowStop();return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
   ttsStop();
 });
 document.addEventListener('visibilitychange',function(){

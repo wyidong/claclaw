@@ -1423,7 +1423,9 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/tts' && req.method === 'POST') {
       let b = {}; try { b = JSON.parse(await readBody(req, 8192)); } catch {}
       try {
+        const t0 = Date.now();
         const { buf, type } = await ttsSynth(b.text, String(b.voice || ''), b.rate);
+        log('tts', String(b.voice || ''), String(b.text || '').length + '字', (Date.now() - t0) + 'ms');
         res.writeHead(200, { 'content-type': type, 'content-length': buf.length, 'cache-control': 'no-store' });
         return res.end(buf);
       } catch (e) { log('tts failed', String(b.voice || ''), e.message); return sendJson(res, 400, { error: e.message }); }
