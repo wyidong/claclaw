@@ -1372,7 +1372,7 @@ wss.on('connection', (ws, req) => {
         log('open', m.id.slice(0, 8), info.cwd, 'history ' + histMs + 'ms');
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
-          cwdShort: relPath(info.cwd || '', null), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,
+          cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch || '', mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: runner.busy && runner.busySince ? Date.now() - runner.busySince : 0,
           pending: [...runner.pending.values()].map(p => p.req),

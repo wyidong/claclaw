@@ -1319,7 +1319,7 @@ function onEvent(m){
   switch(m.t){
   case 'session.opened':
     if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
-    session={id:m.id,title:m.title,cwd:m.cwd};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
+    session={id:m.id,title:m.title,cwd:m.cwd,branch:m.branch||''};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig);
     delete feedCache[m.id];
     if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null;histStart=(m.historyTotal||0)-fc.kept;histMore=histStart>0}   // 记录没变：直接用上次画好的，不重画、不闪
@@ -1335,7 +1335,7 @@ function onEvent(m){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
     renderHistory(m.history);
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
-    addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||''));
+    addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||'')+(m.branch?' · 分支 '+m.branch:''));
     }
     localStorage.setItem('claclaw.session',m.id);
     refreshList();goChat();bgRefreshList();
@@ -1478,7 +1478,10 @@ function setHeader(){
   $('#nm').textContent=t||dir||'会话';
   var sid=$('#sid');sid.textContent='';
   var idEl=document.createElement('span');idEl.className='cpid';idEl.dataset.copy=session.id;idEl.title='点击复制完整会话 ID';idEl.textContent=shortId(session.id);
-  sid.appendChild(idEl);if(t&&dir)sid.appendChild(document.createTextNode('　'+dir));
+  sid.appendChild(idEl);
+  // 目录 · 分支：标题栏放不下会被截断，鼠标停留看完整的；「已恢复会话」那行也写全了
+  var where=(t?dir:'')+(session.branch?(t&&dir?' · ':'')+session.branch:'');
+  if(where){var w=document.createElement('span');w.textContent='　'+where;w.title=(session.cwd||dir)+(session.branch?'\n分支：'+session.branch:'');sid.appendChild(w)}
 }
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function connect(){
@@ -1824,6 +1827,7 @@ function openSheet(silent){
       b.querySelector('.t').textContent=s.title;
       var idEl=b.querySelector('.id');idEl.textContent=shortId(s.id);idEl.classList.add('cpid');idEl.dataset.copy=s.id;idEl.title='点击复制完整会话 ID';
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
+      b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
       b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);if(!s.unsent&&s.lastModified)b.dataset.lm=s.lastModified;
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
