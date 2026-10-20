@@ -1420,6 +1420,7 @@ const handler = async (req, res) => {
     // 电脑合成语音：手机网页拿去播放（登录后才能用）
     if (url.pathname === '/api/tts/voices') return sendJson(res, 200, await ttsVoices());
     if (url.pathname === '/api/tts/warm' && req.method === 'POST') { ttsWarm(); return sendJson(res, 200, { ok: true }); }
+    if (url.pathname === '/api/tts/log' && req.method === 'POST') { let b = {}; try { b = JSON.parse(await readBody(req, 1024)); } catch {} log('tts client', String(b.m || '').replace(/\s+/g, ' ').slice(0, 200)); return sendJson(res, 200, { ok: true }); }
     if (url.pathname === '/api/tts' && req.method === 'POST') {
       let b = {}; try { b = JSON.parse(await readBody(req, 8192)); } catch {}
       try {
