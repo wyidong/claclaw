@@ -413,7 +413,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
   .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
-  .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:2px solid transparent;border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+  .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid transparent;border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
   .claw-card[aria-current="true"]{border-color:var(--accent)}
   .claw-card:disabled{opacity:.45;cursor:default}
   .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
@@ -437,7 +437,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-ren span,.s-del span{display:none}
 @media (max-width:999px){
   /* 边框画在外层（不动）：滑动时只有里面的内容往左移，编辑 / 删除也在框里 */
-  .s-row{overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+  .s-row{overflow:hidden;border:.5px solid var(--line);border-radius:12px;background:var(--bg)}
   .s-row.working{border-color:var(--allow)}
   .s-row.waiting{border-color:var(--warn)}
   .s-row:has(> .s-item[aria-current="true"]){border-color:var(--accent)}
