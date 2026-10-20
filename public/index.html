@@ -2481,7 +2481,7 @@ function ttsVoices(){
   if(!ttsOk())return [];
   var seen={};
   return speechSynthesis.getVoices().filter(function(v){
-    if(!/^zh/i.test(v.lang||''))return false;
+    if(!/^zh/i.test(v.lang||'')||/HK|yue/i.test(v.lang||''))return false;   // 不要粤语
     var k=v.name+'|'+v.lang+'|'+ttsTier(v);if(seen[k])return false;seen[k]=1;return true;   // 同名同语言同版本只留一个
   }).sort(function(a,b){return ttsScore(b)-ttsScore(a)});
 }
@@ -2505,7 +2505,8 @@ function srvLabel(v){
 function srvScore(v){var n=v.name;return (/^edge:/.test(n)?200:0)+(/Xiaoyi/.test(n)?20:/Xiaoxiao/.test(n)?15:/Yunxi/.test(n)?10:0)-(/liaoning|shaanxi/.test(n)?50:0)+(/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
 function ttsLoadSrv(){
   return fetch('/api/tts/voices').then(function(r){return r.ok?r.json():[]}).then(function(list){
-    tts.srv=(Array.isArray(list)?list:[]).sort(function(a,b){return srvScore(b)-srvScore(a)});ttsPickVoice();
+    // 只留微软的声音（Mac 自带的那几个不好听），去掉所有粤语
+    tts.srv=(Array.isArray(list)?list:[]).filter(function(v){return /^edge:/.test(v.name)&&!/HK|yue/i.test(v.lang||'')}).sort(function(a,b){return srvScore(b)-srvScore(a)});ttsPickVoice();
   }).catch(function(){});
 }
 function ttsSrvVoice(){return /^srv:/.test(tts.want)&&(tts.srv||[]).some(function(v){return 'srv:'+v.name===tts.want})?tts.want.slice(4):''}
