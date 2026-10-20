@@ -11,7 +11,7 @@ const run = (cmd, args, ms = 4000) => new Promise(ok => {
 });
 
 const slow = { at: 0, data: null };
-async function slowInfo(root) {
+export async function slowInfo(root) {   // server 启动时先跑一次，第一次打开宿主页不用等
   if (slow.data && Date.now() - slow.at < 10 * 60 * 1000) return slow.data;
   const mac = process.platform === 'darwin';
   const [name, osVer, model, claude, openclaw, gitLine] = await Promise.all([
