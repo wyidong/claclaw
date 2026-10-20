@@ -13,6 +13,7 @@ import { z } from 'zod';
 import * as push from './push.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
+import { ttsVoices, ttsSynth } from './tts.mjs';
 import { loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning } from './dsh.mjs';
 const STARTED_AT = Date.now();
@@ -1415,6 +1416,16 @@ const handler = async (req, res) => {
       await new Promise(ok => setTimeout(ok, 300));   // 等监听结果（端口被占用会马上报错）
       log('peer config saved', c.enabled ? 'on' : 'off', c.sessions.length, 'sessions');
       return sendJson(res, 200, peerPublic(c, true));
+    }
+    // 电脑合成语音：手机网页拿去播放（登录后才能用）
+    if (url.pathname === '/api/tts/voices') return sendJson(res, 200, await ttsVoices());
+    if (url.pathname === '/api/tts' && req.method === 'POST') {
+      let b = {}; try { b = JSON.parse(await readBody(req, 8192)); } catch {}
+      try {
+        const buf = await ttsSynth(b.text, String(b.voice || ''), b.rate);
+        res.writeHead(200, { 'content-type': 'audio/mp4', 'content-length': buf.length, 'cache-control': 'no-store' });
+        return res.end(buf);
+      } catch (e) { return sendJson(res, 400, { error: e.message }); }
     }
     if (url.pathname === '/api/host') {
       const live = m => [...m.values()].filter(r => !r.closed);
