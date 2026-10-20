@@ -1815,7 +1815,7 @@ function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
     var h=box.previousElementSibling,label=h.dataset.path||(h.querySelector('.gn')||{}).textContent||'',hit=0;
-    box.querySelectorAll('.s-row').forEach(function(r){var ok=!q||(label+' '+r.textContent).toLowerCase().indexOf(q)>=0;r.hidden=!ok;if(ok)hit++});
+    box.querySelectorAll('.s-row').forEach(function(r){var ok=!q||(label+' '+r.textContent+' '+(r.dataset.id||'')).toLowerCase().indexOf(q)>=0;r.hidden=!ok;if(ok)hit++});
     h.hidden=!!q&&!hit;
     if(q)box.style.display=hit?'block':'none';else box.style.display='';
   });
@@ -1912,9 +1912,8 @@ function openSheet(silent){
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
       var bz=s.busyElsewhere;
       if(bz&&!bz.canTakeover)b.dataset.busy='1';
-      b.innerHTML='<div class="t"></div><div class="m"><span class="id"></span><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
+      b.innerHTML='<div class="t"></div><div class="m"><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
-      var idEl=b.querySelector('.id');idEl.textContent=shortId(s.id);idEl.classList.add('cpid');idEl.dataset.copy=s.id;idEl.title='点击复制完整会话 ID';
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
       b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||'');

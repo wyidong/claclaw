@@ -903,7 +903,7 @@ async function sessionList() {
       title: s.customTitle || s.summary || s.firstPrompt || '(无标题)',
       cwd: s.cwd || '',
       cwdShort: relPath(s.cwd || '', null),
-      branch: s.gitBranch || '',
+      branch: s.gitBranch === 'HEAD' ? '' : s.gitBranch || '',   // HEAD：不是 git 目录（或没在任何分支上），不显示
       lastModified: s.lastModified,
       openInWeb: ours,
       busyElsewhere: elsewhere,
@@ -1402,7 +1402,7 @@ wss.on('connection', (ws, req) => {
         log('open', m.id.slice(0, 8), info.cwd, 'history ' + histMs + 'ms');
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
-          cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch || '', mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,
+          cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: runner.busy && runner.busySince ? Date.now() - runner.busySince : 0,
           pending: [...runner.pending.values()].map(p => p.req),
