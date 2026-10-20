@@ -2655,6 +2655,8 @@ function ttsWake(){
 }
 function ttsSync(){
   $('#setTts').dataset.on=tts.on?'1':'';$('#setTtsRate').value=String(tts.rate);ttsRateLabel();
+  // 朗读关着时，声音和语速用不上：一起收起来
+  $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
   $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：正在看的会话来了新回复就念出来；屏幕保持常亮':'关着：开了以后，正在看的会话来了新回复就念出来';
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
 }
