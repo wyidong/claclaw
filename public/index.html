@@ -504,7 +504,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #rail .rclaw[hidden]{display:none}
   #rail .rclaw img{width:26px;height:26px;object-fit:contain}
   #rail .rclaw img.tile{border-radius:22.5%}
-  #rail .rclaw.on{background:var(--user-bg)}   /* 当前 Claw：浅绿底，和选中的会话一个样子 */
+  #rail .rclaw.on{background:var(--user-bg)}
+  #rclaws.solo .rclaw.on{background:none}
+  #rclaws.solo .rclaw.on:hover{background:var(--surface)}   /* 当前 Claw：浅绿底，和选中的会话一个样子 */
   #rail .rclaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
   #rail .rsep{width:24px;margin:4px 0;border-top:1px solid var(--line)}
 
@@ -1720,6 +1722,9 @@ function renderRailClaws(){
     var c=b.dataset.claw,on=c===cc||busy[c]||unr[c];
     b.classList.toggle('idle',!on);if(!on&&!b.hidden)idle++;
   });
+  // 外面只露出一个 Claw（就是选中的那个）时不用浅绿底；露出好几个（别的有未读 / 在干活，或展开了「⌃」）才用底色标出选中的
+  var shown=[].filter.call(document.querySelectorAll('#rail .rclaw'),function(b){return !b.hidden&&!b.classList.contains('idle')}).length;
+  $('#rclaws').classList.toggle('solo',shown===1&&!$('#rclaws').classList.contains('open'));
   $('#rclawMore').hidden=!idle;
   if(!idle)$('#rclaws').classList.remove('open');
   $('#rclawMore').setAttribute('aria-expanded',String($('#rclaws').classList.contains('open')));
