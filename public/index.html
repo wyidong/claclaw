@@ -1417,6 +1417,7 @@ function onEvent(m){
     session=null;permQueue=[];suggestion=null;commands=[];cmdMenu.hidden=true;setBusy(false);
     break;
   case 'user':
+    if(session&&m.text)liveLastPrompt(session.id,m.text);
     if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');outboxDone();think(true);break}
     if(outbox&&m.text===outbox.text)outboxDone();
     addUser(m.text,m.images);think(true);
@@ -1812,6 +1813,19 @@ $('#railHost').addEventListener('click',function(){mTab('host')});
   addEventListener('resize',function(){var cur=parseInt(getComputedStyle(app).getPropertyValue('--listW'))||0;if(cur)apply(cur)});
 })();
 // 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
+// 刚发出（或别的设备在这个会话里发出）一条消息：列表里「最后一条消息」立刻换成它，不等列表刷新
+function liveLastPrompt(id,text){
+  text=String(text).replace(/\s+/g,' ').trim();if(!text)return;
+  var it=(lastList||[]).find(function(x){return x.id===id});
+  if(!it||it.branch||it.claw)return;   // 只管非 git 目录的 Claude 会话
+  it.lastPrompt=text;
+  document.querySelectorAll('#sList .s-row').forEach(function(r){
+    if(r.dataset.id!==id)return;
+    var box=r.closest('.s-gbox'),h=box&&box.previousElementSibling;
+    if(h&&h.classList.contains('recent'))return;   // 最近活跃那组显示目录，不换
+    var c=r.querySelector('.cwd');if(c){c.textContent=text;c.classList.add('lp')}
+  });
+}
 function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
