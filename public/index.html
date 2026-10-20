@@ -302,6 +302,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
 #setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
 /* 开关 */
+#ttsStop{position:fixed;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);z-index:30;height:34px;padding:0 14px;border:0;border-radius:17px;background:var(--ink);color:var(--bg);font:inherit;font-size:13.5px;box-shadow:0 2px 10px rgba(0,0,0,.2);cursor:pointer}
+#ttsStop[hidden]{display:none}
 #setPane .sw{flex:none;position:relative;width:50px;height:30px;border-radius:15px;background:var(--line);transition:background .2s}
 #setPane .sw::after{content:'';position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
 #setPane [data-on="1"] .sw{background:var(--allow)}
@@ -773,6 +775,14 @@ select.pe-in{text-align-last:right}
         </div>
       </div>
       <div class="set-sec">
+        <div class="set-h">语音</div>
+        <div class="set-card">
+          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读回复<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
+          <label class="set-item"><span class="lb">语速</span>
+            <select id="setTtsRate"><option value="0.9">慢</option><option value="1.1">正常</option><option value="1.35">快</option><option value="1.6">很快</option></select></label>
+        </div>
+      </div>
+      <div class="set-sec">
         <div class="set-h">外观</div>
         <div class="set-card">
           <label class="set-item"><span class="lb">主题<small>跟随系统：随这台设备的深浅色自动切换</small></span>
@@ -813,6 +823,7 @@ select.pe-in{text-align-last:right}
   </div>
 </div>
 
+<button type="button" id="ttsStop" hidden>停止朗读</button>
 <script>
 (function(){
 'use strict';
@@ -1468,7 +1479,7 @@ function onEvent(m){
     break;
   case 'ai.end':
     clearTimeout(aiRender);aiRender=null;
-    if(aiEl){aiEl.innerHTML=md(aiText);aiEl=null;scrollDown()}
+    if(aiEl){aiEl.innerHTML=md(aiText);aiEl=null;scrollDown();ttsSay(aiText)}
     if(busy)think(true,'思考中');
     break;
   case 'tool.start':
@@ -1521,7 +1532,7 @@ function onEvent(m){
     commands=m.commands||[];syncCmdMenu();
     break;
   case 'ai.full':
-    addAi(m.text);
+    addAi(m.text);ttsSay(m.text);
     break;
   case 'cmd.out':
     var po=document.createElement('pre');po.className='cmdout';po.textContent=m.text;feed.appendChild(po);scrollDown();
@@ -1608,7 +1619,7 @@ function run(text){
   attachments.forEach(function(a){URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
   ta.value='';ta.style.height='auto';
   busy=true;setDock('busy');
-  outbox={text:text,images:images,sid:session.id};outboxShow();trySend();
+  outbox={text:text,images:images,sid:session.id};outboxShow();trySend();ttsUnlock();
 }
 // 待确认的消息：发出去后要等服务器回显（'user' 事件）才算送达。
 // 手机切后台、换网络后 WebSocket 常常「看着连着、其实已断」，消息会被悄悄吞掉：
@@ -2428,6 +2439,64 @@ function applyTheme(t){
     var dark=/dark/.test(m.media);m.content=t==='light'?'#FFFFFF':t==='dark'?'#161B21':(dark?'#161B21':'#FFFFFF');
   });
 }
+// ---------- 自动朗读回复（浏览器自带的语音合成，不联网、不花钱） ----------
+// 只念正在看的会话里新来的文字回复（历史不念）；代码、表格、链接这些不适合听的换成简短说明。
+// iPhone 要求第一次发声必须由点击触发：打开开关、点发送时顺手「解锁」一下。开着时让屏幕常亮（锁屏后网页不能发声）。
+var tts={on:false,rate:1.1,voice:null,lock:null};
+try{tts.on=localStorage.getItem('claclaw.tts')==='1';tts.rate=+localStorage.getItem('claclaw.ttsRate')||1.1}catch(_){}
+function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
+function ttsPickVoice(){
+  if(!ttsOk())return;
+  var vs=speechSynthesis.getVoices();
+  tts.voice=vs.find(function(v){return /^zh[-_]CN/i.test(v.lang)&&/Tingting|婷婷|Xiaoxiao|晓晓/i.test(v.name)})||vs.find(function(v){return /^zh[-_]CN/i.test(v.lang)})||vs.find(function(v){return /^zh/i.test(v.lang)})||null;
+}
+if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
+function ttsText(src){
+  return String(src||'')
+    .replace(/```[\s\S]*?```/g,'，代码略，')
+    .replace(/^\s*\|.*\|\s*$/gm,'').replace(/^\s*[-:| ]{3,}\s*$/gm,'')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
+    .replace(/https?:\/\/\S+/g,'链接')
+    .replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|~~/g,'')
+    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'')
+    .replace(/\n{2,}/g,'。\n').replace(/\s+/g,' ').trim();
+}
+function ttsSay(src){
+  if(!tts.on||!ttsOk()||document.hidden)return;
+  var t=ttsText(src);if(!t)return;
+  // 太长的切成几段排队念（有些浏览器一段太长会念到一半停）
+  var parts=t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t];
+  parts.forEach(function(p){
+    var u=new SpeechSynthesisUtterance(p);
+    u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
+    u.onstart=ttsShowStop;u.onend=u.onerror=function(){setTimeout(ttsShowStop,50)};
+    speechSynthesis.speak(u);
+  });
+  ttsShowStop();
+}
+function ttsShowStop(){$('#ttsStop').hidden=!(ttsOk()&&(speechSynthesis.speaking||speechSynthesis.pending))}
+function ttsStop(){if(ttsOk())speechSynthesis.cancel();$('#ttsStop').hidden=true}
+function ttsUnlock(){if(!tts.on||!ttsOk()||tts.unlocked)return;tts.unlocked=true;var u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}
+function ttsWake(){
+  if(!tts.on||document.hidden||!navigator.wakeLock||tts.lock)return;
+  navigator.wakeLock.request('screen').then(function(l){tts.lock=l;l.addEventListener('release',function(){tts.lock=null})}).catch(function(){});
+}
+function ttsSync(){
+  $('#setTts').dataset.on=tts.on?'1':'';$('#setTtsRate').value=String(tts.rate);
+  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：正在看的会话来了新回复就念出来；屏幕保持常亮':'关着：开了以后，正在看的会话来了新回复就念出来';
+  if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
+}
+$('#setTts').addEventListener('click',function(){
+  if(!ttsOk())return;
+  tts.on=!tts.on;try{localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
+  if(tts.on){tts.unlocked=false;ttsUnlock();var u=new SpeechSynthesisUtterance('自动朗读已打开');u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u)}else ttsStop();
+  ttsSync();
+});
+$('#setTtsRate').addEventListener('change',function(e){tts.rate=+e.target.value||1.1;try{localStorage.setItem('claclaw.ttsRate',String(tts.rate))}catch(_){}});
+$('#ttsStop').addEventListener('click',ttsStop);
+document.addEventListener('visibilitychange',function(){if(document.hidden)ttsStop();else ttsWake()});
+document.addEventListener('pointerdown',ttsUnlock,{capture:true});
+ttsSync();
 (function(){
   var sel=$('#setTheme'),t='';try{t=localStorage.getItem('claclaw.theme')||''}catch(_){}
   sel.value=t;applyTheme(t);
