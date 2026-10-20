@@ -491,6 +491,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #rail button:hover{background:var(--surface);color:var(--ink)}
   #rail button.on{color:var(--accent);background:var(--surface)}
   #rail .gap{flex:1}
+  #rail .rclaw{position:relative}
+  #rail .rclaw[hidden]{display:none}
+  #rail .rclaw img{width:26px;height:26px;object-fit:contain}
+  #rail .rclaw img.tile{border-radius:22.5%}
+  #rail .rclaw.on{background:var(--user-bg)}   /* 当前 Claw：浅绿底，和选中的会话一个样子 */
+  #rail .rclaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+  #rail .rsep{width:24px;margin:4px 0;border-top:1px solid var(--line)}
 
   /* 会话列表栏 */
   #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:static;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
@@ -566,6 +573,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
     <img class="logo" src="/icons/icon-192.png?v=4" alt="Claclaw">
     <button type="button" id="railChats" class="on" aria-label="会话" title="会话"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg></button>
     <span class="gap"></span>
+    <!-- 电脑端的 Claw 切换：点哪个，会话列表就显示哪一种的会话（只列这台电脑装了、能用的） -->
+    <button type="button" class="rclaw" data-claw="claude" aria-label="Claude" title="Claude"><img class="tile" src="https://claude.com/apple-touch-icon.png" alt=""></button>
+    <button type="button" class="rclaw" data-claw="openclaw" aria-label="OpenClaw" title="OpenClaw"><img src="https://openclaw.ai/apple-touch-icon.png" alt=""></button>
+    <button type="button" class="rclaw" data-claw="deepseek" aria-label="DeepSeek Harness" title="DeepSeek Harness"><img class="tile" src="https://cdn.deepseek.com/chat/icon.png" alt=""></button>
+    <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
@@ -956,7 +968,7 @@ function addPeer(from,t){
 }
 // 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
 function clawName(id){return /^oc:/.test(id||'')?'OpenClaw':/^ds:/.test(id||'')?'DeepSeek':'Claude'}
-function shortId(id){id=String(id||'');if(/^ds:/.test(id))return id.replace(/^ds:(session-)?/,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':');return p[p.length-1]||p[0]}return id.slice(0,8)}
+function shortId(id){id=String(id||'');if(/^ds:/.test(id))return id.replace(/^ds:(session-)?/,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':'),q=p[p.length-1]||p[0];return /^[0-9a-f]{8}-/i.test(q)?q.slice(0,8):q}return id.slice(0,8)}
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
 // 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
@@ -1678,7 +1690,9 @@ function loadHost(){
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
 var clawSel=null;try{clawSel=localStorage.getItem('claclaw.claw')}catch(_){}
 if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek')clawSel=null;
+function curClaw(){return clawSel||(DESKTOP.matches?'claude':null)}   // 电脑端没选过就是 Claude
 function showClawSel(){
+  document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('on',b.dataset.claw===curClaw())});
   document.querySelectorAll('.claw-card').forEach(function(x){
     var on=x.dataset.claw===clawSel;x.setAttribute('aria-current',String(on));
   });
@@ -1688,6 +1702,7 @@ showClawSel();
 fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
   var any=false;
   list.forEach(function(c){
+    var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported;
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
     card.hidden=!c.installed;if(c.installed)any=true;
     if(!c.supported){card.disabled=true;card.querySelector('.claw-st').textContent='即将支持';if(clawSel===c.id)clawSel=null}
@@ -1696,12 +1711,13 @@ fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
   document.querySelector('.claw-none').hidden=any;
   showClawSel();
 }).catch(function(){});
-document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){
-  if(c.disabled)return;
-  if(clawSel!==c.dataset.claw){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
-  clawSel=c.dataset.claw;try{localStorage.setItem('claclaw.claw',clawSel)}catch(_){}
+function pickClaw(id){
+  if(curClaw()!==id){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
+  clawSel=id;try{localStorage.setItem('claclaw.claw',clawSel)}catch(_){}
   showClawSel();renderUnread();mTab('chats');openSheet();
-})});
+}
+document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(!c.disabled)pickClaw(c.dataset.claw)})});
+document.querySelectorAll('#rail .rclaw').forEach(function(b){b.addEventListener('click',function(){pickClaw(b.dataset.claw)})});
 document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){
   var t=b.dataset.tab;
   if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
@@ -1907,7 +1923,10 @@ function renderUnread(){
   });
   // 手机底栏：当前 Claw 的未读亮在「会话」上，别的 Claw 的未读亮在「Claw」上，Claw 页里对应的卡片也亮
   var otherClaw=Object.keys(byClaw).some(function(c){return c!==clawSel});
-  $('#railChats').classList.toggle('dot',other);
+  // 电脑左栏：当前 Claw 的未读亮在「会话」上，别的 Claw 的未读亮在它自己的图标上
+  var cc=curClaw();
+  $('#railChats').classList.toggle('dot',DESKTOP.matches?!!byClaw[cc]:other);
+  document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('dot',b.dataset.claw!==cc&&!!byClaw[b.dataset.claw])});
   $('#mtabs [data-tab="chats"]').classList.toggle('dot',!!byClaw[clawSel]||(!clawSel&&other));
   $('#mtabs [data-tab="claw"]').classList.toggle('dot',!!clawSel&&otherClaw);
   document.querySelectorAll('.claw-card').forEach(function(c){c.classList.toggle('unread',!!byClaw[c.dataset.claw])});
