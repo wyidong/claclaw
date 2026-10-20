@@ -1472,7 +1472,7 @@ function onEvent(m){
     addUser(m.text,m.images);think(true);
     break;
   case 'ai.start':
-    aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);ttsPos=0;
+    aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);ttsPos=0;ttsWarmUp();
     if(busy)think(true,'输出中');
     break;
   case 'ai.delta':
@@ -2561,7 +2561,9 @@ function ttsText(src){
 }
 // 边写边念：文字每出来完整的一句（句末标点或换行）就交去念，不等整段写完。
 // 代码块没写完时不切（等它写完整块念成「代码略」）；太短的碎句先攒着，和下一句一起念。
-var ttsPos=0;
+var ttsPos=0,ttsWarmAt=0;
+// 开始回复时让电脑先连好微软语音（30 秒内只叫一次）
+function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(tts.want)||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
 function ttsStream(raw,end){
   if(!tts.on)return;
   if(end){var rest=raw.slice(ttsPos);ttsPos=raw.length;if(rest.trim())ttsSay(rest);return}

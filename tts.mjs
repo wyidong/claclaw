@@ -44,6 +44,8 @@ function edgeCall(req, ms = 20000) {
     p.stdin.write(JSON.stringify({ id, ...req }) + '\n');
   });
 }
+// 先把到微软的连接建好：开始回复时调一下，第一句就不用再花 1～1.5 秒握手
+export function ttsWarm() { if (fs.existsSync(EDGE_PY)) edgeCall({ op: 'warm' }, 15000).catch(() => {}); }
 async function edgeVoiceList() {
   if (!fs.existsSync(EDGE_PY)) return [];
   if (edgeVoices.list.length && Date.now() - edgeVoices.at < 6 * 3600 * 1000) return edgeVoices.list;

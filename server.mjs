@@ -13,7 +13,7 @@ import { z } from 'zod';
 import * as push from './push.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
-import { ttsVoices, ttsSynth } from './tts.mjs';
+import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning } from './dsh.mjs';
 const STARTED_AT = Date.now();
@@ -1419,6 +1419,7 @@ const handler = async (req, res) => {
     }
     // 电脑合成语音：手机网页拿去播放（登录后才能用）
     if (url.pathname === '/api/tts/voices') return sendJson(res, 200, await ttsVoices());
+    if (url.pathname === '/api/tts/warm' && req.method === 'POST') { ttsWarm(); return sendJson(res, 200, { ok: true }); }
     if (url.pathname === '/api/tts' && req.method === 'POST') {
       let b = {}; try { b = JSON.parse(await readBody(req, 8192)); } catch {}
       try {
