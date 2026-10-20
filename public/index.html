@@ -491,11 +491,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #rail button:hover{background:var(--surface);color:var(--ink)}
   #rail button.on{color:var(--accent);background:var(--surface)}
   #rail .gap{flex:1}
-  /* 左栏只放活跃的 Claw（当前选中的、有会话在干活的、有未读的）；其余收在「⌃」里，点开往上展开 */
+  /* 左栏只放活跃的 Claw（当前选中的、有会话在干活的、有未读的）；其余收在下面的「⌃」里，点开在它上方展开 */
   #rclaws{display:flex;flex-direction:column;align-items:center;gap:6px}
-  #rclawMore{order:1}
-  #rclaws .rclaw{order:2}
-  #rclaws .rclaw.idle{order:0}
+  #rclaws .rclaw{order:0}         /* 顺序：活跃的 → （展开时）不活跃的 → ⌃，展开的出现在 ⌃ 上方 */
+  #rclaws .rclaw.idle{order:1}
+  #rclawMore{order:2}
   #rclaws:not(.open) .rclaw.idle{display:none}
   #rclawMore svg{transition:transform .18s}
   #rclaws.open #rclawMore svg{transform:rotate(180deg)}
