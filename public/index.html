@@ -787,7 +787,6 @@ select.pe-in{text-align-last:right}
           <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读回复<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
             <select id="setTtsVoice"></select></label>
-          <button type="button" class="set-item" id="setTtsDiag"><span class="lb">列表里没有刚下载的声音？<small id="setTtsDiagSub">点一下，列出浏览器实际能用的全部语音</small></span></button>
           <div class="set-item tts-rate"><span class="lb">语速<small id="setTtsRateV">1.10 倍</small></span>
             <span class="rate-row"><span class="rate-end">慢</span><input type="range" id="setTtsRate" min="0.6" max="2" step="0.05" value="1.1" aria-label="语速"><span class="rate-end">快</span></span></div>
         </div>
@@ -2511,8 +2510,7 @@ function ttsPickVoice(){
   var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(srvLabel(v))+'</option>'}).join('');
   sel.innerHTML=(pc?'<optgroup label="电脑合成（微软在线语音 / Mac 上的声音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
   sel.value=ttsSrvVoice()?tts.want:tts.voice?tts.voice.voiceURI:'';
-  var good=vs.some(function(v){return /natural|online|neural/i.test(v.name)||ttsTier(v)});
-  $('#setTtsVoiceSub').textContent=good||!/iPhone|iPad|Mac/i.test(navigator.userAgent)?'选了会试听一句':'选了会试听一句。想更自然：系统设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载「高级」或「增强」版本';
+  $('#setTtsVoiceSub').textContent=srv.length?'选了会试听一句；电脑合成的声音更自然':'选了会试听一句';
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
 ttsLoadSrv();
@@ -2665,12 +2663,6 @@ $('#setTts').addEventListener('click',function(){
   tts.on=!tts.on;try{localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
   if(tts.on){tts.unlocked=false;tts.srvUnlocked=false;ttsUnlock();ttsPreview('自动朗读已打开')}else ttsStop();
   ttsSync();
-});
-// 诊断：浏览器（不是系统）实际给网页的语音清单，截图发给开发者看
-$('#setTtsDiag').addEventListener('click',function(){
-  if(!ttsOk()){$('#setTtsDiagSub').textContent='这个浏览器不支持朗读';return}
-  var all=speechSynthesis.getVoices(),zh=all.filter(function(v){return /^zh/i.test(v.lang||'')});
-  $('#setTtsDiagSub').textContent='共 '+all.length+' 个语音，中文 '+zh.length+' 个：'+zh.map(function(v){return v.name+' ['+v.lang+'] '+String(v.voiceURI||'').replace(/^com\.apple\.(voice|speech\.synthesis\.voice)\./,'')}).join('；');
 });
 $('#setTtsVoice').addEventListener('change',function(e){
   tts.want=e.target.value;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}
