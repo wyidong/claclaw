@@ -778,6 +778,8 @@ select.pe-in{text-align-last:right}
         <div class="set-h">语音</div>
         <div class="set-card">
           <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读回复<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
+          <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
+            <select id="setTtsVoice"></select></label>
           <label class="set-item"><span class="lb">语速</span>
             <select id="setTtsRate"><option value="0.9">慢</option><option value="1.1">正常</option><option value="1.35">快</option><option value="1.6">很快</option></select></label>
         </div>
@@ -2442,13 +2444,36 @@ function applyTheme(t){
 // ---------- 自动朗读回复（浏览器自带的语音合成，不联网、不花钱） ----------
 // 只念正在看的会话里新来的文字回复（历史不念）；代码、表格、链接这些不适合听的换成简短说明。
 // iPhone 要求第一次发声必须由点击触发：打开开关、点发送时顺手「解锁」一下。开着时让屏幕常亮（锁屏后网页不能发声）。
-var tts={on:false,rate:1.1,voice:null,lock:null};
-try{tts.on=localStorage.getItem('claclaw.tts')==='1';tts.rate=+localStorage.getItem('claclaw.ttsRate')||1.1}catch(_){}
+var tts={on:false,rate:1.1,voice:null,lock:null,want:''};
+try{tts.on=localStorage.getItem('claclaw.tts')==='1';tts.rate=+localStorage.getItem('claclaw.ttsRate')||1.1;tts.want=localStorage.getItem('claclaw.ttsVoice')||''}catch(_){}
 function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
+// 声音：列出这台设备上的中文语音，好听的排前面（和 dsh-tts-reader 的经验一样：默认取第一个中文语音往往最难听）。
+// Edge 里有微软的自然语音（晓伊、晓晓、云希…）；iPhone / Mac 上是苹果语音，系统设置里下载了「增强 / 高级」版本会更自然。
+function ttsScore(v){
+  var n=v.name,l=String(v.lang||'').toLowerCase(),s=0;
+  if(/^zh[-_]cn/.test(l))s+=100;else if(/^zh/.test(l))s+=40;
+  if(/sichuan|四川|粤|cantonese|hong ?kong|台|taiwan/i.test(n+l))s-=30;
+  if(/natural|online|neural/i.test(n))s+=50;
+  if(/晓伊|xiaoyi/i.test(n))s+=30;else if(/晓晓|xiaoxiao/i.test(n))s+=25;else if(/云希|yunxi/i.test(n))s+=20;else if(/云扬|yunyang/i.test(n))s+=15;
+  if(/premium|高级|enhanced|增强|优化/i.test(n))s+=40;
+  if(/婷婷|tingting/i.test(n))s+=10;
+  if(/eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|祖|奶奶|爷爷/i.test(n))s-=20;   // 苹果的趣味声音
+  return s;
+}
+function ttsVoices(){return ttsOk()?speechSynthesis.getVoices().filter(function(v){return /^zh/i.test(v.lang||'')}).sort(function(a,b){return ttsScore(b)-ttsScore(a)}):[]}
+function ttsLabel(v){
+  var n=v.name.replace(/^Microsoft\s+/i,'').replace(/\s*Online\s*\(Natural\)\s*-\s*Chinese.*$/i,'（自然）').replace(/\s+-\s+Chinese.*$/i,'');
+  var region=/HK/i.test(v.lang)?' · 粤语/香港':/TW/i.test(v.lang)?' · 台湾':'';
+  return n+region;
+}
 function ttsPickVoice(){
-  if(!ttsOk())return;
-  var vs=speechSynthesis.getVoices();
-  tts.voice=vs.find(function(v){return /^zh[-_]CN/i.test(v.lang)&&/Tingting|婷婷|Xiaoxiao|晓晓/i.test(v.name)})||vs.find(function(v){return /^zh[-_]CN/i.test(v.lang)})||vs.find(function(v){return /^zh/i.test(v.lang)})||null;
+  var vs=ttsVoices();
+  tts.voice=vs.find(function(v){return v.voiceURI===tts.want})||vs[0]||null;
+  var sel=$('#setTtsVoice');if(!sel)return;
+  sel.innerHTML=vs.length?vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(ttsLabel(v))+'</option>'}).join(''):'<option value="">没有中文语音</option>';
+  if(tts.voice)sel.value=tts.voice.voiceURI;
+  var good=vs.some(function(v){return /natural|online|neural|premium|高级|enhanced|增强|优化/i.test(v.name)});
+  $('#setTtsVoiceSub').textContent=good||!/iPhone|iPad|Mac/i.test(navigator.userAgent)?'选了会试听一句':'选了会试听一句。想更自然：系统设置 → 辅助功能 → 朗读内容 → 声音 → 中文，下载「高级」或「增强」版本';
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
 function ttsText(src){
@@ -2491,6 +2516,11 @@ $('#setTts').addEventListener('click',function(){
   tts.on=!tts.on;try{localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
   if(tts.on){tts.unlocked=false;ttsUnlock();var u=new SpeechSynthesisUtterance('自动朗读已打开');u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u)}else ttsStop();
   ttsSync();
+});
+$('#setTtsVoice').addEventListener('change',function(e){
+  tts.want=e.target.value;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}
+  ttsPickVoice();
+  if(ttsOk()){speechSynthesis.cancel();var u=new SpeechSynthesisUtterance('你好，以后就用这个声音给你念回复。');u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u)}
 });
 $('#setTtsRate').addEventListener('change',function(e){tts.rate=+e.target.value||1.1;try{localStorage.setItem('claclaw.ttsRate',String(tts.rate))}catch(_){}});
 $('#ttsStop').addEventListener('click',ttsStop);
