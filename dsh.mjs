@@ -432,7 +432,10 @@ export class DsRunner {
       try {
         await this.attach();
         if (cmd) return this.finish(await this.command(cmd[1], (cmd[2] || '').trim()));
-        if (images.length && !caps.promptCapabilities?.image) throw new Error('当前 DeepSeek 模型没有声明图片输入（ACP image=false）。在 dsh 里切换到支持图片的模型（如 deepseek-flash / DeepSeek-V4.1-Flash），或把图片存到工作区后用 read_image 读；也可以改用 Claude / OpenClaw 发图。');
+        // ACP 的 image 能力在 initialize 时按 llm.resolveModelInfo(provider,model).inputModalities 决定；
+        // 模型不在 dsh 默认目录里时会回退成 text-only。deepseek-v4-flash 需要
+        // ~/.dsh/profiles/acp/cordis.patch.yml 里补 inputModalities: [text, image] 才会被声明。
+        if (images.length && !caps.promptCapabilities?.image) throw new Error('当前 DeepSeek 模型没有声明图片输入（ACP image=false）。在 dsh 里把模型目录补上 inputModalities: [text, image]（deepseek-v4-flash 本身支持图片），或把图片存到工作区后用 read_image 读；也可以改用 Claude / OpenClaw 发图。');
         const prompt = [
           ...images.map(i => ({ type: 'image', mimeType: i.media_type, data: i.data })),
           ...(text ? [{ type: 'text', text }] : []),
