@@ -1133,7 +1133,7 @@ async function sessionList() {
   const list = normal.concat(all.filter(s => ours.has(s.sessionId) && !seen.has(s.sessionId)));
   const unread = unreadMap();
   const pc = loadPeer(), peerOn = new Set(pc.enabled ? pc.sessions : []);
-  const peerLastOf = id => { const l = pc.last[id], p = l && pc.peers.find(x => x.id === l.peer); return p ? { no: p.no, name: p.name, at: l.at } : undefined; };
+  const peerLastOf = id => { const l = pc.last[id], p = l && pc.peers.find(x => x.id === l.peer); return p ? { id: p.id, no: p.no, name: p.name, at: l.at } : undefined; };
   return list.filter(resumable).map(s => {
     const ours = runners.has(s.sessionId);
     const elsewhere = ours ? null : takeoverInfo(s.sessionId, jsonlPathOf(s), live);

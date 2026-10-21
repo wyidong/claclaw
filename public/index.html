@@ -23,7 +23,7 @@
 <style>
 :root{
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
-  --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;--peer:#C4B5F4;--peer-bg:#EEE9FC;
+  --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;--peer:#C4B5F4;--peer-bg:#EEE9FC;--pts:70%;--ptl:92%;--ptl2:86%;
   --allow:#17794A;--on-allow:#FFFFFF;--deny:#B23A2E;--warn:#A86200;
   --add-bg:#E2F3E8;--del-bg:#FBE5E2;--code-bg:#E9ECEF;--banner-bg:#FFF4DC;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -32,14 +32,14 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
-    --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;--peer-bg:#2A2346;
+    --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;--peer-bg:#2A2346;--pts:30%;--ptl:20%;--ptl2:26%;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
     --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
-  --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;--peer-bg:#2A2346;
+  --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;--peer-bg:#2A2346;--pts:30%;--ptl:20%;--ptl2:26%;
   --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
   --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
 }
@@ -216,8 +216,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item{display:block;width:100%;min-height:56px;margin-top:8px;padding:10px 12px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
 .s-item[aria-current="true"]{border-color:var(--accent)}
 .s-item .t{font-weight:600}
-.pno{display:inline-grid;place-items:center;min-width:16px;height:16px;margin:0 6px;padding:0 3px;border-radius:8px;color:#fff;font-size:10.5px;font-weight:700;line-height:1;vertical-align:2px;font-family:var(--sans);box-sizing:border-box}
-.pe-peer-name .pno{margin:0 6px 0 0;vertical-align:0}
+/* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
+.h-row.pe-peer.ptint{background:hsl(var(--ph) var(--pts) var(--ptl));border-radius:10px;margin:4px 6px}
+.s-row.ptint,.s-row.ptint .s-item{background:hsl(var(--ph) var(--pts) var(--ptl))!important}
+.s-row.ptint:not(.working):not(.waiting),.s-row.ptint:not(.working):not(.waiting) .s-item{border-color:hsl(var(--ph) var(--pts) var(--ptl2))!important}
+.s-row.ptint:has(> .s-item[aria-current="true"]),.s-row.ptint .s-item[aria-current="true"]{background:hsl(var(--ph) var(--pts) var(--ptl2))!important;border-color:hsl(var(--ph) var(--pts) var(--ptl2))!important}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
@@ -1950,9 +1953,8 @@ function peerPendingHtml(c){
   }).join('')+'</div><div class="pe-note">核对 IP 和名字是你认可的那台电脑，再把这个两位数配对码告诉对方（微信、口头都行）。对方填对就配对完成；不认识就点「拒绝」。</div></div>';
 }
 // 已配对的对方：固定编号 + 固定颜色（会话列表里标「最近和谁通信」用同一套）
-var PEER_COLORS=['#8B5CF6','#0EA5E9','#F59E0B','#EC4899','#10B981','#EF4444','#6366F1','#14B8A6'];
-function peerColor(no){return PEER_COLORS[((no||1)-1)%PEER_COLORS.length]}
-function peerNoHtml(no){return '<span class="pno" style="background:'+peerColor(no)+'">'+(no||'')+'</span>'}
+// 对方的颜色：按对方 id 算出一个色相（看起来随机，同一个对方永远同一个颜色）
+function peerHue(id){var h=0;id=String(id||'');for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0;return h%360}
 function peerPeersHtml(c){
   if(!c.peers||!c.peers.length)return '';
   return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
@@ -1975,7 +1977,7 @@ function peerPeersHtml(c){
       (!p.canCall?'':!o?kv('状态','检查中…'):!o.online?kv('状态','离线'+(o.error?'：'+esc(o.error):'')):
         kv('对方会话',ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'没有开放会话'));
     // 第一行：名字 + 撤销；第二行：在线状态、对方会话、IP 和配对时间（占满整行，左对齐）
-    return '<div class="h-row pe-peer"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+peerNoHtml(p.no)+'<span>'+esc(p.name)+'</span><i class="pe-chev'+(open?' open':'')+'"></i></button>'+
+    return '<div class="h-row pe-peer ptint" style="--ph:'+peerHue(p.id)+'"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+'<span>'+esc(p.name)+'</span><i class="pe-chev'+(open?' open':'')+'"></i></button>'+
       '<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button></div>'+
       (open?'<div class="pe-peer-desc">'+det+'</div>':'')+'</div>';
   }).join('')+'</div></div>';
@@ -2254,9 +2256,9 @@ function openSheet(silent){
       if(bz&&!bz.canTakeover)b.dataset.busy='1';
       b.innerHTML='<div class="t"></div><div class="m"><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
-      if(s.peerLast){   // 协同会话：最近和哪个对方通信（编号 + 颜色，和协同页「已配对」里的一致）
-        var pn=document.createElement('span');pn.className='pno';pn.textContent=s.peerLast.no;pn.style.background=peerColor(s.peerLast.no);
-        pn.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);b.querySelector('.t').appendChild(pn);
+      if(s.peerLast){   // 协同会话：最近和哪个对方通信，用那个对方的背景色（和协同页「已配对」里的一致）
+        row.classList.add('ptint');row.style.setProperty('--ph',peerHue(s.peerLast.id));
+        b.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);
       }
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
