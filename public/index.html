@@ -98,6 +98,9 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #feed>*{flex-shrink:0}   /* 消息多了也不许被压扁（工具卡片 overflow:hidden，以前会被压成 0 高，只剩两条边框）*/
 .msg{white-space:pre-wrap;word-break:break-word;max-width:100%}
 .msg.user.pending{opacity:.55}
+/* DeepSeek / OpenCode 回复中又发的消息：排队，这一轮结束后自动发出 */
+.msg.user.queued{opacity:.7}
+.msg.user.queued::after{content:'排队中 · 这一轮结束后自动发出';display:block;margin-top:4px;font-size:11.5px;opacity:.8}
 .msg.user{align-self:flex-end;max-width:86%;padding:9px 13px;background:var(--user-bg);border-radius:16px 16px 4px 16px}
 .msg.ai{align-self:stretch}
 .msg code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
@@ -1587,9 +1590,12 @@ function onEvent(m){
     break;
   case 'user':
     if(session&&m.text)liveLastPrompt(session.id,m.text);
-    if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');outboxDone();think(true);break}
+    if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');if(m.queued)outbox.el.classList.add('queued');outboxDone();think(true);break}
     if(outbox&&m.text===outbox.text)outboxDone();
-    addUser(m.text,m.images);think(true);
+    var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');think(true);
+    break;
+  case 'queue.sent':   // 排队的消息发出去了（合成一条）
+    feed.querySelectorAll('.msg.user.queued').forEach(function(e){e.classList.remove('queued')});
     break;
   case 'peer.pair':   // 有人申请协同配对：页面顶部提醒，点了直接去协同页
     pairBanner(m);
@@ -1682,7 +1688,7 @@ function onEvent(m){
     break;
   case 'error':
     openFailed();clearOpening();
-    if(outbox){outboxRestore();setBusy(false)}
+    if(outbox){outboxRestore();if(!m.busy)setBusy(false)}   // 会话还在忙（只是这条没收下）：别把它显示成空闲
     notice('⚠ '+m.message);
     break;
   }
@@ -2707,7 +2713,7 @@ function histSig(h,total){var l=h[h.length-1]||{};return (total||h.length)+'|'+(
 // 画一段历史；每条历史对应聊天区里一个元素，打上 data-h 好数「缓存里留了几条」
 function renderHistory(items){
   items.forEach(function(it){
-    if(it.kind==='user')addUser(it.text,it.images);
+    if(it.kind==='user'){var hu=addUser(it.text,it.images);if(it.waiting&&hu)hu.classList.add('queued')}
     else if(it.kind==='ai')addAi(it.text);
     else if(it.kind==='peer')addPeer(it.from,it.text);
     else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no')}

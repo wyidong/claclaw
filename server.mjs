@@ -1807,6 +1807,7 @@ wss.on('connection', (ws, req) => {
         r.subscribe(ws);
         if (ws.visible !== false) clearUnread(m.id);
         const pg = historyPage(hist, hist.total, HISTORY_PAGE);
+        for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });   // 排着队、还没发出的
         log('open dsh', r.sid, hist.total, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
@@ -1834,6 +1835,7 @@ wss.on('connection', (ws, req) => {
         r.subscribe(ws);
         if (ws.visible !== false) clearUnread(m.id);
         const pg = historyPage(hist, hist.total, HISTORY_PAGE);
+        for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });   // 排着队、还没发出的
         log('open opencode', r.sid, hist.total, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'opencode',
@@ -1918,8 +1920,10 @@ wss.on('connection', (ws, req) => {
           if (i.data.length > MAX_IMAGE_B64) return send({ t: 'error', message: '图片太大了' });
         }
         if (!text && !images.length) return;
-        if (!runner.send(text, images)) send({ t: 'error', message: '上一条还在处理中' });
-        else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data) });
+        const acp = runner instanceof DsRunner || runner instanceof OpRunner;
+        const sent = runner.send(text, images);
+        if (!sent) send({ t: 'error', busy: runner.busy || undefined, message: acp && runner.busy ? '这一轮结束前只能排队普通消息（命令要等这一轮结束，最多排 10 条）' : '上一条还在处理中' });
+        else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data), queued: sent === 'queued' || undefined });
       } else if (m.t === 'permission.reply') {
         runner.replyPermission(m.requestId, m.decision, m.answers);
       } else if (m.t === 'interrupt') {

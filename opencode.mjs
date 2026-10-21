@@ -326,6 +326,7 @@ export class OpRunner {
     this.suggestion = null; this.commands = COMMANDS;
     this.closed = false; this.attached = false; this.config = null;
     this.msgId = null; this.textOpen = false;
+    this.queue = [];          // 回复中又发来的消息：这一轮结束（或被中断）后合成一条发出
     this.tools = new Map();   // toolCallId → { name, kind, started }
     this.cache = null;        // { key, items }：会话没改动就不重读
   }
@@ -464,7 +465,12 @@ export class OpRunner {
   }
 
   send(text, images = []) {
-    if (this.busy) return false;
+    if (this.busy) {
+      // ACP 不支持插话：先排队。命令不排队（等这一轮结束再发），最多排 10 条
+      if (/^\/(model|effort|mode)\b/.test(text) || this.queue.length >= 10) return false;
+      this.queue.push({ text, images });
+      return 'queued';
+    }
     const cmd = text.match(/^\/(model|effort|mode)(?:\s+(.*))?$/);
     this.lastText = '';
     this.setBusy(true);
@@ -500,7 +506,19 @@ export class OpRunner {
     this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
     this.onActivity?.(this.id, null);
     if (reason !== 'command') this.onTurnDone?.(this, ok, this.lastText);
+    if (this.queue.length && this.sendQueued()) return;   // 中断后也照发：通常就是「停下，改做这个」
     if (!this.subs.size) this.dispose();
+  }
+
+  // 排队的消息：合成一条发出（中间空一行），图片按顺序带上
+  sendQueued() {
+    const q = this.queue.splice(0);
+    const text = q.map(x => x.text).filter(Boolean).join('\n\n');
+    const images = q.flatMap(x => x.images || []);
+    if (!text && !images.length) return false;
+    if (!this.send(text, images)) return false;
+    this.emit({ t: 'queue.sent' });
+    return true;
   }
 
   // /model、/effort、/mode：用 ACP 的 session/set_config_option
