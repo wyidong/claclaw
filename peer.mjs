@@ -2,11 +2,11 @@
 //
 // 对外只有一个固定地址：http://<局域网 IP>:<端口>/claclaw-peer（地址里不含密码）。
 // 配对（像蓝牙）：
-//   1. 对方 POST /claclaw-peer/pair {name, inbox?}           → {requestId}；我们这边页面上出现申请（对方 IP、名字、两位数配对码）
-//   2. 我们的人核对后，把两位数配对码告诉对方（微信 / 口头）
+//   1. 对方 POST /claclaw-peer/pair {name, inbox?}           → {requestId}；我们这边页面上出现申请（对方 IP、名字、六位数配对码）
+//   2. 我们的人核对后，把六位数配对码告诉对方（微信 / 口头）
 //   3. 对方 POST /claclaw-peer/pair/confirm {requestId, code, token?} → {token, name, inbox}
 //      token：以后对方找我们用的钥匙；对方带上的 token：以后我们找对方用的钥匙（双向一次配好）
-//   配对码只对这一次申请有效，5 分钟过期，最多输错 3 次。
+//   配对码只对这一次申请有效，5 分钟过期；同一申请最多输错 3 次，同一个 IP 累计输错 10 次锁一小时。
 // 配对后（请求头 Authorization: Bearer <token>）：
 //   GET  /claclaw-peer/sessions → 加入协同的会话
 //   POST /claclaw-peer {from, text, session?} → 送进会话，等这一轮回复完，返回 {ok, reply}
@@ -68,22 +68,54 @@ export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + '
 
 // ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
 export const PAIR_TTL = 5 * 60 * 1000;
+export const PAIR_CODE_LEN = 6;                 // 六位数字（两位数只有 90 种，平均三十来次请求就能猜中）
+const PAIR_MIN_INTERVAL = 10 * 1000;            // 同一个 IP 10 秒内只能申请一次
+const PAIR_GLOBAL_MAX = 30;                     // 全局：每小时最多 30 次申请
+const PAIR_GLOBAL_WINDOW = 60 * 60 * 1000;
+const PAIR_FAIL_MAX = 10, PAIR_FAIL_LOCK = 60 * 60 * 1000;   // 配对码猜错 10 次锁一小时
 const pending = new Map();   // requestId → {id, name, ip, inbox, code, expiresAt, tries}
+const pairLimit = new Map();  // ip → 上次申请的时间
+const pairFails = new Map();  // ip → { n, until }
+let pairGlobal = [];         // 最近的申请时间，用来算每小时的上限
 export function pendingList() {
   const now = Date.now();
   for (const [k, p] of pending) if (p.expiresAt < now) pending.delete(k);
   return [...pending.values()];
 }
 export function addPending(name, ip, inbox) {
+  const now = Date.now();
+  // 全局上限：每小时最多 30 次申请（不然可以一直刷，把主人烦死）
+  pairGlobal = pairGlobal.filter(t => now - t < PAIR_GLOBAL_WINDOW);
+  if (pairGlobal.length >= PAIR_GLOBAL_MAX) throw Object.assign(new Error('配对申请太频繁，稍后再试'), { code: 429 });
+  // 同一个 IP 10 秒内只能申请一次
+  const last = pairLimit.get(ip);
+  if (last && now - last < PAIR_MIN_INTERVAL) {
+    throw Object.assign(new Error('申请太频繁，' + Math.ceil((PAIR_MIN_INTERVAL - (now - last)) / 1000) + ' 秒后再试'), { code: 429 });
+  }
+  // 这个 IP 猜错过太多次：先冷静一小时
+  const fl = pairFails.get(ip);
+  if (fl && fl.until > now) throw Object.assign(new Error('这个地址配对码试错太多，请一小时后再试'), { code: 429 });
   const list = pendingList();
   if (list.length >= 5) throw Object.assign(new Error('配对申请太多，稍后再试'), { code: 429 });
   for (const p of list) if (p.ip === ip) pending.delete(p.id);   // 同一台电脑只保留最新一条
-  const p = { id: newId(), name, ip, inbox, code: String(10 + crypto.randomInt(90)), expiresAt: Date.now() + PAIR_TTL, tries: 0 };
+  pairLimit.set(ip, now);
+  pairGlobal.push(now);
+  const code = String(100000 + crypto.randomInt(900000)).slice(0, PAIR_CODE_LEN);
+  const p = { id: newId(), name, ip, inbox, code, expiresAt: now + PAIR_TTL, tries: 0 };
   pending.set(p.id, p);
   return p;
 }
 export const getPending = id => (pendingList(), pending.get(id) || null);
 export const dropPending = id => pending.delete(id);
+// 配对码猜错次数按来源 IP 累计（不是按申请算，不然反复申请就绕过去了）
+export function notePairFail(ip) {
+  const f = pairFails.get(ip) || { n: 0, until: 0 };
+  f.n++;
+  if (f.n >= PAIR_FAIL_MAX) f.until = Date.now() + PAIR_FAIL_LOCK;
+  pairFails.set(ip, f);
+  return f;
+}
+export function clearPairFails(ip) { pairFails.delete(ip); }
 
 // ---------- 收件服务 ----------
 let srv = null, srvKey = '', srvErr = '';

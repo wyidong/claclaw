@@ -15,7 +15,7 @@ import * as hosts from './hosts.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
-import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
+import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, notePairFail, clearPairFails, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists } from './dsh.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename } from './opencode.mjs';
 const STARTED_AT = Date.now();
@@ -591,7 +591,7 @@ async function peerHandler(req, res) {
   const ip = cleanIp(req.socket.remoteAddress);
   const readJson = async () => { try { return JSON.parse(await readBody(req, 64 * 1024)); } catch { return null; } };
   try {
-    // 1. 配对申请：谁都可以申请，但要我们这边的人把两位数配对码告诉对方才能完成
+    // 1. 配对申请：谁都可以申请，但要我们这边的人把六位数配对码告诉对方才能完成
     if (route === '/pair') {
       if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
       const b = await readJson() || {};
@@ -605,7 +605,7 @@ async function peerHandler(req, res) {
       localSound();
       push.sendAll({ title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/?view=peer' }, log)
         .then(n => log('peer pair push sent →', n)).catch(e => log('peer pair push failed', e.message));
-      return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要两位数配对码，然后调用 pair/confirm' });
+      return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要六位数配对码，然后调用 pair/confirm' });
     }
     if (route === '/pair/confirm') {
       if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
@@ -614,10 +614,14 @@ async function peerHandler(req, res) {
       if (!p) return out(404, { ok: false, error: '配对申请不存在或已过期，请重新申请' });
       if (String(b.code || '').trim() !== p.code) {
         p.tries++;
+        // 猜错次数按来源 IP 累计（不是按申请算，不然反复申请就绕过去了）
+        const fl = notePairFail(ip);
         if (p.tries >= 3) { dropPending(p.id); return out(403, { ok: false, error: '配对码错了 3 次，这次申请作废，请重新申请' }); }
+        if (fl.until > Date.now()) return out(429, { ok: false, error: '这个地址配对码试错太多，请一小时后再试' });
         return out(403, { ok: false, error: '配对码不对，还能试 ' + (3 - p.tries) + ' 次' });
       }
       dropPending(p.id);
+      clearPairFails(ip);
       const token = newToken();
       const theirToken = typeof b.token === 'string' && b.token.length >= 16 ? b.token.slice(0, 200) : '';
       const c2 = loadPeer();
@@ -1533,7 +1537,7 @@ const handler = async (req, res) => {
         return sendJson(res, 200, out);
       }
       if (act === '/pair-start') {
-        // 我们向对方申请配对：对方页面会出现申请和两位数配对码，对方的人把码告诉你
+        // 我们向对方申请配对：对方页面会出现申请和六位数配对码，对方的人把码告诉你
         const base = String(b.url || '').trim().replace(/\/+$/, '');
         if (!/^https?:\/\/\S+$/i.test(base)) return sendJson(res, 400, { error: '对方地址要以 http:// 开头，例如 http://192.168.1.x:8788/claclaw-peer' });
         if (!c.enabled) return sendJson(res, 400, { error: '先开启我们这边的协同（对方要能回连我们）' });
