@@ -344,8 +344,22 @@ function peerMessages(text) {
 // ---------- 历史消息 → 前端条目 ----------
 
 // 打开会话时的历史记录：大会话要把整个记录文件读一遍（100MB 级的要 0.7 秒），
-// 所以按「文件大小 + 修改时间」缓存，没变就直接用；列表刷新时顺手把最近几个会话预读好
-const historyCache = new Map();
+// 所以按「文件大小 + 修改时间」缓存，没变就直接用；列表刷新时顺手把最近几个会话预读好。
+// 缓存里带着完整的 base64 图片（发给网页的那一页有 4MB 预算，但缓存里是全量），
+// 最多 40 个会话的话内存能到上百 MB。所以除了条数上限，再加一个总字节上限，超了就从最旧的开始淘汰。
+const HISTORY_CACHE_MAX = 64 * 1024 * 1024;
+const historyCache = new Map();   // sessionId → { key, items, bytes }
+let historyCacheBytes = 0;
+// 估算一段历史的体积：图片按 base64 数据的长度算（内存里就占这么多）
+function historyBytes(items) {
+  let n = 0;
+  for (const it of items) {
+    n += 64;                                   // 这条记录本身的开销
+    if (it.text) n += it.text.length;
+    if (it.images) for (const im of it.images) n += (im?.data?.length || 0) + 64;
+  }
+  return n;
+}
 async function loadHistoryCached(sessionId, cwd) {
   let key = null;
   try { const st = fs.statSync(jsonlPathOf({ sessionId, cwd })); key = st.size + ':' + st.mtimeMs; } catch {}
@@ -353,8 +367,17 @@ async function loadHistoryCached(sessionId, cwd) {
   if (key && hit && hit.key === key) return hit.items;
   const items = await loadHistory(sessionId, cwd);
   if (key) {
-    historyCache.delete(sessionId); historyCache.set(sessionId, { key, items });
-    while (historyCache.size > 40) historyCache.delete(historyCache.keys().next().value);
+    if (hit) { historyCache.delete(sessionId); historyCacheBytes -= hit.bytes || 0; }
+    const bytes = historyBytes(items);
+    historyCache.set(sessionId, { key, items, bytes });
+    historyCacheBytes += bytes;
+    while (historyCache.size > 40 || historyCacheBytes > HISTORY_CACHE_MAX) {
+      const first = historyCache.keys().next().value;
+      if (first === undefined) break;
+      const v = historyCache.get(first);
+      historyCache.delete(first);
+      historyCacheBytes -= v?.bytes || 0;
+    }
   }
   return items;
 }
