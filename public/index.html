@@ -561,6 +561,9 @@ select.pe-in{text-align-last:right}
   .claw-card:disabled{opacity:.45;cursor:default}
   .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
   .claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
+  /* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比另外三个重得多也小得多。
+     这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
+     颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
   .claw-card[hidden]{display:none}
   .claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
   .claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
@@ -628,7 +631,7 @@ select.pe-in{text-align-last:right}
   #rclaws.open #rclawMore svg{transform:rotate(180deg)}
   #rail .rclaw{position:relative}
   #rail .rclaw[hidden]{display:none}
-  #rail .rclaw img{width:26px;height:26px;object-fit:contain}
+  #rail .rclaw img,#rail .rclaw svg{width:26px;height:26px;object-fit:contain}
   #rail .rclaw img.tile{border-radius:22.5%}
   #rail .rclaw.on{background:var(--user-bg)}
   #rclaws.solo .rclaw.on{background:none}
@@ -727,7 +730,7 @@ select.pe-in{text-align-last:right}
     <button type="button" class="rclaw" data-claw="claude" aria-label="Claude Code" title="Claude Code"><img class="tile" src="https://claude.com/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="openclaw" aria-label="OpenClaw" title="OpenClaw"><img src="https://openclaw.ai/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="deepseek" aria-label="DeepSeek Harness" title="DeepSeek Harness"><img class="tile" src="https://cdn.deepseek.com/chat/icon.png" alt=""></button>
-    <button type="button" class="rclaw" data-claw="opencode" aria-label="OpenCode" title="OpenCode"><img class="tile" src="https://opencode.ai/apple-touch-icon.png" alt=""></button>
+    <button type="button" class="rclaw" data-claw="opencode" aria-label="OpenCode" title="OpenCode"><svg class="oc-mark" viewBox="128 96 256 320" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="var(--ink)"/><path d="M320 224V352H192V224H320Z" fill="var(--muted)"/></svg></button>
     </div>
     <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
@@ -850,7 +853,7 @@ select.pe-in{text-align-last:right}
           <span class="claw-st"></span>
         </button>
         <button type="button" class="claw-card" data-claw="opencode">
-          <img class="claw-ic tile" src="https://opencode.ai/apple-touch-icon.png" alt="">
+          <svg class="claw-ic oc-mark" viewBox="128 96 256 320" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="var(--ink)"/><path d="M320 224V352H192V224H320Z" fill="var(--muted)"/></svg>
           <span class="claw-tx"><b>OpenCode</b><small>opencode 的会话：终端里开的都在这里</small></span>
           <span class="claw-st"></span>
         </button>
