@@ -433,15 +433,25 @@ export class OpRunner {
     const requestId = 'op-' + rpcId;
     const opts = p.options || [];
     const tc = p.toolCall || {};
-    const name = tc.title || this.tools.get(tc.toolCallId)?.name || '操作';
+    // opencode 的 title 往往就是整条命令：不能当标题用。按 Claude 会话的样子：标题「允许运行这条命令？」，命令全文放在下面（网页那块能滚动）
+    const tool = this.tools.get(tc.toolCallId)?.name || '';
+    const raw = tc.rawInput && typeof tc.rawInput === 'object' ? tc.rawInput : {};
+    const isCmd = tc.kind === 'execute' || /^bash$/i.test(tool) || typeof raw.command === 'string';
+    const isEdit = !isCmd && (tc.kind === 'edit' || /^(edit|write|patch|multiedit)$/i.test(tool));
+    const name = isCmd ? 'Bash' : isEdit ? 'Edit' : (tool || '操作');
+    const target = (isCmd && raw.command ? String(raw.command) : toolTarget(raw) || String(tc.title || '')).slice(0, 4000);
+    // external_directory：要碰工作目录外的路径（opencode 默认对这个要确认）
+    const cwd = this.cwd;
+    const outside = [...(tc.locations || []).map(l => l?.path), raw.parentDir, raw.filepath, raw.filePath]
+      .find(x => typeof x === 'string' && path.isAbsolute(x) && cwd && x !== cwd && !x.startsWith(cwd + '/'));
     const req = {
       t: 'perm.request', requestId, toolUseID: tc.toolCallId, name,
-      title: null, displayName: name, description: '', target: toolTarget(tc.rawInput),
-      reason: '', canAlways: opts.some(o => o.kind === 'allow_always'), defaultToNo: false,
+      title: null, displayName: name, description: '', target,
+      reason: outside ? '涉及工作目录外：' + outside : '', canAlways: opts.some(o => o.kind === 'allow_always'), defaultToNo: false,
     };
     this.pending.set(requestId, { rpcId, opts, req });
     this.emit(req);
-    this.onAsk?.(this, '等你确认：' + req.displayName);
+    this.onAsk?.(this, '等你确认：' + (isCmd ? '运行命令' : isEdit ? '修改文件' : name));
   }
   replyPermission(requestId, decision) {
     const p = this.pending.get(requestId);
