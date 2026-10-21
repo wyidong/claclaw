@@ -22,6 +22,7 @@ import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loa
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason } from './dsh.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
 const STARTED_AT = Date.now();
+setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody } from './httpbody.mjs';
@@ -1309,6 +1310,17 @@ async function handleLogin(req, res) {
 // ---------- 删除会话：要求再次输入初始账号；文件挪进 data/trash/，不直接删 ----------
 
 const TRASH = path.join(DATA, 'trash');
+// 回收站里的备份保留 30 天：启动时和每次删除之后清一次（目录和文件都清）
+const TRASH_KEEP_DAYS = 30;
+function trimTrash() {
+  let entries = [];
+  try { entries = fs.readdirSync(TRASH); } catch { return; }
+  const cut = Date.now() - TRASH_KEEP_DAYS * 86400e3;
+  for (const name of entries) {
+    const p = path.join(TRASH, name);
+    try { if (fs.statSync(p).mtimeMs < cut) fs.rmSync(p, { recursive: true, force: true }); } catch {}
+  }
+}
 
 async function handleDelete(req, res) {
   const ip = req.socket.remoteAddress;
@@ -1348,6 +1360,7 @@ async function handleDelete(req, res) {
       if (r) await new Promise(ok => setTimeout(ok, 500));   // 等 dsh 关掉会话、写完收尾
       const dest = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_dsh_' + path.basename(dir));
       fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 });
+      try { trimTrash(); } catch {}
       fs.renameSync(dir, dest);
       fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: body.id, from: dir, deletedAt: new Date().toISOString() }, null, 2));
     }
@@ -1374,6 +1387,7 @@ async function handleDelete(req, res) {
   }
   const dest = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_' + info.sessionId);
   fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
+  try { trimTrash(); } catch {}
   fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: info.sessionId, title: info.customTitle || info.summary, cwd: info.cwd, from: path.dirname(file), deletedAt: new Date().toISOString() }, null, 2));
   fs.renameSync(file, path.join(dest, path.basename(file)));
   const sub = file.replace(/\.jsonl$/, '');
