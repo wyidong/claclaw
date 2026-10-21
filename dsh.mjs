@@ -93,10 +93,10 @@ export function dsSessionList({ busy = () => false } = {}) {
     const recs = readRecords(f);
     if (!recs) continue;
     const s = summarize(recs);
-    if (s.sub || !s.hasUser) continue;   // 子代理会话、没发过消息的空会话不列
+    if (s.sub) continue;   // 子代理会话不列；刚新建、还没发过消息的也要列（不然新建完离开就找不到了）
     out.push({
       id: DS_PREFIX + sid,
-      title: s.title || s.firstPrompt.slice(0, 60) || '(无标题)',
+      title: s.title || s.firstPrompt.slice(0, 60) || (s.hasUser ? '(无标题)' : '新会话'),
       cwd: s.cwd, cwdShort: tilde(s.cwd), branch: s.model,
       lastModified: recCache.get(f)?.mtime || s.createdAt,
       openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
@@ -489,6 +489,7 @@ function toolLabel(name = '') {
 }
 
 // 会话目录（删除时整个挪走）
+export const dsExists = id => isDs(id) && !!fileOf(sidOf(id));
 export function dsSessionDir(id) {
   const f = isDs(id) ? fileOf(sidOf(id)) : null;
   return f ? path.dirname(f) : null;

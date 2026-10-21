@@ -15,7 +15,7 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
-import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning } from './dsh.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists } from './dsh.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
@@ -1672,7 +1672,7 @@ wss.on('connection', (ws, req) => {
         let r = dsRunners.get(m.id);
         if (!r) { r = new DsRunner(m.id, dsOpts()); dsRunners.set(m.id, r); }
         const hist = r.history();
-        if (!hist.total && !r.attached) { dsRunners.delete(m.id); runner = null; return send({ t: 'error', message: '找不到这个会话' }); }
+        if (!hist.total && !r.attached && !dsExists(m.id)) { dsRunners.delete(m.id); runner = null; return send({ t: 'error', message: '找不到这个会话' }); }   // 空会话（新建后还没发消息）文件在就能打开
         runner = r;
         r.subscribe(ws);
         if (ws.visible !== false) clearUnread(m.id);
