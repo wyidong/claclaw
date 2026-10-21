@@ -3176,7 +3176,7 @@ var narration=(function(){
   }
   function finish(m){
     cancelStart();clearAllP0();flushBucket(false);
-    q=q.filter(function(i){return i.priority<P2});
+    q=q.filter(function(i){return i.priority<P1});   // 丢掉还没念的「开始/进度」，只保留 P0
     muted=false;state='done';
     var err=clean(m.error).slice(0,40);
     var text=(err||m.subtype==='error')?'这轮出错了'+(err?'：'+err:''):m.subtype==='aborted'?'已中断':'这轮完成了';
