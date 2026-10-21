@@ -341,11 +341,41 @@ async function prewarmHistory(list) {
   try { for (const s of list.slice(0, 6)) if (s.cwd && !s.unsent) await loadHistoryCached(s.id, s.cwd); } catch {} finally { prewarming = false; }
 }
 
+// 干活中途插话（Claude 还在回复时又发的消息）：会话文件里记成 attachment「queued_command」，
+// SDK 的 getSessionMessages 不返回它们，所以自己从文件里找出来，按在文件里的位置插回历史
+function queuedPrompts(sessionId, cwd) {
+  let text = '';
+  try { text = fs.readFileSync(jsonlPathOf({ sessionId, cwd }), 'utf8'); } catch { return { lineOf: new Map(), queued: [] }; }
+  const lineOf = new Map(), queued = [];
+  let i = 0;
+  for (const line of text.split('\n')) {
+    const k = line.lastIndexOf('"uuid":"');
+    if (k >= 0) lineOf.set(line.slice(k + 8, line.indexOf('"', k + 8)), i);
+    if (line.includes('"queued_command"')) {
+      try {
+        const o = JSON.parse(line), pr = o.attachment?.prompt;
+        if (o.attachment?.type === 'queued_command' && pr) queued.push({ i, text: typeof pr === 'string' ? pr : userText(pr) });   // 带图片时是内容块数组
+      } catch {}
+    }
+    i++;
+  }
+  return { lineOf, queued };
+}
+
 async function loadHistory(sessionId, cwd) {
   const msgs = await getSessionMessages(sessionId, cwd ? { dir: cwd } : undefined);
   const items = [];
   const toolIdx = new Map();
+  const { lineOf, queued } = queuedPrompts(sessionId, cwd);
+  const pushQueued = q => {
+    const peers = peerMessages(q.text);
+    if (peers.length) for (const p of peers) items.push({ kind: 'peer', from: p.from, text: p.text });
+    else if (!isNoise(q.text)) items.push({ kind: 'user', text: q.text, queued: true });
+  };
+  let qi = 0;
   for (const m of msgs) {
+    const at = lineOf.get(m.uuid);
+    if (at != null) while (qi < queued.length && queued[qi].i < at) pushQueued(queued[qi++]);
     if (m.parent_tool_use_id) continue; // 子 Agent 内部的消息不展开
     const content = m.message?.content;
     if (m.type === 'user') {
@@ -382,7 +412,11 @@ async function loadHistory(sessionId, cwd) {
       }
     }
   }
-  return { items: items.slice(-HISTORY_KEEP), total: items.length };
+  while (qi < queued.length) pushQueued(queued[qi++]);
+  // 插话没赶上这一轮、变成下一轮的正式消息时，文件里两种记录都有：只留正式的那条
+  const dedup = items.filter((x, k) => !(x.queued && items.slice(Math.max(0, k - 8), k + 9).some(y => y !== x && !y.queued && y.kind === 'user' && y.text === x.text)));
+  dedup.forEach(x => { delete x.queued; });
+  return { items: dedup.slice(-HISTORY_KEEP), total: dedup.length };
 }
 
 // 取一页：before 之前（绝对序号，不含）最多 count 条；图片按页从新到旧分预算，超出的给 null（前端显示占位）
@@ -748,7 +782,7 @@ class Runner {
           // CLI 自己报的忙/闲，比 result 更准：插话的消息可能在 result 之后又开一轮，idle 才是真正结束
           this.sawState = true;
           if (m.state === 'running' && !this.busy) { this.busy = true; this.busySince = Date.now(); this.cancelClose(); this.emit({ t: 'busy', on: true }); }
-          else if (m.state === 'idle' && this.busy) { this.busy = false; this.emit({ t: 'busy', on: false }); this.maybeScheduleClose(); }
+          else if (m.state === 'idle' && this.busy) { this.busy = false; this.steered = []; this.emit({ t: 'busy', on: false }); this.maybeScheduleClose(); }
         } else if (m.subtype === 'status') {
           // 不需要显示
         }
@@ -787,6 +821,8 @@ class Runner {
   // 正在工作时也能发：作为「插话」排队（priority next），Claude 在下一个合适的时机读到，和终端里边干边打字一样
   send(text, images = []) {
     const steering = this.busy;
+    // 干活中途插的话：被 Claude 读到之前还不在会话文件里，先记着，重新打开会话时补显示
+    if (steering && text) { (this.steered ||= []).push(text); if (this.steered.length > 10) this.steered.shift(); }
     touchWeb(this.id);
     this.busy = true;
     if (!steering) this.busySince = Date.now();   // 网页显示「已工作多久」从这里算，刷新页面也不归零
@@ -1657,6 +1693,12 @@ wss.on('connection', (ws, req) => {
         const hist = await loadHistoryCached(m.id, info.cwd);
         const pg = historyPage(hist, hist.total, HISTORY_PAGE);
         const histMs = Date.now() - tHist;
+        // 正在干活时插的话还没写进会话文件：补在最后，免得「发出去又不见了」
+        const live = runners.get(m.id);
+        if (live?.busy && live.steered?.length) {
+          const tail = new Set(pg.items.slice(-40).filter(x => x.kind === 'user').map(x => x.text));
+          for (const t of live.steered) if (!tail.has(t)) pg.items.push({ kind: 'user', text: t, queued: true });
+        }
         if (!runners.has(m.id)) {
           const inherited = inheritedMode(info);
           const allowed = MODES.includes(inherited) ? MODES : [...MODES, inherited];
