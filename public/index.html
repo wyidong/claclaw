@@ -881,7 +881,9 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">语音</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读回复<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
+          <label class="set-item"><span class="lb">播报范围<small id="setTtsModeSub">只念回复：不念工具进度</small></span>
+            <select id="setTtsMode"><option value="off">关（不朗读）</option><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
             <select id="setTtsVoice"></select></label>
           <div class="set-item tts-rate"><span class="lb">语速<small id="setTtsRateV">1.10 倍</small></span>
@@ -1541,6 +1543,7 @@ function onEvent(m){
   if(/^(user|ai\.|tool\.|peer|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;
   if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
+  if(narration)narration.onEvent(m);   // 过程播报：只读事件，不改现有逻辑
   switch(m.t){
   case 'session.opened':
     if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
@@ -1674,7 +1677,7 @@ function onEvent(m){
     commands=m.commands||[];syncCmdMenu();
     break;
   case 'ai.full':
-    addAi(m.text);ttsSay(m.text);
+    addAi(m.text);if(ttsModeAllows(3))ttsSay(m.text);
     break;
   case 'cmd.out':
     var po=document.createElement('pre');po.className='cmdout';po.textContent=m.text;feed.appendChild(po);scrollDown();
@@ -2795,8 +2798,21 @@ function applyTheme(t){
 // ---------- 自动朗读回复（浏览器自带的语音合成，不联网、不花钱） ----------
 // 只念正在看的会话里新来的文字回复（历史不念）；代码、表格、链接这些不适合听的换成简短说明。
 // iPhone 要求第一次发声必须由点击触发：打开开关、点发送时顺手「解锁」一下。开着时让屏幕常亮（锁屏后网页不能发声）。
-var tts={on:false,rate:1.1,voice:null,lock:null,want:''};
-try{tts.on=localStorage.getItem('claclaw.tts')==='1';tts.rate=+localStorage.getItem('claclaw.ttsRate')||1.1;tts.want=localStorage.getItem('claclaw.ttsVoice')||''}catch(_){}
+var TTS_MODES=['off','reply','steps','brief'];
+var tts={on:false,rate:1.1,voice:null,lock:null,want:'',mode:'off',lastMode:'reply'};
+try{
+  var savedMode=localStorage.getItem('claclaw.ttsMode'),oldOn=localStorage.getItem('claclaw.tts');
+  tts.mode=TTS_MODES.indexOf(savedMode)>=0?savedMode:(oldOn==='1'?'reply':'off');
+  tts.on=tts.mode!=='off';
+  tts.lastMode=tts.mode==='off'?'reply':tts.mode;
+  tts.rate=+localStorage.getItem('claclaw.ttsRate')||1.1;tts.want=localStorage.getItem('claclaw.ttsVoice')||'';
+}catch(_){}
+// 档位：off 关 / reply 只念回复 / steps 关键节点+回复 / brief 只念关键节点
+function ttsModeAllows(pri){
+  if(!tts.on)return false;
+  if(pri===3)return tts.mode==='reply'||tts.mode==='steps';
+  return tts.mode==='steps'||tts.mode==='brief';
+}
 function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
 // 声音：列出这台设备上的中文语音，好听的排前面（和 dsh-tts-reader 的经验一样：默认取第一个中文语音往往最难听）。
 // Edge 里有微软的自然语音（晓伊、晓晓、云希…）；iPhone / Mac 上是苹果语音，系统设置里下载了「增强 / 高级」版本会更自然。
@@ -2899,6 +2915,15 @@ function srvNext(){
 }
 function srvSay(parts,voice){parts.forEach(function(p){srvQ.push({text:p,voice:voice})});srvNext()}
 function srvStop(){srvGen++;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}})}
+// P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
+function srvInterrupt(text,voice){
+  if(!text)return;
+  try{if(srvCur)srvCur.pause()}catch(_){}
+  srvGen++;                       // 让正在进行的 play/fetch 回调失效
+  srvCur=null;srvBusy=false;
+  srvQ.unshift({text:text,voice:voice});
+  srvNext();
+}
 function srvPlaying(){return !!srvCur&&!srvCur.paused}
 function srvKeepIdle(){}
 // iPhone：<audio> 第一次播放要由点击触发；点一下时两个都放一小段静音，之后就能自己播
@@ -2931,9 +2956,9 @@ function ttsText(src){
 var ttsPos=0,ttsWarmAt=0;
 // 开始回复时让电脑先连好微软语音（30 秒内只叫一次）
 function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(tts.want)||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
-var ttsHush=false;   // 用户在这一轮里点了停止：这一轮剩下的不再自动念，下一轮回复照常自动念
+var ttsHush=false;   // 用户点停止：这一轮正文不再自动念；P0/P1 仍播，下一轮恢复
 function ttsStream(raw,end){
-  if(!tts.on||ttsHush){if(end)ttsPos=raw.length;return}
+  if(!tts.on||!ttsModeAllows(3)||ttsHush){if(end)ttsPos=raw.length;return}
   if(end){var rest=raw.slice(ttsPos);ttsPos=raw.length;if(rest.trim())ttsSay(rest);return}
   // 句末标点 / 换行：攒够 8 个字就切；逗号、冒号：攒够 16 个字也切（长句不用等整句写完，第二句也能快点接上）
   var cut=-1,re=/[。！？!?；;\n，,：:]/g,mm;re.lastIndex=ttsPos;
@@ -2960,6 +2985,248 @@ function ttsSay(src,force){
   });
   ttsShowStop();
 }
+// P0：两条播放路径都要能立刻出声。服务端声音插队；系统语音只能 cancel 后重念 P0，
+// 被丢掉的正文不再接（设计评审允许这个降级）。
+function ttsInterrupt(text){
+  var t=ttsText(text);if(!t)return;
+  var sv=ttsSrvVoice();
+  if(sv){srvUnlock();srvInterrupt(t,sv);return}
+  if(ttsOk())speechSynthesis.cancel();
+  ttsSay(t,true);
+}
+// P0 提示音：WebAudio 现场合成，不引资源文件；只在页面可见时响
+var narrBeepCtx=null;
+function narrBeep(){
+  if(document.hidden)return;
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+    if(!narrBeepCtx)narrBeepCtx=new AC();
+    if(narrBeepCtx.state==='suspended'&&narrBeepCtx.resume)narrBeepCtx.resume().catch(function(){});
+    var t0=narrBeepCtx.currentTime;
+    [880,1174].forEach(function(f,i){
+      var o=narrBeepCtx.createOscillator(),g=narrBeepCtx.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t0+i*0.13);
+      g.gain.exponentialRampToValueAtTime(0.12,t0+i*0.13+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+i*0.13+0.11);
+      o.connect(g);g.connect(narrBeepCtx.destination);
+      o.start(t0+i*0.13);o.stop(t0+i*0.13+0.12);
+    });
+  }catch(_){}
+}
+// ---------- 过程播报：里程碑，而不是每一步 ----------
+// 只读服务端事件；文案只含动作词和文件名，不念路径、命令原文、displayName。
+var narration=(function(){
+  var P0=0,P1=1,P2=2;
+  var BUCKET_MS=3000,MIN_GAP_MS=8000,DEDUP_MS=20000,MAX_QUEUE=6;
+  var TTL={0:120000,1:60000,2:45000};
+  var q=[],timer=null,bucket=[],bucketTimer=null,p0={},said={},lastP2=0,hiddenLatest=null;
+  var muted=false,state='idle',startTimer=null;
+  function clean(s){return String(s||'').replace(/\s+/g,' ').trim()}
+  function base(target){
+    var s=clean(target).replace(/\\/g,'/');
+    if(!s)return '';
+    if(/[\s"'`<>|&;]/.test(s))return '';   // 命令片段 / 带引号的目标：宁可不念
+    s=s.split('/').pop();
+    return s.length>48?s.slice(0,48)+'…':s;
+  }
+  // 四种 Claw 的工具名大小写/叫法都不同，统一收成动作；未知一律静默
+  function kindOf(name){
+    var n=String(name||'').trim();
+    if(!n||n.length>40||/\s/.test(n))return '';   // DeepSeek 的 name 有时是整条命令
+    n=n.toLowerCase().replace(/^mcp__[a-z0-9_]+__/,'');
+    if(!n)return '';
+    // 静默项要先判断：TodoWrite 里有 write，TaskCreate 里有 task
+    if(/(^|[^a-z])(todo|todowrite|task(create|update|list|get|stop)|plan|think|grep|glob|list|ls)([^a-z]|$)/.test(n))return 'silent';
+    if(/(^|[^a-z])(read|notebookread)([^a-z]|$)/.test(n))return 'read';
+    if(/(^|[^a-z])(bash|sh|shell|exec|execute|command|terminal|run)([^a-z]|$)/.test(n))return 'bash';
+    if(/multiedit|notebookedit|apply_?patch|edit|write|patch|replace|insert/.test(n))return 'edit';
+    if(/web_?fetch|web_?search|webfetch|websearch|fetch|browse/.test(n))return 'web';
+    if(/agent|subagent|sessions?_spawn|task/.test(n))return 'agent';
+    return '';
+  }
+  function verbOf(k){
+    return k==='edit'?'改文件':k==='bash'?'跑命令':k==='web'?'查网页':k==='read'?'读文件':k==='agent'?'派子任务':'';
+  }
+  function allowed(pri){return ttsModeAllows(pri)}
+  function mark(items){
+    var now=Date.now();
+    items.forEach(function(it){said[it.kind+'|'+base(it.target)]=now});
+    for(var k in said)if(now-said[k]>60000)delete said[k];
+  }
+  function fresh(items){
+    var now=Date.now(),out=[],seen={};
+    items.forEach(function(it){
+      var key=it.kind+'|'+base(it.target);
+      if(seen[key]||(said[key]||0)>now-DEDUP_MS)return;
+      seen[key]=1;out.push(it);
+    });
+    return out;
+  }
+  function phrase(kind,items){
+    var targets=[];
+    items.forEach(function(it){var b=base(it.target);if(b&&targets.indexOf(b)<0)targets.push(b)});
+    if(kind==='edit'){
+      var n=targets.length||items.length;
+      if(n===1&&targets.length)return '改了 '+targets[0];
+      return '改了 '+n+' 个文件'+(targets.length?'：'+targets.slice(0,3).join('、')+(targets.length>3?' 等':''):'');
+    }
+    if(kind==='bash'){
+      var cmds=items.map(function(it){return String(it.target||'').toLowerCase()});
+      var all=function(re){return cmds.length&&cmds.every(function(c){return re.test(c)})};
+      if(all(/(^|\s)(test|vitest|jest|pytest|npm\s+test|pnpm\s+test|yarn\s+test)(\s|$)/))return '跑测试';
+      if(all(/git\s+commit/))return '提交代码';
+      if(all(/(^|\s)(npm|pnpm|yarn|bun)\s+(install|i|add)(\s|$)/))return '装依赖';
+      return items.length===1?'跑了一条命令':'跑了 '+items.length+' 条命令';
+    }
+    if(kind==='web')return items.length===1?'查资料':'查了 '+items.length+' 次资料';
+    if(kind==='agent')return items.length===1?'派了个子任务':'派了 '+items.length+' 个子任务';
+    return '';
+  }
+  function flushBucket(live){
+    clearTimeout(bucketTimer);bucketTimer=null;
+    var items=bucket;bucket=[];
+    if(!items.length||!live||muted||!allowed(P2))return;
+    var groups={};
+    items.forEach(function(it){(groups[it.kind]=groups[it.kind]||[]).push(it)});
+    Object.keys(groups).forEach(function(k){
+      var list=fresh(groups[k]);if(!list.length)return;
+      var text=phrase(k,list);if(!text)return;
+      mark(list);
+      enqueue({priority:P2,text:text,at:Date.now(),ttl:TTL[P2]});
+    });
+  }
+  function enqueue(item){
+    if(!allowed(item.priority))return;
+    if(item.priority===P2&&muted)return;
+    if(document.hidden){if(item.priority<=P1)hiddenLatest=item;return}
+    if(item.priority!==P0&&q.length>=MAX_QUEUE){
+      var drop=-1,best=-1;
+      for(var i=0;i<q.length;i++)if(q[i].priority>best){best=q[i].priority;drop=i}
+      if(drop<0)drop=0;
+      q.splice(drop,1);
+    }
+    q.push(item);
+    q.sort(function(a,b){return a.priority-b.priority||a.at-b.at});
+    pump();
+  }
+  function pump(){
+    clearTimeout(timer);timer=null;
+    if(!tts.on)return;
+    if(document.hidden){
+      var last=null;q.forEach(function(i){if(i.priority<=P1)last=i});
+      if(last)hiddenLatest=last;
+      q=[];return;
+    }
+    var now=Date.now(),keep=[];
+    for(var i=0;i<q.length;i++)if(now-q[i].at<=q[i].ttl)keep.push(q[i]);
+    q=keep;
+    if(!q.length)return;
+    var item=q[0];
+    if(item.priority===P2&&now-lastP2<MIN_GAP_MS){timer=setTimeout(pump,Math.max(200,Math.min(1000,MIN_GAP_MS-(now-lastP2))));return}
+    if(ttsSpeaking()){timer=setTimeout(pump,500);return}
+    q.shift();
+    if(item.priority===P2)lastP2=Date.now();
+    ttsSay(item.text,true);
+    timer=setTimeout(pump,400);
+  }
+  function interrupt(item){
+    if(!allowed(P0))return;
+    if(document.hidden){hiddenLatest=item;return}
+    q=q.filter(function(x){return x.priority<P2});   // 过时的阶段进展不再念，P1 保留
+    narrBeep();
+    ttsInterrupt(item.text);
+    timer=setTimeout(pump,400);
+  }
+  function cancelStart(){if(startTimer){clearTimeout(startTimer);startTimer=null}}
+  function startTurn(){
+    muted=false;ttsHush=false;state='working';cancelStart();
+    flushBucket(false);
+    q=q.filter(function(i){return i.priority<P1});
+    ttsPos=0;
+    if(!allowed(P1))return;
+    startTimer=setTimeout(function(){
+      if(state==='working')enqueue({priority:P1,text:'开始干活了',at:Date.now(),ttl:TTL[P1]});
+    },3000);
+  }
+  function clearP0(id){
+    var p=p0[id];
+    if(p){if(p.timer)clearTimeout(p.timer);delete p0[id]}
+    if(hiddenLatest&&hiddenLatest.requestId===id)hiddenLatest=null;
+  }
+  function clearAllP0(){Object.keys(p0).forEach(clearP0)}
+  function ask(m){
+    cancelStart();state='waiting';
+    var k=kindOf(m.name),v=verbOf(k),b=(k==='edit'||k==='read')?base(m.target):'';
+    var text=m.questions?'有个问题要问你，打开看看。':'需要你确认'+(v?'：'+v+(b?' '+b:''):'');
+    var item={priority:P0,text:text,at:Date.now(),ttl:TTL[P0],requestId:m.requestId};
+    clearP0(m.requestId);
+    var rec={timer:null};
+    rec.timer=setTimeout(function(){
+      if(!p0[m.requestId])return;
+      rec.timer=null;
+      interrupt({priority:P0,text:text,at:Date.now(),ttl:TTL[P0],requestId:m.requestId});
+    },15000);
+    p0[m.requestId]=rec;
+    interrupt(item);
+  }
+  function addTool(m){
+    cancelStart();state='working';
+    if(muted||!allowed(P2))return;
+    var k=kindOf(m.name);
+    if(!k||k==='read'||k==='silent')return;
+    bucket.push({kind:k,target:m.target||'',at:Date.now()});
+    if(!bucketTimer)bucketTimer=setTimeout(function(){flushBucket(true)},BUCKET_MS);
+  }
+  function finish(m){
+    cancelStart();clearAllP0();flushBucket(false);
+    q=q.filter(function(i){return i.priority<P1});   // 丢掉还没念的「开始/进度」，只保留 P0
+    muted=false;state='done';
+    var err=clean(m.error).slice(0,40);
+    var text=(err||m.subtype==='error')?'这轮出错了'+(err?'：'+err:''):m.subtype==='aborted'?'已中断':'这轮完成了';
+    enqueue({priority:P1,text:text,at:Date.now(),ttl:TTL[P1]});
+    setTimeout(function(){if(state==='done')state='idle'},2000);
+  }
+  function reset(){
+    cancelStart();clearAllP0();
+    if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
+    if(timer){clearTimeout(timer);timer=null}
+    bucket=[];q=[];said={};lastP2=0;muted=false;state='idle';hiddenLatest=null;
+  }
+  function onHidden(){
+    var last=null;q.forEach(function(i){if(i.priority<=P1)last=i});
+    if(last)hiddenLatest=last;
+    q=[];if(timer){clearTimeout(timer);timer=null}
+    if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
+    bucket=[];
+  }
+  function onVisible(){
+    if(!tts.on)return;
+    if(hiddenLatest){var it=hiddenLatest;hiddenLatest=null;it.at=Date.now();q.push(it);q.sort(function(a,b){return a.priority-b.priority||a.at-b.at})}
+    pump();
+  }
+  return {
+    onEvent:function(m){
+      switch(m.t){
+      case 'session.opened': case 'session.closed': case 'session.reclaimed': reset();break;
+      case 'user': if(!m.queued)startTurn();break;
+      case 'ai.start': cancelStart();state='working';break;
+      case 'tool.start': addTool(m);break;
+      case 'perm.request': ask(m);break;
+      case 'perm.cancel': case 'perm.done': clearP0(m.requestId);break;
+      case 'turn.done': finish(m);break;
+      case 'busy': if(m.on)state='working';break;
+      }
+    },
+    onUserStop:function(){
+      muted=true;q=q.filter(function(i){return i.priority<P2});
+      if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
+      bucket=[];
+    },
+    onHidden:onHidden,
+    onVisible:onVisible
+  };
+})();
 // 试听：不管自动朗读开没开，都用当前选的声音念一句
 function ttsPreview(text){
   ttsStop();
@@ -2998,18 +3265,35 @@ function ttsWake(){
   if(!tts.on||document.hidden||!navigator.wakeLock||tts.lock)return;
   navigator.wakeLock.request('screen').then(function(l){tts.lock=l;l.addEventListener('release',function(){tts.lock=null})}).catch(function(){});
 }
+function ttsModeSet(mode){
+  if(TTS_MODES.indexOf(mode)<0)mode='reply';
+  ttsStop();
+  if(mode!=='off')tts.lastMode=mode;
+  tts.mode=mode;tts.on=mode!=='off';
+  try{localStorage.setItem('claclaw.ttsMode',mode);localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
+  if(tts.on){tts.unlocked=false;tts.srvUnlocked=false;ttsUnlock()}else ttsStop();
+  if(narration&&narration.reset)narration.reset();
+  ttsSync();
+}
 function ttsSync(){
   $('#setTts').dataset.on=tts.on?'1':'';$('#setTtsRate').value=String(tts.rate);ttsRateLabel();
+  var sel=$('#setTtsMode');if(sel)sel.value=tts.mode;
   // 朗读关着时，声音和语速用不上：一起收起来
   $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
-  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：正在看的会话来了新回复就念出来；屏幕保持常亮':'关着：开了以后，正在看的会话来了新回复就念出来';
+  var label={off:'关着：不朗读',reply:'只念文字回复，不念工具进度',steps:'关键节点 + 回复：等你确认、改文件/跑命令、完成，再念正文',brief:'只念关键节点，不念正文'};
+  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；页面保持在前台，锁屏后停止':'关着：点一下打开朗读';
+  var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
 }
 $('#setTts').addEventListener('click',function(){
   if(!ttsOk())return;
-  tts.on=!tts.on;try{localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
-  if(tts.on){tts.unlocked=false;tts.srvUnlocked=false;ttsUnlock();ttsPreview('自动朗读已打开')}else ttsStop();
-  ttsSync();
+  if(tts.on)ttsModeSet('off');
+  else{ttsModeSet(tts.lastMode||'reply');ttsPreview('自动朗读已打开')}
+});
+$('#setTtsMode').addEventListener('change',function(e){
+  var m=e.target.value;
+  ttsModeSet(m);
+  if(m!=='off')ttsPreview(m==='reply'?'只念回复':m==='steps'?'关键节点和回复':'只念关键节点');
 });
 $('#setTtsVoice').addEventListener('change',function(e){
   tts.want=e.target.value;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}
@@ -3025,7 +3309,7 @@ $('#setTtsRate').addEventListener('change',function(e){
 });
 $('#ttsStop').addEventListener('click',function(){
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
-  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;return}   // 还在回复中：这一轮后面的也别念了
+  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;if(narration&&narration.onUserStop)narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice())srvUnlock(true);else ttsUnlock();
   ttsDbg('tap say');
@@ -3036,8 +3320,11 @@ setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
 var ttsDbgAt=0;
 function ttsDbg(m){if(Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();fetch('/api/tts/log',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({m:String(m).slice(0,200)})}).catch(function(){})}
 document.addEventListener('visibilitychange',function(){
-  if(document.hidden){if(!ttsSrvVoice())ttsStop();else tts.srvUnlocked=false}   // 去过后台：下次点屏幕时重新解锁一次
-  else{ttsWake();ttsPickVoice()}
+  if(document.hidden){
+    if(narration&&narration.onHidden)narration.onHidden();
+    if(!ttsSrvVoice())ttsStop();else tts.srvUnlocked=false;
+  }
+  else{ttsWake();ttsPickVoice();if(narration&&narration.onVisible)narration.onVisible()}
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
 $('#mtabs [data-tab="set"]').addEventListener('click',ttsLoadSrv);$('#railSet').addEventListener('click',ttsLoadSrv);
 document.addEventListener('pointerdown',ttsUnlock,{capture:true});

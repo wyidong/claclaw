@@ -511,7 +511,7 @@ export class OpRunner {
       try {
         await this.attach();
         if (cmd) return this.finish(await this.command(cmd[1], (cmd[2] || '').trim()));
-        if (images.length && !caps.promptCapabilities?.image) throw new Error('opencode 不支持发图片，只发文字吧');
+        if (images.length && !caps.promptCapabilities?.image) throw new Error('当前 OpenCode 模型没有声明图片输入（ACP image=false）。换一个支持图片的模型，或改用 Claude / OpenClaw 发图。');
         const prompt = [
           ...images.map(i => ({ type: 'image', mimeType: i.media_type, data: i.data })),
           ...(text ? [{ type: 'text', text }] : []),
