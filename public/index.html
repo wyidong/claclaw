@@ -451,9 +451,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-req-b small{color:var(--muted);font-size:12px;font-family:var(--mono)}
 .pe-mini{height:28px;padding:0 10px;font-size:13px;flex:none}
 .pe-tag{flex:none;font-size:12px;color:var(--allow)}
-.pe-peer{flex-direction:column;align-items:stretch;gap:6px}
-.pe-peer-top{display:flex;align-items:center;gap:12px}
-.pe-peer-top .k{flex:1;min-width:0}
+.h-row.pe-peer{flex-direction:column;align-items:stretch;gap:6px}
+.pe-peer-top{display:flex;align-items:center;gap:12px;width:100%}
+.pe-peer-name{flex:1;min-width:0;display:flex;align-items:center;gap:0;padding:0;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.pe-peer-name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-chev{flex:none;width:7px;height:7px;margin-left:8px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.pe-chev.open{transform:rotate(225deg) translateY(-2px)}
 .pe-peer-desc{font-size:13px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
 .pe-peer-desc small{display:block;font-size:12px}
 .pe-scan{margin-left:8px;padding:0;border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
@@ -1796,7 +1799,7 @@ function loadHost(){
 // ---------- 宿主 → claclaw 协同 ----------
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
 // 只有在本机用 127.0.0.1 打开时能改设置；第一版只走局域网
-var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
+var peerOpen={},peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
 $('#hostBody').addEventListener('click',function(e){
   var a=e.target.closest('[data-act]');if(!a)return;
   var act=a.dataset.act;
@@ -1811,6 +1814,7 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-start'){peerMsg={ok:'正在向对方申请…'};paintPeerMsg();peerPost('/pair-start',{url:$('#peUrl').value.replace(/\s+/g,'')},'已向对方申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
   if(act==='peer-near-pair'){peerMsg={ok:'正在向「'+a.dataset.name+'」申请…'};paintPeerMsg();peerPost('/pair-start',{url:a.dataset.url,urlAlt:a.dataset.alt||''},'已向「'+a.dataset.name+'」申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
   if(act==='peer-scan')peerScan();
+  if(act==='peer-more'){peerOpen[a.dataset.id]=!peerOpen[a.dataset.id];paintPeerLive();return}
   if(act==='peer-finish')peerPost('/pair-finish',{code:$('#peCode').value.trim()},'');
   if(act==='peer-cancel')peerPost('/pair-cancel',{},'');
 });
@@ -1905,11 +1909,13 @@ function peerPeersHtml(c){
   if(!c.peers||!c.peers.length)return '';
   return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
     var o=peerOnline[p.id],dot=p.canCall?'<i class="h-dot'+(o&&o.online?' on':'')+'"></i>':'';
-    var st=!p.canCall?'只能对方找我们':!o?'检查中…':o.online?'在线'+(o.sessions&&o.sessions.length?' · 对方会话：'+o.sessions.map(function(s){return s.title||s.id}).join('、'):''):'离线'+(o.error?'（'+o.error+'）':'');
+    // 在线与否看绿点；展开后才显示对方会话、离线原因、IP 和配对时间
+    var st=!p.canCall?'只能对方找我们（配对时对方没给收件地址）':!o?'检查中…':o.online?(o.sessions&&o.sessions.length?'对方会话：'+o.sessions.map(function(s){return s.title||s.id}).join('、'):'对方没有开放会话'):'离线'+(o.error?'：'+o.error:'');
+    var open=peerOpen[p.id];
     // 第一行：名字 + 撤销；第二行：在线状态、对方会话、IP 和配对时间（占满整行，左对齐）
-    return '<div class="h-row pe-peer"><div class="pe-peer-top"><span class="k">'+dot+esc(p.name)+'</span>'+
+    return '<div class="h-row pe-peer"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+'<span>'+esc(p.name)+'</span><i class="pe-chev'+(open?' open':'')+'"></i></button>'+
       '<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button></div>'+
-      '<div class="pe-peer-desc">'+esc(st)+'<small>IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt)+' 配对</small></div></div>';
+      (open?'<div class="pe-peer-desc">'+esc(st)+'<small>IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt)+' 配对</small></div>':'')+'</div>';
   }).join('')+'</div></div>';
 }
 function paintPeerLive(){
