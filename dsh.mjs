@@ -1,5 +1,5 @@
 // DeepSeek Harness（dsh）适配。
-// - 会话列表和历史：直接读 ~/.dsh/sessions/<目录>/<id>/session.v3.jsonl.zstd（追加写的多段 zstd + JSONL），和读 Claude 会话文件一个思路。
+// - 会话列表和历史：直接读 ~/.dsh/sessions/<目录>/<id>/session.v4.jsonl.zstd（dsh 0.2 起；旧版是 v3，两个都在时读 v4。追加写的多段 zstd + JSONL），和读 Claude 会话文件一个思路。
 // - 发消息：claclaw 自己起一个 `dsh --profile acp`（ACP 标准协议，stdin/stdout 一行一条 JSON-RPC），
 //   用 session/resume 接上已有会话、session/prompt 发消息；不依赖 dsh 网页版（3080）开着。
 // 网页里 DeepSeek 会话的 id = 'ds:' + dsh 会话 id，和 Claude 的 UUID、OpenClaw 的 oc: 区分开。
@@ -14,7 +14,8 @@ const HOME = os.homedir();
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
 const ROOT = path.join(DSH_HOME, 'sessions');
 const ATTACH = path.join(DSH_HOME, 'attachments', 'v1', 'objects');
-const LOG_NAME = 'session.v3.jsonl.zstd';
+// dsh 0.2 升级会话时会另写一份 v4，旧的 v3 留着不再更新，所以新格式优先
+const LOG_NAMES = ['session.v4.jsonl.zstd', 'session.v3.jsonl.zstd'];
 export const DS_PREFIX = 'ds:';
 export const isDs = id => typeof id === 'string' && id.startsWith(DS_PREFIX);
 const sidOf = id => id.slice(DS_PREFIX.length);
@@ -63,8 +64,8 @@ function scan() {
     let ds = [];
     try { ds = fs.readdirSync(path.join(ROOT, g)); } catch { continue; }
     for (const d of ds) {
-      const f = path.join(ROOT, g, d, LOG_NAME);
-      if (fs.existsSync(f)) map.set(d, f);
+      const f = LOG_NAMES.map(n => path.join(ROOT, g, d, n)).find(x => fs.existsSync(x));
+      if (f) map.set(d, f);
     }
   }
   return map;
@@ -84,7 +85,7 @@ function summarize(recs) {
     else if (r.type === 'request/header' && r.data?.header?.config?.model) model = r.data.header.config.model;
     else if (r.type === 'user/message' && r.data?.source?.kind === 'user') { hasUser = true; if (!firstPrompt) firstPrompt = userText(r.data); }
   }
-  return { id: head.id, cwd: head.cwd || '', createdAt: head.createdAt || 0, sub: head.origin === 'subagent' || !!head.parentSession, title, model, firstPrompt, hasUser };
+  return { id: head.id, cwd: head.cwd || '', createdAt: head.createdAt || 0, sub: head.origin === 'subagent' || !!head.parentSession || head.delegationDepth > 0, title, model, firstPrompt, hasUser };
 }
 
 export function dsSessionList({ busy = () => false } = {}) {
