@@ -1920,7 +1920,7 @@ function renderPeer(){
       '<div class="pe-note">协同要在这台电脑上用 <span class="pe-mono">http://127.0.0.1:'+location.port+'</span> 打开网页时设置。</div>';
     $('#hostBody').innerHTML=h;paintPeerMsg();return;
   }
-  h+='<div id="pePending">'+peerPendingHtml(c)+'</div>';   // 配对申请放最上面（提示语下面），一进来就看到
+  h+='<div id="pePeers">'+peerPeersHtml(c)+'</div><div id="pePending">'+peerPendingHtml(c)+'</div>';   // 已配对放最上面，配对申请紧跟着，一进来就看到
   var dirs=[];peerList.forEach(function(s){if(s.cwd&&!s.claw&&dirs.indexOf(s.cwd)<0)dirs.push(s.cwd)});
   if(c.dir&&dirs.indexOf(c.dir)<0)dirs.unshift(c.dir);
   var dirSel='<select id="peDir" class="pe-in"><option value="">选择目录</option>'+dirs.map(function(d){return '<option value="'+esc(d)+'"'+(d===c.dir?' selected':'')+'>'+esc(d.replace(/^\/(Users|home)\/[^\/]+/,'~'))+'</option>'}).join('')+'</select>';
@@ -1940,7 +1940,7 @@ function renderPeer(){
       '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.baseName||c.base)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请（含配对说明）</button></div>'+
       '</div><div class="pe-note">地址里不含密码：别人拿到只能申请配对，要你在这页把两位数配对码告诉他才能配上。</div></div>';
   }
-  h+='<div id="peNear">'+peerNearHtml(c)+'</div><div id="pePeers">'+peerPeersHtml(c)+'</div>';
+  h+='<div id="peNear">'+peerNearHtml(c)+'</div>';
   h+='<div><div class="h-h">向对方申请配对</div><div class="h-card">'+
     (c.outPair?
       '<div class="h-row"><span class="k">对方</span><span class="v pe-mono">'+esc(c.outPair.base)+'</span></div>'+

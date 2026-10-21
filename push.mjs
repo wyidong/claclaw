@@ -65,12 +65,18 @@ export async function sendAll(payload, log = () => {}) {
   const body = JSON.stringify(payload);
   let ok = 0, dead = [];
   await Promise.all(list.map(async ({ sub }) => {
-    try {
-      await webpush.sendNotification(sub, body, { TTL: 3600, urgency: 'high' });
-      ok++;
-    } catch (e) {
-      if (e.statusCode === 404 || e.statusCode === 410) dead.push(sub.endpoint);
-      else log('push failed', e.statusCode || '', String(e.body || e.message).slice(0, 160));
+    // 网络抖动（socket hang up、超时……没有状态码）：隔一会儿再试，最多 3 次
+    for (let n = 1; ; n++) {
+      try {
+        await webpush.sendNotification(sub, body, { TTL: 3600, urgency: 'high' });
+        ok++;
+        return;
+      } catch (e) {
+        if (e.statusCode === 404 || e.statusCode === 410) { dead.push(sub.endpoint); return; }
+        if (!e.statusCode && n < 3) { await new Promise(r => setTimeout(r, 1500 * n)); continue; }
+        log('push failed', e.statusCode || '', String(e.body || e.message).slice(0, 160));
+        return;
+      }
     }
   }));
   if (dead.length) {
