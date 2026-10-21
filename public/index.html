@@ -416,6 +416,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
     padding:4px max(6px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
   #mtabs button.on{color:var(--accent)}
+  #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}   /* 宿主那格显示宿主名，太长截断 */
   #mtabs .ti{display:block;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   #mtabs .ti .f{fill:currentColor;fill-opacity:0;transition:fill-opacity .15s}
   #mtabs button.on .ti .f{fill-opacity:.22}
@@ -437,6 +438,31 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #setTop{display:none}
 #clawPane{display:none}
 #hostPane{display:none}
+#hostsPane{display:none}
+#hostPane:has([data-act="peer-back"]) #hostBack{display:none}   /* 协同子页面有自己的「‹ 宿主」 */
+/* 选择宿主：卡片（手机和电脑共用，手机上更大） */
+.hcard{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:64px;margin:0 0 8px;padding:12px 14px;border:.5px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);box-sizing:border-box;cursor:pointer;-webkit-user-select:none;user-select:none}
+.hcard[aria-current="true"]{border-color:var(--user-bg);background:var(--user-bg)}
+.hcard.dis{opacity:.5;cursor:default}
+.hc-ic{position:relative;flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:var(--surface);color:var(--muted)}
+.hcard[aria-current="true"] .hc-ic{color:var(--accent)}
+.hc-dot{position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;border-radius:50%;background:var(--surface);border:2px solid var(--muted);box-sizing:border-box}
+.hc-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
+.hc-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.hc-tx b{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hc-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
+.hc-st{flex:none;font-size:12.5px;color:var(--accent);font-weight:600}
+.hc-rm{flex:none;height:28px;padding:0 10px;border:0;border-radius:8px;background:none;color:var(--deny);font:inherit;font-size:13px;cursor:pointer}
+.hc-rm:hover{background:var(--surface)}
+.hs-h{margin:16px 6px 8px;font-size:12.5px;color:var(--muted)}
+.hs-note{margin:10px 6px;font-size:12.5px;line-height:1.6;color:var(--muted)}
+.hc-form{margin:-4px 0 10px;padding:10px 0 0;border:.5px solid var(--line);border-radius:14px;background:var(--bg)}
+.hc-ft{margin:0 14px 8px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.hc-row{display:flex;align-items:center;gap:10px;padding:6px 14px;font-size:14px}
+.hc-row span{flex:none;width:52px;color:var(--muted)}
+.hc-row input{flex:1;min-width:0;height:34px;padding:0 10px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px}
+.hc-err{margin:4px 14px 0;min-height:1em;font-size:12.5px;color:var(--deny)}
+.hc-err:empty{display:none}
 /* 宿主页的分组卡片（手机和电脑共用） */
 .h-link{cursor:pointer}
 .h-link:active{background:var(--surface)}
@@ -521,6 +547,9 @@ select.pe-in{text-align-last:right}
   #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + env(safe-area-inset-bottom,0px))}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
+  #app.m-list.hosts-on #sTop,#app.m-list.hosts-on #sList{display:none}
+  #app.m-list.hosts-on #hostsPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + env(safe-area-inset-bottom,0px))}
+  #hostsPane .hcard{min-height:80px;padding:16px;border-radius:16px}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + env(safe-area-inset-bottom,0px))}
   .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
   .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
@@ -624,6 +653,9 @@ select.pe-in{text-align-last:right}
   /* 宿主页（图标栏的显示器）：和设置一样，占会话列表那一栏 */
   #app.host-on #sTop,#app.host-on #sList{display:none}
   #app.host-on #hostPane{display:block;padding:16px 0 8px}
+  #app.hosts-on #sTop,#app.hosts-on #sList{display:none}
+  #app.hosts-on #hostsPane{display:block;padding:16px 0 8px}
+  #hostsPane .claw-h{margin:0 6px 16px;font-size:17px;font-weight:600;color:var(--ink)}
   #hostPane .claw-h{margin:0 6px 16px;font-size:17px;font-weight:600;color:var(--ink)}
   #hostPane .h-row{min-height:40px;padding:8px 12px;font-size:13.5px}
   #hostPane .h-row .v{font-size:12.5px}
@@ -695,7 +727,7 @@ select.pe-in{text-align-last:right}
     </div>
     <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
-    <button type="button" id="railHost" aria-label="宿主" title="宿主（这台电脑的状态）"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
+    <button type="button" id="railHost" aria-label="宿主" title="宿主（点开切换）"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
   <header>
@@ -751,7 +783,7 @@ select.pe-in{text-align-last:right}
   <nav id="mtabs" aria-label="底部菜单">
     <button type="button" data-tab="chats" class="on"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span>会话</span></button>
     <button type="button" data-tab="claw"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="3.5" y="13.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="13.5" width="7" height="7" rx="2"/></svg><span>Claw</span></button>
-    <button type="button" data-tab="host"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>宿主</span></button>
+    <button type="button" data-tab="hosts"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>宿主</span></button>
     <button type="button" data-tab="set"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
   </nav>
 
@@ -815,7 +847,9 @@ select.pe-in{text-align-last:right}
         </button>
       </div>
       <!-- 宿主：跑 claclaw 的这台电脑的状态（打开时每 5 秒刷新） -->
-      <div id="hostPane"><div class="claw-h">宿主</div><div id="hostBody"><div class="h-empty">加载中…</div></div></div>
+      <div id="hostPane"><button type="button" class="pe-back" id="hostBack">‹ 设置</button><div class="claw-h" id="hostTitle">宿主</div><div id="hostBody"><div class="h-empty">加载中…</div></div></div>
+      <!-- 选择宿主：像选 Claw 一样，点哪台，会话、Claw、设置里的「宿主」就都是那台电脑的 -->
+      <div id="hostsPane"><div class="claw-h">选择宿主</div><div id="hostsList"></div><div class="hs-note" id="hostsNote"></div></div>
       <div id="setPane">
       <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
       <div id="setBody">
@@ -824,6 +858,12 @@ select.pe-in{text-align-last:right}
         <div class="set-h">客户端</div>
         <div class="set-card">
           <button type="button" class="set-item" id="setReload"><span class="lb">更新客户端<small id="setReloadSub">重新加载网页，用上电脑上的最新版本</small></span><svg class="rl-ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+        </div>
+      </div>
+      <div class="set-sec">
+        <div class="set-h">宿主</div>
+        <div class="set-card">
+          <button type="button" class="set-item" id="setHost"><span class="lb"><span id="setHostName">宿主</span><small>这台宿主的电脑状态、claclaw 版本、Claw、claclaw 协同</small></span><span class="chev" aria-hidden="true"></span></button>
         </div>
       </div>
       <div class="set-sec">
@@ -882,6 +922,28 @@ select.pe-in{text-align-last:right}
 (function(){
 'use strict';
 var $=function(s){return document.querySelector(s)};
+// ---------- 多宿主：选中的宿主（''＝这台，也就是网址里的首连宿主）。记在这台设备上；通知点进来带 ?host= ----------
+var HOST=(function(){
+  var q=new URLSearchParams(location.search).get('host');
+  try{if(q!=null){if(q)localStorage.setItem('claclaw.host',q);else localStorage.removeItem('claclaw.host')}return localStorage.getItem('claclaw.host')||''}catch(_){return q||''}
+})();
+var HB=HOST?'/h/'+encodeURIComponent(HOST):'';
+var hostName='';try{hostName=localStorage.getItem('claclaw.hostName.'+HOST)||''}catch(_){}
+// 存在这台设备上、跟宿主有关的东西（上次的会话、选的 Claw）按宿主分开
+function hk(k){return 'claclaw.'+k+(HOST?'@'+HOST:'')}
+// 推送、宿主列表、退出登录、朗读总是找首连宿主；其余 /api/ 都转给选中的宿主
+var HOST_LOCAL=/^\/api\/(push\/|hosts|logout|tts)/,hostTrouble=null;
+if(HB){var _fetch=window.fetch.bind(window);window.fetch=function(u,o){
+  var mine=typeof u==='string'&&u.indexOf('/api/')===0&&!HOST_LOCAL.test(u);
+  return _fetch(mine?HB+u:u,o).then(function(r){
+    if(mine&&(r.status===424||r.status===404||r.status===502))r.clone().json().then(function(j){if(j&&(j.hostAuth||j.hostGone||j.hostDown)&&hostTrouble)hostTrouble(j)}).catch(function(){});
+    return r;
+  });
+}}
+function switchHost(id,s){
+  try{if(id)localStorage.setItem('claclaw.host',id);else localStorage.removeItem('claclaw.host')}catch(_){}
+  location.replace('/?host='+encodeURIComponent(id||'')+(s==='view:peer'?'&view=peer':s?'&s='+encodeURIComponent(s):''));
+}
 var DESKTOP=window.matchMedia('(min-width:1000px)');
 var feed=$('#feed'),dock=$('#dock'),ta=$('#ta'),sendBtn=$('#send'),taWrap=$('#taWrap'),sugBtn=$('#sugBtn');
 
@@ -1481,7 +1543,7 @@ function onEvent(m){
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||'')+(m.branch?' · 分支 '+m.branch:''));
     }
-    localStorage.setItem('claclaw.session',m.id);
+    localStorage.setItem(hk('session'),m.id);
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
     commands=m.commands||[];syncCmdMenu();   // 输入框里已经有「/」时，弹层立刻换成这个会话的命令
@@ -1507,7 +1569,7 @@ function onEvent(m){
     break;
   case 'session.reclaimed':
     addSys('这个会话已在'+where(m.entrypoint)+'重新打开，网页端已退出（以原处的操作为准）。');
-    localStorage.removeItem('claclaw.session');
+    localStorage.removeItem(hk('session'));
     break;
   case 'session.closed':
     if(m.reason==='deleted')addSys('当前会话已被删除');
@@ -1635,16 +1697,16 @@ function setHeader(){
 }
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function connect(){
-  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+HB+'/ws');
   ws.onopen=function(){
     retry=0;banner(null);
     if(connectedOnce)checkVersion();connectedOnce=true;
     wsSend({t:'visible',on:!document.hidden});
     if(wantPeer){wantPeer=false;history.replaceState(null,'','/');if(!DESKTOP.matches){goList();openPeerView();return}openPeerView()}
     var fromUrl=new URLSearchParams(location.search).get('s');
-    if(fromUrl)history.replaceState(null,'','/');
+    if(fromUrl||location.search)history.replaceState(null,'','/');
     if(pendingOpen)fromUrl=pendingOpen;
-    var last=fromUrl||(session?session.id:localStorage.getItem('claclaw.session'));
+    var last=fromUrl||(session?session.id:localStorage.getItem(hk('session')));
     if(!DESKTOP.matches&&!fromUrl){
       var view='';try{view=sessionStorage.getItem('claclaw.view')||''}catch(_){}
       if(mList||view!=='chat'||!last){goList();return}   // 手机：打开 App 先到会话列表（像微信）
@@ -1774,11 +1836,11 @@ function railTab(set){mTab(set?'set':'chats')}
 // 底部菜单：claw（选择哪种助手）/ chats（会话列表）/ set（设置，子页面）
 function mTab(t){
   var app=$('#app');
-  app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
+  app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');app.classList.toggle('hosts-on',t==='hosts');
   if(t!=='host'){hostView='';peerWatch(false)}
-  hostLive(t==='host');
-  $('#railSet').classList.toggle('on',t==='set');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host');
-  document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t)});
+  hostLive(t==='host');if(t==='hosts')loadHosts();
+  $('#railSet').classList.toggle('on',t==='set'||t==='host');$('#railHost').classList.toggle('on',t==='hosts');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host'&&t!=='hosts');
+  document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===(t==='host'?'set':t))});
   $('.sheet-p').scrollTop=0;
 }
 // ---------- 宿主页 ----------
@@ -1827,6 +1889,115 @@ function loadHost(){
     $('#hostBody').innerHTML=h;
   }).catch(function(e){if(!$('#hostBody .h-row'))$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
+// ---------- 选择宿主（多宿主）：像选 Claw 一样的卡片页 ----------
+// 首连宿主（这个网址连的电脑）总在第一个；已添加的宿主点一下就切过去（整页刷新）；
+// 同一 Tailscale 里其他在线电脑：默认端口上有 claclaw 的点一下输入它的用户名密码添加，没有的可以自己填端口
+var hostsData=null,hostsForm=null;   // hostsForm：正在填的添加表单 {key,ip,port,name,needPort,relogin}
+var HOST_IC='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+function hostLabels(){
+  var n=hostName||'';
+  $('#hostTitle').textContent=n?'宿主 · '+n:'宿主';
+  $('#setHostName').textContent=n?'宿主 · '+n:'宿主';
+  var mt=$('#mtabs [data-tab="hosts"] span');if(mt)mt.textContent=HOST&&n?n:'宿主';
+  $('#railHost').title=n?'宿主：'+n+'（点开切换）':'宿主（点开切换）';
+}
+function setHostName(n){hostName=n||'';try{localStorage.setItem('claclaw.hostName.'+HOST,hostName)}catch(_){}hostLabels()}
+hostLabels();
+fetch('/api/claclaw/hello').then(function(r){return r.json()}).then(function(j){if(j&&j.name&&j.name!==hostName)setHostName(j.name)}).catch(function(){});
+function loadHosts(){
+  if(!hostsData)$('#hostsList').innerHTML='<div class="h-empty">正在找同一 Tailscale 里的电脑…</div>';
+  fetch('/api/hosts').then(function(r){return r.json()}).then(function(j){hostsData=j;renderHosts()})
+    .catch(function(e){$('#hostsList').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
+}
+function hostCard(o){   // o: {key,id,name,sub,cur,dis,dot,rm}
+  return '<div class="hcard'+(o.dis?' dis':'')+'" role="button" tabindex="0" data-hk="'+esc(o.key)+'"'+(o.cur?' aria-current="true"':'')+'>'+
+    '<span class="hc-ic">'+HOST_IC+(o.dot!=null?'<i class="hc-dot'+(o.dot?' on':'')+'"></i>':'')+'</span>'+
+    '<span class="hc-tx"><b>'+esc(o.name)+'</b><small>'+esc(o.sub)+'</small></span>'+
+    (o.cur?'<span class="hc-st">当前</span>':'')+(o.rm?'<button type="button" class="hc-rm" data-rm="'+esc(o.id)+'">移除</button>':'')+'</div>'+
+    (hostsForm&&hostsForm.key===o.key?hostFormHtml():'');
+}
+function hostFormHtml(){
+  var f=hostsForm;
+  return '<div class="hc-form">'+
+    (f.relogin?'<div class="hc-ft">「'+esc(f.name)+'」的登录失效了，重新输入它网页的用户名和密码</div>':'<div class="hc-ft">输入「'+esc(f.name)+'」上 claclaw 网页的用户名和密码（只用来登录一次，不保存密码）</div>')+
+    (f.needPort?'<label class="hc-row"><span>端口</span><input id="hfPort" inputmode="numeric" value="'+esc(f.port||'')+'" placeholder="对方 claclaw 的端口"></label>':'')+
+    '<label class="hc-row"><span>用户名</span><input id="hfUser" autocomplete="off" autocapitalize="off" spellcheck="false"></label>'+
+    '<label class="hc-row"><span>密码</span><input id="hfPass" type="password" autocomplete="off"></label>'+
+    '<div class="hc-err" id="hfErr"></div>'+
+    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-hf="go">'+(f.relogin?'重新登录':'添加')+'</button><button type="button" class="pe-btn" data-hf="cancel">取消</button></div></div>';
+}
+function renderHosts(){
+  var j=hostsData;if(!j)return;
+  var h='';
+  if(!HOST&&j.self.name&&j.self.name!==hostName)setHostName(j.self.name);
+  h+=hostCard({key:'',id:'',name:j.self.name||'这台宿主',sub:'首连宿主 · 网址连的这台电脑',cur:!HOST,dot:true});
+  j.hosts.forEach(function(x){
+    if(x.id===HOST&&x.name!==hostName)setHostName(x.name);
+    h+=hostCard({key:x.id,id:x.id,name:x.name,sub:x.ip+':'+x.port+' · '+(x.online?'在线':'离线'),cur:x.id===HOST,dot:x.online,rm:true,dis:!x.online&&x.id!==HOST});
+  });
+  if(j.tailnet&&j.tailnet.length){
+    h+='<div class="hs-h">同一 Tailscale 里的其他电脑</div>';
+    j.tailnet.forEach(function(p){
+      var key='ip:'+p.ip;
+      h+=hostCard({key:key,name:p.name||p.ip,sub:p.ip+(p.os?' · '+p.os:'')+' · '+(!p.online?'离线':p.claclaw?'有 claclaw，点一下添加':p.old?'有旧版 claclaw，更新后才能添加':'默认端口没有 claclaw，换了端口的点一下输入'),dot:p.online,dis:!p.online||p.old});
+    });
+  }
+  $('#hostsList').innerHTML=h;
+  $('#hostsNote').textContent=j.tailnet===null?'这台电脑上没找到 Tailscale，只能用这台宿主。':
+    '切换后，会话、Claw、设置里的「宿主」都是选中那台电脑的；通知由首连宿主统一发到这台设备。';
+  if(hostsForm){var u=$('#hfPort')&&!$('#hfPort').value?$('#hfPort'):$('#hfUser');if(u)u.focus()}
+}
+$('#hostsList').addEventListener('click',function(e){
+  var j=hostsData;if(!j)return;
+  var rm=e.target.closest('[data-rm]');
+  if(rm){
+    var x=j.hosts.filter(function(y){return y.id===rm.dataset.rm})[0];
+    if(!x||!confirm('移除宿主「'+x.name+'」？以后要用得重新添加（输入它的密码）。'))return;
+    fetch('/api/hosts/remove',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:x.id})}).then(function(){
+      if(x.id===HOST)switchHost('');else loadHosts();
+    });
+    return;
+  }
+  var hf=e.target.closest('[data-hf]');
+  if(hf){
+    if(hf.dataset.hf==='cancel'){hostsForm=null;renderHosts();return}
+    var f=hostsForm,port=f.needPort?Number($('#hfPort').value):f.port;
+    if(!port){$('#hfErr').textContent='填一下端口';return}
+    hf.disabled=true;$('#hfErr').textContent='正在连接…';
+    fetch('/api/hosts/add',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ip:f.ip,port:port,username:$('#hfUser').value,password:$('#hfPass').value})})
+      .then(function(r){return r.json()}).then(function(r){
+        if(!r.ok){hf.disabled=false;$('#hfErr').textContent=r.error||'添加失败';return}
+        hostsForm=null;
+        if(f.relogin&&r.id===HOST){location.reload();return}
+        hostsData=null;loadHosts();
+      }).catch(function(e){hf.disabled=false;$('#hfErr').textContent=e.message});
+    return;
+  }
+  if(e.target.closest('.hc-form'))return;
+  var c=e.target.closest('.hcard');if(!c||c.classList.contains('dis'))return;
+  var key=c.dataset.hk;
+  if(key.indexOf('ip:')===0){   // 还没添加的电脑：展开添加表单
+    var p=j.tailnet.filter(function(y){return 'ip:'+y.ip===key})[0];if(!p)return;
+    hostsForm=hostsForm&&hostsForm.key===key?null:{key:key,ip:p.ip,port:p.claclaw?8787:'',name:p.claclaw&&p.claclaw.name||p.name||p.ip,needPort:!p.claclaw};
+    renderHosts();return;
+  }
+  if(key===HOST){if(!DESKTOP.matches)goList();else mTab('chats');return}
+  switchHost(key);
+});
+$('#hostsList').addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.closest('.hc-form')){var b=$('[data-hf="go"]');if(b&&!b.disabled)b.click()}});
+// 选中的宿主出问题：登录失效 → 到宿主页重新输密码；被移除 → 回首连宿主；连不上 → 顶部提示
+var hostWarned=false;
+hostTrouble=function(j){
+  if(j.hostGone){switchHost('');return}
+  if(hostWarned)return;hostWarned=true;
+  if(j.hostAuth){
+    fetch('/api/hosts').then(function(r){return r.json()}).then(function(d){
+      hostsData=d;var x=d.hosts.filter(function(y){return y.id===HOST})[0];
+      if(x)hostsForm={key:x.id,ip:x.ip,port:x.port,name:x.name,relogin:true};
+      if(!DESKTOP.matches&&!mList)goList();mTab('hosts');renderHosts();
+    });
+  }else if(j.hostDown)banner('连不上宿主「'+(hostName||'')+'」：它可能关机或没启动 claclaw。可以到「宿主」页切回其他宿主');
+};
 // ---------- 宿主 → claclaw 协同 ----------
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
 // 只有在本机用 127.0.0.1 打开时能改设置；第一版只走局域网
@@ -2061,7 +2232,7 @@ function renderPeer(){
   $('#hostBody').innerHTML=h;paintPeerMsg();
 }
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
-var clawSel=null;try{clawSel=localStorage.getItem('claclaw.claw')}catch(_){}
+var clawSel=null;try{clawSel=localStorage.getItem(hk('claw'))||localStorage.getItem('claclaw.claw')}catch(_){}   // 新切到的宿主：先沿用首连宿主选的 Claw
 if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek')clawSel=null;
 // 左栏的 Claw：活跃的常显，其余收起来；全都活跃就没有「更多」
 function renderRailClaws(){
@@ -2098,14 +2269,14 @@ fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
     card.hidden=!c.installed;if(c.installed)any=true;
     if(!c.supported){card.disabled=true;card.querySelector('.claw-st').textContent='即将支持';if(clawSel===c.id)clawSel=null}
-    if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem('claclaw.claw')}catch(_){}}
+    if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;
   showClawSel();
 }).catch(function(){});
 function pickClaw(id){
   if(curClaw()!==id){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
-  clawSel=id;try{localStorage.setItem('claclaw.claw',clawSel)}catch(_){}
+  clawSel=id;try{localStorage.setItem(hk('claw'),clawSel)}catch(_){}
   showClawSel();renderUnread();mTab('chats');openSheet();
 }
 document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(!c.disabled)pickClaw(c.dataset.claw)})});
@@ -2134,7 +2305,9 @@ $('#railReload').addEventListener('click',function(){
 });
 try{var dr=sessionStorage.getItem('claclaw.draft');if(dr){sessionStorage.removeItem('claclaw.draft');ta.value=dr;ta.dispatchEvent(new Event('input'))}}catch(_){}
 $('#railSet').addEventListener('click',function(){railTab(true)});
-$('#railHost').addEventListener('click',function(){mTab('host')});
+$('#railHost').addEventListener('click',function(){mTab('hosts')});
+$('#setHost').addEventListener('click',function(){mTab('host')});
+$('#hostBack').addEventListener('click',function(){mTab('set')});
 // 会话列表宽度：拖右边缘调整，记在本机；最窄 240，最宽到聊天区还剩 420
 (function(){
   var MIN=240,DEF=300,g=$('#sheetGrip'),app=$('#app');
@@ -2500,7 +2673,7 @@ function takePendingOpen(){
   return caches.open('claclaw-nav').then(function(c){
     return c.match('/__pending-open').then(function(r){
       if(!r)return null;
-      return r.json().then(function(j){c.delete('/__pending-open');if(!j||Date.now()-j.at>=60000)return null;return j.view==='peer'?'view:peer':j.id||null});
+      return r.json().then(function(j){c.delete('/__pending-open');if(!j||Date.now()-j.at>=60000)return null;if((j.host||'')!==HOST){switchHost(j.host||'',j.view==='peer'?'view:peer':j.id);return null}return j.view==='peer'?'view:peer':j.id||null});
     });
   }).catch(function(){return null});
 }
@@ -2779,7 +2952,7 @@ function ttsShowStop(){
   var b=$('#ttsStop'),st=srvBlocked?'go':sp?'stop':'say';
   if(b.dataset.st!==st){b.dataset.st=st;b.innerHTML=TTS_IC[st];b.setAttribute('aria-label',st==='go'?'继续朗读':st==='stop'?'停止朗读':'朗读最后一条回复');b.title=b.getAttribute('aria-label')}
   b.classList.toggle('go',st==='go');b.classList.toggle('on',st==='stop');
-  var inChat=!!session&&!(mList&&!DESKTOP.matches)&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on');
+  var inChat=!!session&&!(mList&&!DESKTOP.matches)&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on')&&!$('#app').classList.contains('hosts-on');
   b.hidden=!(st!=='say'||(tts.on&&inChat&&!!feed.querySelector('.msg.ai')));   // 喇叭只在开了「自动朗读回复」时出现
 }
 // 最后一条回复的文字：从页面上取，代码块、表格换成简短说明
@@ -2863,10 +3036,13 @@ if('serviceWorker' in navigator&&window.isSecureContext){
   // 点通知 → Service Worker 发来要打开的地址（/?s=会话ID）
   navigator.serviceWorker.addEventListener('message',function(e){
     var d=e.data||{};if(d.t!=='open')return;
-    var q=new URL(d.url,location.href).searchParams,s=q.get('s');
+    var q=new URL(d.url,location.href).searchParams,s=q.get('s'),h=q.get('host')||'';   // 没带 host 的通知是首连宿主自己的
+    if(h!==HOST){switchHost(h,q.get('view')==='peer'?'view:peer':s);return}
     if(q.get('view')==='peer')openPeerView();else if(s)openFromNotice(s);
   });
 }
+// 告诉首连宿主：这台设备现在看的是哪台宿主（角标只算那台的未读）
+function pushPick(sub){fetch('/api/push/pick',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint,host:HOST})}).catch(function(){})}
 function b64ToU8(b){var p='='.repeat((4-b.length%4)%4),r=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,function(c){return c.charCodeAt(0)})}
 function pushSupported(){return window.isSecureContext&&'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window}
 function syncPushBtn(){
@@ -2889,7 +3065,7 @@ function syncPushBtn(){
   navigator.serviceWorker.ready.then(function(r){return r.pushManager.getSubscription()}).then(function(sub){
     if(!sub)return;
     return fetch('/api/push/status?endpoint='+encodeURIComponent(sub.endpoint)).then(function(r){return r.json()}).then(function(j){
-      if(j.subscribed){pushUI(true);$('#pushLocal').hidden=false}
+      if(j.subscribed){pushUI(true);$('#pushLocal').hidden=false;pushPick(sub)}
     });
   }).catch(function(){});
 }
@@ -2959,7 +3135,7 @@ pushBtn.addEventListener('click',function(){
     return step('正在准备…',Promise.all([navigator.serviceWorker.ready,fetch('/api/push/key').then(function(r){return r.json()})]),15).then(function(x){
       return step('正在向推送服务登记…',x[0].pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(x[1].publicKey)}),20);
     }).then(function(sub){
-      return fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})});
+      return fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})}).then(function(r){if(r.ok)pushPick(sub);return r});
     }).then(function(r){
       if(!r.ok)throw new Error('保存订阅失败');
       return fetch('/api/push/test',{method:'POST'});
@@ -3033,7 +3209,7 @@ $('#delForm').addEventListener('submit',function(e){
   .then(function(x){
     if(!x.ok){$('#delErr').textContent=x.j.error||'删除失败';$('#delGo').disabled=false;return}
     closeDel();
-    if(session&&session.id===t.id)localStorage.removeItem('claclaw.session');
+    if(session&&session.id===t.id)localStorage.removeItem(hk('session'));
     else addSys('已删除会话「'+t.title+'」');
     openSheet();
   })
@@ -3043,7 +3219,7 @@ $('#delForm').addEventListener('submit',function(e){
 $('#bannerX').addEventListener('click',function(){$('#banner').hidden=true});
 $('#bannerT').addEventListener('click',function(){if(updateReady)$('#railReload').click()});
 $('#logout').addEventListener('click',function(){
-  fetch('/api/logout',{method:'POST'}).finally(function(){localStorage.removeItem('claclaw.session');location.replace('/login')});
+  fetch('/api/logout',{method:'POST'}).finally(function(){localStorage.removeItem(hk('session'));location.replace('/login')});
 });
 
 if(window.visualViewport){
