@@ -9,6 +9,9 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { DATA } from './auth.mjs';
 
 const HOME = os.homedir();
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
@@ -551,30 +554,160 @@ function toolLabel(name = '') {
 }
 
 // 改名：ACP 没有 title 能力，但 dsh 的会话记录本身就是追加式事件流（session/title 是最后一条生效）。
-// 这里在文件末尾追加一个 zstd 帧，写一条 source=user 的标题事件；先关掉网页里打开的会话，避免两个写入方。
+// 这里在文件末尾追加一个 zstd 帧；追加前必须先拿到 dsh 自己的 session.lock（flock），
+// 否则 dsh web / 终端 / 另一个 ACP 正在写时，seq 会撞车或把日志写坏。
+let flockApi;
+async function dshFlock() {
+  if (flockApi !== undefined) return flockApi;
+  try {
+    const bin = dshBin();
+    if (!bin) throw new Error('没找到 dsh 命令');
+    const require = createRequire(bin);
+    const file = require.resolve('@deepseek-ai/node-addon-system/flock');
+    const mod = await import(pathToFileURL(file).href);
+    if (typeof mod.tryLockExclusive !== 'function') throw new Error('dsh 的 flock 模块不可用');
+    flockApi = mod;
+  } catch {
+    flockApi = null;
+  }
+  return flockApi;
+}
+export async function dsLockAvailable() { return !!(await dshFlock()); }
+
+async function acquireLease(dir, sid) {
+  const api = await dshFlock();
+  if (!api) throw Object.assign(new Error('当前环境拿不到 dsh 的会话写入锁，改名暂不可用'), { code: 503 });
+  const lockPath = path.join(dir, 'session.lock');
+  await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
+  let handle = null;
+  try {
+    handle = await fs.promises.open(lockPath, 'w');
+    try { await api.tryLockExclusive(handle.fd); }
+    catch (e) {
+      if (e.code === 'EAGAIN' || e.code === 'EWOULDBLOCK') throw Object.assign(new Error('这个会话正在 dsh / 终端里使用，先关掉再改名'), { code: 409 });
+      if (e.code === 'ERR_FLOCK_UNSUPPORTED_PLATFORM') throw Object.assign(new Error('当前平台不支持 dsh 的会话写入锁，改名暂不可用'), { code: 503 });
+      throw e;
+    }
+    // 和 dsh 一样，锁住 inode 后确认锁文件没被替换
+    const held = await handle.stat({ bigint: true });
+    const cur = await fs.promises.stat(lockPath, { bigint: true }).catch(e => { if (e.code === 'ENOENT') return null; throw e; });
+    if (!cur || cur.ino !== held.ino || cur.dev !== held.dev) throw Object.assign(new Error('会话锁文件被替换，改名取消'), { code: 409 });
+    const h = handle; handle = null;
+    return { release: () => h.close() };
+  } finally {
+    if (handle) { try { await handle.close(); } catch {} }
+  }
+}
+
+// 和 dsh 的 session-title 一样：去控制序列/零宽字符、压成一行、按 UTF-8 字节截断（dsh 默认 80 字节）
+const TITLE_MAX_BYTES = 80;
+const TITLE_OSC = /(?:\u001B\]|\u009D)(?:(?!\u0007|\u001B\\)[\s\S])*(?:\u0007|\u001B\\|$)/gu;
+const TITLE_CSI = /(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]/gu;
+const TITLE_ESC = /\u001B[@-_]/gu;
+const TITLE_CTRL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu;
+const TITLE_DIR = /[\u200B\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/gu;
+function cleanTitle(input) {
+  return String(input || '')
+    .replace(TITLE_OSC, '').replace(TITLE_CSI, '').replace(TITLE_ESC, '')
+    .replace(TITLE_CTRL, '').replace(TITLE_DIR, '')
+    .replace(/\s+/gu, ' ').trim();
+}
+function truncateUtf8(input, maxBytes) {
+  if (Buffer.byteLength(input, 'utf8') <= maxBytes) return input;
+  let used = 0, out = '';
+  for (const ch of input) {
+    const n = Buffer.byteLength(ch, 'utf8');
+    if (used + n > maxBytes) break;
+    out += ch; used += n;
+  }
+  return out.trimEnd();
+}
+
+// 严格读：zstd 帧必须完整、每行必须是 JSON；半帧/坏帧一律拒绝，避免在坏日志后面追加
+function unzstdAllStrict(b) {
+  const out = [];
+  let pos = 0;
+  while (pos < b.length) {
+    if (b.indexOf(MAGIC, pos) !== pos) return null;
+    let from = pos + 4, done = false;
+    for (;;) {
+      const nx = b.indexOf(MAGIC, from), stop = nx < 0 ? b.length : nx;
+      try { out.push(zlib.zstdDecompressSync(b.subarray(pos, stop))); pos = stop; done = true; break; }
+      catch { if (nx < 0) break; from = nx + 1; }
+    }
+    if (!done) return null;
+  }
+  return Buffer.concat(out).toString('utf8');
+}
+function readRecordsStrict(file) {
+  let buf;
+  try { buf = fs.readFileSync(file); } catch (e) { throw Object.assign(new Error('读不了这个会话的记录：' + e.message), { code: 500 }); }
+  const text = unzstdAllStrict(buf);
+  if (text === null) throw Object.assign(new Error('会话日志末尾不完整，改名取消'), { code: 409 });
+  const recs = [];
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    try { recs.push(JSON.parse(line)); } catch { throw Object.assign(new Error('会话日志里有坏记录，改名取消'), { code: 409 }); }
+  }
+  if (!recs.length || recs[0].type !== 'session' || ![3, 4].includes(recs[0].version)) throw Object.assign(new Error('不是可识别的 dsh 会话日志'), { code: 409 });
+  return recs;
+}
+
+// 追加前先备份到 claclaw 回收站；写失败就恢复
+function backupSession(file, sid) {
+  const dir = path.join(DATA, 'trash');
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const base = new Date().toISOString().replace(/[:.]/g, '-') + '_dsh-rename_' + String(sid).replace(/[^A-Za-z0-9-]/g, '');
+  const dest = path.join(dir, base + '.jsonl.zstd');
+  fs.copyFileSync(file, dest);
+  fs.writeFileSync(path.join(dir, base + '.json'), JSON.stringify({ kind: 'dsh-rename', sessionId: sid, from: file, at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  return dest;
+}
+function appendFrame(file, frame) {
+  const fd = fs.openSync(file, 'a');
+  try {
+    let off = 0;
+    while (off < frame.length) {
+      const n = fs.writeSync(fd, frame, off, frame.length - off);
+      if (!(n > 0)) throw new Error('追加会话标题失败');
+      off += n;
+    }
+    fs.fsyncSync(fd);
+  } finally { try { fs.closeSync(fd); } catch {} }
+}
+
 export async function dsRename(id, title) {
   if (!dsSupported()) throw new Error(dsUnsupportedReason());
   if (!isDs(id)) throw Object.assign(new Error('不是 DeepSeek 会话'), { code: 400 });
   const sid = sidOf(id);
   const file = fileOf(sid);
   if (!file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  const text = String(title || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  const text = truncateUtf8(cleanTitle(title), TITLE_MAX_BYTES);
   if (!text) throw Object.assign(new Error('名字不能为空'), { code: 400 });
   const runner = dsRunners.get(id);
   if (runner && !runner.closed) {
     if (runner.subs.size) throw Object.assign(new Error('当前会话正在网页里打开着，先切到别的会话再改名'), { code: 409 });
+    if (runner.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
     runner.dispose();
-    await waitClosing(sid);   // 等 session/close 真正完成，再往同一个日志追加
+    await waitClosing(sid);   // 等 session/close 真正完成，再拿 dsh 的写入锁
   }
-  const recs = readRecords(file);
-  if (!recs) throw Object.assign(new Error('读不了这个会话的记录'), { code: 500 });
-  let seq = -1;
-  for (const r of recs) if (Number.isInteger(r.seq) && r.seq > seq) seq = r.seq;
-  const rec = { type: 'session/title', seq: seq + 1, time: Date.now(), data: { title: text, messageSeqs: [], source: { kind: 'user' } } };
-  const frame = zlib.zstdCompressSync(Buffer.from(JSON.stringify(rec) + '\n', 'utf8'));
-  fs.appendFileSync(file, frame);   // 一帧一条记录；半帧在 dsh 读取时会被当成未写完的尾巴忽略
-  recCache.delete(file);
-  return { title: text, seq: seq + 1 };
+  const lease = await acquireLease(path.dirname(file), sid);
+  let backup = null;
+  try {
+    const recs = readRecordsStrict(file);
+    let seq = -1;
+    for (const r of recs) if (Number.isInteger(r.seq) && r.seq > seq) seq = r.seq;
+    backup = backupSession(file, sid);
+    const rec = { type: 'session/title', seq: seq + 1, time: Date.now(), data: { title: text, messageSeqs: [], source: { kind: 'user' } } };
+    appendFrame(file, zlib.zstdCompressSync(Buffer.from(JSON.stringify(rec) + '\n', 'utf8')));
+    recCache.delete(file);
+    return { title: text, seq: seq + 1 };
+  } catch (e) {
+    if (backup) { try { fs.copyFileSync(backup, file); } catch {} }
+    throw e;
+  } finally {
+    try { await lease.release(); } catch {}
+  }
 }
 
 // 会话目录（删除时整个挪走）

@@ -1410,10 +1410,11 @@ async function handleRename(req, res) {
     return sendJson(res, 200, { ok: true, title });
   }
   if (isDs(body.id)) {
-    try { await dsRename(body.id, title); } catch (e) { return sendJson(res, e.code || 502, { error: 'DeepSeek 改名失败：' + e.message }); }
-    const r = dsRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
+    let accepted;
+    try { accepted = (await dsRename(body.id, title)).title; } catch (e) { return sendJson(res, e.code || 502, { error: 'DeepSeek 改名失败：' + e.message }); }
+    const r = dsRunners.get(body.id); if (r) { r.title = accepted; r.emit({ t: 'session.renamed', title: accepted }); }
     log('renamed deepseek session', body.id);
-    return sendJson(res, 200, { ok: true, title });
+    return sendJson(res, 200, { ok: true, title: accepted });
   }
   if (isOp(body.id)) {
     try { await opRename(body.id, title, log); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 改名失败：' + e.message }); }

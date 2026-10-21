@@ -136,6 +136,7 @@ npm start
 
 - 过程播报/自动朗读需要页面保持在前台（屏幕可以常亮）。锁屏或切到后台后语音会停止，重要节点改用系统推送通知。
 - 其他会话通过 Claude Code 内置的跨会话消息发来的消息，如果因权限模式不同被扣住，网页上只显示提示，暂不能批准
+- DeepSeek 改名：需要先关闭这个会话在 dsh web / 终端里的写入方；网页里打开的会话要先切走（claclaw 会先关掉网页里的 runner，再拿 dsh 的 `session.lock`）。改名前的日志备份在 `data/trash/`。
 - OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。改名走 opencode 自己的本机接口（终端里开着同一会话的要重开才看到新名）；删除前先导出到 data/trash（`opencode import` 可找回）
 
 ## 文件

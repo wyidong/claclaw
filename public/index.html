@@ -3490,6 +3490,7 @@ $('#newForm').addEventListener('submit',function(e){
 // ---------- 会话改名 ----------
 
 function renameSess(s){
+  if(/^ds:/.test(s.id)&&session&&session.id===s.id){alert('DeepSeek 会话改名要先切到别的会话，再在列表里改（改名会先关掉网页里的这个会话）。');return}
   var t=prompt('给会话改个名字',s.title);
   if(t===null)return;
   t=t.replace(/\s+/g,' ').trim();
