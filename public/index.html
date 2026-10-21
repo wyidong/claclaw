@@ -538,8 +538,8 @@ select.pe-in{text-align-last:right}
   /* 选中的会话：和电脑端一样，整张卡片浅绿底、不再画绿框 */
   .s-row:has(> .s-item[aria-current="true"]){border-color:var(--user-bg);background:var(--user-bg)}
   /* 加入了 claclaw 协同的会话：浅紫色边框（选中时也保留）；在干活 / 等确认时仍以绿 / 黄框为准 */
-  .s-row.peer:not(.working):not(.waiting){border-color:var(--peer)}
-  .s-row.peer:has(> .s-item[aria-current="true"]),.s-row.peer > .s-item[aria-current="true"]{background:var(--peer-bg);border-color:var(--peer-bg)}   /* 选中：浅紫底代替浅绿底 */
+  .s-row.collab:not(.working):not(.waiting){border-color:var(--peer)}
+  .s-row.collab:has(> .s-item[aria-current="true"]),.s-row.collab > .s-item[aria-current="true"]{background:var(--peer-bg);border-color:var(--peer-bg)}   /* 选中：浅紫底代替浅绿底 */
   .s-row > .s-item[aria-current="true"]{background:var(--user-bg)}
   .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
   .s-row.dragging .s-item{transition:none}
@@ -617,8 +617,8 @@ select.pe-in{text-align-last:right}
   .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding-top:7px;padding-bottom:7px;padding-left:9px;border:1px solid var(--bg);border-radius:8px;background:none;cursor:pointer}
   .s-row:hover .s-item{background:var(--bg)}
   .s-item[aria-current="true"]{background:var(--user-bg)!important;border-color:var(--user-bg)!important}
-  .s-row.peer:not(.working):not(.waiting) .s-item{border-color:var(--peer)!important}
-  .s-row.peer .s-item[aria-current="true"]{background:var(--peer-bg)!important;border-color:var(--peer-bg)!important}
+  .s-row.collab:not(.working):not(.waiting) .s-item{border-color:var(--peer)!important}
+  .s-row.collab .s-item[aria-current="true"]{background:var(--peer-bg)!important;border-color:var(--peer-bg)!important}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
@@ -2194,7 +2194,7 @@ function openSheet(silent){
         });
         list.appendChild(h);list.appendChild(box);cur=box;return;
       }
-      var row=document.createElement('div');row.className='s-row'+(s.peer?' peer':'');row.dataset.id=s.id;
+      var row=document.createElement('div');row.className='s-row'+(s.peer?' collab':'');   // 不能叫 peer：.peer 是聊天里「别的会话发来的消息」的样式row.dataset.id=s.id;
       if(unread[s.id]||s.unread)row.classList.add('unread');
       var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
