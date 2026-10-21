@@ -20,7 +20,7 @@ import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsS
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
-import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
+import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody } from './httpbody.mjs';
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
@@ -1011,7 +1011,7 @@ function settings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8'))
 function saveSettings(patch) {
   const next = { ...settings(), ...patch };
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(SETTINGS, JSON.stringify(next, null, 2), { mode: 0o600 });
+  writeJsonAtomic(SETTINGS, next);   // 原子写：崩溃不会写坏 settings.json
   return next;
 }
 const SOUND_DIR = '/System/Library/Sounds';
@@ -1091,7 +1091,7 @@ function unreadMap() { try { return JSON.parse(fs.readFileSync(UNREAD_FILE, 'utf
 const unreadTotal = u => Object.values(u).reduce((a, n) => a + (n || 0), 0);
 function saveUnread(u) {
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(UNREAD_FILE, JSON.stringify(u), { mode: 0o600 });
+  writeJsonAtomic(UNREAD_FILE, u);
   const msg = JSON.stringify({ t: 'unread', unread: u });
   for (const c of wss.clients) if (c.readyState === 1) c.send(msg);
 }
@@ -1110,7 +1110,7 @@ function touchWeb(id) {
   webActiveTimer = setTimeout(() => {
     const cut = Date.now() - 7 * 86400e3;   // 只留最近 7 天的
     for (const k of Object.keys(webActive)) if (webActive[k] < cut) delete webActive[k];
-    try { fs.writeFileSync(WEB_ACTIVE_FILE, JSON.stringify(webActive), { mode: 0o600 }); } catch {}
+    try { writeJsonAtomic(WEB_ACTIVE_FILE, webActive); } catch {}
   }, 2000);
 }
 

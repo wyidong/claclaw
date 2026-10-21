@@ -29,8 +29,10 @@ function check(password, rec) {
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
 }
-function writeJson(file, obj) {
-  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
+// 原子写：先写临时文件再 rename，掉电/崩溃不会写出半截 JSON。
+// 导出给 server.mjs / peer.mjs 等处统一使用。
+export function writeJsonAtomic(file, obj) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = file + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, file);
@@ -94,7 +96,7 @@ export function setLastSet(username, password) {
   if (!a) throw new Error('还没有设置初始账号，请先在网页上完成首次设置');
   const c = normalize(username, password);
   a.lastSet = record(c.username, c.password);
-  writeJson(AUTH_FILE, a);
+  writeJsonAtomic(AUTH_FILE, a);
   return { username: c.username, hasPassword: !!c.password, setAt: a.lastSet.setAt };
 }
 
@@ -122,7 +124,7 @@ export function issueToken(via, ip) {
   const token = crypto.randomBytes(32).toString('base64url');
   const all = loadTokens();
   all[sha(token)] = { via, ip, created: Date.now(), exp: Date.now() + TOKEN_TTL_MS };
-  writeJson(TOKENS_FILE, all);
+  writeJsonAtomic(TOKENS_FILE, all);
   return token;
 }
 
@@ -135,5 +137,5 @@ export function revokeToken(token) {
   if (!token) return;
   const all = loadTokens();
   delete all[sha(token)];
-  writeJson(TOKENS_FILE, all);
+  writeJsonAtomic(TOKENS_FILE, all);
 }

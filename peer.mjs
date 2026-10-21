@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { DATA } from './auth.mjs';
+import { DATA, writeJsonAtomic } from './auth.mjs';
 
 const FILE = path.join(DATA, 'peer.json');
 export const PEER_BASE = '/claclaw-peer';
@@ -40,8 +40,7 @@ export function markLast(sessionId, peerId) {
 }
 export function savePeer(c) {
   const { code, remote, ...keep } = c;   // 旧版的「地址里带配对码」配置不再保存
-  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(FILE, JSON.stringify(keep, null, 2), { mode: 0o600 });
+  writeJsonAtomic(FILE, keep);   // 原子写：崩溃不会写坏 peer.json
 }
 export const myName = c => c.name || os.hostname().replace(/\.local$/, '');
 
