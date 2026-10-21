@@ -1935,8 +1935,24 @@ wss.on('connection', (ws, req) => {
     }
   });
 
+  // 心跳：手机断网后连接会半开着，watched() 一直为真，于是不再推送通知、会话也不会空闲关闭。
+  // 每 30 秒 ping 一轮，连续两轮没收到 pong 就判定连接已死，terminate 掉（close 回调照常清理）。
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+  ws.on('error', () => { try { ws.terminate(); } catch {} });
+
   ws.on('close', () => runner?.unsubscribe(ws));
 });
+
+// 每 30 秒 ping 一轮；连续两轮没有 pong 的连接直接 terminate
+const WS_PING_MS = 30 * 1000;
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) { try { ws.terminate(); } catch {} continue; }
+    ws.isAlive = false;
+    try { ws.ping(); } catch {}
+  }
+}, WS_PING_MS).unref?.();
 
 // 原处重新打开了这个会话 → 以用户在原处的操作为准，网页端立刻退出
 setInterval(() => {
