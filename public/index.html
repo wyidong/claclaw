@@ -1829,7 +1829,10 @@ $('#hostBody').addEventListener('change',function(e){
 });
 function peerForm(enabled){
   var ss=[].map.call(document.querySelectorAll('#hostBody .pe-ss input:checked'),function(x){return x.value});
-  return {enabled:enabled,port:+(($('#pePort')||{}).value||8788),name:($('#peName')||{}).value||'',dir:($('#peDir')||{}).value||'',sessions:ss};
+  var f={enabled:enabled,dir:($('#peDir')||{}).value||'',sessions:ss};
+  if($('#pePort'))f.port=+$('#pePort').value||8788;
+  if($('#peName'))f.name=$('#peName').value||'';
+  return f;
 }
 function peerPost(path,body,okText){
   fetch('/api/peer'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
@@ -1954,11 +1957,16 @@ function renderPeer(){
   var ssHtml=c.dir?(ss.length?'<div class="pe-ss">'+ss.map(function(s){return '<label><input type="checkbox" value="'+esc(s.id)+'"'+(c.sessions.indexOf(s.id)>=0?' checked':'')+'><span>'+esc(s.title||'(无标题)')+'</span><small>'+esc(s.id.slice(0,8))+'</small></label>'}).join('')+'</div>':'<div class="pe-note" style="margin-bottom:10px">这个目录下没有会话</div>'):'';
   h+='<div><div class="h-h">我们这边</div><div class="h-card">'+
     '<div class="h-row"><span class="k">状态</span><span class="v">'+(c.enabled?(c.listening?'已开启，正在接收':'已开启，但没在监听'):'未开启')+'</span></div>'+
-    '<div class="h-row"><span class="k">名字</span><input id="peName" class="pe-in" maxlength="40" value="'+esc(c.name||'')+'"></div>'+
-    '<div class="h-row"><span class="k">端口</span><input id="pePort" class="pe-in mono" type="number" min="1024" max="65535" value="'+c.port+'"></div>'+
+    // 已经和别人配对后，名字和端口就锁住：端口一改对方就找不到我们，名字是配对时告诉对方的，改了对方那边也不会变
+    (c.peers&&c.peers.length?
+      '<div class="h-row"><span class="k">名字</span><span class="v">'+esc(c.name||'')+'</span></div>'+
+      '<div class="h-row"><span class="k">端口</span><span class="v pe-mono">'+c.port+'</span></div>'
+    :
+      '<div class="h-row"><span class="k">名字</span><input id="peName" class="pe-in" maxlength="40" value="'+esc(c.name||'')+'"></div>'+
+      '<div class="h-row"><span class="k">端口</span><input id="pePort" class="pe-in mono" type="number" min="1024" max="65535" value="'+c.port+'"></div>')+
     '<div class="h-row"><span class="k">会话目录</span>'+dirSel+'</div>'+ssHtml+
     '<div class="pe-btns">'+(c.enabled?'<button type="button" class="pe-btn pri" data-act="peer-save">保存</button><button type="button" class="pe-btn del" data-act="peer-off">关闭协同</button>':'<button type="button" class="pe-btn pri" data-act="peer-on">开启协同</button>')+'</div>'+
-    '</div><div class="pe-note">名字会显示在对方那边。只能选一个会话目录，可以勾选这个目录下的多个会话；对方发来的消息会送进这些会话，回复自动返回给对方。</div></div>';
+    '</div><div class="pe-note">'+(c.peers&&c.peers.length?'已经有配对，名字和端口不能再改（改了对方就找不到这台电脑了）；确实要改，先撤销全部配对。':'名字会显示在对方那边。')+'只能选一个会话目录，可以勾选这个目录下的多个会话；对方发来的消息会送进这些会话，回复自动返回给对方。</div></div>';
   if(c.enabled&&c.base){
     h+='<div><div class="h-h">我们的协同地址（第一版只支持局域网）</div><div class="h-card">'+
       (c.baseName?'<span class="pe-url">'+esc(c.baseName)+'</span><div class="pe-note" style="margin:-4px 14px 6px">按电脑名找，路由器换了 IP 也不用改；名字找不到时用这个：</div>':'')+

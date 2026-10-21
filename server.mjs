@@ -1460,6 +1460,7 @@ const handler = async (req, res) => {
       }
       if (act === '/pair-cancel') { outPair = null; return sendJson(res, 200, peerPublic(c, true)); }
       if (act !== '') return sendJson(res, 404, { error: 'not found' });
+      if (c.peers.length && ((b.port != null && Number(b.port) !== c.port) || (typeof b.name === 'string' && b.name.trim() !== (c.name || '')))) return sendJson(res, 400, { error: '已经有配对，名字和端口不能改；要改先撤销全部配对' });
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
       if (typeof b.dir === 'string') c.dir = b.dir;
       if (typeof b.name === 'string') c.name = b.name.replace(/\s+/g, ' ').trim().slice(0, 40);
