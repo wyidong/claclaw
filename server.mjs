@@ -1435,7 +1435,8 @@ const handler = async (req, res) => {
       if (act === '/revoke') { c.peers = c.peers.filter(p => p.id !== b.id); savePeer(c); log('peer revoked', b.id); return sendJson(res, 200, peerPublic(c, true)); }
       if (act === '/check') {
         // 已配对的对方在不在线：能用钥匙列出对方的会话就算在线
-        const out = await Promise.all(c.peers.map(async p => {
+        // 带 id 只查这一个：网页按对方分别查，在线的不用等离线的那个超时
+        const out = await Promise.all(c.peers.filter(p => !b?.id || p.id === b.id).map(async p => {
           if (!p.inbox || !p.theirToken) return { id: p.id, online: null };
           try { const j = await peerCall(c, p, '/sessions', { ms: 6000 }); return { id: p.id, online: !!j.ok, sessions: j.sessions || [], error: j.ok ? undefined : j.error }; }
           catch (e) { return { id: p.id, online: false, error: e.message }; }

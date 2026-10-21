@@ -510,6 +510,8 @@ select.pe-in{text-align-last:right}
 .h-dot.on{background:var(--allow)}
 /* 已配对列表：底色是对方的颜色，点要更醒目——在线 = 亮绿实心 + 白圈，离线 = 空心圈 */
 .pe-peer .h-dot{flex:none;width:11px;height:11px;margin:0 8px 0 0;background:transparent;border:2px solid var(--muted);box-sizing:border-box}
+.pe-peer .h-dot.wait{border-style:dotted;animation:pdotw 1s linear infinite}
+@keyframes pdotw{to{transform:rotate(360deg)}}
 .pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
 @media (max-width:999px){
   /* Claw 页：三张大卡片，选了哪个，会话页就显示哪一种的会话（现在只有 Claude） */
@@ -1883,9 +1885,12 @@ function peerWatch(on){
 }
 function peerCheckNow(){
   if(!peerCfg||!peerCfg.local||!peerCfg.peers.length)return;
-  fetch('/api/peer/check',{method:'POST'}).then(function(r){return r.json()}).then(function(list){
-    (list||[]).forEach(function(x){peerOnline[x.id]=x});paintPeerLive();
-  }).catch(function(){});
+  // 每个对方单独查：离线的那个要等超时（最多十几秒），不拖着在线的一起显示「离线」
+  peerCfg.peers.forEach(function(p){
+    fetch('/api/peer/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:p.id})}).then(function(r){return r.json()}).then(function(list){
+      (list||[]).forEach(function(x){peerOnline[x.id]=x});paintPeerLive();
+    }).catch(function(){});
+  });
 }
 // 页面开着时来了配对申请：顶部横幅（App 在前台时系统通知往往不弹），15 秒后自动收起
 var pairBannerT=null;
@@ -1959,7 +1964,7 @@ function peerHue(id){var h=0;id=String(id||'');for(var i=0;i<id.length;i++)h=(h*
 function peerPeersHtml(c){
   if(!c.peers||!c.peers.length)return '';
   return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
-    var o=peerOnline[p.id],dot=p.canCall?'<i class="h-dot'+(o&&o.online?' on':'')+'"></i>':'';
+    var o=peerOnline[p.id],dot=p.canCall?'<i class="h-dot'+(!o?' wait':o.online?' on':'')+'" title="'+(!o?'检查中':o.online?'在线':'离线')+'"></i>':'';
     // 在线与否看绿点；展开后才显示对方会话、离线原因、IP 和配对时间
     var open=peerOpen[p.id];
     // 展开的详情：一项一行；对方开放的会话一个一行（标题里本身就有顿号、括号，连成一串没法看）
