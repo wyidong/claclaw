@@ -583,6 +583,8 @@ async function peerHandler(req, res) {
       const inbox = okUrl(b.inbox), inboxAlt = okUrl(b.inboxAlt);   // 对方的名字地址（.local）和 IP 地址
       let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }
       log('peer pair request from', ip, name);
+      // 开着的网页也提醒一下（App 在前台时 iPhone 不弹推送横幅）
+      { const msg = JSON.stringify({ t: 'peer.pair', name, ip, code: p.code }); for (const w of wss.clients) if (w.readyState === 1) w.send(msg); }
       localSound();
       push.sendAll({ title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/?view=peer' }, log)
         .then(n => log('peer pair push sent →', n)).catch(e => log('peer pair push failed', e.message));

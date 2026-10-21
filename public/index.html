@@ -312,6 +312,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 @keyframes ttsw{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent)}}
 @media (min-width:1000px){#ttsStop{bottom:120px;right:26px}}
 #ttsStop[hidden]{display:none}
+#pairBanner{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:60;transform:translate(-50%,-150%);max-width:min(92vw,520px);padding:11px 16px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:14.5px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.22);cursor:pointer;transition:transform .25s ease;text-align:center}
+#pairBanner.on{transform:translate(-50%,0)}
 #setPane .tts-rate{flex-wrap:wrap;cursor:default}
 #setPane .tts-rate:active{background:none}
 #setPane .tts-rate .lb{flex:1 1 100%}
@@ -1506,6 +1508,9 @@ function onEvent(m){
     if(outbox&&m.text===outbox.text)outboxDone();
     addUser(m.text,m.images);think(true);
     break;
+  case 'peer.pair':   // 有人申请协同配对：页面顶部提醒，点了直接去协同页
+    pairBanner(m);
+    break;
   case 'ai.start':
     aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);ttsPos=0;ttsWarmUp();
     if(busy)think(true,'输出中');
@@ -1864,6 +1869,16 @@ function peerCheckNow(){
   fetch('/api/peer/check',{method:'POST'}).then(function(r){return r.json()}).then(function(list){
     (list||[]).forEach(function(x){peerOnline[x.id]=x});paintPeerLive();
   }).catch(function(){});
+}
+// 页面开着时来了配对申请：顶部横幅（App 在前台时系统通知往往不弹），15 秒后自动收起
+var pairBannerT=null;
+function pairBanner(m){
+  var el=$('#pairBanner');
+  if(!el){el=document.createElement('button');el.type='button';el.id='pairBanner';document.body.appendChild(el);
+    el.addEventListener('click',function(){el.classList.remove('on');openPeerView()})}
+  el.textContent=m.name+'（'+m.ip+'）申请配对 · 配对码 '+m.code+' · 点这里查看';
+  el.classList.add('on');clearTimeout(pairBannerT);pairBannerT=setTimeout(function(){el.classList.remove('on')},15000);
+  if(hostView==='peer'&&peerCfg)fetch('/api/peer').then(function(r){return r.json()}).then(function(j){var c=peerCfg||{};j.dir=c.dir;j.sessions=c.sessions;peerCfg=j;paintPeerLive()}).catch(function(){});
 }
 // 点「配对申请」通知：直接打开 宿主 → claclaw 协同
 var wantPeer=new URLSearchParams(location.search).get('view')==='peer';
