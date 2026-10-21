@@ -1126,6 +1126,7 @@ async function sessionList() {
   const seen = new Set(normal.map(s => s.sessionId));
   const list = normal.concat(all.filter(s => ours.has(s.sessionId) && !seen.has(s.sessionId)));
   const unread = unreadMap();
+  const pc = loadPeer(), peerOn = new Set(pc.enabled ? pc.sessions : []);
   return list.filter(resumable).map(s => {
     const ours = runners.has(s.sessionId);
     const elsewhere = ours ? null : takeoverInfo(s.sessionId, jsonlPathOf(s), live);
@@ -1142,6 +1143,7 @@ async function sessionList() {
       busyElsewhere: elsewhere,
       unread: unread[s.sessionId] || 0,
       webActive: webActive[s.sessionId] || 0,
+      peer: peerOn.has(s.sessionId) || undefined,   // 加入了 claclaw 协同（列表里用浅紫色边框标出来）
     };
   }).concat(
     // 网页里新建、还没发过消息的会话：没有会话文件，listSessions 看不到，也列出来
