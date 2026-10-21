@@ -536,6 +536,13 @@ async function peerDeliver(info, text, from) {
   const r = runners.get(id);
   if (r.busy) return [409, { ok: false, error: '这个会话正在忙，稍后再发' }];
   const msg = '【claclaw 协同 · 来自对方：' + from + '】\n' + text;
+  // 协同消息到了：没人正看着这个会话就推一条通知（点开直接进这个会话）
+  if (!r.watched()) {
+    localSound();
+    const badge = markUnread(id);
+    push.sendAll({ title: '协同消息 · ' + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge }, log)
+      .then(n => log('peer msg push →', n)).catch(() => {});
+  }
   return new Promise(resolve => {
     let reply = '', cur = '', done = false;
     const sub = { readyState: 1, visible: false, send(raw) {
