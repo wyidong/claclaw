@@ -508,6 +508,9 @@ select.pe-in{text-align-last:right}
 .h-bar.hi i{background:var(--warn)}
 .h-dot{display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:var(--muted);vertical-align:middle}
 .h-dot.on{background:var(--allow)}
+/* 已配对列表：底色是对方的颜色，点要更醒目——在线 = 亮绿实心 + 白圈，离线 = 空心圈 */
+.pe-peer .h-dot{flex:none;width:11px;height:11px;margin:0 8px 0 0;background:transparent;border:2px solid var(--muted);box-sizing:border-box}
+.pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
 @media (max-width:999px){
   /* Claw 页：三张大卡片，选了哪个，会话页就显示哪一种的会话（现在只有 Claude） */
   #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
