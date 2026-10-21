@@ -432,7 +432,7 @@ export class DsRunner {
       try {
         await this.attach();
         if (cmd) return this.finish(await this.command(cmd[1], (cmd[2] || '').trim()));
-        if (images.length && !caps.promptCapabilities?.image) throw new Error('当前 DeepSeek 模型不支持图片，只发文字吧');
+        if (images.length && !caps.promptCapabilities?.image) throw new Error('当前 DeepSeek 模型没有声明图片输入（ACP image=false）。在 dsh 里切换到支持图片的模型（如 deepseek-flash / DeepSeek-V4.1-Flash），或把图片存到工作区后用 read_image 读；也可以改用 Claude / OpenClaw 发图。');
         const prompt = [
           ...images.map(i => ({ type: 'image', mimeType: i.media_type, data: i.data })),
           ...(text ? [{ type: 'text', text }] : []),
