@@ -211,8 +211,25 @@ function startAcp(log) {
   p.on('error', e => dead('dsh 启动失败：' + e.message));
   p.on('exit', code => { log?.('dsh acp exited', code, errTail.trim().split('\n').pop() || ''); dead('dsh 进程退出了（' + code + '）'); });
   log?.('dsh acp starting', bin);
-  ready = rpc('initialize', { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'claclaw', version: '0.1' } })
-    .then(r => { caps = r?.agentCapabilities || {}; log?.('dsh acp ready'); return p; });
+  // initialize 最多等 15 秒：初始化失败或挂住时，ready 会永远停在 rejected/pending，
+  // 整个 DeepSeek 后端就永久不可用了。超时就杀掉子进程、把 proc/ready 置空，下次用时自动重新拉起。
+  let initTimer = null;
+  const init = rpc('initialize', { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'claclaw', version: '0.1' } });
+  const timeout = new Promise((_, rej) => {
+    initTimer = setTimeout(() => rej(new Error('initialize 15 秒没有应答')), 15000);
+    initTimer.unref?.();
+  });
+  ready = Promise.race([init, timeout])
+    .then(r => { clearTimeout(initTimer); caps = r?.agentCapabilities || {}; log?.('dsh acp ready'); return p; })
+    .catch(e => {
+      clearTimeout(initTimer);
+      const last = errTail.trim().split('\n').pop() || '';
+      const why = 'dsh 初始化失败：' + (e?.message || e) + (last ? '（' + last + '）' : '');
+      try { p.kill(); } catch {}
+      // 和进程自己挂掉时一样：proc/ready 置空（下次用的时候自动重新拉起）、挂着的请求全部作废
+      dead(why);
+      throw new Error(why);
+    });
   ready.catch(() => {});
   return ready;
 }
