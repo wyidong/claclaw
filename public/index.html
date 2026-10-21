@@ -2956,7 +2956,7 @@ function ttsText(src){
 var ttsPos=0,ttsWarmAt=0;
 // 开始回复时让电脑先连好微软语音（30 秒内只叫一次）
 function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(tts.want)||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
-var ttsHush=false;   // 用户在这一轮里点了停止：这一轮剩下的不再自动念，下一轮回复照常自动念
+var ttsHush=false;   // 用户点停止：这一轮正文不再自动念；P0/P1 仍播，下一轮恢复
 function ttsStream(raw,end){
   if(!tts.on||!ttsModeAllows(3)||ttsHush){if(end)ttsPos=raw.length;return}
   if(end){var rest=raw.slice(ttsPos);ttsPos=raw.length;if(rest.trim())ttsSay(rest);return}
@@ -3020,7 +3020,7 @@ var narration=(function(){
   var P0=0,P1=1,P2=2;
   var BUCKET_MS=3000,MIN_GAP_MS=8000,DEDUP_MS=20000,MAX_QUEUE=6;
   var TTL={0:120000,1:60000,2:45000};
-  var q=[],timer=null,bucket=[],bucketTimer=null,p0={},said={},lastP2=0;
+  var q=[],timer=null,bucket=[],bucketTimer=null,p0={},said={},lastP2=0,hiddenLatest=null;
   var muted=false,state='idle',startTimer=null;
   function clean(s){return String(s||'').replace(/\s+/g,' ').trim()}
   function base(target){
@@ -3095,6 +3095,7 @@ var narration=(function(){
   function enqueue(item){
     if(!allowed(item.priority))return;
     if(item.priority===P2&&muted)return;
+    if(document.hidden){if(item.priority<=P1)hiddenLatest=item;return}
     if(item.priority!==P0&&q.length>=MAX_QUEUE){
       var drop=-1,best=-1;
       for(var i=0;i<q.length;i++)if(q[i].priority>best){best=q[i].priority;drop=i}
@@ -3107,7 +3108,12 @@ var narration=(function(){
   }
   function pump(){
     clearTimeout(timer);timer=null;
-    if(!tts.on||document.hidden)return;
+    if(!tts.on)return;
+    if(document.hidden){
+      var last=null;q.forEach(function(i){if(i.priority<=P1)last=i});
+      if(last)hiddenLatest=last;
+      q=[];return;
+    }
     var now=Date.now(),keep=[];
     for(var i=0;i<q.length;i++)if(now-q[i].at<=q[i].ttl)keep.push(q[i]);
     q=keep;
@@ -3121,7 +3127,8 @@ var narration=(function(){
     timer=setTimeout(pump,400);
   }
   function interrupt(item){
-    if(!allowed(P0)||document.hidden)return;
+    if(!allowed(P0))return;
+    if(document.hidden){hiddenLatest=item;return}
     q=q.filter(function(x){return x.priority<P2});   // 过时的阶段进展不再念，P1 保留
     narrBeep();
     ttsInterrupt(item.text);
@@ -3139,9 +3146,9 @@ var narration=(function(){
     },3000);
   }
   function clearP0(id){
-    var p=p0[id];if(!p)return;
-    if(p.timer)clearTimeout(p.timer);
-    delete p0[id];
+    var p=p0[id];
+    if(p){if(p.timer)clearTimeout(p.timer);delete p0[id]}
+    if(hiddenLatest&&hiddenLatest.requestId===id)hiddenLatest=null;
   }
   function clearAllP0(){Object.keys(p0).forEach(clearP0)}
   function ask(m){
@@ -3180,7 +3187,19 @@ var narration=(function(){
     cancelStart();clearAllP0();
     if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
     if(timer){clearTimeout(timer);timer=null}
-    bucket=[];q=[];said={};lastP2=0;muted=false;state='idle';
+    bucket=[];q=[];said={};lastP2=0;muted=false;state='idle';hiddenLatest=null;
+  }
+  function onHidden(){
+    var last=null;q.forEach(function(i){if(i.priority<=P1)last=i});
+    if(last)hiddenLatest=last;
+    q=[];if(timer){clearTimeout(timer);timer=null}
+    if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
+    bucket=[];
+  }
+  function onVisible(){
+    if(!tts.on)return;
+    if(hiddenLatest){var it=hiddenLatest;hiddenLatest=null;it.at=Date.now();q.push(it);q.sort(function(a,b){return a.priority-b.priority||a.at-b.at})}
+    pump();
   }
   return {
     onEvent:function(m){
@@ -3199,7 +3218,9 @@ var narration=(function(){
       muted=true;q=q.filter(function(i){return i.priority<P2});
       if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
       bucket=[];
-    }
+    },
+    onHidden:onHidden,
+    onVisible:onVisible
   };
 })();
 // 试听：不管自动朗读开没开，都用当前选的声音念一句
@@ -3256,7 +3277,7 @@ function ttsSync(){
   // 朗读关着时，声音和语速用不上：一起收起来
   $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
   var label={off:'关着：不朗读',reply:'只念文字回复，不念工具进度',steps:'关键节点 + 回复：等你确认、改文件/跑命令、完成，再念正文',brief:'只念关键节点，不念正文'};
-  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；屏幕保持常亮':'关着：点一下打开朗读';
+  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；页面保持在前台，锁屏后停止':'关着：点一下打开朗读';
   var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
 }
@@ -3295,8 +3316,11 @@ setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
 var ttsDbgAt=0;
 function ttsDbg(m){if(Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();fetch('/api/tts/log',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({m:String(m).slice(0,200)})}).catch(function(){})}
 document.addEventListener('visibilitychange',function(){
-  if(document.hidden){if(!ttsSrvVoice())ttsStop();else tts.srvUnlocked=false}   // 去过后台：下次点屏幕时重新解锁一次
-  else{ttsWake();ttsPickVoice()}
+  if(document.hidden){
+    if(narration&&narration.onHidden)narration.onHidden();
+    if(!ttsSrvVoice())ttsStop();else tts.srvUnlocked=false;
+  }
+  else{ttsWake();ttsPickVoice();if(narration&&narration.onVisible)narration.onVisible()}
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
 $('#mtabs [data-tab="set"]').addEventListener('click',ttsLoadSrv);$('#railSet').addEventListener('click',ttsLoadSrv);
 document.addEventListener('pointerdown',ttsUnlock,{capture:true});
