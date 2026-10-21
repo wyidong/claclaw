@@ -1331,12 +1331,21 @@ async function handleRename(req, res) {
 }
 
 // ---------- 多宿主（见 hosts.mjs）----------
+// 只有用 Tailscale 地址（100.64.0.0/10 的 IP，或 tailscale serve 的 *.ts.net 名字）打开时才能切换宿主；
+// 127.0.0.1、局域网 IP 打开的就是单宿主
+function multiHostReq(req) {
+  const h = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  return /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}$/.test(h) || /\.ts\.net$/.test(h);
+}
 async function handleHosts(req, res, url) {
   const act = url.pathname.slice('/api/hosts'.length);
-  if (req.method === 'GET' && !act) {
-    const si = await slowInfo(ROOT).catch(() => ({}));
-    return sendJson(res, 200, await hosts.overview({ name: si.name || os.hostname() }), { 'cache-control': 'no-store' });
+  const si = req.method === 'GET' && !act ? await slowInfo(ROOT).catch(() => ({})) : null;
+  // 下面两个 relay 是首连宿主经 Tailscale IP 调这台的，不受限制；其余要用 Tailscale 地址打开
+  if (!act.startsWith('/relay') && !multiHostReq(req)) {
+    if (si) return sendJson(res, 200, { single: true, self: { id: '', name: si.name || os.hostname() }, hosts: [], tailnet: null }, { 'cache-control': 'no-store' });
+    return sendJson(res, 403, { error: '用 Tailscale 地址打开网页时才能切换宿主' });
   }
+  if (si) return sendJson(res, 200, await hosts.overview({ name: si.name || os.hostname() }), { 'cache-control': 'no-store' });
   if (req.method !== 'POST' || !/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
   let b = {};
   try { b = JSON.parse(await readBody(req, 4096)); } catch {}
@@ -1413,7 +1422,7 @@ const handler = async (req, res) => {
     }
     // 多宿主：/h/<宿主ID>/api/… 原样转给那台宿主
     const hp = url.pathname.match(/^\/h\/([\w-]{4,64})(\/api\/.*)$/);
-    if (hp) return hosts.proxyHttp(req, res, hp[1], hp[2] + url.search);
+    if (hp) return multiHostReq(req) ? hosts.proxyHttp(req, res, hp[1], hp[2] + url.search) : sendJson(res, 404, { error: '单宿主', hostGone: true });
     if (url.pathname === '/api/hosts' || url.pathname.startsWith('/api/hosts/')) return handleHosts(req, res, url);
     if (url.pathname === '/api/push/pick' && req.method === 'POST') {
       let b = {};
@@ -1619,7 +1628,7 @@ const wss = new WebSocketServer({ noServer: true });
 function onUpgrade(req, socket, head) {
   const hw = new URL(req.url, 'http://x').pathname.match(/^\/h\/([\w-]{4,64})\/ws$/);
   if (hw) {
-    if (!sameOrigin(req) || !authed(req)) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); return socket.destroy(); }
+    if (!sameOrigin(req) || !authed(req) || !multiHostReq(req)) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); return socket.destroy(); }
     return hosts.proxyWs(req, socket, head, hw[1], wss, log);
   }
   if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {

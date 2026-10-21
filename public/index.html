@@ -923,7 +923,9 @@ select.pe-in{text-align-last:right}
 'use strict';
 var $=function(s){return document.querySelector(s)};
 // ---------- 多宿主：选中的宿主（''＝这台，也就是网址里的首连宿主）。记在这台设备上；通知点进来带 ?host= ----------
-var HOST=(function(){
+// 只有用 Tailscale 地址（100.64–127.x.x 或 *.ts.net）打开时是多宿主；127.0.0.1、局域网 IP 打开就是单宿主
+var MULTI=/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}$/.test(location.hostname)||/\.ts\.net$/i.test(location.hostname);
+var HOST=!MULTI?'':(function(){
   var q=new URLSearchParams(location.search).get('host');
   try{if(q!=null){if(q)localStorage.setItem('claclaw.host',q);else localStorage.removeItem('claclaw.host')}return localStorage.getItem('claclaw.host')||''}catch(_){return q||''}
 })();
@@ -1943,7 +1945,8 @@ function renderHosts(){
     });
   }
   $('#hostsList').innerHTML=h;
-  $('#hostsNote').textContent=j.tailnet===null?'这台电脑上没找到 Tailscale，只能用这台宿主。':
+  $('#hostsNote').textContent=j.single?'现在是用 '+location.hostname+' 打开的，只用这台宿主。要切换宿主，用这台电脑的 Tailscale 地址打开网页。':
+    j.tailnet===null?'这台电脑上没找到 Tailscale，只能用这台宿主。':
     '切换后，会话、Claw、设置里的「宿主」都是选中那台电脑的；通知由首连宿主统一发到这台设备。';
   if(hostsForm){var u=$('#hfPort')&&!$('#hfPort').value?$('#hfPort'):$('#hfUser');if(u)u.focus()}
 }
@@ -2673,7 +2676,7 @@ function takePendingOpen(){
   return caches.open('claclaw-nav').then(function(c){
     return c.match('/__pending-open').then(function(r){
       if(!r)return null;
-      return r.json().then(function(j){c.delete('/__pending-open');if(!j||Date.now()-j.at>=60000)return null;if((j.host||'')!==HOST){switchHost(j.host||'',j.view==='peer'?'view:peer':j.id);return null}return j.view==='peer'?'view:peer':j.id||null});
+      return r.json().then(function(j){c.delete('/__pending-open');if(!j||Date.now()-j.at>=60000)return null;if(MULTI&&(j.host||'')!==HOST){switchHost(j.host||'',j.view==='peer'?'view:peer':j.id);return null}return j.view==='peer'?'view:peer':j.id||null});
     });
   }).catch(function(){return null});
 }
@@ -3037,7 +3040,7 @@ if('serviceWorker' in navigator&&window.isSecureContext){
   navigator.serviceWorker.addEventListener('message',function(e){
     var d=e.data||{};if(d.t!=='open')return;
     var q=new URL(d.url,location.href).searchParams,s=q.get('s'),h=q.get('host')||'';   // 没带 host 的通知是首连宿主自己的
-    if(h!==HOST){switchHost(h,q.get('view')==='peer'?'view:peer':s);return}
+    if(MULTI&&h!==HOST){switchHost(h,q.get('view')==='peer'?'view:peer':s);return}
     if(q.get('view')==='peer')openPeerView();else if(s)openFromNotice(s);
   });
 }
