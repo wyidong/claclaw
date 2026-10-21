@@ -21,6 +21,7 @@ import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opA
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
+import { readBody } from './httpbody.mjs';
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
 // CLACLAW_HOST 可以写逗号分隔的列表覆盖默认值
@@ -1189,14 +1190,7 @@ function cookieToken(req) {
 }
 const authed = req => checkToken(cookieToken(req));
 
-function readBody(req, max = 4096) {
-  return new Promise((resolve, reject) => {
-    let b = '';
-    req.on('data', c => { b += c; if (b.length > max) { reject(new Error('too large')); req.destroy(); } });
-    req.on('end', () => resolve(b));
-    req.on('error', reject);
-  });
-}
+
 
 function sendJson(res, code, obj, headers = {}) {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
