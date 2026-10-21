@@ -537,7 +537,7 @@ async function peerDeliver(info, text, from, peerId) {
   }
   const r = runners.get(id);
   if (r.busy) return [409, { ok: false, error: '这个会话正在忙，稍后再发' }];
-  const msg = '【claclaw 协同 · 来自对方：' + from + '（回复请言简意赅，只写结果或必要的问题）】\n' + text;
+  const msg = '【claclaw 协同 · 来自对方：' + from + '（来信长的话先提炼要点再处理；回复言简意赅，只写结果或必要的问题）】\n' + text;
   // 协同消息到了：没人正看着这个会话就推一条通知（点开直接进这个会话）
   if (!r.watched()) {
     localSound();
