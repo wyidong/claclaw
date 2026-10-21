@@ -644,7 +644,7 @@ function peerPublic(c, local) {
     local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c),
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
-    peers: c.peers.map(p => ({ id: p.id, no: p.no, name: p.name, allow: local ? (Array.isArray(p.allow) ? p.allow : null) : undefined, ip: p.ip, inbox: local ? p.inbox : undefined, inboxAlt: local ? p.inboxAlt : undefined, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    peers: c.peers.map(p => ({ id: p.id, no: p.no, name: p.name, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt } : null,
   };
 }
@@ -1419,9 +1419,10 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
       const local = isLocalReq(req), c = loadPeer();
       if (req.method === 'GET' && url.pathname === '/api/peer') return sendJson(res, 200, peerPublic(c, local));
-      if (!local) return sendJson(res, 403, { error: '只能在这台电脑上用 127.0.0.1 打开网页时设置协同' });
       let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024) || '{}'); } catch {}
       const act = url.pathname.slice('/api/peer'.length);
+      // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
+      if (act !== '/check' && !local) return sendJson(res, 403, { error: '只能在这台电脑上用 127.0.0.1 打开网页时设置协同' });
       if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
       if (act === '/allow') {
         // 给某个对方单独设开放哪些会话（null = 全部开放）
