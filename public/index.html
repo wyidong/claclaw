@@ -2194,7 +2194,8 @@ function openSheet(silent){
         });
         list.appendChild(h);list.appendChild(box);cur=box;return;
       }
-      var row=document.createElement('div');row.className='s-row'+(s.peer?' collab':'');   // 不能叫 peer：.peer 是聊天里「别的会话发来的消息」的样式row.dataset.id=s.id;
+      // 协同会话的样式叫 collab，不能叫 peer：.peer 是聊天里「别的会话发来的消息」的样式
+      var row=document.createElement('div');row.className='s-row'+(s.peer?' collab':'');row.dataset.id=s.id;
       if(unread[s.id]||s.unread)row.classList.add('unread');
       var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
