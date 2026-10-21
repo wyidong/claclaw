@@ -1,5 +1,8 @@
-// claclaw —— 手机浏览器连本机 Claude Code 会话（阶段 1 最小原型）
-// 现在只监听 127.0.0.1、没有认证；远程访问和密码等功能验证完再加。
+// claclaw —— 用手机浏览器接管本机的 AI 编程会话（Claude Code / OpenClaw / OpenCode / DeepSeek Harness）。
+// 网页服务默认只监听 127.0.0.1 和本机的 Tailscale IP；登录要密码（初始账号 + 最近一次设置，两者都有效）。
+// 会话用 Claude Agent SDK 驱动：改文件、跑命令前会问一次，等网页上点「允许 / 拒绝」；
+// 原处（终端 / VS Code）闲置够久，网页端才能接管，接管时会核对进程启动时间，避免误杀别的进程。
+// 协同（两台电脑的会话互发消息）走局域网上的另一个端口，配对用六位数配对码。
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
