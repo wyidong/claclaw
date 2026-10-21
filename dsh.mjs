@@ -16,6 +16,10 @@ const ROOT = path.join(DSH_HOME, 'sessions');
 const ATTACH = path.join(DSH_HOME, 'attachments', 'v1', 'objects');
 // dsh 0.2 升级会话时会另写一份 v4，旧的 v3 留着不再更新，所以新格式优先
 const LOG_NAMES = ['session.v4.jsonl.zstd', 'session.v3.jsonl.zstd'];
+
+// 当前 Node 有没有 zstd（读 dsh 会话记录要用；Node 22.15 才有）
+export const dsSupported = () => typeof zlib.zstdDecompressSync === 'function';
+export const dsUnsupportedReason = () => '当前 Node 没有 zstd（需要 Node 22.15 以上），读不了 DeepSeek 会话';
 export const DS_PREFIX = 'ds:';
 export const isDs = id => typeof id === 'string' && id.startsWith(DS_PREFIX);
 const sidOf = id => id.slice(DS_PREFIX.length);

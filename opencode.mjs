@@ -25,6 +25,10 @@ const DEFAULT_TITLE = /^(New session|Child session) - \d{4}-\d\d-\d\dT/;
 let sqlite = null;
 try { sqlite = await import('node:sqlite'); } catch {}
 
+// 当前 Node 有没有 node:sqlite（读 opencode 的库要用；Node 22.13 才有）
+export const opSupported = () => !!sqlite;
+export const opUnsupportedReason = () => '当前 Node 没有 node:sqlite（需要 Node 22.13 以上），读不了 OpenCode 会话';
+
 export const opInstalled = () => fs.existsSync(DB) || !!opBin();
 
 // 每次查询单独开一个只读连接，用完就关：不占着库，也不怕 opencode 升级时换了库文件

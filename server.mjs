@@ -16,8 +16,8 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, notePairFail, clearPairFails, PEER_BASE } from './peer.mjs';
-import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists } from './dsh.mjs';
-import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename } from './opencode.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason } from './dsh.mjs';
+import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
@@ -1107,11 +1107,14 @@ function inPath(name) {
   return false;
 }
 function detectClaws() {
+  // 有些 Claw 要新一点的 Node 才读得了它的会话（DeepSeek 要 zstd，OpenCode 要 node:sqlite）。
+  // 这种情况不是「即将支持」，而是「这台机器的 Node 版本不够」，要把原因说清楚。
+  const dsOk = dsSupported(), opOk = opSupported();
   return [
     { id: 'claude', installed: fs.existsSync(path.join(HOME, '.claude', 'projects')), supported: true },
     { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: true },
-    { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: true },
-    { id: 'opencode', installed: opInstalled(), supported: true },
+    { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: dsOk, reason: dsOk ? undefined : dsUnsupportedReason() },
+    { id: 'opencode', installed: opInstalled(), supported: opOk, reason: opOk ? undefined : opUnsupportedReason() },
   ];
 }
 

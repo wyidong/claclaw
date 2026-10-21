@@ -2288,7 +2288,7 @@ fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
     var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported;
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
     card.hidden=!c.installed;if(c.installed)any=true;
-    if(!c.supported){card.disabled=true;card.querySelector('.claw-st').textContent='即将支持';if(clawSel===c.id)clawSel=null}
+    if(!c.supported){card.disabled=true;card.querySelector('.claw-st').textContent=c.reason||'这个 Claw 在当前环境下用不了';if(clawSel===c.id)clawSel=null}
     if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;

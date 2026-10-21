@@ -15,7 +15,10 @@
 ## 要求
 
 - macOS（目前只在 macOS 上用过）
-- Node.js 18+
+- Node.js 18+（只用 Claude Code / OpenClaw 的话 18 就够）
+  - DeepSeek Harness 的会话记录是 zstd 压缩的，读它需要 **Node 22.15+**
+  - OpenCode 的会话在 SQLite 库里，读它需要 **Node 22.13+**（Node 自带的 `node:sqlite`）
+  - Node 版本不够时，Claw 页上那个 Claw 会写明原因（不是「即将支持」）
 - 已登录的 Claude Code（claclaw 通过 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 驱动会话，SDK 自带 Claude Code 二进制）
 
 ## 安装与启动
