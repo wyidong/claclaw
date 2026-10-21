@@ -110,3 +110,78 @@ export async function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } =
     throw new Error(e.name === 'AbortError' ? '对方超时没有回复' : '连不上对方：' + (e.cause?.code || e.message));
   } finally { clearTimeout(t); }
 }
+
+// ---------- 按名字找：Bonjour（mDNS）----------
+// 开着协同时在局域网里广播「我是 claclaw 协同」（dns-sd -R），附近的 claclaw 一问就能列出来（dns-sd -B / -L）；
+// 地址优先用「电脑名.local」，路由器换了 IP 也不用重新配对；名字查不到（有的网络屏蔽广播）再退回 IP。
+import { spawn, execFileSync } from 'node:child_process';
+import dns from 'node:dns';
+
+const SVC = '_claclaw._tcp';
+let localHost = null;
+export function localHostName() {
+  if (localHost !== null) return localHost;
+  try { localHost = execFileSync('scutil', ['--get', 'LocalHostName'], { timeout: 3000 }).toString().trim(); } catch { localHost = ''; }
+  return localHost;
+}
+export const ourBaseName = c => { const h = localHostName(); return h ? 'http://' + h + '.local:' + c.port + PEER_BASE : ''; };
+export const instanceId = c => { if (!c.instanceId) { c.instanceId = newId(); savePeer(c); } return c.instanceId; };
+
+let advert = null, advertKey = '';
+export function applyAdvert(c, log) {
+  const has = process.platform === 'darwin';
+  const key = c.enabled && has ? myName(c) + '|' + c.port + '|' + instanceId(c) : '';
+  if (key === advertKey) return;
+  if (advert) { try { advert.kill(); } catch {} advert = null; }
+  advertKey = key;
+  if (!key) return;
+  advert = spawn('dns-sd', ['-R', myName(c), SVC, 'local', String(c.port), 'path=' + PEER_BASE, 'id=' + instanceId(c), 'host=' + localHostName() + '.local'], { stdio: 'ignore' });
+  advert.on('exit', () => { advert = null; advertKey = ''; });
+  log?.('peer bonjour advertised as', myName(c));
+}
+process.on('exit', () => { try { advert?.kill(); } catch {} });
+
+// 跑一个 dns-sd 命令若干毫秒，收集输出
+function dnssd(args, ms) {
+  return new Promise(ok => {
+    let out = '';
+    const p = spawn('dns-sd', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    p.stdout.on('data', d => { out += d; });
+    p.on('error', () => ok(''));
+    setTimeout(() => { try { p.kill(); } catch {} ok(out); }, ms);
+  });
+}
+const lookup4 = host => new Promise(ok => dns.lookup(host, { family: 4 }, (e, a) => ok(e ? '' : a)));
+// 附近的 claclaw：名字、主机名、IP、协同地址（不含自己）
+export async function discover(c) {
+  if (process.platform !== 'darwin') return [];
+  const browse = await dnssd(['-B', SVC, 'local'], 2500);
+  const names = [...new Set(browse.split('\n').map(l => l.match(/\sAdd\s+\d+\s+\d+\s+\S+\s+_claclaw\._tcp\.\s+(.+)$/)?.[1]?.trim()).filter(Boolean))];
+  const found = await Promise.all(names.map(async raw => {
+    const n = raw.replace(/\\(\d{3})/g, (_, d) => String.fromCharCode(+d));   // dns-sd 把空格等写成 \032
+    const out = await dnssd(['-L', n, SVC, 'local'], 1500);
+    const m = out.match(/can be reached at (\S+?)\.?:(\d+)/);
+    if (!m) return null;
+    const txt = k => (out.match(new RegExp('\\b' + k + '=(\\S+)')) || [])[1] || '';
+    if (txt('id') === instanceId(c)) return null;   // 自己
+    const host = m[1].replace(/\.$/, ''), port = Number(m[2]), path = txt('path') || PEER_BASE;
+    const ip = await lookup4(host);
+    return { name: n, host, ip, port, base: 'http://' + host + ':' + port + path, baseIp: ip ? 'http://' + ip + ':' + port + path : '' };
+  }));
+  return found.filter(Boolean);
+}
+
+// 请求已配对的对方：先用名字地址，连不上再用 IP 地址（成功的那个以后优先用）
+export async function peerCall(c, p, sub, opts) {
+  const tries = [p.inbox, p.inboxAlt].filter(Boolean);
+  if (p.ip && p.inbox) { try { const u = new URL(p.inbox); if (u.hostname !== p.ip) { u.hostname = p.ip; tries.push(u.toString().replace(/\/$/, '')); } } catch {} }
+  let err;
+  for (const [i, url] of [...new Set(tries)].entries()) {
+    try {
+      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, ms: i ? Math.min(opts?.ms || 8000, 8000) : opts?.ms });
+      if (i && url !== p.inbox) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; savePeer(c); }   // 换了能用的那个当首选
+      return j;
+    } catch (e) { err = e; }
+  }
+  throw err || new Error('没有对方的地址');
+}

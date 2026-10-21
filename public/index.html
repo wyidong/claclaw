@@ -450,6 +450,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-req-b{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .pe-req-b small{color:var(--muted);font-size:12px;font-family:var(--mono)}
 .pe-mini{height:28px;padding:0 10px;font-size:13px;flex:none}
+.pe-tag{flex:none;font-size:12px;color:var(--allow)}
+.pe-scan{margin-left:8px;padding:0;border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
+.pe-scan:disabled{color:var(--muted);cursor:default}
 .pe-in[type=number]{-moz-appearance:textfield}
 .pe-in[type=number]::-webkit-inner-spin-button,.pe-in[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .pe-in.mono,.pe-mono{font-family:var(--mono)}
@@ -1788,7 +1791,7 @@ function loadHost(){
 // ---------- 宿主 → claclaw 协同 ----------
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
 // 只有在本机用 127.0.0.1 打开时能改设置；第一版只走局域网
-var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null;
+var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
 $('#hostBody').addEventListener('click',function(e){
   var a=e.target.closest('[data-act]');if(!a)return;
   var act=a.dataset.act;
@@ -1801,6 +1804,8 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-reject')peerPost('/reject',{id:a.dataset.id},'已拒绝');
   if(act==='peer-revoke'){if(confirm('撤销和「'+a.dataset.name+'」的配对？撤销后对方要重新申请才能联系我们'))peerPost('/revoke',{id:a.dataset.id},'已撤销')}
   if(act==='peer-start'){peerMsg={ok:'正在向对方申请…'};paintPeerMsg();peerPost('/pair-start',{url:$('#peUrl').value.replace(/\s+/g,'')},'已向对方申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
+  if(act==='peer-near-pair'){peerMsg={ok:'正在向「'+a.dataset.name+'」申请…'};paintPeerMsg();peerPost('/pair-start',{url:a.dataset.url,urlAlt:a.dataset.alt||''},'已向「'+a.dataset.name+'」申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
+  if(act==='peer-scan')peerScan();
   if(act==='peer-finish')peerPost('/pair-finish',{code:$('#peCode').value.trim()},'');
   if(act==='peer-cancel')peerPost('/pair-cancel',{},'');
 });
@@ -1841,30 +1846,47 @@ function openPeerView(){
   if(!DESKTOP.matches&&!mList)goList();
   mTab('host');hostView='peer';peerMsg={};peerOnline={};loadPeerPage();
 }
+// 附近的 claclaw（局域网里开着协同的电脑，Bonjour 广播找到的）
+function peerScan(){
+  if(!peerCfg||!peerCfg.local||!peerCfg.enabled||peerScanning)return;
+  peerScanning=true;paintPeerNear();
+  fetch('/api/peer/nearby',{method:'POST'}).then(function(r){return r.json()}).then(function(list){peerNear=Array.isArray(list)?list:[]}).catch(function(){peerNear=[]})
+    .then(function(){peerScanning=false;paintPeerNear()});
+}
+function peerNearHtml(c){
+  if(!c.local||!c.enabled)return '';
+  var rows=(peerNear||[]).map(function(n){
+    return '<div class="h-row"><span class="k">'+esc(n.name)+'</span><span class="v"><span class="pe-mono">'+esc(n.host)+'</span><small>'+esc(n.ip||'IP 未知')+'</small></span>'+
+      (n.paired?'<span class="pe-tag">已配对</span>':'<button type="button" class="pe-btn pri pe-mini" data-act="peer-near-pair" data-name="'+esc(n.name)+'" data-url="'+esc(n.base)+'" data-alt="'+esc(n.baseIp||'')+'">申请配对</button>')+'</div>';
+  }).join('');
+  var empty=peerScanning?'<div class="pe-note" style="margin:10px 14px">正在找附近的 claclaw…</div>':peerNear&&!peerNear.length?'<div class="pe-note" style="margin:10px 14px">没找到。对方要开着协同、和这台电脑在同一个局域网；有的网络会屏蔽这种广播，那就在下面手动填地址。</div>':'';
+  return '<div><div class="h-h">附近的 claclaw <button type="button" class="pe-scan" data-act="peer-scan"'+(peerScanning?' disabled':'')+'>'+(peerScanning?'查找中…':'重新查找')+'</button></div><div class="h-card">'+rows+empty+'</div></div>';
+}
+function paintPeerNear(){var el=$('#peNear');if(el&&peerCfg)el.innerHTML=peerNearHtml(peerCfg)}
 function loadPeerPage(){
   $('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';
   Promise.all([fetch('/api/peer').then(function(r){return r.json()}),fetch('/api/sessions').then(function(r){return r.json()})]).then(function(x){
     peerCfg=x[0];peerList=Array.isArray(x[1])?x[1]:[];
     if(!peerCfg.dir&&peerCfg.sessions.length){var f=peerList.find(function(s){return s.id===peerCfg.sessions[0]});if(f)peerCfg.dir=f.cwd}
-    renderPeer();peerWatch(true);peerCheckNow();
+    renderPeer();peerWatch(true);peerCheckNow();peerScan();
   }).catch(function(e){$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
 function fmtLeft(t){var s=Math.max(0,Math.round((t-Date.now())/1000));return Math.floor(s/60)+':'+('0'+s%60).slice(-2)}
 function fmtWhen(t){return t?new Date(t).toLocaleString():''}
 // 「复制邀请」：对方（或对方的 AI）照着就能申请配对、然后收发消息
 function peerInvite(c){
-  var b=c.base;
-  return 'claclaw 协同邀请（局域网）\n协同地址：'+b+'\n\n'+
+  var b=c.baseName||c.base;
+  return 'claclaw 协同邀请（局域网）\n协同地址：'+b+(c.baseName?'\n（电脑名找不到时用 IP：'+c.base+'）':'')+'\n\n'+
     '配对（一次）：\n'+
-    '1. 申请：POST '+b+'/pair  {"name":"你的名字","inbox":"你的收件地址（可选；填了我们也能主动找你）"}\n'+
+    '1. 申请：POST '+b+'/pair  {"name":"你的名字","inbox":"你的收件地址（可选；填了我们也能主动找你）","inboxAlt":"备用地址（可选，例如 IP 版）"}\n'+
     '   → {"requestId":"…"}；这时我们页面上会出现你的申请和一个两位数配对码，我们会把码告诉你（5 分钟内有效，最多输错 3 次）\n'+
     '2. 确认：POST '+b+'/pair/confirm  {"requestId":"…","code":"两位数","token":"可选：以后我们找你用的钥匙"}\n'+
-    '   → {"token":"以后你找我们用的钥匙","name":"我们的名字","inbox":"我们的协同地址"}\n\n'+
+    '   → {"token":"以后你找我们用的钥匙","name":"我们的名字","inbox":"我们的协同地址","inboxAlt":"备用地址"}\n\n'+
     '配对后（请求头 Authorization: Bearer <token>）：\n'+
     '- 查看会话：GET '+b+'/sessions → {"sessions":[{"id","title","busy"}]}\n'+
     '- 发消息：POST '+b+'  {"from":"你是谁","text":"正文（4000 字内）","session":"可选，会话 id"} → {"ok":true,"reply":"我们这一轮的回复原文"}（最多等 10 分钟）\n'+
     '- 错误码：400 消息为空或没指定会话，401 没配对或钥匙不对，409 会话正忙，413 太长，429 上一条还在处理，504 超时。\n\n'+
-    '如果你也用 claclaw：在「宿主 → claclaw 协同」开启后，在「向对方申请配对」里填上面的协同地址即可，不用手动调这些接口。';
+    '如果你也用 claclaw：在「宿主 → claclaw 协同」开启后，「附近的 claclaw」里会直接列出我们，点「申请配对」即可；列不出来就在「向对方申请配对」里填上面的协同地址。';
 }
 function peerPendingHtml(c){
   if(!c.pending||!c.pending.length)return '';
@@ -1913,18 +1935,19 @@ function renderPeer(){
     '</div><div class="pe-note">名字会显示在对方那边。只能选一个会话目录，可以勾选这个目录下的多个会话；对方发来的消息会送进这些会话，回复自动返回给对方。</div></div>';
   if(c.enabled&&c.base){
     h+='<div><div class="h-h">我们的协同地址（第一版只支持局域网）</div><div class="h-card">'+
+      (c.baseName?'<span class="pe-url">'+esc(c.baseName)+'</span><div class="pe-note" style="margin:-4px 14px 6px">按电脑名找，路由器换了 IP 也不用改；名字找不到时用这个：</div>':'')+
       '<span class="pe-url">'+esc(c.base)+'</span>'+
-      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.base)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请（含配对说明）</button></div>'+
+      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.baseName||c.base)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请（含配对说明）</button></div>'+
       '</div><div class="pe-note">地址里不含密码：别人拿到只能申请配对，要你在这页把两位数配对码告诉他才能配上。</div></div>';
   }
-  h+='<div id="pePeers">'+peerPeersHtml(c)+'</div>';
+  h+='<div id="peNear">'+peerNearHtml(c)+'</div><div id="pePeers">'+peerPeersHtml(c)+'</div>';
   h+='<div><div class="h-h">向对方申请配对</div><div class="h-card">'+
     (c.outPair?
       '<div class="h-row"><span class="k">对方</span><span class="v pe-mono">'+esc(c.outPair.base)+'</span></div>'+
       '<div class="h-row"><span class="k">配对码</span><input id="peCode" class="pe-in mono" inputmode="numeric" maxlength="2" placeholder="对方告诉你的两位数"></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-finish">完成配对</button><button type="button" class="pe-btn" data-act="peer-cancel">取消</button></div>'
     :
-      '<div class="h-row pe-urlrow"><span class="k">对方地址</span><textarea id="peUrl" class="pe-in pe-ta mono" rows="2" placeholder="http://192.168.1.x:8788/claclaw-peer"></textarea></div>'+
+      '<div class="h-row pe-urlrow"><span class="k">对方地址</span><textarea id="peUrl" class="pe-in pe-ta mono" rows="2" placeholder="http://电脑名.local:8788/claclaw-peer（或 IP）"></textarea></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-start">申请配对</button></div>')+
     '</div><div class="pe-note">填对方的协同地址申请配对；对方页面上会出现一个两位数配对码，问对方要来填上就配好了，之后双方都能主动找对方。'+(c.enabled?'':'要先开启我们这边的协同。')+'</div></div>';
   $('#hostBody').innerHTML=h;paintPeerMsg();
