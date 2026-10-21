@@ -475,7 +475,7 @@ function claclawMcp(sessionId) {
         async ({ peer }) => {
           const c = loadPeer();
           if (!c.enabled || !c.sessions.includes(sessionId)) return { content: [{ type: 'text', text: '这个会话没有加入 claclaw 协同' }], isError: true };
-          const list = c.peers.filter(p => p.inbox && p.theirToken && (!peer || p.name === peer));
+          const list = c.peers.filter(p => p.inbox && p.theirToken && (!peer || p.name === peer) && peerAllowed(c, p).includes(sessionId));
           if (!list.length) return { content: [{ type: 'text', text: peer ? '没有叫「' + peer + '」的已配对对方' : '还没有可以联系的已配对对方（对方配对时没有提供收件地址的话，只能由对方来找我们）' }], isError: true };
           const out = [];
           for (const p of list) {
@@ -495,7 +495,7 @@ function claclawMcp(sessionId) {
         async ({ text, peer, session }) => {
           const c = loadPeer();
           if (!c.enabled || !c.sessions.includes(sessionId)) return { content: [{ type: 'text', text: '这个会话没有加入 claclaw 协同' }], isError: true };
-          const can = c.peers.filter(p => p.inbox && p.theirToken);
+          const can = c.peers.filter(p => p.inbox && p.theirToken && peerAllowed(c, p).includes(sessionId));   // 只有把这个会话开放给它的对方
           const p = peer ? can.find(x => x.name === peer) : can.length === 1 ? can[0] : null;
           if (!p) return { content: [{ type: 'text', text: peer ? '没有叫「' + peer + '」的已配对对方' : can.length ? '有多个已配对对方，用 peer 指定：' + can.map(x => x.name).join('、') : '还没有可以联系的已配对对方' }], isError: true };
           const r = runners.get(sessionId);
@@ -521,9 +521,11 @@ function isLocalReq(req) {
   return /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip) && /^(127\.0\.0\.1|localhost|\[::1\])$/.test(host)
     && !req.headers['x-forwarded-for'] && !Object.keys(req.headers).some(k => k.startsWith('tailscale-'));
 }
-async function peerSessionInfos(c) {
+// 某个对方能看到的会话：协同会话池 ∩ 开放给它的（没单独设过 = 全部开放）
+const peerAllowed = (c, p) => Array.isArray(p?.allow) ? c.sessions.filter(id => p.allow.includes(id)) : c.sessions;
+async function peerSessionInfos(c, p) {
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
-  return c.sessions.map(id => list.find(s => s.sessionId === id)).filter(Boolean);
+  return peerAllowed(c, p).map(id => list.find(s => s.sessionId === id)).filter(Boolean);
 }
 // 把对方的消息送进会话，收集这一轮的回复
 async function peerDeliver(info, text, from, peerId) {
@@ -615,7 +617,7 @@ async function peerHandler(req, res) {
     const peer = findPeerByToken(c, auth);
     if (!peer) { log('peer reject 401', ip, req.method, route, auth ? 'bad token' : 'no token'); return out(401, { ok: false, error: '还没配对，或钥匙不对：先 POST ' + PEER_BASE + '/pair 申请配对' }); }
     if (peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
-    const infos = await peerSessionInfos(c);
+    const infos = await peerSessionInfos(c, peer);
     const brief = infos.map(s => ({ id: s.sessionId.slice(0, 8), title: s.customTitle || s.summary || '', busy: !!runners.get(s.sessionId)?.busy }));
     if (route === '/sessions') return out(200, { ok: true, name: myName(c), sessions: brief });
     if (route !== '/') return out(404, { ok: false, error: '没有这个接口' });
@@ -642,7 +644,7 @@ function peerPublic(c, local) {
     local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c),
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
-    peers: c.peers.map(p => ({ id: p.id, no: p.no, name: p.name, ip: p.ip, inbox: local ? p.inbox : undefined, inboxAlt: local ? p.inboxAlt : undefined, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    peers: c.peers.map(p => ({ id: p.id, no: p.no, name: p.name, allow: local ? (Array.isArray(p.allow) ? p.allow : null) : undefined, ip: p.ip, inbox: local ? p.inbox : undefined, inboxAlt: local ? p.inboxAlt : undefined, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt } : null,
   };
 }
@@ -1421,6 +1423,15 @@ const handler = async (req, res) => {
       let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024) || '{}'); } catch {}
       const act = url.pathname.slice('/api/peer'.length);
       if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
+      if (act === '/allow') {
+        // 给某个对方单独设开放哪些会话（null = 全部开放）
+        const p = c.peers.find(x => x.id === b.id);
+        if (!p) return sendJson(res, 404, { error: '没有这个对方' });
+        if (b.sessions === null) delete p.allow;
+        else if (Array.isArray(b.sessions)) p.allow = b.sessions.filter(x => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x)).slice(0, 100);
+        savePeer(c); log('peer allow', p.name, Array.isArray(p.allow) ? p.allow.length : 'all');
+        return sendJson(res, 200, peerPublic(c, true));
+      }
       if (act === '/revoke') { c.peers = c.peers.filter(p => p.id !== b.id); savePeer(c); log('peer revoked', b.id); return sendJson(res, 200, peerPublic(c, true)); }
       if (act === '/check') {
         // 已配对的对方在不在线：能用钥匙列出对方的会话就算在线
@@ -1472,7 +1483,7 @@ const handler = async (req, res) => {
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
       if (typeof b.dir === 'string') c.dir = b.dir;
       if (typeof b.name === 'string') c.name = b.name.replace(/\s+/g, ' ').trim().slice(0, 40);
-      if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x)).slice(0, 50);
+      if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x)).slice(0, 100);
       if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
       if (c.enabled && !c.sessions.length) return sendJson(res, 400, { error: '先选至少一个会话加入协同' });
       savePeer(c);
