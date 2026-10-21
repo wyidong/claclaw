@@ -170,6 +170,9 @@ function dshBin() {
 let proc = null, ready = null, rid = 0, idleTimer = null, caps = {};
 const pending = new Map();
 const owners = new Map();   // dsh 会话 id → DsRunner（收 session/update 和权限请求）
+// 正在关闭的会话：sid → 关闭用的 Promise。旧 runner 的关闭还没结束，同一个会话又被打开时，
+// 新 runner 刚登记的 owners 会被旧 runner 的 finally 删掉（回复不显示），所以要等它关完再 resume。
+const closing = new Map();
 
 function startAcp(log) {
   if (ready) return ready;
@@ -261,6 +264,13 @@ export const COMMANDS = [
 // ---------- 打开的 DeepSeek 会话：接口和 Claude 的 Runner 对齐 ----------
 export const dsRunners = new Map();
 
+// 等某个会话的关闭结束（没有在关就直接返回）
+async function waitClosing(sid) {
+  const p = closing.get(sid);
+  if (!p) return;
+  try { await p; } catch {}
+}
+
 export class DsRunner {
   constructor(id, { log, onActivity, onTurnDone, onAsk, info }) {
     this.id = id; this.sid = sidOf(id);
@@ -297,13 +307,15 @@ export class DsRunner {
     if (this.attached) return;
     await startAcp(this.log);
     clearTimeout(idleTimer);
+    await waitClosing(this.sid);   // 上一次关闭还没关完就先等它，否则会互相踩 owners
     owners.set(this.sid, this);
     try {
       const r = await rpc('session/resume', { sessionId: this.sid, cwd: this.cwd, mcpServers: [] });
       this.setConfig(r?.configOptions);
       this.attached = true;
     } catch (e) {
-      owners.delete(this.sid); idleCheck();
+      if (owners.get(this.sid) === this) owners.delete(this.sid);
+      idleCheck();
       if (/already owned|write handle/i.test(e.message)) throw new Error('这个会话正在 DeepSeek Harness 别处打开着（比如 dsh 网页版），先在那边关掉再试');
       throw e;
     }
@@ -477,7 +489,13 @@ export class DsRunner {
     dsRunners.delete(this.id);
     if (this.attached) {
       this.attached = false;
-      rpc('session/close', { sessionId: this.sid }).catch(() => {}).finally(() => { owners.delete(this.sid); idleCheck(); });
+      // 记下这次关闭：owners 只在「现在这个 owner 还是我」时才删，避免删掉新 runner 的登记
+      const p = rpc('session/close', { sessionId: this.sid }).catch(() => {}).finally(() => {
+        if (owners.get(this.sid) === this) owners.delete(this.sid);
+        closing.delete(this.sid);
+        idleCheck();
+      });
+      closing.set(this.sid, p);
     }
   }
 }
@@ -487,6 +505,7 @@ export async function dsNewSession(cwd, opts) {
   await startAcp(opts.log);
   clearTimeout(idleTimer);
   const r = await rpc('session/new', { cwd, mcpServers: [] });
+  await waitClosing(r.sessionId);
   const id = DS_PREFIX + r.sessionId;
   const runner = new DsRunner(id, { ...opts, info: { cwd, title: '新会话' } });
   owners.set(r.sessionId, runner);

@@ -210,6 +210,9 @@ const binEnv = () => ({ ...process.env, PATH: [path.dirname(process.execPath), p
 let proc = null, ready = null, rid = 0, idleTimer = null, caps = {};
 const pending = new Map();
 const owners = new Map();   // opencode 会话 id → OpRunner（收 session/update 和权限请求）
+// 正在关闭的会话：sid → 关闭用的 Promise。旧 runner 的关闭还没结束，同一个会话又被打开时，
+// 新 runner 刚登记的 owners 会被旧 runner 的 finally 删掉（回复不显示），所以要等它关完再 resume。
+const closing = new Map();
 
 function startAcp(log) {
   if (ready) return ready;
@@ -312,6 +315,13 @@ function toolLabel(name = '', kind = '') {
 // ---------- 打开的 OpenCode 会话：接口和 Claude 的 Runner 对齐 ----------
 export const opRunners = new Map();
 
+// 等某个会话的关闭结束（没有在关就直接返回）
+async function waitClosing(sid) {
+  const p = closing.get(sid);
+  if (!p) return;
+  try { await p; } catch {}
+}
+
 export class OpRunner {
   constructor(id, { log, onActivity, onTurnDone, onAsk, info }) {
     this.id = id; this.sid = sidOf(id);
@@ -358,13 +368,15 @@ export class OpRunner {
     if (this.attached) return;
     await startAcp(this.log);
     clearTimeout(idleTimer);
+    await waitClosing(this.sid);   // 上一次关闭还没关完就先等它，否则会互相踩 owners
     owners.set(this.sid, this);
     try {
       const r = await rpc('session/resume', { sessionId: this.sid, cwd: this.cwd || HOME, mcpServers: [] });
       this.setConfig(r?.configOptions);
       this.attached = true;
     } catch (e) {
-      owners.delete(this.sid); idleCheck();
+      if (owners.get(this.sid) === this) owners.delete(this.sid);
+      idleCheck();
       throw e;
     }
   }
@@ -558,7 +570,13 @@ export class OpRunner {
     opRunners.delete(this.id);
     if (this.attached) {
       this.attached = false;
-      rpc('session/close', { sessionId: this.sid }).catch(() => {}).finally(() => { owners.delete(this.sid); idleCheck(); });
+      // 记下这次关闭：owners 只在「现在这个 owner 还是我」时才删，避免删掉新 runner 的登记
+      const p = rpc('session/close', { sessionId: this.sid }).catch(() => {}).finally(() => {
+        if (owners.get(this.sid) === this) owners.delete(this.sid);
+        closing.delete(this.sid);
+        idleCheck();
+      });
+      closing.set(this.sid, p);
     }
   }
 }
@@ -569,6 +587,7 @@ export async function opNewSession(cwd, opts) {
   clearTimeout(idleTimer);
   const r = await rpc('session/new', { cwd, mcpServers: [] });
   touch(r.sessionId);
+  await waitClosing(r.sessionId);
   const id = OP_PREFIX + r.sessionId;
   const runner = new OpRunner(id, { ...opts, info: { cwd, title: '新会话' } });
   owners.set(r.sessionId, runner);
