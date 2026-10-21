@@ -127,6 +127,7 @@ npm start
 ## 目前的限制
 
 - 其他会话通过 Claude Code 内置的跨会话消息发来的消息，如果因权限模式不同被扣住，网页上只显示提示，暂不能批准
+- OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。暂不支持改名；删除前先导出到 data/trash（`opencode import` 可找回）
 
 ## 文件
 
@@ -134,6 +135,7 @@ npm start
 server.mjs        HTTP + WebSocket 服务，会话管理（SDK query）、权限转发、接管
 openclaw.mjs      OpenClaw 会话（通过本机 OpenClaw 网关）
 dsh.mjs           DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
+opencode.mjs      OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
 peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
 host.mjs          「宿主」页：电脑、资源、网络、各 Claw 状态
 tts.mjs           电脑合成语音（微软在线语音 / macOS say）

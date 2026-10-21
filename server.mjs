@@ -17,6 +17,7 @@ import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists } from './dsh.mjs';
+import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
@@ -1029,14 +1030,14 @@ function ocTurnDone(r, ok, text) {
   if (r.watched()) return;
   localSound();
   const badge = markUnread(r.id);
-  push.sendAll({ title: r.title || (isDs(r.id) ? 'DeepSeek' : 'OpenClaw'), body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+  push.sendAll({ title: r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : 'OpenClaw'), body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
 }
-// DeepSeek 会话要你确认操作：没人看着就推送
+// DeepSeek / OpenCode 会话要你确认操作：没人看着就推送
 function dsAsk(r, body) {
   if (r.watched()) return;
   localSound();
   const badge = markUnread(r.id);
-  push.sendAll({ title: r.title || 'DeepSeek', body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+  push.sendAll({ title: r.title || (isOp(r.id) ? 'OpenCode' : 'DeepSeek'), body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
 }
 const dsOpts = () => ({ log, onActivity: setActivity, onTurnDone: ocTurnDone, onAsk: dsAsk });
 function setActivity(id, a) {
@@ -1073,6 +1074,7 @@ function detectClaws() {
     { id: 'claude', installed: fs.existsSync(path.join(HOME, '.claude', 'projects')), supported: true },
     { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: true },
     { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: true },
+    { id: 'opencode', installed: opInstalled(), supported: true },
   ];
 }
 
@@ -1257,6 +1259,17 @@ async function handleDelete(req, res) {
     return sendJson(res, 401, { error: n >= MAX_FAILS ? '失败次数太多，10 分钟内不能再试' : '初始用户名或密码不对' });
   }
   fails.delete(ip);
+  if (isOp(body.id)) {
+    const r = opRunners.get(body.id);
+    if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
+    if (r?.busy) return sendJson(res, 409, { error: '这个会话还在回复，等它结束再删' });
+    if (opTakeoverInfo(body.id, takeoverMin())) return sendJson(res, 409, { error: '这个会话正在终端的 opencode 里打开，先关掉再删' });
+    r?.dispose();
+    // opencode 的会话在它的数据库里：先导出一份 JSON 到回收站（opencode import 能找回），再删
+    try { await opDelete(body.id, TRASH); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 删除失败：' + e.message }); }
+    log('deleted session', body.id);
+    return sendJson(res, 200, { ok: true });
+  }
   if (isOc(body.id) || isDs(body.id)) {
     const r = (isOc(body.id) ? ocRunners : dsRunners).get(body.id);
     if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
@@ -1321,6 +1334,7 @@ async function handleRename(req, res) {
     return sendJson(res, 200, { ok: true, title });
   }
   if (isDs(body.id)) return sendJson(res, 400, { error: 'DeepSeek 会话暂不支持改名' });
+  if (isOp(body.id)) return sendJson(res, 400, { error: 'OpenCode 会话暂不支持改名' });
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
   const info = list.find(s => s.sessionId === body.id);
   if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
@@ -1589,12 +1603,17 @@ const handler = async (req, res) => {
       const claws = Object.fromEntries(detectClaws().map(c => [c.id, { installed: c.installed }]));
       claws.openclaw.up = claws.openclaw.installed ? await ocGatewayUp(log) : false;
       claws.deepseek.up = dsAcpRunning();
+      claws.opencode.up = opAcpRunning();
       const info = await hostInfo({
         root: ROOT, port: PORT, hosts: HOSTS, https: getHttpsUrl(), startedAt: STARTED_AT,
-        sessions: { claude: count(runners), openclaw: count(ocRunners), deepseek: count(dsRunners), push: push.subscriptionCount() },
-        claws: { claude: { ...claws.claude, ...count(runners) }, openclaw: { ...claws.openclaw, ...count(ocRunners) }, deepseek: { ...claws.deepseek, ...count(dsRunners) } },
+        sessions: { claude: count(runners), openclaw: count(ocRunners), deepseek: count(dsRunners), opencode: count(opRunners), push: push.subscriptionCount() },
+        claws: { claude: { ...claws.claude, ...count(runners) }, openclaw: { ...claws.openclaw, ...count(ocRunners) }, deepseek: { ...claws.deepseek, ...count(dsRunners) }, opencode: { ...claws.opencode, ...count(opRunners) } },
       });
       return sendJson(res, 200, info, { 'cache-control': 'no-store' });
+    }
+    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'opencode') {
+      try { return sendJson(res, 200, opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() }), { 'cache-control': 'no-store' }); }
+      catch (e) { return sendJson(res, 500, { error: e.message }); }
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'deepseek') {
       try { return sendJson(res, 200, dsSessionList({ busy: id => !!dsRunners.get(id)?.busy }), { 'cache-control': 'no-store' }); }
@@ -1661,7 +1680,7 @@ wss.on('connection', (ws, req) => {
       // 往上滑：要 before（绝对序号）之前的一页
       if (m.t === 'history.more') {
         if (!runner) return;
-        if (runner instanceof DsRunner) {
+        if (runner instanceof DsRunner || runner instanceof OpRunner) {
           const pg = historyPage(runner.history(), Number(m.before) || 0, HISTORY_MORE);
           return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
         }
@@ -1691,6 +1710,30 @@ wss.on('connection', (ws, req) => {
           mode: 'default', modes: ['default'], busy: false, claw: 'openclaw', commands: r.commands || [],
           history: pg.items, historyStart: 100000 - pg.items.length, historyTotal: 100000, historyMore: pg.more,
           pending: [], suggestion: null, isNew: true,
+        });
+      }
+      if (m.t === 'session.new' && (isOp(m.from) || m.claw === 'opencode')) {
+        // OpenCode：用 opencode 的 ACP 在目录里新建会话；目录默认用参照会话的
+        let cwd = isOp(m.from) ? (opRunners.get(m.from)?.cwd || opSessionList().find(s => s.id === m.from)?.cwd) : '';
+        if (typeof m.cwd === 'string' && m.cwd.trim()) {
+          let d = m.cwd.trim();
+          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
+          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
+          cwd = path.resolve(d);
+        }
+        if (!cwd) cwd = HOME;
+        let st = null; try { st = fs.statSync(cwd); } catch {}
+        if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + cwd });
+        let r;
+        try { r = await opNewSession(cwd, dsOpts()); } catch (e) { return send({ t: 'error', message: 'OpenCode 新建会话失败：' + e.message }); }
+        runner?.unsubscribe(ws);
+        runner = r;
+        r.subscribe(ws);
+        log('new opencode session', r.sid, 'in', cwd);
+        return send({
+          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'opencode',
+          mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
+          commands: r.commands, isNew: true,
         });
       }
       if (m.t === 'session.new' && (isDs(m.from) || m.claw === 'deepseek')) {
@@ -1762,6 +1805,33 @@ wss.on('connection', (ws, req) => {
         log('open dsh', r.sid, hist.total, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
+          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands,
+          history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
+          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
+          pending: [...r.pending.values()].map(p => p.req), suggestion: null,
+        });
+      } else if (m.t === 'session.open' && isOp(m.id)) {
+        let r = opRunners.get(m.id);
+        if (!r) {
+          // 终端里的 opencode 正开着它：和 Claude 会话一样，闲置够久才能接管，接管会结束终端里的 opencode
+          const el = opTakeoverInfo(m.id, takeoverMin());
+          if (el) {
+            if (!m.takeover || !el.canTakeover) return send({ t: 'session.busy', id: m.id, ...el });
+            if (!(await opEndHolders(el))) return send({ t: 'error', message: '没能结束终端里的 opencode，未接管' });
+            log('takeover opencode done', m.id);
+          }
+        }
+        runner?.unsubscribe(ws);
+        if (!r) { r = new OpRunner(m.id, dsOpts()); opRunners.set(m.id, r); }
+        const hist = r.history();
+        if (!hist.total && !r.attached && !opExists(m.id)) { opRunners.delete(m.id); runner = null; return send({ t: 'error', message: '找不到这个会话' }); }
+        runner = r;
+        r.subscribe(ws);
+        if (ws.visible !== false) clearUnread(m.id);
+        const pg = historyPage(hist, hist.total, HISTORY_PAGE);
+        log('open opencode', r.sid, hist.total, 'items');
+        send({
+          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'opencode',
           mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands,
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
@@ -1888,7 +1958,9 @@ function shutdown() {
   log('shutting down');
   for (const r of [...runners.values()]) r.dispose();
   for (const r of [...dsRunners.values()]) r.dispose();
+  for (const r of [...opRunners.values()]) r.dispose();
   setTimeout(dsShutdown, 300);
+  setTimeout(opShutdown, 300);
   setTimeout(() => process.exit(0), 500);
 }
 process.on('SIGINT', shutdown);

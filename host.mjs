@@ -14,13 +14,14 @@ const slow = { at: 0, data: null };
 export async function slowInfo(root) {   // server 启动时先跑一次，第一次打开宿主页不用等
   if (slow.data && Date.now() - slow.at < 10 * 60 * 1000) return slow.data;
   const mac = process.platform === 'darwin';
-  const [name, osVer, model, claude, openclaw, gitLine] = await Promise.all([
+  const [name, osVer, model, claude, openclaw, gitLine, opencode] = await Promise.all([
     mac ? run('scutil', ['--get', 'ComputerName']) : Promise.resolve(os.hostname()),
     mac ? run('sw_vers', ['-productVersion']) : Promise.resolve(os.release()),
     mac ? run('sysctl', ['-n', 'hw.model']) : Promise.resolve(''),
     run('claude', ['--version']),
     run('openclaw', ['--version'], 8000),
     run('git', ['-C', root, 'log', '-1', '--format=%h %ct']),
+    run('opencode', ['--version'], 8000),
   ]);
   let dsh = '';
   try { dsh = JSON.parse(fs.readFileSync('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json', 'utf8')).version; } catch {}
@@ -29,7 +30,7 @@ export async function slowInfo(root) {   // server 启动时先跑一次，第�
     name: name || os.hostname(), os: (mac ? 'macOS ' : os.type() + ' ') + osVer, model,
     claude: (claude.match(/\d+\.\d+\.\d+\S*/) || [''])[0],
     openclaw: (openclaw.match(/\d{4}\.\d+\.\d+\S*|\d+\.\d+\.\d+\S*/) || [''])[0],
-    dsh, commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
+    dsh, opencode: (opencode.match(/\d+\.\d+\.\d+\S*/) || [''])[0], commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
   };
   slow.at = Date.now();
   return slow.data;
@@ -88,6 +89,7 @@ export async function hostInfo({ root, port, hosts, https, startedAt, sessions, 
       { id: 'claude', name: 'Claude Code', version: s.claude, ...claws.claude },
       { id: 'openclaw', name: 'OpenClaw', version: s.openclaw, ...claws.openclaw },
       { id: 'deepseek', name: 'DeepSeek Harness', version: s.dsh, ...claws.deepseek },
+      { id: 'opencode', name: 'OpenCode', version: s.opencode, ...claws.opencode },
     ],
   };
 }

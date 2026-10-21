@@ -724,6 +724,7 @@ select.pe-in{text-align-last:right}
     <button type="button" class="rclaw" data-claw="claude" aria-label="Claude Code" title="Claude Code"><img class="tile" src="https://claude.com/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="openclaw" aria-label="OpenClaw" title="OpenClaw"><img src="https://openclaw.ai/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="deepseek" aria-label="DeepSeek Harness" title="DeepSeek Harness"><img class="tile" src="https://cdn.deepseek.com/chat/icon.png" alt=""></button>
+    <button type="button" class="rclaw" data-claw="opencode" aria-label="OpenCode" title="OpenCode"><img class="tile" src="https://opencode.ai/apple-touch-icon.png" alt=""></button>
     </div>
     <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
@@ -843,6 +844,11 @@ select.pe-in{text-align-last:right}
         <button type="button" class="claw-card" data-claw="deepseek">
           <img class="claw-ic tile" src="https://cdn.deepseek.com/chat/icon.png" alt="">
           <span class="claw-tx"><b>DeepSeek Harness</b><small>dsh 的会话：网页版、终端里开的都在这里</small></span>
+          <span class="claw-st"></span>
+        </button>
+        <button type="button" class="claw-card" data-claw="opencode">
+          <img class="claw-ic tile" src="https://opencode.ai/apple-touch-icon.png" alt="">
+          <span class="claw-tx"><b>OpenCode</b><small>opencode 的会话：终端里开的都在这里</small></span>
           <span class="claw-st"></span>
         </button>
       </div>
@@ -1160,8 +1166,8 @@ function addPeer(from,t){
   feed.appendChild(e);scrollDown();
 }
 // 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
-function clawName(id){return /^oc:/.test(id||'')?'OpenClaw':/^ds:/.test(id||'')?'DeepSeek':'Claude'}
-function shortId(id){id=String(id||'');if(/^ds:/.test(id))return id.replace(/^ds:(session-)?/,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':'),q=p[p.length-1]||p[0];return /^[0-9a-f]{8}-/i.test(q)?q.slice(0,8):q}return id.slice(0,8)}
+function clawName(id){return /^oc:/.test(id||'')?'OpenClaw':/^ds:/.test(id||'')?'DeepSeek':/^op:/.test(id||'')?'OpenCode':'Claude'}
+function shortId(id){id=String(id||'');if(/^ds:/.test(id))return id.replace(/^ds:(session-)?/,'').slice(0,8);if(/^op:/.test(id))return id.replace(/^op:(ses_)?/,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':'),q=p[p.length-1]||p[0];return /^[0-9a-f]{8}-/i.test(q)?q.slice(0,8):q}return id.slice(0,8)}
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
 // 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
@@ -1879,11 +1885,11 @@ function loadHost(){
     h+=hSec('claclaw',
       hRow('版本',esc(k.commit||'未知'),k.commitAt?new Date(k.commitAt).toLocaleString():'')+
       hRow('服务已运行',fmtDur(Date.now()-k.startedAt))+
-      hRow('打开的会话',String(k.sessions.claude.open+k.sessions.openclaw.open+k.sessions.deepseek.open),'工作中 '+(k.sessions.claude.busy+k.sessions.openclaw.busy+k.sessions.deepseek.busy))+
+      hRow('打开的会话',String(k.sessions.claude.open+k.sessions.openclaw.open+k.sessions.deepseek.open+(k.sessions.opencode?k.sessions.opencode.open:0)),'工作中 '+(k.sessions.claude.busy+k.sessions.openclaw.busy+k.sessions.deepseek.busy+(k.sessions.opencode?k.sessions.opencode.busy:0)))+
       hRow('推送设备',String(k.sessions.push))+
       hRow('Node.js',esc(k.node)));
     h+=hSec('Claw',x.claws.filter(function(w){return w.installed}).map(function(w){
-      var st=w.id==='openclaw'?(w.up?'网关在线':'网关连不上'):w.id==='deepseek'?(w.up?'ACP 进程运行中':'空闲（发消息时启动）'):'';
+      var st=w.id==='openclaw'?(w.up?'网关在线':'网关连不上'):w.id==='deepseek'||w.id==='opencode'?(w.up?'ACP 进程运行中':'空闲（发消息时启动）'):'';
       var on=w.id==='claude'?w.open>0:w.up;
       return hRow(w.name,(w.version?esc(w.version):'版本未知'),(st?st+' · ':'')+'打开 '+w.open+(w.busy?' · 工作中 '+w.busy:''))
         .replace('<span class="k">','<span class="k"><i class="h-dot'+(on?' on':'')+'"></i>');
@@ -2236,7 +2242,7 @@ function renderPeer(){
 }
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
 var clawSel=null;try{clawSel=localStorage.getItem(hk('claw'))||localStorage.getItem('claclaw.claw')}catch(_){}   // 新切到的宿主：先沿用首连宿主选的 Claw
-if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek')clawSel=null;
+if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek'&&clawSel!=='opencode')clawSel=null;
 // 左栏的 Claw：活跃的常显，其余收起来；全都活跃就没有「更多」
 function renderRailClaws(){
   var busy={},unr={},cc=curClaw();
@@ -2361,6 +2367,10 @@ $('#sNew').addEventListener('click',function(){
     ref=(session&&/^ds:/.test(session.id))?session:(lastList||[]).find(function(x){return /^ds:/.test(x.id)&&x.cwd});
     newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:'deepseek'}:{id:'',cwd:'~',claw:'deepseek'});return;
   }
+  if(clawSel==='opencode'){   // OpenCode：同上
+    ref=(session&&/^op:/.test(session.id))?session:(lastList||[]).find(function(x){return /^op:/.test(x.id)&&x.cwd});
+    newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:'opencode'}:{id:'',cwd:'~',claw:'opencode'});return;
+  }
   if(!ref||!ref.cwd){alert('先打开一个会话，新会话会默认建在它的目录里');return}
   newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});
 });
@@ -2375,7 +2385,7 @@ function openSheet(silent){
   if(!silent&&DESKTOP.matches){sheet.classList.add('on');sheet.setAttribute('aria-hidden','false')}   // 手机列表页本身就是列表，不用弹出面板
   syncPushBtn();
   var claw=clawSel;
-  fetch('/api/sessions'+(clawSel==='openclaw'||clawSel==='deepseek'?'?claw='+clawSel:'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
+  fetch('/api/sessions'+(clawSel==='openclaw'||clawSel==='deepseek'||clawSel==='opencode'?'?claw='+clawSel:'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
     if(claw!==clawSel)return;   // 加载途中换了 Claw
     if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
     lastList=arr;
@@ -2520,7 +2530,7 @@ function renderActivity(){
     w.textContent=a||it.dataset.when||'';
   });
 }
-function clawOf(id){return /^oc:/.test(id)?'openclaw':/^ds:/.test(id)?'deepseek':'claude'}
+function clawOf(id){return /^oc:/.test(id)?'openclaw':/^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':'claude'}
 function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false,byClaw={};
   ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id){other=true;byClaw[clawOf(id)]=true}});
@@ -3180,6 +3190,7 @@ $('#newForm').addEventListener('submit',function(e){
 
 function renameSess(s){
   if(/^ds:/.test(s.id)){alert('DeepSeek 会话暂不支持在这里改名');return}
+  if(/^op:/.test(s.id)){alert('OpenCode 会话暂不支持在这里改名');return}
   var t=prompt('给会话改个名字',s.title);
   if(t===null)return;
   t=t.replace(/\s+/g,' ').trim();
