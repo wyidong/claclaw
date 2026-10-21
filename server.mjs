@@ -1185,8 +1185,38 @@ async function sessionList() {
 // ---------- 登录 ----------
 
 const COOKIE = 'claclaw_sid';
-const fails = new Map(); // ip -> { n, until }
-const MAX_FAILS = 5, LOCK_MS = 10 * 60 * 1000;
+// 登录失败限流：每个 IP 记失败次数，错够 MAX_FAILS 次就锁定；
+// 每锁一次锁定时长翻倍（从 10 分钟起，最长 24 小时），登录成功就清零。
+const fails = new Map();   // ip -> { n, until, at }
+const MAX_FAILS = 5;
+const LOCK_BASE_MIN = 10, LOCK_MAX_MIN = 24 * 60;   // 分钟
+const FAILS_TTL_MS = 60 * 60 * 1000;                // 清理的宽限期
+const lockMinutes = n => Math.min(LOCK_BASE_MIN * 2 ** (n - MAX_FAILS), LOCK_MAX_MIN);
+function lockedFor(ip) {
+  const f = fails.get(ip);
+  return f && f.until > Date.now() ? f : null;
+}
+function noteFail(ip) {
+  const f = fails.get(ip);
+  const n = (f?.n || 0) + 1;
+  const until = n >= MAX_FAILS ? Date.now() + lockMinutes(n) * 60000 : 0;
+  fails.set(ip, { n, until, at: Date.now() });
+  return { n, until };
+}
+function clearFails(ip) { fails.delete(ip); }
+function tooManyTries(f) {
+  return '失败次数太多，请 ' + Math.max(1, Math.ceil((f.until - Date.now()) / 60000)) + ' 分钟后再试';
+}
+// 定期清理过期的条目（#25）。
+// 注意：不能只看「上次失败多久以前」——锁定时长会越来越长，按失败时间清会把退避重置掉。
+// 所以要以「锁定结束的时间」为准：锁定期内的条目一律留着，锁定结束后再过 FAILS_TTL_MS 才删。
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, f] of fails) {
+    if (f.until > now) continue;                       // 还锁着，别动
+    if (now - Math.max(f.at, f.until) > FAILS_TTL_MS) fails.delete(ip);
+  }
+}, 5 * 60 * 1000).unref?.();
 
 function cookieToken(req) {
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)claclaw_sid=([^;]+)/);
@@ -1222,18 +1252,17 @@ async function handleSetup(req, res) {
 
 async function handleLogin(req, res) {
   const ip = req.socket.remoteAddress;
-  const f = fails.get(ip);
-  if (f && f.until > Date.now()) return sendJson(res, 429, { error: '失败次数太多，请 ' + Math.ceil((f.until - Date.now()) / 60000) + ' 分钟后再试' });
+  const f = lockedFor(ip);
+  if (f) return sendJson(res, 429, { error: tooManyTries(f) });
   let body = {};
   try { body = JSON.parse(await readBody(req)); } catch {}
   const via = verify(body.username, body.password);
   if (!via) {
-    const n = (f && f.until > Date.now() ? f.n : (f?.n || 0)) + 1;
-    fails.set(ip, { n: n >= MAX_FAILS ? 0 : n, until: n >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
-    log('login failed from', ip);
-    return sendJson(res, 401, { error: n >= MAX_FAILS ? '失败次数太多，10 分钟内不能再试' : '用户名或密码不对' });
+    const { n } = noteFail(ip);
+    log('login failed from', ip, 'fails=' + n);
+    return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '用户名或密码不对' });
   }
-  fails.delete(ip);
+  clearFails(ip);
   const token = issueToken(via, ip);
   log('login ok from', ip, 'via', via);
   sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(token) });
@@ -1245,18 +1274,17 @@ const TRASH = path.join(DATA, 'trash');
 
 async function handleDelete(req, res) {
   const ip = req.socket.remoteAddress;
-  const f = fails.get(ip);
-  if (f && f.until > Date.now()) return sendJson(res, 429, { error: '失败次数太多，请 ' + Math.ceil((f.until - Date.now()) / 60000) + ' 分钟后再试' });
+  const f = lockedFor(ip);
+  if (f) return sendJson(res, 429, { error: tooManyTries(f) });
   if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
   let body = {};
   try { body = JSON.parse(await readBody(req)); } catch {}
   if (!verifyMaster(body.username, body.password)) {
-    const n = (f?.n || 0) + 1;
-    fails.set(ip, { n: n >= MAX_FAILS ? 0 : n, until: n >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
-    log('delete: wrong initial credentials from', ip);
-    return sendJson(res, 401, { error: n >= MAX_FAILS ? '失败次数太多，10 分钟内不能再试' : '初始用户名或密码不对' });
+    const { n } = noteFail(ip);
+    log('delete: wrong initial credentials from', ip, 'fails=' + n);
+    return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '初始用户名或密码不对' });
   }
-  fails.delete(ip);
+  clearFails(ip);
   if (isOp(body.id)) {
     const r = opRunners.get(body.id);
     if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
