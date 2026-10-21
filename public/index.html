@@ -3026,19 +3026,23 @@ var narration=(function(){
   function base(target){
     var s=clean(target).replace(/\\/g,'/');
     if(!s)return '';
-    s=s.split('/').pop().replace(/^["'`]+|["'`]+$/g,'');
+    if(/[\s"'`<>|&;]/.test(s))return '';   // 命令片段 / 带引号的目标：宁可不念
+    s=s.split('/').pop();
     return s.length>48?s.slice(0,48)+'…':s;
   }
   // 四种 Claw 的工具名大小写/叫法都不同，统一收成动作；未知一律静默
   function kindOf(name){
-    var n=String(name||'').toLowerCase().replace(/^mcp__[a-z0-9_]+__/,'');
+    var n=String(name||'').trim();
+    if(!n||n.length>40||/\s/.test(n))return '';   // DeepSeek 的 name 有时是整条命令
+    n=n.toLowerCase().replace(/^mcp__[a-z0-9_]+__/,'');
     if(!n)return '';
+    // 静默项要先判断：TodoWrite 里有 write，TaskCreate 里有 task
+    if(/(^|[^a-z])(todo|todowrite|task(create|update|list|get|stop)|plan|think|grep|glob|list|ls)([^a-z]|$)/.test(n))return 'silent';
+    if(/(^|[^a-z])(read|notebookread)([^a-z]|$)/.test(n))return 'read';
     if(/(^|[^a-z])(bash|sh|shell|exec|execute|command|terminal|run)([^a-z]|$)/.test(n))return 'bash';
     if(/multiedit|notebookedit|apply_?patch|edit|write|patch|replace|insert/.test(n))return 'edit';
     if(/web_?fetch|web_?search|webfetch|websearch|fetch|browse/.test(n))return 'web';
     if(/agent|subagent|sessions?_spawn|task/.test(n))return 'agent';
-    if(/read|notebookread/.test(n))return 'read';
-    if(/grep|glob|list|ls|todo|plan|think/.test(n))return 'silent';
     return '';
   }
   function verbOf(k){
