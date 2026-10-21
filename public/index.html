@@ -1009,7 +1009,12 @@ function mdInline(s){
   // 像 ID、命令、路径的行内代码后面跟一个复制图标（太短或纯单词的只是强调，不加）
   s=s.replace(/`([^`\n]+)`/g,function(_,c){return put('<code>'+c+'</code>'+(c.trim().length>=6&&/[0-9\/._:@=-]/.test(c)?COPY_BTN:''))});
   // 图片 ![说明](地址)：只认 http(s) 和本站路径（/icons/... 这类，不认 // 开头的）
-  s=s.replace(/!\[([^\]\n]*)\]\(((?:https?:\/\/|\/(?!\/))[^\s)]+)\)/g,function(_,t,u){return put('<img class="mdimg" src="'+u+'" alt="'+t+'" loading="lazy">')});
+  // 图片 ![说明](地址)：只自动加载本站（/ 开头）的；外链的渲染成普通链接、显示地址，点了才打开
+  // （AI 回复里的图片可能带着会话数据，自动加载等于把它送出去）
+  s=s.replace(/!\[([^\]\n]*)\]\(((?:https?:\/\/|\/(?!\/))[^\s)]+)\)/g,function(_,t,u){
+    if(/^\/(?!\/)/.test(u))return put('<img class="mdimg" src="'+u+'" alt="'+t+'" loading="lazy">');
+    return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>');
+  });
   s=s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>'+COPY_BTN)});
   s=s.replace(/(^|[\s(（：:，、；])(https?:\/\/[^\s<)），。、；！？」]+)/g,function(_,pre,u){return pre+put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'+COPY_BTN)});
   s=s.replace(/\*\*([^*\n]+?)\*\*/g,'<strong>$1</strong>');
