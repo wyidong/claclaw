@@ -1541,6 +1541,7 @@ function onEvent(m){
   if(/^(user|ai\.|tool\.|peer|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;
   if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
+  if(narration)narration.onEvent(m);   // 过程播报：只读事件，不改现有逻辑
   switch(m.t){
   case 'session.opened':
     if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
@@ -2960,6 +2961,39 @@ function ttsSay(src,force){
   });
   ttsShowStop();
 }
+// ---------- 阶段 0：过程播报最小版 ----------
+// 只读服务端事件：P0 等你确认、P1 完成/中断、P2 开始用工具。
+// 确认请求只念工具动词，不念 displayName（DeepSeek 的 displayName 往往就是整条命令）。
+var narration=(function(){
+  var at=0;
+  function nameOf(n){
+    n=String(n||'').toLowerCase();
+    if(/bash|shell|exec|command|terminal/.test(n))return '跑命令';
+    if(/edit|write|patch|multiedit|notebookedit/.test(n))return '改文件';
+    if(/webfetch|websearch|web_fetch|web_search|fetch/.test(n))return '查网页';
+    if(/read|notebookread/.test(n))return '读文件';
+    if(/agent|task|subagent/.test(n))return '派子任务';
+    return '';
+  }
+  function say(text,pri){
+    if(!tts.on||!text)return;
+    var now=Date.now();
+    if(pri>=2&&now-at<12000)return;
+    at=now;
+    ttsSay(text,true);
+  }
+  return {
+    onEvent:function(m){
+      if(m.t==='perm.request'){
+        say(m.questions?'有个问题要问你，打开看看。':'需要你确认'+(nameOf(m.name)?'：'+nameOf(m.name):''),0);
+      }else if(m.t==='turn.done'){
+        say(m.error?'这轮出错了'+(m.error?('：'+String(m.error).replace(/\s+/g,' ').slice(0,40)):''):m.subtype==='aborted'?'已中断':'这轮完成了',1);
+      }else if(m.t==='tool.start'){
+        var n=nameOf(m.name);if(n)say('正在'+n,2);
+      }
+    }
+  };
+})();
 // 试听：不管自动朗读开没开，都用当前选的声音念一句
 function ttsPreview(text){
   ttsStop();
