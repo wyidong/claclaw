@@ -216,6 +216,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item{display:block;width:100%;min-height:56px;margin-top:8px;padding:10px 12px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
 .s-item[aria-current="true"]{border-color:var(--accent)}
 .s-item .t{font-weight:600}
+.pno{display:inline-grid;place-items:center;min-width:16px;height:16px;margin:0 6px;padding:0 3px;border-radius:8px;color:#fff;font-size:10.5px;font-weight:700;line-height:1;vertical-align:2px;font-family:var(--sans);box-sizing:border-box}
+.pe-peer-name .pno{margin:0 6px 0 0;vertical-align:0}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
@@ -1919,6 +1921,10 @@ function peerPendingHtml(c){
       '<div class="pe-req-b"><small>剩 '+fmtLeft(p.expiresAt)+'</small><button type="button" class="pe-btn del" data-act="peer-reject" data-id="'+esc(p.id)+'">拒绝</button></div></div>';
   }).join('')+'</div><div class="pe-note">核对 IP 和名字是你认可的那台电脑，再把这个两位数配对码告诉对方（微信、口头都行）。对方填对就配对完成；不认识就点「拒绝」。</div></div>';
 }
+// 已配对的对方：固定编号 + 固定颜色（会话列表里标「最近和谁通信」用同一套）
+var PEER_COLORS=['#8B5CF6','#0EA5E9','#F59E0B','#EC4899','#10B981','#EF4444','#6366F1','#14B8A6'];
+function peerColor(no){return PEER_COLORS[((no||1)-1)%PEER_COLORS.length]}
+function peerNoHtml(no){return '<span class="pno" style="background:'+peerColor(no)+'">'+(no||'')+'</span>'}
 function peerPeersHtml(c){
   if(!c.peers||!c.peers.length)return '';
   return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
@@ -1934,7 +1940,7 @@ function peerPeersHtml(c){
       (!p.canCall?'':!o?kv('状态','检查中…'):!o.online?kv('状态','离线'+(o.error?'：'+esc(o.error):'')):
         kv('对方会话',ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'没有开放会话'));
     // 第一行：名字 + 撤销；第二行：在线状态、对方会话、IP 和配对时间（占满整行，左对齐）
-    return '<div class="h-row pe-peer"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+'<span>'+esc(p.name)+'</span><i class="pe-chev'+(open?' open':'')+'"></i></button>'+
+    return '<div class="h-row pe-peer"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+peerNoHtml(p.no)+'<span>'+esc(p.name)+'</span><i class="pe-chev'+(open?' open':'')+'"></i></button>'+
       '<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button></div>'+
       (open?'<div class="pe-peer-desc">'+det+'</div>':'')+'</div>';
   }).join('')+'</div></div>';
@@ -2203,6 +2209,10 @@ function openSheet(silent){
       if(bz&&!bz.canTakeover)b.dataset.busy='1';
       b.innerHTML='<div class="t"></div><div class="m"><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
+      if(s.peerLast){   // 协同会话：最近和哪个对方通信（编号 + 颜色，和协同页「已配对」里的一致）
+        var pn=document.createElement('span');pn.className='pno';pn.textContent=s.peerLast.no;pn.style.background=peerColor(s.peerLast.no);
+        pn.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);b.querySelector('.t').appendChild(pn);
+      }
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
       b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||s.lastPrompt||'');   // 非 git 目录没有分支：显示最后一条用户消息（放不下就截断）

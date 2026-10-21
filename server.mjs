@@ -14,7 +14,7 @@ import * as push from './push.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
-import { ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
+import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning } from './dsh.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
@@ -489,7 +489,7 @@ function claclawMcp(sessionId) {
       tool(
         'peer_send',
         '给协同对方（局域网里另一台电脑上、已配对的 AI 会话）发一条消息，等对方这一轮回复完，返回对方的回复原文（最多等 10 分钟）。' +
-        '用于和对方的会话沟通、提问、交付结果。不要在消息里发送密码、令牌、密钥。' +
+        '用于和对方的会话沟通、提问、交付结果。消息要言简意赅：只写对方需要的信息，不寒暄、不复述。不要在消息里发送密码、令牌、密钥。' +
         '有多个已配对对方时用 peer 指定名字；对方有多个会话时用 session 指定（peer_sessions 列出的 id），只有一个时可以不填。',
         { text: z.string().describe('消息正文，4000 字以内'), peer: z.string().optional().describe('对方名字，只配对了一个时可省略'), session: z.string().optional().describe('对方会话 id，可省略') },
         async ({ text, peer, session }) => {
@@ -503,6 +503,7 @@ function claclawMcp(sessionId) {
           try {
             const j = await peerCall(c, p, '', { body: { from, text: String(text).slice(0, 4000), session } });
             log('peer send', sessionId.slice(0, 8), '→', p.name, j.ok ? 'ok' : 'fail');
+            markLast(sessionId, p.id);
             return { content: [{ type: 'text', text: j.ok ? (j.reply || '（对方这一轮没有文字回复）') : '对方返回错误：' + (j.error || '未知') }], isError: !j.ok };
           } catch (e) { return { content: [{ type: 'text', text: e.message }], isError: true }; }
         },
@@ -525,7 +526,8 @@ async function peerSessionInfos(c) {
   return c.sessions.map(id => list.find(s => s.sessionId === id)).filter(Boolean);
 }
 // 把对方的消息送进会话，收集这一轮的回复
-async function peerDeliver(info, text, from) {
+async function peerDeliver(info, text, from, peerId) {
+  if (peerId) markLast(info.sessionId, peerId);
   const id = info.sessionId;
   if (!runners.has(id)) {
     if (info.cwd && !fs.existsSync(info.cwd)) return [410, { ok: false, error: '会话目录已不存在' }];
@@ -535,7 +537,7 @@ async function peerDeliver(info, text, from) {
   }
   const r = runners.get(id);
   if (r.busy) return [409, { ok: false, error: '这个会话正在忙，稍后再发' }];
-  const msg = '【claclaw 协同 · 来自对方：' + from + '】\n' + text;
+  const msg = '【claclaw 协同 · 来自对方：' + from + '（回复请言简意赅，只写结果或必要的问题）】\n' + text;
   // 协同消息到了：没人正看着这个会话就推一条通知（点开直接进这个会话）
   if (!r.watched()) {
     localSound();
@@ -601,7 +603,7 @@ async function peerHandler(req, res) {
       const theirToken = typeof b.token === 'string' && b.token.length >= 16 ? b.token.slice(0, 200) : '';
       const c2 = loadPeer();
       c2.peers = c2.peers.filter(x => !(p.inbox && (x.inbox === p.inbox || x.inboxAlt === p.inbox)));   // 同一个对方重新配对：替换旧的
-      c2.peers.push({ id: newId(), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
+      c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
       savePeer(c2);
       log('peer paired', p.ip, p.name, theirToken ? 'two-way' : 'one-way');
       return out(200, { ok: true, token, name: myName(c2), inbox: ourBaseName(c2) || ourBase(c2), inboxAlt: ourBase(c2) });
@@ -627,7 +629,7 @@ async function peerHandler(req, res) {
     if (peerBusy.has(info.sessionId)) return out(429, { ok: false, error: '上一条还在处理，稍后再发' });
     peerBusy.add(info.sessionId);
     log('peer in', peer.name, ip, '→', info.sessionId.slice(0, 8), text.length + ' chars');
-    try { const [code, obj] = await peerDeliver(info, text, peer.name + (from && from !== peer.name ? ' · ' + from : '')); out(code, obj); }
+    try { const [code, obj] = await peerDeliver(info, text, peer.name + (from && from !== peer.name ? ' · ' + from : ''), peer.id); out(code, obj); }
     finally { peerBusy.delete(info.sessionId); }
   } catch (e) { out(500, { ok: false, error: e.message }); }
 }
@@ -638,7 +640,7 @@ function peerPublic(c, local) {
     local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c),
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
-    peers: c.peers.map(p => ({ id: p.id, name: p.name, ip: p.ip, inbox: local ? p.inbox : undefined, inboxAlt: local ? p.inboxAlt : undefined, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    peers: c.peers.map(p => ({ id: p.id, no: p.no, name: p.name, ip: p.ip, inbox: local ? p.inbox : undefined, inboxAlt: local ? p.inboxAlt : undefined, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt } : null,
   };
 }
@@ -1127,6 +1129,7 @@ async function sessionList() {
   const list = normal.concat(all.filter(s => ours.has(s.sessionId) && !seen.has(s.sessionId)));
   const unread = unreadMap();
   const pc = loadPeer(), peerOn = new Set(pc.enabled ? pc.sessions : []);
+  const peerLastOf = id => { const l = pc.last[id], p = l && pc.peers.find(x => x.id === l.peer); return p ? { no: p.no, name: p.name, at: l.at } : undefined; };
   return list.filter(resumable).map(s => {
     const ours = runners.has(s.sessionId);
     const elsewhere = ours ? null : takeoverInfo(s.sessionId, jsonlPathOf(s), live);
@@ -1144,6 +1147,7 @@ async function sessionList() {
       unread: unread[s.sessionId] || 0,
       webActive: webActive[s.sessionId] || 0,
       peer: peerOn.has(s.sessionId) || undefined,   // 加入了 claclaw 协同（列表里用浅紫色边框标出来）
+      peerLast: peerLastOf(s.sessionId),             // 最近一次和哪个对方通信：{no, name, at}
     };
   }).concat(
     // 网页里新建、还没发过消息的会话：没有会话文件，listSessions 看不到，也列出来
@@ -1449,7 +1453,7 @@ const handler = async (req, res) => {
           const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
           const inbox = okUrl(j.inbox) || outPair.base, inboxAlt = okUrl(j.inboxAlt) || (inbox !== outPair.base ? outPair.base : outPair.baseAlt || '');
           c2.peers = c2.peers.filter(p => ![inbox, inboxAlt, outPair.base].includes(p.inbox));
-          c2.peers.push({ id: newId(), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
+          c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
           savePeer(c2); outPair = null;
           log('peer paired (we asked)', c2.peers.at(-1).name);
           return sendJson(res, 200, { ...peerPublic(c2, true), paired: c2.peers.at(-1).name });

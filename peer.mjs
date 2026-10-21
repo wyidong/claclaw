@@ -25,7 +25,18 @@ const DEFAULTS = { enabled: false, port: 8788, dir: '', sessions: [], name: '', 
 export function loadPeer() {
   let c = {};
   try { c = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
-  return { ...DEFAULTS, ...c, peers: Array.isArray(c.peers) ? c.peers : [] };
+  const out = { ...DEFAULTS, ...c, peers: Array.isArray(c.peers) ? c.peers : [], last: c.last && typeof c.last === 'object' ? c.last : {} };
+  // 每个已配对的对方一个固定编号（①②③…），会话列表里用编号 + 颜色标「最近和谁通信」
+  let n = Math.max(0, ...out.peers.map(p => p.no || 0));
+  for (const p of out.peers) if (!p.no) p.no = ++n;
+  return out;
+}
+export const nextPeerNo = c => Math.max(0, ...c.peers.map(p => p.no || 0)) + 1;
+// 记下这个会话最近一次和哪个对方通信（收到或发出都算）
+export function markLast(sessionId, peerId) {
+  const c = loadPeer();
+  c.last[sessionId] = { peer: peerId, at: Date.now() };
+  savePeer(c);
 }
 export function savePeer(c) {
   const { code, remote, ...keep } = c;   // 旧版的「地址里带配对码」配置不再保存
