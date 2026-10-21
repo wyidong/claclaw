@@ -451,6 +451,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-req-b small{color:var(--muted);font-size:12px;font-family:var(--mono)}
 .pe-mini{height:28px;padding:0 10px;font-size:13px;flex:none}
 .pe-tag{flex:none;font-size:12px;color:var(--allow)}
+.pe-peer{flex-direction:column;align-items:stretch;gap:6px}
+.pe-peer-top{display:flex;align-items:center;gap:12px}
+.pe-peer-top .k{flex:1;min-width:0}
+.pe-peer-desc{font-size:13px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
+.pe-peer-desc small{display:block;font-size:12px}
 .pe-scan{margin-left:8px;padding:0;border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
 .pe-scan:disabled{color:var(--muted);cursor:default}
 .pe-in[type=number]{-moz-appearance:textfield}
@@ -1901,8 +1906,10 @@ function peerPeersHtml(c){
   return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
     var o=peerOnline[p.id],dot=p.canCall?'<i class="h-dot'+(o&&o.online?' on':'')+'"></i>':'';
     var st=!p.canCall?'只能对方找我们':!o?'检查中…':o.online?'在线'+(o.sessions&&o.sessions.length?' · 对方会话：'+o.sessions.map(function(s){return s.title||s.id}).join('、'):''):'离线'+(o.error?'（'+o.error+'）':'');
-    return '<div class="h-row"><span class="k">'+dot+esc(p.name)+'</span><span class="v">'+esc(st)+'<small>IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt)+' 配对</small></span>'+
-      '<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button></div>';
+    // 第一行：名字 + 撤销；第二行：在线状态、对方会话、IP 和配对时间（占满整行，左对齐）
+    return '<div class="h-row pe-peer"><div class="pe-peer-top"><span class="k">'+dot+esc(p.name)+'</span>'+
+      '<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button></div>'+
+      '<div class="pe-peer-desc">'+esc(st)+'<small>IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt)+' 配对</small></div></div>';
   }).join('')+'</div></div>';
 }
 function paintPeerLive(){
