@@ -191,7 +191,8 @@ function lastActive(holder, jsonlPath) {
 function takeoverInfo(sessionId, jsonlPath, live) {
   const holders = foreignHolders(sessionId, live);
   if (!holders.length) return null;
-  const h = holders[0];
+  // 展示优先取「不空闲」的那个持有者（status / entrypoint / name 都跟着它）；都空闲时取第一个
+  const h = holders.find(x => x.status !== 'idle') || holders[0];
   const idleMin = Math.floor((Date.now() - Math.max(...holders.map(x => lastActive(x, jsonlPath)))) / 60000);
   const allIdle = holders.every(x => x.status === 'idle');
   return {
