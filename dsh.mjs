@@ -547,6 +547,33 @@ function toolLabel(name = '') {
   return '用工具';
 }
 
+// 改名：ACP 没有 title 能力，但 dsh 的会话记录本身就是追加式事件流（session/title 是最后一条生效）。
+// 这里在文件末尾追加一个 zstd 帧，写一条 source=user 的标题事件；先关掉网页里打开的会话，避免两个写入方。
+export async function dsRename(id, title) {
+  if (!dsSupported()) throw new Error(dsUnsupportedReason());
+  if (!isDs(id)) throw Object.assign(new Error('不是 DeepSeek 会话'), { code: 400 });
+  const sid = sidOf(id);
+  const file = fileOf(sid);
+  if (!file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
+  const text = String(title || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!text) throw Object.assign(new Error('名字不能为空'), { code: 400 });
+  const runner = dsRunners.get(id);
+  if (runner && !runner.closed) {
+    if (runner.subs.size) throw Object.assign(new Error('当前会话正在网页里打开着，先切到别的会话再改名'), { code: 409 });
+    runner.dispose();
+    await waitClosing(sid);   // 等 session/close 真正完成，再往同一个日志追加
+  }
+  const recs = readRecords(file);
+  if (!recs) throw Object.assign(new Error('读不了这个会话的记录'), { code: 500 });
+  let seq = -1;
+  for (const r of recs) if (Number.isInteger(r.seq) && r.seq > seq) seq = r.seq;
+  const rec = { type: 'session/title', seq: seq + 1, time: Date.now(), data: { title: text, messageSeqs: [], source: { kind: 'user' } } };
+  const frame = zlib.zstdCompressSync(Buffer.from(JSON.stringify(rec) + '\n', 'utf8'));
+  fs.appendFileSync(file, frame);   // 一帧一条记录；半帧在 dsh 读取时会被当成未写完的尾巴忽略
+  recCache.delete(file);
+  return { title: text, seq: seq + 1 };
+}
+
 // 会话目录（删除时整个挪走）
 export const dsExists = id => isDs(id) && !!fileOf(sidOf(id));
 export function dsSessionDir(id) {
