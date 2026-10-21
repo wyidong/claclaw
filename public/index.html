@@ -2915,6 +2915,15 @@ function srvNext(){
 }
 function srvSay(parts,voice){parts.forEach(function(p){srvQ.push({text:p,voice:voice})});srvNext()}
 function srvStop(){srvGen++;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}})}
+// P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
+function srvInterrupt(text,voice){
+  if(!text)return;
+  try{if(srvCur)srvCur.pause()}catch(_){}
+  srvGen++;                       // 让正在进行的 play/fetch 回调失效
+  srvCur=null;srvBusy=false;
+  srvQ.unshift({text:text,voice:voice});
+  srvNext();
+}
 function srvPlaying(){return !!srvCur&&!srvCur.paused}
 function srvKeepIdle(){}
 // iPhone：<audio> 第一次播放要由点击触发；点一下时两个都放一小段静音，之后就能自己播
@@ -2975,6 +2984,35 @@ function ttsSay(src,force){
     speechSynthesis.speak(u);
   });
   ttsShowStop();
+}
+// P0：两条播放路径都要能立刻出声。服务端声音插队；系统语音只能 cancel 后重念 P0，
+// 被丢掉的正文不再接（设计评审允许这个降级）。
+function ttsInterrupt(text){
+  var t=ttsText(text);if(!t)return;
+  var sv=ttsSrvVoice();
+  if(sv){srvUnlock();srvInterrupt(t,sv);return}
+  if(ttsOk())speechSynthesis.cancel();
+  ttsSay(t,true);
+}
+// P0 提示音：WebAudio 现场合成，不引资源文件；只在页面可见时响
+var narrBeepCtx=null;
+function narrBeep(){
+  if(document.hidden)return;
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+    if(!narrBeepCtx)narrBeepCtx=new AC();
+    if(narrBeepCtx.state==='suspended'&&narrBeepCtx.resume)narrBeepCtx.resume().catch(function(){});
+    var t0=narrBeepCtx.currentTime;
+    [880,1174].forEach(function(f,i){
+      var o=narrBeepCtx.createOscillator(),g=narrBeepCtx.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,t0+i*0.13);
+      g.gain.exponentialRampToValueAtTime(0.12,t0+i*0.13+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+i*0.13+0.11);
+      o.connect(g);g.connect(narrBeepCtx.destination);
+      o.start(t0+i*0.13);o.stop(t0+i*0.13+0.12);
+    });
+  }catch(_){}
 }
 // ---------- 过程播报：里程碑，而不是每一步 ----------
 // 只读服务端事件；文案只含动作词和文件名，不念路径、命令原文、displayName。
@@ -3085,8 +3123,8 @@ var narration=(function(){
   function interrupt(item){
     if(!allowed(P0)||document.hidden)return;
     q=q.filter(function(x){return x.priority<P2});   // 过时的阶段进展不再念，P1 保留
-    ttsStop();                                       // C3 会换成只暂停当前句、不丢队列
-    ttsSay(item.text,true);
+    narrBeep();
+    ttsInterrupt(item.text);
     timer=setTimeout(pump,400);
   }
   function cancelStart(){if(startTimer){clearTimeout(startTimer);startTimer=null}}
@@ -3246,7 +3284,7 @@ $('#setTtsRate').addEventListener('change',function(e){
 });
 $('#ttsStop').addEventListener('click',function(){
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
-  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;return}   // 还在回复中：这一轮后面的也别念了
+  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;if(narration&&narration.onUserStop)narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice())srvUnlock(true);else ttsUnlock();
   ttsDbg('tap say');
