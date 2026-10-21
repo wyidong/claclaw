@@ -127,7 +127,7 @@ npm start
 ## 目前的限制
 
 - 其他会话通过 Claude Code 内置的跨会话消息发来的消息，如果因权限模式不同被扣住，网页上只显示提示，暂不能批准
-- OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。暂不支持改名；删除前先导出到 data/trash（`opencode import` 可找回）
+- OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。改名走 opencode 自己的本机接口（终端里开着同一会话的要重开才看到新名）；删除前先导出到 data/trash（`opencode import` 可找回）
 
 ## 文件
 

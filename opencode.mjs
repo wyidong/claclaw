@@ -569,3 +569,32 @@ export async function opDelete(id, trashDir) {
   await runBin(['session', 'delete', sid], 60000);
   return file;
 }
+
+// 改名：ACP 里没有改名，但 `opencode acp` 进程自己在 127.0.0.1 上开着 opencode 的 HTTP 接口，
+// 用它的 PATCH /session/{id} 改标题（走 opencode 自己的逻辑，不直接写库）。端口默认 4096，被占了会换，所以按进程查。
+let apiPort = { pid: 0, port: 0 };
+async function acpApiPort() {
+  if (proc && apiPort.pid === proc.pid) return apiPort.port;
+  for (let i = 0; i < 20 && proc; i++) {
+    let o = '';
+    try { o = execFileSync('lsof', ['-a', '-p', String(proc.pid), '-iTCP', '-sTCP:LISTEN', '-n', '-P', '-Fn'], { encoding: 'utf8' }); } catch {}
+    const m = o.match(/^n.*:(\d+)$/m);
+    if (m) { apiPort = { pid: proc.pid, port: Number(m[1]) }; return apiPort.port; }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  throw new Error('找不到 opencode 的本机接口');
+}
+export async function opRename(id, title, log) {
+  const sid = sidOf(id);
+  const dir = validSid(sid) && query(db => db.prepare('select directory from session where id = ?').get(sid))?.directory;
+  if (!dir) throw new Error('找不到这个会话');
+  await startAcp(log);
+  const port = await acpApiPort();
+  const headers = { 'content-type': 'application/json' };
+  if (process.env.OPENCODE_SERVER_PASSWORD) headers.authorization = 'Basic ' + Buffer.from((process.env.OPENCODE_SERVER_USERNAME || 'opencode') + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/session/${sid}?directory=${encodeURIComponent(dir)}`,
+      { method: 'PATCH', headers, body: JSON.stringify({ title }), signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  } finally { idleCheck(); }   // 只为改名起的进程：没会话接着就照常 10 分钟后关
+}

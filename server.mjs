@@ -17,7 +17,7 @@ import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists } from './dsh.mjs';
-import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled } from './opencode.mjs';
+import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS } from './auth.mjs';
@@ -1334,7 +1334,12 @@ async function handleRename(req, res) {
     return sendJson(res, 200, { ok: true, title });
   }
   if (isDs(body.id)) return sendJson(res, 400, { error: 'DeepSeek 会话暂不支持改名' });
-  if (isOp(body.id)) return sendJson(res, 400, { error: 'OpenCode 会话暂不支持改名' });
+  if (isOp(body.id)) {
+    try { await opRename(body.id, title, log); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 改名失败：' + e.message }); }
+    const r = opRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
+    log('renamed opencode session', body.id);
+    return sendJson(res, 200, { ok: true, title });
+  }
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
   const info = list.find(s => s.sessionId === body.id);
   if (!info) return sendJson(res, 404, { error: '找不到这个会话' });

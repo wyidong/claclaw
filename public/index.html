@@ -3190,7 +3190,6 @@ $('#newForm').addEventListener('submit',function(e){
 
 function renameSess(s){
   if(/^ds:/.test(s.id)){alert('DeepSeek 会话暂不支持在这里改名');return}
-  if(/^op:/.test(s.id)){alert('OpenCode 会话暂不支持在这里改名');return}
   var t=prompt('给会话改个名字',s.title);
   if(t===null)return;
   t=t.replace(/\s+/g,' ').trim();
