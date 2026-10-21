@@ -218,9 +218,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item .t{font-weight:600}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
 .h-row.pe-peer.ptint{background:hsl(var(--ph) var(--pts) var(--ptl));border-radius:10px;margin:4px 6px}
-.s-row.ptint,.s-row.ptint .s-item{background:hsl(var(--ph) var(--pts) var(--ptl))!important}
-.s-row.ptint:not(.working):not(.waiting),.s-row.ptint:not(.working):not(.waiting) .s-item{border-color:hsl(var(--ph) var(--pts) var(--ptl2))!important}
-.s-row.ptint:has(> .s-item[aria-current="true"]),.s-row.ptint .s-item[aria-current="true"]{background:hsl(var(--ph) var(--pts) var(--ptl2))!important;border-color:hsl(var(--ph) var(--pts) var(--ptl2))!important}
+.s-row.ptint .t .ptn{background:hsl(var(--ph) var(--pts) var(--ptl2));border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
@@ -2258,6 +2256,7 @@ function openSheet(silent){
       b.querySelector('.t').textContent=s.title;
       if(s.peerLast){   // 协同会话：最近和哪个对方通信，用那个对方的背景色（和协同页「已配对」里的一致）
         row.classList.add('ptint');row.style.setProperty('--ph',peerHue(s.peerLast.id));
+        var tn=document.createElement('span');tn.className='ptn';tn.textContent=s.title;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
         b.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);
       }
       // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
