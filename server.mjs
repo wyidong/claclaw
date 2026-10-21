@@ -368,12 +368,12 @@ async function loadHistoryCached(sessionId, cwd) {
   let key = null;
   try { const st = fs.statSync(jsonlPathOf({ sessionId, cwd })); key = st.size + ':' + st.mtimeMs; } catch {}
   const hit = historyCache.get(sessionId);
-  if (key && hit && hit.key === key) return hit.items;
-  const items = await loadHistory(sessionId, cwd);
+  if (key && hit && hit.key === key) return hit.hist;
+  const hist = await loadHistory(sessionId, cwd);   // { items, total }
   if (key) {
     if (hit) { historyCache.delete(sessionId); historyCacheBytes -= hit.bytes || 0; }
-    const bytes = historyBytes(items);
-    historyCache.set(sessionId, { key, items, bytes });
+    const bytes = historyBytes(hist.items || []);
+    historyCache.set(sessionId, { key, hist, bytes });
     historyCacheBytes += bytes;
     while (historyCache.size > 40 || historyCacheBytes > HISTORY_CACHE_MAX) {
       const first = historyCache.keys().next().value;
@@ -383,7 +383,7 @@ async function loadHistoryCached(sessionId, cwd) {
       historyCacheBytes -= v?.bytes || 0;
     }
   }
-  return items;
+  return hist;
 }
 let prewarming = false;
 async function prewarmHistory(list) {
