@@ -1675,7 +1675,7 @@ function onEvent(m){
     commands=m.commands||[];syncCmdMenu();
     break;
   case 'ai.full':
-    addAi(m.text);ttsSay(m.text);
+    addAi(m.text);if(ttsModeAllows(3))ttsSay(m.text);
     break;
   case 'cmd.out':
     var po=document.createElement('pre');po.className='cmdout';po.textContent=m.text;feed.appendChild(po);scrollDown();
@@ -2796,8 +2796,21 @@ function applyTheme(t){
 // ---------- 自动朗读回复（浏览器自带的语音合成，不联网、不花钱） ----------
 // 只念正在看的会话里新来的文字回复（历史不念）；代码、表格、链接这些不适合听的换成简短说明。
 // iPhone 要求第一次发声必须由点击触发：打开开关、点发送时顺手「解锁」一下。开着时让屏幕常亮（锁屏后网页不能发声）。
-var tts={on:false,rate:1.1,voice:null,lock:null,want:''};
-try{tts.on=localStorage.getItem('claclaw.tts')==='1';tts.rate=+localStorage.getItem('claclaw.ttsRate')||1.1;tts.want=localStorage.getItem('claclaw.ttsVoice')||''}catch(_){}
+var TTS_MODES=['off','reply','steps','brief'];
+var tts={on:false,rate:1.1,voice:null,lock:null,want:'',mode:'off',lastMode:'reply'};
+try{
+  var savedMode=localStorage.getItem('claclaw.ttsMode'),oldOn=localStorage.getItem('claclaw.tts');
+  tts.mode=TTS_MODES.indexOf(savedMode)>=0?savedMode:(oldOn==='1'?'reply':'off');
+  tts.on=tts.mode!=='off';
+  tts.lastMode=tts.mode==='off'?'reply':tts.mode;
+  tts.rate=+localStorage.getItem('claclaw.ttsRate')||1.1;tts.want=localStorage.getItem('claclaw.ttsVoice')||'';
+}catch(_){}
+// 档位：off 关 / reply 只念回复 / steps 关键节点+回复 / brief 只念关键节点
+function ttsModeAllows(pri){
+  if(!tts.on)return false;
+  if(pri===3)return tts.mode==='reply'||tts.mode==='steps';
+  return tts.mode==='steps'||tts.mode==='brief';
+}
 function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
 // 声音：列出这台设备上的中文语音，好听的排前面（和 dsh-tts-reader 的经验一样：默认取第一个中文语音往往最难听）。
 // Edge 里有微软的自然语音（晓伊、晓晓、云希…）；iPhone / Mac 上是苹果语音，系统设置里下载了「增强 / 高级」版本会更自然。
@@ -2934,7 +2947,7 @@ var ttsPos=0,ttsWarmAt=0;
 function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(tts.want)||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
 var ttsHush=false;   // 用户在这一轮里点了停止：这一轮剩下的不再自动念，下一轮回复照常自动念
 function ttsStream(raw,end){
-  if(!tts.on||ttsHush){if(end)ttsPos=raw.length;return}
+  if(!tts.on||!ttsModeAllows(3)||ttsHush){if(end)ttsPos=raw.length;return}
   if(end){var rest=raw.slice(ttsPos);ttsPos=raw.length;if(rest.trim())ttsSay(rest);return}
   // 句末标点 / 换行：攒够 8 个字就切；逗号、冒号：攒够 16 个字也切（长句不用等整句写完，第二句也能快点接上）
   var cut=-1,re=/[。！？!?；;\n，,：:]/g,mm;re.lastIndex=ttsPos;
@@ -2961,36 +2974,191 @@ function ttsSay(src,force){
   });
   ttsShowStop();
 }
-// ---------- 阶段 0：过程播报最小版 ----------
-// 只读服务端事件：P0 等你确认、P1 完成/中断、P2 开始用工具。
-// 确认请求只念工具动词，不念 displayName（DeepSeek 的 displayName 往往就是整条命令）。
+// ---------- 过程播报：里程碑，而不是每一步 ----------
+// 只读服务端事件；文案只含动作词和文件名，不念路径、命令原文、displayName。
 var narration=(function(){
-  var at=0;
-  function nameOf(n){
-    n=String(n||'').toLowerCase();
-    if(/bash|shell|exec|command|terminal/.test(n))return '跑命令';
-    if(/edit|write|patch|multiedit|notebookedit/.test(n))return '改文件';
-    if(/webfetch|websearch|web_fetch|web_search|fetch/.test(n))return '查网页';
-    if(/read|notebookread/.test(n))return '读文件';
-    if(/agent|task|subagent/.test(n))return '派子任务';
+  var P0=0,P1=1,P2=2;
+  var BUCKET_MS=3000,MIN_GAP_MS=8000,DEDUP_MS=20000,MAX_QUEUE=6;
+  var TTL={0:120000,1:60000,2:45000};
+  var q=[],timer=null,bucket=[],bucketTimer=null,p0={},said={},lastP2=0;
+  var muted=false,state='idle',startTimer=null;
+  function clean(s){return String(s||'').replace(/\s+/g,' ').trim()}
+  function base(target){
+    var s=clean(target).replace(/\\/g,'/');
+    if(!s)return '';
+    s=s.split('/').pop().replace(/^["'`]+|["'`]+$/g,'');
+    return s.length>48?s.slice(0,48)+'…':s;
+  }
+  // 四种 Claw 的工具名大小写/叫法都不同，统一收成动作；未知一律静默
+  function kindOf(name){
+    var n=String(name||'').toLowerCase().replace(/^mcp__[a-z0-9_]+__/,'');
+    if(!n)return '';
+    if(/(^|[^a-z])(bash|sh|shell|exec|execute|command|terminal|run)([^a-z]|$)/.test(n))return 'bash';
+    if(/multiedit|notebookedit|apply_?patch|edit|write|patch|replace|insert/.test(n))return 'edit';
+    if(/web_?fetch|web_?search|webfetch|websearch|fetch|browse/.test(n))return 'web';
+    if(/agent|subagent|sessions?_spawn|task/.test(n))return 'agent';
+    if(/read|notebookread/.test(n))return 'read';
+    if(/grep|glob|list|ls|todo|plan|think/.test(n))return 'silent';
     return '';
   }
-  function say(text,pri){
-    if(!tts.on||!text)return;
+  function verbOf(k){
+    return k==='edit'?'改文件':k==='bash'?'跑命令':k==='web'?'查网页':k==='read'?'读文件':k==='agent'?'派子任务':'';
+  }
+  function allowed(pri){return ttsModeAllows(pri)}
+  function mark(items){
     var now=Date.now();
-    if(pri>=2&&now-at<12000)return;
-    at=now;
-    ttsSay(text,true);
+    items.forEach(function(it){said[it.kind+'|'+base(it.target)]=now});
+    for(var k in said)if(now-said[k]>60000)delete said[k];
+  }
+  function fresh(items){
+    var now=Date.now(),out=[],seen={};
+    items.forEach(function(it){
+      var key=it.kind+'|'+base(it.target);
+      if(seen[key]||(said[key]||0)>now-DEDUP_MS)return;
+      seen[key]=1;out.push(it);
+    });
+    return out;
+  }
+  function phrase(kind,items){
+    var targets=[];
+    items.forEach(function(it){var b=base(it.target);if(b&&targets.indexOf(b)<0)targets.push(b)});
+    if(kind==='edit'){
+      var n=targets.length||items.length;
+      if(n===1&&targets.length)return '改了 '+targets[0];
+      return '改了 '+n+' 个文件'+(targets.length?'：'+targets.slice(0,3).join('、')+(targets.length>3?' 等':''):'');
+    }
+    if(kind==='bash'){
+      var cmds=items.map(function(it){return String(it.target||'').toLowerCase()});
+      var all=function(re){return cmds.length&&cmds.every(function(c){return re.test(c)})};
+      if(all(/(^|\s)(test|vitest|jest|pytest|npm\s+test|pnpm\s+test|yarn\s+test)(\s|$)/))return '跑测试';
+      if(all(/git\s+commit/))return '提交代码';
+      if(all(/(^|\s)(npm|pnpm|yarn|bun)\s+(install|i|add)(\s|$)/))return '装依赖';
+      return items.length===1?'跑了一条命令':'跑了 '+items.length+' 条命令';
+    }
+    if(kind==='web')return items.length===1?'查资料':'查了 '+items.length+' 次资料';
+    if(kind==='agent')return items.length===1?'派了个子任务':'派了 '+items.length+' 个子任务';
+    return '';
+  }
+  function flushBucket(live){
+    clearTimeout(bucketTimer);bucketTimer=null;
+    var items=bucket;bucket=[];
+    if(!items.length||!live||muted||!allowed(P2))return;
+    var groups={};
+    items.forEach(function(it){(groups[it.kind]=groups[it.kind]||[]).push(it)});
+    Object.keys(groups).forEach(function(k){
+      var list=fresh(groups[k]);if(!list.length)return;
+      var text=phrase(k,list);if(!text)return;
+      mark(list);
+      enqueue({priority:P2,text:text,at:Date.now(),ttl:TTL[P2]});
+    });
+  }
+  function enqueue(item){
+    if(!allowed(item.priority))return;
+    if(item.priority===P2&&muted)return;
+    if(item.priority!==P0&&q.length>=MAX_QUEUE){
+      var drop=-1,best=-1;
+      for(var i=0;i<q.length;i++)if(q[i].priority>best){best=q[i].priority;drop=i}
+      if(drop<0)drop=0;
+      q.splice(drop,1);
+    }
+    q.push(item);
+    q.sort(function(a,b){return a.priority-b.priority||a.at-b.at});
+    pump();
+  }
+  function pump(){
+    clearTimeout(timer);timer=null;
+    if(!tts.on||document.hidden)return;
+    var now=Date.now(),keep=[];
+    for(var i=0;i<q.length;i++)if(now-q[i].at<=q[i].ttl)keep.push(q[i]);
+    q=keep;
+    if(!q.length)return;
+    var item=q[0];
+    if(item.priority===P2&&now-lastP2<MIN_GAP_MS){timer=setTimeout(pump,Math.max(200,Math.min(1000,MIN_GAP_MS-(now-lastP2))));return}
+    if(ttsSpeaking()){timer=setTimeout(pump,500);return}
+    q.shift();
+    if(item.priority===P2)lastP2=Date.now();
+    ttsSay(item.text,true);
+    timer=setTimeout(pump,400);
+  }
+  function interrupt(item){
+    if(!allowed(P0)||document.hidden)return;
+    q=q.filter(function(x){return x.priority<P2});   // 过时的阶段进展不再念，P1 保留
+    ttsStop();                                       // C3 会换成只暂停当前句、不丢队列
+    ttsSay(item.text,true);
+    timer=setTimeout(pump,400);
+  }
+  function cancelStart(){if(startTimer){clearTimeout(startTimer);startTimer=null}}
+  function startTurn(){
+    muted=false;ttsHush=false;state='working';cancelStart();
+    flushBucket(false);
+    q=q.filter(function(i){return i.priority<P1});
+    ttsPos=0;
+    if(!allowed(P1))return;
+    startTimer=setTimeout(function(){
+      if(state==='working')enqueue({priority:P1,text:'开始干活了',at:Date.now(),ttl:TTL[P1]});
+    },3000);
+  }
+  function clearP0(id){
+    var p=p0[id];if(!p)return;
+    if(p.timer)clearTimeout(p.timer);
+    delete p0[id];
+  }
+  function clearAllP0(){Object.keys(p0).forEach(clearP0)}
+  function ask(m){
+    cancelStart();state='waiting';
+    var k=kindOf(m.name),v=verbOf(k),b=(k==='edit'||k==='read')?base(m.target):'';
+    var text=m.questions?'有个问题要问你，打开看看。':'需要你确认'+(v?'：'+v+(b?' '+b:''):'');
+    var item={priority:P0,text:text,at:Date.now(),ttl:TTL[P0],requestId:m.requestId};
+    clearP0(m.requestId);
+    var rec={timer:null};
+    rec.timer=setTimeout(function(){
+      if(!p0[m.requestId])return;
+      rec.timer=null;
+      interrupt({priority:P0,text:text,at:Date.now(),ttl:TTL[P0],requestId:m.requestId});
+    },15000);
+    p0[m.requestId]=rec;
+    interrupt(item);
+  }
+  function addTool(m){
+    cancelStart();state='working';
+    if(muted||!allowed(P2))return;
+    var k=kindOf(m.name);
+    if(!k||k==='read'||k==='silent')return;
+    bucket.push({kind:k,target:m.target||'',at:Date.now()});
+    if(!bucketTimer)bucketTimer=setTimeout(function(){flushBucket(true)},BUCKET_MS);
+  }
+  function finish(m){
+    cancelStart();clearAllP0();flushBucket(false);
+    q=q.filter(function(i){return i.priority<P2});
+    muted=false;state='done';
+    var err=clean(m.error).slice(0,40);
+    var text=(err||m.subtype==='error')?'这轮出错了'+(err?'：'+err:''):m.subtype==='aborted'?'已中断':'这轮完成了';
+    enqueue({priority:P1,text:text,at:Date.now(),ttl:TTL[P1]});
+    setTimeout(function(){if(state==='done')state='idle'},2000);
+  }
+  function reset(){
+    cancelStart();clearAllP0();
+    if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
+    if(timer){clearTimeout(timer);timer=null}
+    bucket=[];q=[];said={};lastP2=0;muted=false;state='idle';
   }
   return {
     onEvent:function(m){
-      if(m.t==='perm.request'){
-        say(m.questions?'有个问题要问你，打开看看。':'需要你确认'+(nameOf(m.name)?'：'+nameOf(m.name):''),0);
-      }else if(m.t==='turn.done'){
-        say(m.error?'这轮出错了'+(m.error?('：'+String(m.error).replace(/\s+/g,' ').slice(0,40)):''):m.subtype==='aborted'?'已中断':'这轮完成了',1);
-      }else if(m.t==='tool.start'){
-        var n=nameOf(m.name);if(n)say('正在'+n,2);
+      switch(m.t){
+      case 'session.opened': case 'session.closed': case 'session.reclaimed': reset();break;
+      case 'user': if(!m.queued)startTurn();break;
+      case 'ai.start': cancelStart();state='working';break;
+      case 'tool.start': addTool(m);break;
+      case 'perm.request': ask(m);break;
+      case 'perm.cancel': case 'perm.done': clearP0(m.requestId);break;
+      case 'turn.done': finish(m);break;
+      case 'busy': if(m.on)state='working';break;
       }
+    },
+    onUserStop:function(){
+      muted=true;q=q.filter(function(i){return i.priority<P2});
+      if(bucketTimer){clearTimeout(bucketTimer);bucketTimer=null}
+      bucket=[];
     }
   };
 })();
