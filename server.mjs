@@ -1713,8 +1713,10 @@ wss.on('connection', (ws, req) => {
         // 正在干活时插的话还没写进会话文件：补在最后，免得「发出去又不见了」
         const live = runners.get(m.id);
         if (live?.busy && live.steered?.length) {
-          const tail = new Set(pg.items.slice(-40).filter(x => x.kind === 'user').map(x => x.text));
-          for (const t of live.steered) if (!tail.has(t)) pg.items.push({ kind: 'user', text: t, queued: true });
+          // 已经被 Claude 读到的插话会出现在会话文件里（整段历史里找，不只看这一页）：从待显示里去掉，只补还在排队的
+          const seen = new Set(hist.items.filter(x => x.kind === 'user').map(x => x.text));
+          live.steered = live.steered.filter(t => !seen.has(t));
+          for (const t of live.steered) pg.items.push({ kind: 'user', text: t, queued: true });
         }
         if (!runners.has(m.id)) {
           const inherited = inheritedMode(info);
