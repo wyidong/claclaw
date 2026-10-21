@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
+import * as hosts from './hosts.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
@@ -66,6 +67,18 @@ function argPort() {
 const PORT = Number(argPort() ?? process.env.CLACLAW_PORT ?? 8787);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('端口不合法：' + (argPort() ?? process.env.CLACLAW_PORT));
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+// 多宿主：别的宿主交回通知用的地址（这台的 Tailscale IP + 端口）
+const SELF_URL = (ip => ip ? `http://${ip}:${PORT}` : '')(HOSTS.find(h => /^100\./.test(h)));
+// 这台被别的 claclaw 添加了：通知先交给它发（它没发出去，push.sendAll 再自己发）
+push.setRelay(async payload => {
+  const list = hosts.relays();
+  if (!list.length) return 0;
+  const sent = await Promise.all(list.map(r => fetch(r.url + '/api/push/relay', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-claclaw-relay': r.token },
+    body: JSON.stringify({ payload }), signal: AbortSignal.timeout(5000),
+  }).then(x => x.ok ? x.json() : {}).then(j => Number(j.sent) || 0).catch(() => 0)));
+  return sent.reduce((a, b) => a + b, 0);
+});
 const REGISTRY = path.join(os.homedir(), '.claude', 'sessions');
 const HOME = os.homedir();
 
@@ -1317,6 +1330,31 @@ async function handleRename(req, res) {
   sendJson(res, 200, { ok: true, title });
 }
 
+// ---------- 多宿主（见 hosts.mjs）----------
+async function handleHosts(req, res, url) {
+  const act = url.pathname.slice('/api/hosts'.length);
+  if (req.method === 'GET' && !act) {
+    const si = await slowInfo(ROOT).catch(() => ({}));
+    return sendJson(res, 200, await hosts.overview({ name: si.name || os.hostname() }), { 'cache-control': 'no-store' });
+  }
+  if (req.method !== 'POST' || !/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+  let b = {};
+  try { b = JSON.parse(await readBody(req, 4096)); } catch {}
+  try {
+    if (act === '/add') {
+      const si = await slowInfo(ROOT).catch(() => ({}));
+      const r = await hosts.add(b, { selfUrl: SELF_URL, selfName: si.name || os.hostname() });
+      log('host added', r.name, r.relay ? '(push relay ok)' : '(no push relay)');
+      return sendJson(res, 200, { ok: true, ...r });
+    }
+    if (act === '/remove') { const ok = await hosts.remove(String(b.id || '')); log('host removed', b.id); return sendJson(res, 200, { ok }); }
+    // 下面两个是首连宿主调这台的：登记 / 取消「通知交给它发」
+    if (act === '/relay') { hosts.setRelay(b); log('push relay set →', b.name || b.id); return sendJson(res, 200, { ok: true }); }
+    if (act === '/relay/remove') { hosts.dropRelay(String(b.id || '')); log('push relay removed', b.id); return sendJson(res, 200, { ok: true }); }
+  } catch (e) { return sendJson(res, 400, { error: e.message }); }
+  sendJson(res, 404, { error: 'not found' });
+}
+
 const handler = async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
@@ -1344,6 +1382,25 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' });
       return fs.createReadStream(path.join(ROOT, 'public', 'manifest.webmanifest')).pipe(res);
     }
+    // 多宿主：「这个端口上是不是 claclaw」—— 免登录，只回实例 ID、电脑名、版本
+    if (url.pathname === '/api/claclaw/hello') {
+      const si = await slowInfo(ROOT).catch(() => ({}));
+      return sendJson(res, 200, { app: 'claclaw', id: hosts.selfId(), name: si.name || os.hostname(), version: si.commit || '' }, { 'cache-control': 'no-store' });
+    }
+    // 别的宿主交过来的通知：凭添加时给它的转发令牌（不走登录 cookie）
+    if (url.pathname === '/api/push/relay' && req.method === 'POST') {
+      const h = hosts.hostByRelayToken(req.headers['x-claclaw-relay']);
+      if (!h) return sendJson(res, 401, { error: 'bad relay token' });
+      let b = {};
+      try { b = JSON.parse(await readBody(req, 8192)); } catch {}
+      const p = b.payload && typeof b.payload === 'object' ? b.payload : null;
+      if (!p) return sendJson(res, 400, { error: 'bad request' });
+      const u = new URL(String(p.url || '/'), 'http://x');
+      u.searchParams.set('host', h.id);   // 点通知：先切到那台宿主，再打开会话
+      const out = { ...p, title: h.name + ' · ' + String(p.title || 'claclaw'), tag: 'h' + h.id + '-' + String(p.tag || ''), url: u.pathname + u.search };
+      const sent = await push.sendAll(out, log, { noRelay: true, source: h.id });
+      return sendJson(res, 200, { sent });
+    }
     if (url.pathname === '/api/setup' && req.method === 'POST') return handleSetup(req, res);
     if (url.pathname === '/api/login' && req.method === 'POST') return handleLogin(req, res);
     if (url.pathname === '/api/logout' && req.method === 'POST') {
@@ -1353,6 +1410,15 @@ const handler = async (req, res) => {
     if (!authed(req)) {
       if (url.pathname.startsWith('/api/')) return sendJson(res, 401, { error: 'login required' });
       return go(setUp ? '/login' : '/setup');
+    }
+    // 多宿主：/h/<宿主ID>/api/… 原样转给那台宿主
+    const hp = url.pathname.match(/^\/h\/([\w-]{4,64})(\/api\/.*)$/);
+    if (hp) return hosts.proxyHttp(req, res, hp[1], hp[2] + url.search);
+    if (url.pathname === '/api/hosts' || url.pathname.startsWith('/api/hosts/')) return handleHosts(req, res, url);
+    if (url.pathname === '/api/push/pick' && req.method === 'POST') {
+      let b = {};
+      try { b = JSON.parse(await readBody(req, 2048)); } catch {}
+      return sendJson(res, 200, { ok: push.pick(String(b.endpoint || ''), String(b.host || '')) });
     }
     if (url.pathname === '/' || url.pathname === '/index.html') {
       // 页面版本 = 文件内容的短哈希 + 修改时间，改了页面自动变，用来确认手机拿到的是不是新页面
@@ -1551,6 +1617,11 @@ function sameOrigin(req) {
 
 const wss = new WebSocketServer({ noServer: true });
 function onUpgrade(req, socket, head) {
+  const hw = new URL(req.url, 'http://x').pathname.match(/^\/h\/([\w-]{4,64})\/ws$/);
+  if (hw) {
+    if (!sameOrigin(req) || !authed(req)) { socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); return socket.destroy(); }
+    return hosts.proxyWs(req, socket, head, hw[1], wss, log);
+  }
   if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
     log('ws rejected', req.headers.origin || '', req.socket.remoteAddress);
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');

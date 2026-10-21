@@ -53,18 +53,41 @@ export function unsubscribe(endpoint) {
   if (all[endpoint]) { delete all[endpoint]; writeJson(SUBS_FILE, all); }
 }
 
+// 这台设备现在看的是哪台宿主（''＝这台自己）：角标只跟着看的那台走
+export function pick(endpoint, host) {
+  const all = readJson(SUBS_FILE, {});
+  if (!all[endpoint]) return false;
+  all[endpoint].host = String(host || '');
+  writeJson(SUBS_FILE, all);
+  return true;
+}
+
+// 多宿主：这台被别的 claclaw（首连宿主）添加了，通知先交给它，用它的推送密钥发到手机。
+// 它收下并且发出去了，这边就不再自己发（不然装了两边 App 的手机会收到两条）；它关机、断网时这边照常发
+let relayFn = null;
+export const setRelay = fn => { relayFn = fn; };
+
 export const hasSubscription = endpoint => !!readJson(SUBS_FILE, {})[endpoint];
 export const subscriptionCount = () => Object.keys(readJson(SUBS_FILE, {})).length;
 
 // 发给所有订阅的设备；失效的订阅（404 / 410）顺手删掉
-export async function sendAll(payload, log = () => {}) {
+// opts.source：通知来自哪台宿主（''＝这台）；角标只发给正在看那台宿主的设备
+// opts.noRelay：别的宿主交过来的通知，不再往外交（两台互相添加时不会转圈）
+export async function sendAll(payload, log = () => {}, opts = {}) {
+  if (relayFn && !opts.noRelay) {
+    try { const n = await relayFn(payload); if (n > 0) return n; } catch (e) { log('push relay failed', e.message); }
+  }
   const all = readJson(SUBS_FILE, {});
   const list = Object.values(all);
   if (!list.length) return 0;
   configure();
-  const body = JSON.stringify(payload);
+  const source = String(opts.source || '');
+  const full = JSON.stringify(payload);
+  const { badge, ...rest } = payload;
+  const noBadge = JSON.stringify(rest);
   let ok = 0, dead = [];
-  await Promise.all(list.map(async ({ sub }) => {
+  await Promise.all(list.map(async ({ sub, host }) => {
+    const body = (host || '') === source ? full : noBadge;
     // 网络抖动（socket hang up、超时……没有状态码）：隔一会儿再试，最多 3 次
     for (let n = 1; ; n++) {
       try {
