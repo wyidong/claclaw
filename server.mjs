@@ -177,8 +177,16 @@ function foreignHolders(sessionId, live = liveRegistry()) {
   return (live.get(sessionId) || []).filter(r => r.pid !== ours && !(r.entrypoint === 'sdk-ts' && isOurChild(r.pid)));
 }
 
+// 同一个进程的父进程不会变：查一次就记住，别每次都 fork 一个 ps
+const childCache = new Map();   // pid → 父进程 pid（只记查成功的）
 function isOurChild(pid) {
-  try { return Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)]).toString().trim()) === process.pid; } catch { return false; }
+  const hit = childCache.get(pid);
+  if (hit != null) return hit === process.pid;
+  try {
+    const ppid = Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)]).toString().trim());
+    if (Number.isFinite(ppid)) childCache.set(pid, ppid);
+    return ppid === process.pid;
+  } catch { return false; }
 }
 
 // 原处最近一次活跃：会话文件最后修改时间 和 登记表状态变化时间 取较晚的
