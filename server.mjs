@@ -1263,8 +1263,6 @@ function cookieToken(req) {
 }
 const authed = req => checkToken(cookieToken(req));
 
-
-
 function sendJson(res, code, obj, headers = {}) {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
   res.end(JSON.stringify(obj));
