@@ -469,7 +469,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-ss-list{margin:0;padding-left:1.2em}
 .pe-allow label{display:flex;align-items:center;gap:8px;padding:2px 0;cursor:pointer}
 .pe-allow label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pe-allow small{flex:none;color:var(--muted);font-size:11.5px}
+.pe-allow-dir{margin:6px 0 2px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.pe-allow-dir:first-child{margin-top:0}
+.pe-allow label{padding-left:2px}
 .pe-ss-list li{margin:1px 0}
 .pe-ss-list em{font-style:normal;font-size:12px;color:var(--allow)}
 .pe-scan{margin-left:8px;padding:0;border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
@@ -1961,8 +1963,12 @@ function peerPeersHtml(c){
     var kv=function(k,v){return '<div class="pe-kv"><span>'+k+'</span><span>'+v+'</span></div>'};
     var ss=o&&o.online&&o.sessions||[];
     var pool=c.sessions||[],allow=p.allow;
-    var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+pool.map(function(id){var on=!allow||allow.indexOf(id)>=0;
-      return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+'><span>'+esc(poolTitle(id))+'</span><small>'+esc(poolDir(id))+'</small></label>'}).join('')+'</div>':'协同会话池是空的';
+    // 按会话目录分组：先写目录（完整路径），下面是这个目录里加入协同的会话
+    var byDir={},dirOrder=[];pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
+    var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+dirOrder.map(function(d){
+      return '<div class="pe-allow-dir">'+esc(d.replace(/^\/(Users|home)\/[^\/]+/,'~')||'(未知目录)')+'</div>'+byDir[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
+        return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
+    }).join('')+'</div>':'协同会话池是空的';
     var det=kv('开放会话',allowHtml)+kv('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
       kv('地址','<span class="pe-mono">'+esc(p.inbox||'')+'</span>'+(p.inboxAlt?'<br><span class="pe-mono">'+esc(p.inboxAlt)+'</span>':''))+
       kv('配对','IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt))+
@@ -1983,6 +1989,7 @@ function paintPeerLive(){
 function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div class="pe-err">'+esc(peerMsg.err)+'</div>':'')+(peerMsg.ok?'<div class="pe-ok">'+esc(peerMsg.ok)+'</div>':'')}
 // 会话池摘要：加入了几个会话、分布在几个目录
 function poolTitle(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?(s.title||'(无标题)'):id.slice(0,8)}
+function poolCwd(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?String(s.cwd||''):''}
 function poolDir(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?String(s.cwd||'').split('/').pop():''}
 function poolSumText(){
   var ids=(peerCfg&&peerCfg.sessions)||[];if(!ids.length)return '还没加入会话';
