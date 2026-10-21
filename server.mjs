@@ -567,7 +567,7 @@ async function peerHandler(req, res) {
   const c = loadPeer();
   const u = new URL(req.url, 'http://x');
   const sub = u.pathname.replace(/\/+$/, '');
-  if (!c.enabled || (sub !== PEER_BASE && !sub.startsWith(PEER_BASE + '/'))) { res.writeHead(404); return res.end(); }
+  if (!c.enabled || (sub !== PEER_BASE && !sub.startsWith(PEER_BASE + '/'))) { log('peer reject 404', cleanIp(req.socket.remoteAddress), req.method, u.pathname.slice(0, 80)); res.writeHead(404); return res.end(); }
   const route = sub.slice(PEER_BASE.length) || '/';
   const ip = cleanIp(req.socket.remoteAddress);
   const readJson = async () => { try { return JSON.parse(await readBody(req, 64 * 1024)); } catch { return null; } };
@@ -609,7 +609,7 @@ async function peerHandler(req, res) {
     // 2. 配对后的正常收发：请求头带钥匙
     const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     const peer = findPeerByToken(c, auth);
-    if (!peer) return out(401, { ok: false, error: '还没配对，或钥匙不对：先 POST ' + PEER_BASE + '/pair 申请配对' });
+    if (!peer) { log('peer reject 401', ip, req.method, route, auth ? 'bad token' : 'no token'); return out(401, { ok: false, error: '还没配对，或钥匙不对：先 POST ' + PEER_BASE + '/pair 申请配对' }); }
     if (peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
     const infos = await peerSessionInfos(c);
     const brief = infos.map(s => ({ id: s.sessionId.slice(0, 8), title: s.customTitle || s.summary || '', busy: !!runners.get(s.sessionId)?.busy }));
