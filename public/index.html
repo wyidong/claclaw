@@ -881,7 +881,9 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">语音</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读回复<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
+          <label class="set-item"><span class="lb">播报范围<small id="setTtsModeSub">只念回复：不念工具进度</small></span>
+            <select id="setTtsMode"><option value="off">关（不朗读）</option><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
             <select id="setTtsVoice"></select></label>
           <div class="set-item tts-rate"><span class="lb">语速<small id="setTtsRateV">1.10 倍</small></span>
@@ -3200,18 +3202,35 @@ function ttsWake(){
   if(!tts.on||document.hidden||!navigator.wakeLock||tts.lock)return;
   navigator.wakeLock.request('screen').then(function(l){tts.lock=l;l.addEventListener('release',function(){tts.lock=null})}).catch(function(){});
 }
+function ttsModeSet(mode){
+  if(TTS_MODES.indexOf(mode)<0)mode='reply';
+  ttsStop();
+  if(mode!=='off')tts.lastMode=mode;
+  tts.mode=mode;tts.on=mode!=='off';
+  try{localStorage.setItem('claclaw.ttsMode',mode);localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
+  if(tts.on){tts.unlocked=false;tts.srvUnlocked=false;ttsUnlock()}else ttsStop();
+  if(narration&&narration.reset)narration.reset();
+  ttsSync();
+}
 function ttsSync(){
   $('#setTts').dataset.on=tts.on?'1':'';$('#setTtsRate').value=String(tts.rate);ttsRateLabel();
+  var sel=$('#setTtsMode');if(sel)sel.value=tts.mode;
   // 朗读关着时，声音和语速用不上：一起收起来
   $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
-  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：正在看的会话来了新回复就念出来；屏幕保持常亮':'关着：开了以后，正在看的会话来了新回复就念出来';
+  var label={off:'关着：不朗读',reply:'只念文字回复，不念工具进度',steps:'关键节点 + 回复：等你确认、改文件/跑命令、完成，再念正文',brief:'只念关键节点，不念正文'};
+  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；屏幕保持常亮':'关着：点一下打开朗读';
+  var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
 }
 $('#setTts').addEventListener('click',function(){
   if(!ttsOk())return;
-  tts.on=!tts.on;try{localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
-  if(tts.on){tts.unlocked=false;tts.srvUnlocked=false;ttsUnlock();ttsPreview('自动朗读已打开')}else ttsStop();
-  ttsSync();
+  if(tts.on)ttsModeSet('off');
+  else{ttsModeSet(tts.lastMode||'reply');ttsPreview('自动朗读已打开')}
+});
+$('#setTtsMode').addEventListener('change',function(e){
+  var m=e.target.value;
+  ttsModeSet(m);
+  if(m!=='off')ttsPreview(m==='reply'?'只念回复':m==='steps'?'关键节点和回复':'只念关键节点');
 });
 $('#setTtsVoice').addEventListener('change',function(e){
   tts.want=e.target.value;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}
