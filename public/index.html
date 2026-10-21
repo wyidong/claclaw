@@ -458,7 +458,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-chev{flex:none;width:7px;height:7px;margin-left:8px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
 .pe-chev.open{transform:rotate(225deg) translateY(-2px)}
 .pe-peer-desc{font-size:13px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
-.pe-peer-desc small{display:block;font-size:12px}
+.pe-kv{display:flex;gap:10px;padding:3px 0}
+.pe-kv>span:first-child{flex:none;width:4.5em;color:var(--muted)}
+.pe-kv>span:last-child{flex:1;min-width:0;color:var(--ink);overflow-wrap:anywhere}
+.pe-kv .pe-mono{font-size:12px;color:var(--muted)}
+.pe-ss-list{margin:0;padding-left:1.2em}
+.pe-ss-list li{margin:1px 0}
+.pe-ss-list em{font-style:normal;font-size:12px;color:var(--allow)}
 .pe-scan{margin-left:8px;padding:0;border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
 .pe-scan:disabled{color:var(--muted);cursor:default}
 .pe-in[type=number]{-moz-appearance:textfield}
@@ -1910,12 +1916,19 @@ function peerPeersHtml(c){
   return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
     var o=peerOnline[p.id],dot=p.canCall?'<i class="h-dot'+(o&&o.online?' on':'')+'"></i>':'';
     // 在线与否看绿点；展开后才显示对方会话、离线原因、IP 和配对时间
-    var st=!p.canCall?'只能对方找我们（配对时对方没给收件地址）':!o?'检查中…':o.online?(o.sessions&&o.sessions.length?'对方会话：'+o.sessions.map(function(s){return s.title||s.id}).join('、'):'对方没有开放会话'):'离线'+(o.error?'：'+o.error:'');
     var open=peerOpen[p.id];
+    // 展开的详情：一项一行；对方开放的会话一个一行（标题里本身就有顿号、括号，连成一串没法看）
+    var kv=function(k,v){return '<div class="pe-kv"><span>'+k+'</span><span>'+v+'</span></div>'};
+    var ss=o&&o.online&&o.sessions||[];
+    var det=kv('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
+      kv('地址','<span class="pe-mono">'+esc(p.inbox||'')+'</span>'+(p.inboxAlt?'<br><span class="pe-mono">'+esc(p.inboxAlt)+'</span>':''))+
+      kv('配对','IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt))+
+      (!p.canCall?'':!o?kv('状态','检查中…'):!o.online?kv('状态','离线'+(o.error?'：'+esc(o.error):'')):
+        kv('对方会话',ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'没有开放会话'));
     // 第一行：名字 + 撤销；第二行：在线状态、对方会话、IP 和配对时间（占满整行，左对齐）
     return '<div class="h-row pe-peer"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+'<span>'+esc(p.name)+'</span><i class="pe-chev'+(open?' open':'')+'"></i></button>'+
       '<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button></div>'+
-      (open?'<div class="pe-peer-desc">'+esc(st)+'<small>IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt)+' 配对</small></div>':'')+'</div>';
+      (open?'<div class="pe-peer-desc">'+det+'</div>':'')+'</div>';
   }).join('')+'</div></div>';
 }
 function paintPeerLive(){
