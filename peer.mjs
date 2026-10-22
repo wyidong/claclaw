@@ -24,6 +24,8 @@ const FILE = path.join(DATA, 'peer.json');
 export const PEER_BASE = '/claclaw-peer';
 const DEFAULTS = { enabled: false, port: 8788, dir: '', sessions: [], name: '', peers: [] };
 
+// 协同对方的配色：预设组数，和页面上的 .pc0 … .pc6 对应（每组都配好了浅色、深色模式下的底色和字色）
+export const PEER_COLORS = 7;
 export function loadPeer() {
   let c = {};
   try { c = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
@@ -31,6 +33,15 @@ export function loadPeer() {
   // 每个已配对的对方一个固定编号（①②③…），会话列表里用编号 + 颜色标「最近和谁通信」
   let n = Math.max(0, ...out.peers.map(p => p.no || 0));
   for (const p of out.peers) if (!p.no) p.no = ++n;
+  // 每个对方一组固定配色（预设 PEER_COLORS 组里随机挑，先挑还没人用的）；第一次分到就存下来，以后不变
+  let dirty = false;
+  for (const p of out.peers) {
+    if (Number.isInteger(p.color) && p.color >= 0 && p.color < PEER_COLORS) continue;
+    const used = new Set(out.peers.map(x => x.color)), free = [...Array(PEER_COLORS).keys()].filter(i => !used.has(i));
+    const pool = free.length ? free : [...Array(PEER_COLORS).keys()];
+    p.color = pool[crypto.randomInt(pool.length)]; dirty = true;
+  }
+  if (dirty && fs.existsSync(FILE)) savePeer(out);
   return out;
 }
 export const nextPeerNo = c => Math.max(0, ...c.peers.map(p => p.no || 0)) + 1;

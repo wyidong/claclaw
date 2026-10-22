@@ -759,7 +759,7 @@ function peerMark(list) {
   const pc = loadPeer(), on = new Set(pc.enabled ? pc.sessions : []);
   return list.map(x => {
     const l = pc.last?.[x.id], p = l && pc.peers.find(y => y.id === l.peer);
-    return { ...x, peer: on.has(x.id) || undefined, peerLast: p ? { id: p.id, no: p.no, name: p.name, at: l.at } : undefined };
+    return { ...x, peer: on.has(x.id) || undefined, peerLast: p ? { id: p.id, no: p.no, color: p.color, name: p.name, at: l.at } : undefined };
   });
 }
 async function peerRunner(info) {
@@ -924,7 +924,7 @@ function peerPublic(c, local) {
     local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c),
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
-    peers: c.peers.map(p => ({ id: p.id, no: p.no, name: p.name, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt, pairing: !!outPair.pairing } : null,
   };
 }
@@ -1417,7 +1417,7 @@ async function sessionList() {
   const list = normal.concat(all.filter(s => ours.has(s.sessionId) && !seen.has(s.sessionId)));
   const unread = unreadMap();
   const pc = loadPeer(), peerOn = new Set(pc.enabled ? pc.sessions : []);
-  const peerLastOf = id => { const l = pc.last[id], p = l && pc.peers.find(x => x.id === l.peer); return p ? { id: p.id, no: p.no, name: p.name, at: l.at } : undefined; };
+  const peerLastOf = id => { const l = pc.last[id], p = l && pc.peers.find(x => x.id === l.peer); return p ? { id: p.id, no: p.no, color: p.color, name: p.name, at: l.at } : undefined; };
   return list.filter(resumable).map(s => {
     const ours = runners.has(s.sessionId);
     const elsewhere = ours ? null : takeoverInfo(s.sessionId, jsonlPathOf(s), live);
