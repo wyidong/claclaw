@@ -236,7 +236,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
 .pc0{--pbg:var(--pc0b);--pfg:var(--pc0f);--prow:var(--pc0r)}.pc1{--pbg:var(--pc1b);--pfg:var(--pc1f);--prow:var(--pc1r)}.pc2{--pbg:var(--pc2b);--pfg:var(--pc2f);--prow:var(--pc2r)}.pc3{--pbg:var(--pc3b);--pfg:var(--pc3f);--prow:var(--pc3r)}.pc4{--pbg:var(--pc4b);--pfg:var(--pc4f);--prow:var(--pc4r)}.pc5{--pbg:var(--pc5b);--pfg:var(--pc5f);--prow:var(--pc5r)}.pc6{--pbg:var(--pc6b);--pfg:var(--pc6f);--prow:var(--pc6r)}
-.h-row.pe-peer.ptint{background:var(--prow);border-radius:10px;margin:4px 6px}
+.h-row.pe-peer.ptint{background:var(--pbg);border-radius:10px;margin:4px 6px}
+.h-row.pe-peer.ptint .pe-peer-name,.h-row.pe-peer.ptint .pe-peer-name .pe-chev{color:var(--pfg)}   /* 和会话列表里这个对方的名字标签同一套底色、字色 */
 .s-row.ptint .t .ptn{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
