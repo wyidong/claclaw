@@ -132,6 +132,7 @@ function readImage(att) {
   catch { return null; }
 }
 
+const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : undefined; };   // 时间统一成毫秒（秒 / ISO 字符串都认）
 function toItems(recs) {
   const items = [], toolIdx = new Map();
   for (const r of recs) {
@@ -139,10 +140,10 @@ function toItems(recs) {
     if (r.type === 'user/message' && d.source?.kind === 'user') {
       const imgs = (d.content || []).filter(c => c.type === 'image').map(c => readImage(c.attachment)).filter(Boolean);
       const t = userText(d);
-      if (t || imgs.length) items.push({ kind: 'user', text: t, images: imgs.length ? imgs : undefined });
+      if (t || imgs.length) items.push({ kind: 'user', text: t, images: imgs.length ? imgs : undefined, at: tms(r.time) });
     } else if (r.type === 'assistant/message') {
       for (const b of d.message?.content || []) {
-        if (b.type === 'text' && b.text?.trim()) items.push({ kind: 'ai', text: b.text.trim() });
+        if (b.type === 'text' && b.text?.trim()) items.push({ kind: 'ai', text: b.text.trim(), at: tms(r.time) });
         else if (b.type === 'tool-call') {
           toolIdx.set(b.id, items.length);
           items.push({ kind: 'tool', id: b.id, name: b.name, target: toolTarget(b.arguments), status: 'ok' });
@@ -156,9 +157,9 @@ function toItems(recs) {
         it.output = resultText([c]).slice(0, 4000);
       }
     } else if (r.type === 'command/run' && d.source?.kind === 'user') {
-      items.push({ kind: 'user', text: '/' + d.name + (d.args ? ' ' + d.args.trim() : '') });
+      items.push({ kind: 'user', text: '/' + d.name + (d.args ? ' ' + d.args.trim() : ''), at: tms(r.time) });
     } else if (r.type === 'command/done' && d.text) {
-      items.push({ kind: 'ai', text: d.text });
+      items.push({ kind: 'ai', text: d.text, at: tms(r.time) });
     }
   }
   return items;

@@ -103,6 +103,8 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .msg.user.queued::after{content:'排队中 · 这一轮结束后自动发出';display:block;margin-top:4px;font-size:11.5px;opacity:.8}
 .msg.user{align-self:flex-end;max-width:86%;padding:9px 13px;background:var(--user-bg);border-radius:16px 16px 4px 16px}
 .msg.ai{align-self:stretch}
+.msg[data-ts]::after,.peer[data-ts]::after{content:attr(data-ts);display:block;margin-top:3px;font-size:11px;line-height:1.3;color:var(--muted);text-align:right;white-space:nowrap}
+.msg.ai[data-ts]::after{text-align:left}
 .msg code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
 /* 渲染后的 Markdown（流式输出期间仍是纯文本，结束后才渲染） */
 .msg.md{white-space:normal}
@@ -1182,12 +1184,25 @@ feed.addEventListener('click',function(e){
 });
 function addAi(t){var e=document.createElement('div');e.className='msg ai md';e.innerHTML=md(t);feed.appendChild(e);scrollDown()}
 // 别的会话发来的消息：灰色引用卡片，和自己发的气泡区分开
+// 消息时间：用户消息、协同消息每条都标；AI 一轮里连着几段只标最后一段（标新的就去掉同一轮前面那段的）
+function fmtAt(t){
+  var d=new Date(t),n=new Date(),p=function(x){return (x<10?'0':'')+x},hm=p(d.getHours())+':'+p(d.getMinutes());
+  if(d.toDateString()===n.toDateString())return hm;
+  var y=new Date(n);y.setDate(n.getDate()-1);if(d.toDateString()===y.toDateString())return '昨天 '+hm;
+  return (d.getFullYear()===n.getFullYear()?'':d.getFullYear()+'-')+(d.getMonth()+1)+'-'+d.getDate()+' '+hm;
+}
+function stamp(el,t){
+  if(!el||!t)return;
+  el.dataset.ts=fmtAt(t);el.title=new Date(t).toLocaleString();
+  if(el.classList.contains('ai'))for(var x=el.previousElementSibling;x&&!x.classList.contains('user');x=x.previousElementSibling)if(x.classList.contains('ai')){delete x.dataset.ts;x.removeAttribute('title')}
+}
 function addPeer(from,t){
   var e=document.createElement('div');e.className='peer';
   var f=document.createElement('div');f.className='from';f.textContent='来自会话 '+(from||'?');e.appendChild(f);
   // 正文按 Markdown 渲染：里面的网址、ID、代码块、引用旁边同样有复制图标
   if(t){var b=document.createElement('div');b.className='body md';b.innerHTML=md(t);e.appendChild(b)}
   feed.appendChild(e);scrollDown();
+  return e;
 }
 // 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
 function clawName(id){return /^oc:/.test(id||'')?'OpenClaw':/^ds:/.test(id||'')?'DeepSeek':/^op:/.test(id||'')?'OpenCode':'Claude'}
@@ -1612,9 +1627,9 @@ function onEvent(m){
     break;
   case 'user':
     if(session&&m.text)liveLastPrompt(session.id,m.text);
-    if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');if(m.queued)outbox.el.classList.add('queued');outboxDone();think(true);break}
+    if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');if(m.queued)outbox.el.classList.add('queued');stamp(outbox.el,Date.now());outboxDone();think(true);break}
     if(outbox&&m.text===outbox.text)outboxDone();
-    var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');think(true);
+    var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');stamp(ue,Date.now());think(true);
     break;
   case 'queue.sent':   // 排队的消息发出去了（合成一条）
     feed.querySelectorAll('.msg.user.queued').forEach(function(e){e.classList.remove('queued')});
@@ -1634,7 +1649,7 @@ function onEvent(m){
     break;
   case 'ai.end':
     clearTimeout(aiRender);aiRender=null;
-    if(aiEl){aiEl.innerHTML=md(aiText);aiEl=null;scrollDown();ttsStream(aiText,true)}
+    if(aiEl){aiEl.innerHTML=md(aiText);stamp(aiEl,Date.now());aiEl=null;scrollDown();ttsStream(aiText,true)}
     if(busy)think(true,'思考中');
     break;
   case 'tool.start':
@@ -1688,7 +1703,7 @@ function onEvent(m){
     commands=m.commands||[];syncCmdMenu();
     break;
   case 'ai.full':
-    addAi(m.text);if(ttsModeAllows(3))ttsSay(m.text);
+    addAi(m.text);stamp(feed.lastElementChild,Date.now());if(ttsModeAllows(3))ttsSay(m.text);
     break;
   case 'cmd.out':
     var po=document.createElement('pre');po.className='cmdout';po.textContent=m.text;feed.appendChild(po);scrollDown();
@@ -1703,7 +1718,7 @@ function onEvent(m){
     unread=m.unread||{};renderUnread();
     break;
   case 'peer':
-    addPeer(m.from,m.text);
+    stamp(addPeer(m.from,m.text),Date.now());
     break;
   case 'sys':
     addSys(m.text);
@@ -2751,9 +2766,9 @@ function histSig(h,total){var l=h[h.length-1]||{};return (total||h.length)+'|'+(
 // 画一段历史；每条历史对应聊天区里一个元素，打上 data-h 好数「缓存里留了几条」
 function renderHistory(items){
   items.forEach(function(it){
-    if(it.kind==='user'){var hu=addUser(it.text,it.images);if(it.waiting&&hu)hu.classList.add('queued')}
-    else if(it.kind==='ai')addAi(it.text);
-    else if(it.kind==='peer')addPeer(it.from,it.text);
+    if(it.kind==='user'){var hu=addUser(it.text,it.images);if(it.waiting&&hu)hu.classList.add('queued');stamp(hu,it.at)}
+    else if(it.kind==='ai'){addAi(it.text);stamp(feed.lastElementChild,it.at)}
+    else if(it.kind==='peer')stamp(addPeer(it.from,it.text),it.at);
     else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no')}
     else return;
     if(feed.lastElementChild)feed.lastElementChild.dataset.h='1';

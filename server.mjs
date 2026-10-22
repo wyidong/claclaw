@@ -396,32 +396,40 @@ async function prewarmHistory(list) {
 // SDK 的 getSessionMessages 不返回它们，所以自己从文件里找出来，按在文件里的位置插回历史
 function queuedPrompts(sessionId, cwd) {
   let text = '';
-  try { text = fs.readFileSync(jsonlPathOf({ sessionId, cwd }), 'utf8'); } catch { return { lineOf: new Map(), queued: [] }; }
-  const lineOf = new Map(), queued = [];
+  try { text = fs.readFileSync(jsonlPathOf({ sessionId, cwd }), 'utf8'); } catch { return { lineOf: new Map(), queued: [], timeOf: new Map() }; }
+  const lineOf = new Map(), queued = [], timeOf = new Map();
   let i = 0;
   for (const line of text.split('\n')) {
     const k = line.lastIndexOf('"uuid":"');
-    if (k >= 0) lineOf.set(line.slice(k + 8, line.indexOf('"', k + 8)), i);
+    if (k >= 0) {
+      const id = line.slice(k + 8, line.indexOf('"', k + 8));
+      lineOf.set(id, i);
+      const ts = line.match(/"timestamp":"([^"]+)"/);   // 每条记录的时间：聊天里显示消息时间
+      if (ts) { const t = Date.parse(ts[1]); if (t) timeOf.set(id, t); }
+      // 插话被吸收进这一轮时，SDK 用 source_uuid 合成一条用户消息（文件里没有这个 uuid 的行）：时间取插话那一刻
+      const su = line.match(/"source_uuid":"([^"]+)"/);
+      if (su && ts && !timeOf.has(su[1])) { const t = Date.parse(ts[1]); if (t) timeOf.set(su[1], t); }
+    }
     if (line.includes('"queued_command"')) {
       try {
         const o = JSON.parse(line), pr = o.attachment?.prompt;
-        if (o.attachment?.type === 'queued_command' && pr) queued.push({ i, text: typeof pr === 'string' ? pr : userText(pr) });   // 带图片时是内容块数组
+        if (o.attachment?.type === 'queued_command' && pr) queued.push({ i, text: typeof pr === 'string' ? pr : userText(pr), at: Date.parse(o.timestamp) || undefined });   // 带图片时是内容块数组
       } catch {}
     }
     i++;
   }
-  return { lineOf, queued };
+  return { lineOf, queued, timeOf };
 }
 
 async function loadHistory(sessionId, cwd) {
   const msgs = await getSessionMessages(sessionId, cwd ? { dir: cwd } : undefined);
   const items = [];
   const toolIdx = new Map();
-  const { lineOf, queued } = queuedPrompts(sessionId, cwd);
+  const { lineOf, queued, timeOf } = queuedPrompts(sessionId, cwd);
   const pushQueued = q => {
     const peers = peerMessages(q.text);
-    if (peers.length) for (const p of peers) items.push({ kind: 'peer', from: p.from, text: p.text });
-    else if (!isNoise(q.text)) items.push({ kind: 'user', text: q.text, queued: true });
+    if (peers.length) for (const p of peers) items.push({ kind: 'peer', from: p.from, text: p.text, at: q.at });
+    else if (!isNoise(q.text)) items.push({ kind: 'user', text: q.text, queued: true, at: q.at });
   };
   let qi = 0;
   for (const m of msgs) {
@@ -429,6 +437,7 @@ async function loadHistory(sessionId, cwd) {
     if (at != null) while (qi < queued.length && queued[qi].i < at) pushQueued(queued[qi++]);
     if (m.parent_tool_use_id) continue; // 子 Agent 内部的消息不展开
     const content = m.message?.content;
+    const n0 = items.length;
     if (m.type === 'user') {
       if (Array.isArray(content)) {
         for (const b of content) {
@@ -441,10 +450,10 @@ async function loadHistory(sessionId, cwd) {
       }
       const t = userText(content);
       const peers = peerMessages(t);
-      if (peers.length) { for (const p of peers) items.push({ kind: 'peer', from: p.from, text: p.text }); continue; }
+      if (peers.length) { for (const p of peers) items.push({ kind: 'peer', from: p.from, text: p.text, at: timeOf.get(m.uuid) }); continue; }
       const imgs = Array.isArray(content) ? content.filter(b => b.type === 'image' && b.source?.type === 'base64') : [];
       if (imgs.length && !/<command-name>/.test(t)) {
-        items.push({ kind: 'user', text: isNoise(t) ? '' : t, images: imgs.map(b => b.source) });
+        items.push({ kind: 'user', text: isNoise(t) ? '' : t, images: imgs.map(b => b.source), at: timeOf.get(m.uuid) });
         continue;
       }
       const cmd = t.match(/<command-name>\s*(\/?[^<\s]+)\s*<\/command-name>/);
@@ -462,6 +471,8 @@ async function loadHistory(sessionId, cwd) {
         }
       }
     }
+    const t = timeOf.get(m.uuid);
+    if (t) for (let k = n0; k < items.length; k++) if (items[k].kind !== 'tool') items[k].at = t;
   }
   while (qi < queued.length) pushQueued(queued[qi++]);
   // 插话没赶上这一轮、变成下一轮的正式消息时，文件里两种记录都有：只留正式的那条

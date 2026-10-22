@@ -104,15 +104,16 @@ const toolTarget = (name, a) => {
   return String(v).replace(/\s+/g, ' ').slice(0, 160);
 };
 
+const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : undefined; };   // 时间统一成毫秒（秒 / ISO 字符串都认）
 function toItems(msgs) {
   const items = [], toolIdx = new Map();
   for (const m of msgs) {
     if (m.role === 'user') {
       const t = textOf(m.content).trim();
-      if (t) items.push({ kind: 'user', text: t });
+      if (t) items.push({ kind: 'user', text: t, at: tms(m.timestamp) });
     } else if (m.role === 'assistant') {
       for (const b of Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }]) {
-        if (b.type === 'text' && cleanAi(b.text) && !/^Audio reply$/.test(cleanAi(b.text))) items.push({ kind: 'ai', text: cleanAi(b.text) });
+        if (b.type === 'text' && cleanAi(b.text) && !/^Audio reply$/.test(cleanAi(b.text))) items.push({ kind: 'ai', text: cleanAi(b.text), at: tms(m.timestamp) });
         else if (b.type === 'toolCall') {
           toolIdx.set(b.id, items.length);
           items.push({ kind: 'tool', id: b.id, name: b.name, target: toolTarget(b.name, b.arguments), status: 'ok' });

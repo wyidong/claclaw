@@ -177,6 +177,7 @@ function toItems(msgs, parts) {
     if (!byMsg.has(p.message_id)) byMsg.set(p.message_id, []);
     byMsg.get(p.message_id).push(d);
   }
+  const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : undefined; };   // 时间统一成毫秒（秒 / ISO 字符串都认）
   const items = [];
   for (const m of msgs) {
     const md = parse(m.data);
@@ -185,10 +186,10 @@ function toItems(msgs, parts) {
     if (md.role === 'user') {
       const text = ps.filter(p => p.type === 'text' && !p.synthetic && !p.ignored).map(p => p.text).join('\n').trim();
       const imgs = ps.filter(p => p.type === 'file' && /^image\//.test(p.mime || '')).map(dataImage).filter(Boolean);
-      if (text || imgs.length) items.push({ kind: 'user', text, images: imgs.length ? imgs : undefined });
+      if (text || imgs.length) items.push({ kind: 'user', text, images: imgs.length ? imgs : undefined, at: tms(md.time?.created) });
     } else if (md.role === 'assistant') {
       for (const p of ps) {
-        if (p.type === 'text' && !p.synthetic && p.text?.trim()) items.push({ kind: 'ai', text: p.text.trim() });
+        if (p.type === 'text' && !p.synthetic && p.text?.trim()) items.push({ kind: 'ai', text: p.text.trim(), at: tms(p.time?.end || md.time?.completed || md.time?.created) });
         else if (p.type === 'tool') {
           const st = p.state || {};
           items.push({ kind: 'tool', id: p.callID || p.id, name: p.tool, target: toolTarget(st.input), status: st.status === 'error' ? 'no' : 'ok', output: String(st.output ?? st.error ?? '').slice(0, 4000) });
