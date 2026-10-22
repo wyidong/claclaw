@@ -219,6 +219,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item{display:block;width:100%;min-height:56px;margin-top:8px;padding:10px 12px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
 .s-item[aria-current="true"]{border-color:var(--accent)}
 .s-item .t{font-weight:600}
+/* 最近活跃：标题行 = 标题（截断）+ 最右边的目录名 */
+.s-row.rec .s-item .t{display:flex;align-items:baseline;gap:8px}
+.s-row.rec .tt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
 .h-row.pe-peer.ptint{background:hsl(var(--ph) var(--pts) var(--ptl));border-radius:10px;margin:4px 6px}
 .s-row.ptint .t .ptn{background:hsl(var(--ph) var(--pts) var(--ptl2));border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
@@ -687,6 +691,8 @@ select.pe-in{text-align-last:right}
   .s-new{display:none}   /* 新建在列表顶部的 ⊕，每行不再单独放 */
   .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:36px}.s-row.pn .s-ren{right:4px}
   .s-del{right:4px}
+  .s-row.rec .s-item .t{padding-right:0}
+  .s-row.rec:hover .rdir,.s-row.rec:focus-within .rdir{visibility:hidden}   /* 鼠标移上去：目录让位给「编辑」 */
   #sList .s-row[hidden],#sList .s-grp[hidden]{display:none}
 
   /* 聊天区标题：像微信，只有名字加粗，没有框 */
@@ -2492,10 +2498,19 @@ function openSheet(silent){
         var tn=document.createElement('span');tn.className='ptn';tn.textContent=s.title;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
         b.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);
       }
-      // 目录已经在分组标题里了，只显示分支；「最近活跃」里的会话不在目录组下，显示目录
+      // 目录已经在分组标题里了，只显示分支；非 git 目录没有分支：显示最后一条用户消息（放不下就截断）
+      // 「最近活跃」：目录名放在标题行最右边（电脑上鼠标移上去换成「编辑」），下面一行始终是最后一条消息；分支不显示，去目录组里看
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
-      b.querySelector('.cwd').textContent=inRecent?(((s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~')+(s.branch?' · '+s.branch:'')):(s.branch||s.lastPrompt||'');   // 非 git 目录没有分支：显示最后一条用户消息（放不下就截断）
-      b.querySelector('.cwd').classList.toggle('lp',!inRecent&&!s.branch&&!!s.lastPrompt);
+      if(inRecent){
+        row.classList.add('rec');
+        var tt0=b.querySelector('.t'),tw=document.createElement('span');tw.className='tt';
+        while(tt0.firstChild)tw.appendChild(tt0.firstChild);if(!tw.childNodes.length)tw.textContent=s.title;
+        var rd=document.createElement('span');rd.className='rdir';rd.title=s.cwd||'';
+        rd.textContent=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~';
+        tt0.appendChild(tw);tt0.appendChild(rd);
+      }
+      b.querySelector('.cwd').textContent=inRecent?(s.lastPrompt||''):(s.branch||s.lastPrompt||'');
+      b.querySelector('.cwd').classList.toggle('lp',inRecent?!!s.lastPrompt:(!s.branch&&!!s.lastPrompt));
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);if(!s.unsent&&s.lastModified)b.dataset.lm=s.lastModified;
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
       // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
@@ -2529,7 +2544,7 @@ function openSheet(silent){
         row.appendChild(nw);
       }
       // 正在别处打开的会话、当前正在用的会话不给删（服务端也会拒绝）
-      var noDel=bz||(session&&s.id===session.id);
+      var noDel=bz||(session&&s.id===session.id)||inRecent;   // 最近活跃里不给删：去它所在的目录组里删
       if(!s.cwd&&noDel){}                      // 只有改名：默认位置
       else if(noDel)row.classList.add('pn');   // 改名 + 新建
       if(!noDel){

@@ -1219,8 +1219,8 @@ async function sessionList() {
       cwd: s.cwd || '',
       cwdShort: relPath(s.cwd || '', null),
       branch: s.gitBranch === 'HEAD' ? '' : s.gitBranch || '',   // HEAD：不是 git 目录（或没在任何分支上），不显示
-      // 没有分支的会话：列表里标题下面显示最后一条用户消息
-      lastPrompt: s.gitBranch && s.gitBranch !== 'HEAD' ? undefined : lastPromptOf(jsonlPathOf(s)) || s.firstPrompt || undefined,
+      // 没有分支的会话、最近在网页里活跃过的会话（「最近活跃」组始终显示）：标题下面显示最后一条用户消息
+      lastPrompt: s.gitBranch && s.gitBranch !== 'HEAD' && !((webActive[s.sessionId] || 0) > Date.now() - 6 * 3600e3) ? undefined : lastPromptOf(jsonlPathOf(s)) || s.firstPrompt || undefined,
       lastModified: s.lastModified,
       openInWeb: ours,
       busyElsewhere: elsewhere,
