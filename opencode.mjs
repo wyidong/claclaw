@@ -29,7 +29,7 @@ try { sqlite = await import('node:sqlite'); } catch {}
 export const opSupported = () => !!sqlite;
 export const opUnsupportedReason = () => '当前 Node 没有 node:sqlite（需要 Node 22.13 以上），读不了 OpenCode 会话';
 
-export const opInstalled = () => fs.existsSync(DB) || !!opBin();
+export const opInstalled = () => !!opBin();   // 只认程序：卸载后留下的数据库不算装了（会话也打不开）
 
 // 每次查询单独开一个只读连接，用完就关：不占着库，也不怕 opencode 升级时换了库文件
 function query(fn) {
