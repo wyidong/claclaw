@@ -1931,7 +1931,7 @@ function mTab(t){
   var app=$('#app');
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');app.classList.toggle('hosts-on',t==='hosts');
   if(t!=='host'){hostView='';peerWatch(false)}
-  hostLive(t==='host');if(t==='hosts')loadHosts();
+  hostLive(t==='host');if(t==='hosts')loadHosts();if(t==='claw')loadClaws();
   $('#railSet').classList.toggle('on',t==='set'||t==='host');$('#railHost').classList.toggle('on',t==='hosts');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host'&&t!=='hosts');
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===(t==='host'?'set':t))});
   $('.sheet-p').scrollTop=0;
@@ -2363,18 +2363,24 @@ function showClawSel(){
 }
 showClawSel();
 // 只列出这台电脑装了的 Claw；之前选过、现在卸载了的就清掉选择
+// 装没装、启没启动：打开页面时查一次，之后每次切到 Claw 页再查（网关后来开了 / 关了都能跟上）
+function loadClaws(){
 fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
   var any=false;
   list.forEach(function(c){
-    var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported;
+    var down=c.installed&&c.supported&&c.running===false;   // 装了但没启动（OpenClaw 网关没开）：手机上灰着显示、不能选；电脑上不显示
+    var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported||down;
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
-    card.hidden=!c.installed;if(c.installed)any=true;
-    if(!c.supported){card.disabled=true;card.querySelector('.claw-st').textContent=c.reason||'这个 Claw 在当前环境下用不了';if(clawSel===c.id)clawSel=null}
+    card.hidden=!c.installed||(down&&DESKTOP.matches);if(!card.hidden)any=true;
+    card.disabled=!c.supported||down;card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):down?'已安装，没有启动':'';
+    if((!c.supported||down)&&clawSel===c.id)clawSel=null;
     if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;
   showClawSel();
 }).catch(function(){});
+}
+loadClaws();
 function pickClaw(id){
   if(curClaw()!==id){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
   clawSel=id;try{localStorage.setItem(hk('claw'),clawSel)}catch(_){}

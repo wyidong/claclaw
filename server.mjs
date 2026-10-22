@@ -1594,7 +1594,12 @@ const handler = async (req, res) => {
       }
       return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin() });
     }
-    if (url.pathname === '/api/claws') return sendJson(res, 200, detectClaws());
+    if (url.pathname === '/api/claws') {
+      // running：装了但没启动的（OpenClaw 网关没开）手机上灰着显示、电脑上不显示；其他 Claw 用的时候才拉起进程，装了就算可用
+      const list = detectClaws();
+      for (const c of list) c.running = c.installed && c.supported ? (c.id === 'openclaw' ? await ocGatewayUp(log) : true) : false;
+      return sendJson(res, 200, list);
+    }
     if (url.pathname === '/api/sound') {
       if (req.method === 'POST') {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
