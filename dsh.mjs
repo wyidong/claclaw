@@ -224,7 +224,7 @@ function startAcp(log) {
   let initTimer = null;
   const init = rpc('initialize', { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'claclaw', version: '0.1' } });
   const timeout = new Promise((_, rej) => {
-    initTimer = setTimeout(() => rej(new Error('initialize 15 秒没有应答')), 15000);
+    initTimer = setTimeout(() => rej(new Error('initialize 45 秒没有应答')), 45000);   // 老电脑上几个会话同时启动时会超过 15 秒
     initTimer.unref?.();
   });
   ready = Promise.race([init, timeout])

@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import https from 'node:https';
 import crypto from 'node:crypto';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 
@@ -145,24 +146,40 @@ export function applyListener(c, handler, log) {
 
 // ---------- 请求对方 ----------
 // base：对方的协同地址（可以带 ?参数）；sub 接在路径后面；token 放请求头
-export async function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } = {}) {
-  if (!base) throw new Error('没有对方的地址');
+// 用 http.request 不用 fetch：fetch 等响应头最多 5 分钟就断，对方一轮回复可能要 10 分钟。
+// 出错时标出是不是「连都没连上」（connect: true）：只有这种情况才换对方的另一个地址重试，
+// 已经送到对方、只是等回复时出的错不能重试，不然同一条消息会被送两遍
+export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } = {}) {
+  if (!base) return Promise.reject(Object.assign(new Error('没有对方的地址'), { connect: true }));
   const u = new URL(base);
   if (sub) u.pathname = u.pathname.replace(/\/+$/, '') + sub;
   const headers = {};
   if (token) headers.authorization = 'Bearer ' + token;
-  if (body) headers['content-type'] = 'application/json';
-  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
-  try {
-    const r = await fetch(u, { method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined, signal: ctl.signal });
-    const text = await r.text();
-    let j; try { j = JSON.parse(text); } catch { j = { ok: r.ok, reply: text }; }
-    if (!r.ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + r.status; }
-    j.status = r.status;
-    return j;
-  } catch (e) {
-    throw new Error(e.name === 'AbortError' ? '对方超时没有回复' : '连不上对方：' + (e.cause?.code || e.message));
-  } finally { clearTimeout(t); }
+  const data = body ? Buffer.from(JSON.stringify(body)) : null;
+  if (data) { headers['content-type'] = 'application/json'; headers['content-length'] = data.length; }
+  const mod = u.protocol === 'https:' ? https : http;
+  return new Promise((resolve, reject) => {
+    let connected = false, done = false;
+    const fail = (msg, connect) => { if (done) return; done = true; clearTimeout(t); req.destroy(); reject(Object.assign(new Error(msg), { connect })); };
+    const req = mod.request(u, { method: data ? 'POST' : 'GET', headers }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        if (done) return; done = true; clearTimeout(t);
+        const text = Buffer.concat(chunks).toString('utf8'), ok = res.statusCode >= 200 && res.statusCode < 300;
+        let j; try { j = JSON.parse(text); } catch { j = { ok, reply: text }; }
+        if (!ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + res.statusCode; }
+        j.status = res.statusCode;
+        resolve(j);
+      });
+      res.on('error', e => fail('对方的回复中断了：' + e.message, false));
+    });
+    req.on('socket', so => { if (!so.connecting) connected = true; else so.once('connect', () => { connected = true; }); });
+    req.on('error', e => fail('连不上对方：' + (e.code || e.message), !connected));
+    const t = setTimeout(() => fail(connected ? '对方超时没有回复' : '连不上对方：超时', !connected), ms);
+    if (data) req.write(data);
+    req.end();
+  });
 }
 
 // ---------- 按名字找：Bonjour（mDNS）----------
@@ -235,7 +252,7 @@ export async function peerCall(c, p, sub, opts) {
       const j = await callPeer(url, sub, { token: p.theirToken, ...opts, ms: i ? Math.min(opts?.ms || 8000, 8000) : opts?.ms });
       if (i && url !== p.inbox) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; savePeer(c); }   // 换了能用的那个当首选
       return j;
-    } catch (e) { err = e; }
+    } catch (e) { err = e; if (!e.connect) break; }   // 已经送到对方了：不换地址重发
   }
   throw err || new Error('没有对方的地址');
 }
