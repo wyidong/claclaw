@@ -578,10 +578,10 @@ async function peerSessionInfos(c, p) {
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
   return peerAllowed(c, p).map(id => list.find(s => s.sessionId === id)).filter(Boolean);
 }
-// 回复是不是 Claude Code 的额度用完提示（只认短回复，免得正文里引用这句话被误判）
+// 回复是不是 Claude Code 的额度用完提示：只认以这句提示开头、整段不超过 120 字的回复（正文里提到这句话不算）
 function quotaHit(text) {
-  if (!text || text.length > 300) return null;
-  if (!/hit your (session |usage |weekly |daily )?limit|usage limit reached|limit reached.*resets/i.test(text)) return null;
+  if (!text || text.length > 120) return null;
+  if (!/^\s*(you['’]?ve hit your [a-z ]*limit|claude usage limit reached)/i.test(text)) return null;
   const m = text.match(/resets?\s+(?:at\s+)?([^\n·|]+)/i);
   return { resets: m ? m[1].trim() : '' };
 }
