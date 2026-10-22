@@ -578,6 +578,13 @@ async function peerSessionInfos(c, p) {
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
   return peerAllowed(c, p).map(id => list.find(s => s.sessionId === id)).filter(Boolean);
 }
+// 回复是不是 Claude Code 的额度用完提示（只认短回复，免得正文里引用这句话被误判）
+function quotaHit(text) {
+  if (!text || text.length > 300) return null;
+  if (!/hit your (session |usage |weekly |daily )?limit|usage limit reached|limit reached.*resets/i.test(text)) return null;
+  const m = text.match(/resets?\s+(?:at\s+)?([^\n·|]+)/i);
+  return { resets: m ? m[1].trim() : '' };
+}
 // 把对方的消息送进会话，收集这一轮的回复
 async function peerDeliver(info, text, from, peerId) {
   if (peerId) markLast(info.sessionId, peerId);
@@ -606,7 +613,14 @@ async function peerDeliver(info, text, from, peerId) {
       else if (m.t === 'ai.delta') cur += m.text || '';
       else if (m.t === 'ai.end') { if (cur.trim()) reply = cur; cur = ''; }
       else if (m.t === 'ai.full') { if (m.text?.trim()) reply = m.text; }
-      else if (m.t === 'turn.done') end(200, { ok: m.subtype === 'success', reply: (cur.trim() || reply).trim(), error: m.error });
+      else if (m.t === 'turn.done') {
+        const out = (cur.trim() || reply).trim();
+        // 额度用完时 Claude Code 把「You've hit your session limit · resets 6:10pm」当普通回复吐出来，
+        // 原样转给对方会被当成「已回复」。识别出来改成明确的错误，对方据此到点重发。
+        const q = quotaHit(out);
+        if (q) return end(429, { ok: false, code: 'quota_exhausted', error: '对方 Claude 额度已用完，消息未处理' + (q.resets ? '，' + q.resets + ' 恢复，之后请重发' : '，请稍后重发'), resets: q.resets || null, raw: out });
+        end(200, { ok: m.subtype === 'success', reply: out, error: m.error });
+      }
     } };
     const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); resolve([code, obj]); };
     const timer = setTimeout(() => end(504, { ok: false, error: '10 分钟内没等到回复', partial: (cur || reply).trim() }), 10 * 60 * 1000);
