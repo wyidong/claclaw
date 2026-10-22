@@ -2,27 +2,42 @@
 
 > 好的软件功能，总会在你需要的时候自动出现。
 
-在手机浏览器里接管本机的 [Claude Code](https://docs.claude.com/en/docs/claude-code) 会话。
+在手机浏览器里接管本机的 AI 编程会话。
 
-手机上用 SSH 进终端操作 Claude Code 很难受：没有方向键、容易断线、排版乱。claclaw 在开发机上起一个小网页服务，用手机浏览器打开就能：
+claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持四个：[Claude Code](https://docs.claude.com/en/docs/claude-code)、DeepSeek Harness（dsh）、[OpenCode](https://opencode.ai)、[OpenClaw](https://openclaw.ai)。**装了其中任意一个就能用**，不一定要有 Claude；装了几个，「Claw」页就列几个，随时切换。
 
-- 看到本机已有的 Claude Code 会话，选一个继续聊（等同 `claude --resume`）
+手机上用 SSH 进终端操作这些工具很难受：没有方向键、容易断线、排版乱。claclaw 在开发机上起一个小网页服务，用手机浏览器打开就能：
+
+- 看到本机已有的会话，选一个继续聊，或者新开一个
 - 回复流式显示，工具调用以卡片展示（Edit / Write 显示红绿 diff，Bash 显示输出）
-- Claude 要改文件、运行命令时，底部弹出「拒绝 / 允许」大按钮，可选「本会话内同类操作都不再询问」
-- 切换权限模式（默认 / 自动改文件 / 计划）、随时中断
-- 推送通知：Claude 回复完、等你确认、问你问题时，手机收到提醒（需要 https，iPhone 需「添加到主屏幕」）
+- AI 要改文件、运行命令时，底部弹出「拒绝 / 允许」大按钮，可选「本会话内同类操作都不再询问」
+- 随时中断；AI 正在回复时也能接着发消息：Claude 直接插话，其他 Claw 先排队，这一轮结束后合并发出
+- 会话改名、删除（Claude / DeepSeek / OpenCode 删除前先备份到 `data/trash/`，保留 30 天）
+- 推送通知：回复完、等你确认、问你问题时，手机收到提醒（需要 https，iPhone 需「添加到主屏幕」）
 - 语音播报（可选）：只念文字回复，或播报关键节点（等你确认、改文件/跑命令、完成）；在设置 → 语音里选「播报范围」
+- 多台电脑：手机只连一台，在「宿主」页切到同一个 Tailscale 网络里的另一台
+- 会话互发消息：同一台电脑、局域网里另一台电脑上的会话可以直接对话（见下面的「claclaw 协同」）
 
 > 能登录 claclaw 的人，就能在你的电脑上批准任意命令。
+
+## 各 Claw 的支持情况
+
+| Claw | claclaw 怎么连它 | 需要的 Node | 说明 |
+| --- | --- | --- | --- |
+| Claude Code | [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)（自带 Claude Code，要先登录过） | 18+ | 可切换权限模式（默认 / 自动改文件 / 计划）；占用检测和接管最完整 |
+| DeepSeek Harness | 起 `dsh` 的 ACP 进程 | **22.15+**（会话记录是 zstd 压缩的） | `/model`、`/effort` 切模型和思考强度 |
+| OpenCode | 起 `opencode acp` 进程 | **22.13+**（会话在 SQLite 库里，用 Node 自带的 `node:sqlite`） | `/model`、`/effort`、`/mode`；按目录推断终端占用 |
+| OpenClaw | 连本机 OpenClaw 网关 | 18+ | 网关要开着；改文件、跑命令的确认由 OpenClaw 自己处理，网页上不弹按钮 |
+
+- 怎么算「装了」：Claude Code 有 `~/.claude/projects`；DeepSeek 有 `~/.dsh` 或 `dsh` 命令；OpenCode 有 `opencode` 命令；OpenClaw 有 `~/.openclaw/openclaw.json` 或 `openclaw` 命令
+- Node 版本不够时，Claw 页上那个 Claw 会写明原因；一个都没检测到时，Claw 页会提示先装一个
+- 电脑上打开时默认选 Claude Code；这台电脑没有可用的 Claude Code，就自动选第一个能用的 Claw
 
 ## 要求
 
 - macOS（目前只在 macOS 上用过）
-- Node.js 18+（只用 Claude Code / OpenClaw 的话 18 就够）
-  - DeepSeek Harness 的会话记录是 zstd 压缩的，读它需要 **Node 22.15+**
-  - OpenCode 的会话在 SQLite 库里，读它需要 **Node 22.13+**（Node 自带的 `node:sqlite`）
-  - Node 版本不够时，Claw 页上那个 Claw 会写明原因（不是「即将支持」）
-- 已登录的 Claude Code（claclaw 通过 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 驱动会话，SDK 自带 Claude Code 二进制）
+- Node.js 18+；要用 DeepSeek / OpenCode 时按上表升级
+- 至少装好并登录一个 Claw（`npm install` 会装上 Claude Agent SDK，但不用 Claude 时不需要 Claude 账号）
 
 ## 安装与启动
 
@@ -43,6 +58,8 @@ npm start
 
 ## 会话占用与接管
 
+下面说的是 Claude Code。OpenCode 按目录推断终端占用（见「目前的限制」）；DeepSeek 不检测占用，别在终端和网页里同时开同一个会话；OpenClaw 的会话都由它的网关管理，claclaw 只是网关的一个客户端。
+
 同一个会话不能同时被两个 Claude Code 进程操作：两边内存里的上下文互不知道，会话记录（`~/.claude/projects/**.jsonl`）会分叉。claclaw 读取 `~/.claude/sessions/` 下的运行中会话登记表来判断占用：
 
 - 会话正在 VS Code / 终端里打开、且最近 N 分钟内有活动 → 网页端不能打开（N 在「设置 → 会话」里改，默认 30）
@@ -52,7 +69,7 @@ npm start
 
 ## claclaw 协同：两台电脑的会话互发消息
 
-让局域网里两台电脑上的 AI 会话直接对话：你这边的 Claude 有问题可以直接问对方电脑上的会话，对方的回复自动回到你这边；两边的人在 claclaw 网页上都能看到它们在聊什么，随时插话或叫停。
+让局域网里两台电脑上的 AI 会话直接对话：你这边的会话有问题可以直接问对方电脑上的会话，对方的回复自动回到你这边；两边的人在 claclaw 网页上都能看到它们在聊什么，随时插话或叫停。
 
 四个 Claw（Claude Code、DeepSeek、OpenCode、OpenClaw）的会话都能加入协同，**同一台电脑上的会话之间也能互相找**：
 - **收**：别的会话的消息由 claclaw 送进会话，这一轮的回复自动传回去。
@@ -103,7 +120,7 @@ npm start
 
 ### 配对之后
 
-- 加入协同的会话里会多两个工具：**`peer_sessions`**（看对方开放了哪些会话）和 **`peer_send`**（给对方发一条消息，等对方这一轮回复完，拿到回复原文）。直接对 Claude 说「问一下对方……」即可
+- 加入协同的会话能找对方：Claude 会话里多了 **`peer_sessions`**（看对方开放了哪些会话）和 **`peer_send`**（给对方发一条消息，等对方这一轮回复完，拿到回复原文）两个工具，其他 Claw 用 claclaw-peer 技能。直接对会话说「问一下对方……」即可
 - 对方发来的消息会送进我们加入协同的会话，开头带「【claclaw 协同 · 来自对方：…】」；这一轮回复完，回复原文自动返回给对方
 - 「已配对」列表里每 10 秒检查一次对方在不在线（绿点 = 在线）；点「撤销」立即断开，对方要重新申请
 
@@ -123,7 +140,7 @@ npm start
 ### 安全
 
 - **钥匙只存哈希**：我们发给对方的钥匙，本机只存它的哈希（像网站存密码），`data/peer.json` 被看到也拿不出能用的钥匙；对方给我们的钥匙存原文（每次访问对方要带上），`data/` 只有本人可读、不进 git
-- **外部消息 = 别人的指令**：加入协同的会话最好不要开「跳过确认」（bypassPermissions），否则对方的一句话可能直接让 Claude 执行命令、改文件
+- **外部消息 = 别人的指令**：加入协同的会话最好不要开「跳过确认」（bypassPermissions），否则对方的一句话可能直接让 AI 执行命令、改文件
 - 局域网明文 http，只在信任的网络里用；不要把 8788 映射到公网
 
 ### 常见问题
@@ -135,7 +152,7 @@ npm start
 
 ## 安全
 
-- **权限与原会话一致**：网页打开会话时，继承它在原处（VS Code / 终端）最后一次使用的权限模式，并像 `claude --resume` 一样加载用户、项目、本地设置。只有原会话本来就是 `bypassPermissions` 时网页才会处于该模式；从没在别处用过的会话按默认模式打开。模式按钮只能在 默认 / 自动改文件 / 计划 和继承来的模式之间切换
+- **权限与原会话一致**（Claude Code）：网页打开会话时，继承它在原处（VS Code / 终端）最后一次使用的权限模式，并像 `claude --resume` 一样加载用户、项目、本地设置。只有原会话本来就是 `bypassPermissions` 时网页才会处于该模式；从没在别处用过的会话按默认模式打开。模式按钮只能在 默认 / 自动改文件 / 计划 和继承来的模式之间切换
 - **WebSocket 同源检查**：浏览器不对 WebSocket 做同源限制，claclaw 只接受 Origin 与 Host 一致的连接，防止其他网页在后台连进来
 - 不监听 `0.0.0.0`；传输是 http，**不要把端口暴露到公网**
 
@@ -163,11 +180,12 @@ npm start
 ## 文件
 
 ```text
-server.mjs        HTTP + WebSocket 服务，会话管理（SDK query）、权限转发、接管
+server.mjs        HTTP + WebSocket 服务、会话列表、权限转发；Claude Code 会话（Agent SDK）和接管
 openclaw.mjs      OpenClaw 会话（通过本机 OpenClaw 网关）
 dsh.mjs           DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
 opencode.mjs      OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
 peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
+hosts.mjs         多宿主：在「宿主」页切到同一 Tailscale 网络里的另一台 claclaw
 skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
 skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）
 host.mjs          「宿主」页：电脑、资源、网络、各 Claw 状态

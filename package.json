@@ -2,7 +2,7 @@
   "name": "claclaw",
   "version": "0.1.0",
   "private": true,
-  "description": "在手机浏览器里接管本机的 Claude Code 会话：选会话、看流式回复、大按钮确认权限",
+  "description": "在手机浏览器里接管本机的 AI 编程会话（Claude Code、DeepSeek、OpenCode、OpenClaw，装任意一个就能用）：选会话、看流式回复、大按钮确认权限",
   "type": "module",
   "main": "server.mjs",
   "license": "UNLICENSED",

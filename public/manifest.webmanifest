@@ -1,7 +1,7 @@
 {
   "name": "Claclaw",
   "short_name": "Claclaw",
-  "description": "在手机上接管本机的 Claude Code 会话",
+  "description": "在手机上接管本机的 AI 编程会话",
   "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",
