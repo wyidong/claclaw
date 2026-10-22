@@ -28,8 +28,8 @@
   --add-bg:#E2F3E8;--del-bg:#FBE5E2;--code-bg:#E9ECEF;--banner-bg:#FFF4DC;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
-  /* 协同对方的 7 组配色（b 名字底色 / f 名字字色 / r 协同页卡片底色）；深色模式下面另有一套。字色和底色的对比度都在 6.4:1 以上 */
-  --pc0b:#FFE4E6;--pc0f:#9F1239;--pc0r:#FFF1F2;--pc1b:#FEF3C7;--pc1f:#92400E;--pc1r:#FFFBEB;--pc2b:#E0F2FE;--pc2f:#075985;--pc2r:#F0F9FF;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc3r:#FFF7ED;--pc4b:#CCFBF1;--pc4f:#115E59;--pc4r:#F0FDFA;--pc5b:#FAE8FF;--pc5f:#86198F;--pc5r:#FDF4FF;--pc6b:#ECFCCB;--pc6f:#3F6212;--pc6r:#F7FEE7;
+  /* 协同对方的 7 组配色（b 名字底色 / f 名字字色）；深色模式下面另有一套。字色和底色的对比度都在 6.4:1 以上 */
+  --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -37,7 +37,7 @@
     --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
     --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
-    --pc0b:#881337;--pc0f:#FFE4E6;--pc0r:#4C0519;--pc1b:#78350F;--pc1f:#FEF3C7;--pc1r:#451A03;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc2r:#082F49;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc3r:#431407;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc4r:#042F2E;--pc5b:#701A75;--pc5f:#FAE8FF;--pc5r:#4A044E;--pc6b:#365314;--pc6f:#ECFCCB;--pc6r:#1A2E05;
+    --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
   }
 }
 :root[data-theme="dark"]{
@@ -45,7 +45,7 @@
   --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
   --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
   --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
-  --pc0b:#881337;--pc0f:#FFE4E6;--pc0r:#4C0519;--pc1b:#78350F;--pc1f:#FEF3C7;--pc1r:#451A03;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc2r:#082F49;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc3r:#431407;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc4r:#042F2E;--pc5b:#701A75;--pc5f:#FAE8FF;--pc5r:#4A044E;--pc6b:#365314;--pc6f:#ECFCCB;--pc6r:#1A2E05;
+  --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
@@ -235,9 +235,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.rec .rtt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
-.pc0{--pbg:var(--pc0b);--pfg:var(--pc0f);--prow:var(--pc0r)}.pc1{--pbg:var(--pc1b);--pfg:var(--pc1f);--prow:var(--pc1r)}.pc2{--pbg:var(--pc2b);--pfg:var(--pc2f);--prow:var(--pc2r)}.pc3{--pbg:var(--pc3b);--pfg:var(--pc3f);--prow:var(--pc3r)}.pc4{--pbg:var(--pc4b);--pfg:var(--pc4f);--prow:var(--pc4r)}.pc5{--pbg:var(--pc5b);--pfg:var(--pc5f);--prow:var(--pc5r)}.pc6{--pbg:var(--pc6b);--pfg:var(--pc6f);--prow:var(--pc6r)}
-.h-row.pe-peer.ptint{background:var(--pbg);border-radius:10px;margin:4px 6px}
-.h-row.pe-peer.ptint .pe-peer-name,.h-row.pe-peer.ptint .pe-peer-name .pe-chev{color:var(--pfg)}   /* 和会话列表里这个对方的名字标签同一套底色、字色 */
+.pc0{--pbg:var(--pc0b);--pfg:var(--pc0f)}.pc1{--pbg:var(--pc1b);--pfg:var(--pc1f)}.pc2{--pbg:var(--pc2b);--pfg:var(--pc2f)}.pc3{--pbg:var(--pc3b);--pfg:var(--pc3f)}.pc4{--pbg:var(--pc4b);--pfg:var(--pc4f)}.pc5{--pbg:var(--pc5b);--pfg:var(--pc5f)}.pc6{--pbg:var(--pc6b);--pfg:var(--pc6f)}
+.h-row.pe-peer.ptint .pe-peer-name>span{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px}   /* 只给名字加底色，和会话列表里这个对方的名字标签一样 */
 .s-row.ptint .t .ptn{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
