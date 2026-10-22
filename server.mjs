@@ -1756,7 +1756,7 @@ const handler = async (req, res) => {
         const p = c.peers.find(x => x.id === b.id);
         if (!p) return sendJson(res, 404, { error: '没有这个对方' });
         if (b.sessions === null) delete p.allow;
-        else if (Array.isArray(b.sessions)) p.allow = b.sessions.filter(x => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x)).slice(0, 100);
+        else if (Array.isArray(b.sessions)) p.allow = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);
         savePeer(c); log('peer allow', p.name, Array.isArray(p.allow) ? p.allow.length : 'all');
         return sendJson(res, 200, peerPublic(c, true));
       }
