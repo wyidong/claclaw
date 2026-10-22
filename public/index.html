@@ -849,7 +849,7 @@ select.pe-in{text-align-last:right}
            Service Worker 第一次取到后缓存在手机上（见 sw.js） -->
       <div id="clawPane">
         <div class="claw-h">选择 Claw</div>
-        <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code 后再来。</div>
+        <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode 中任意一个后再来。</div>
         <button type="button" class="claw-card" data-claw="claude">
           <img class="claw-ic tile" src="https://claude.com/apple-touch-icon.png" alt="">
           <span class="claw-tx"><b>Claude Code</b><small>终端、VS Code、网页里开的会话都在这里</small></span>
@@ -2353,7 +2353,7 @@ function renderRailClaws(){
   if(!idle)$('#rclaws').classList.remove('open');
   $('#rclawMore').setAttribute('aria-expanded',String($('#rclaws').classList.contains('open')));
 }
-function curClaw(){return clawSel||(DESKTOP.matches?'claude':null)}   // 电脑端没选过就是 Claude
+function curClaw(){return clawSel||(DESKTOP.matches?'claude':null)}   // 电脑端没选过就是 Claude（没装 Claude 时 loadClaws 会换成第一个能用的）
 function showClawSel(){
   document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('on',b.dataset.claw===curClaw())});
   $('#rclaws').classList.remove('open');renderRailClaws();
@@ -2366,7 +2366,7 @@ showClawSel();
 // 装没装、启没启动：打开页面时查一次，之后每次切到 Claw 页再查（网关后来开了 / 关了都能跟上）
 function loadClaws(){
 fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
-  var any=false;
+  var any=false,ok=[];
   list.forEach(function(c){
     var down=c.installed&&c.supported&&c.running===false;   // 装了但没启动（OpenClaw 网关没开）：手机上灰着显示、不能选；电脑上不显示
     var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported||down;
@@ -2374,9 +2374,12 @@ fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
     card.hidden=!c.installed||(down&&DESKTOP.matches);if(!card.hidden)any=true;
     card.disabled=!c.supported||down;card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):down?'已安装，没有启动':'';
     if((!c.supported||down)&&clawSel===c.id)clawSel=null;
+    if(c.installed&&c.supported&&!down)ok.push(c.id);
     if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;
+  // 电脑端没选过 Claw 时默认 Claude；这台电脑没有可用的 Claude：改用第一个能用的（只在内存里，不记成用户的选择）
+  if(DESKTOP.matches&&!clawSel&&ok.length&&ok.indexOf('claude')<0){clawSel=ok[0];lastList=null;$('#sList').innerHTML='';refreshList()}
   showClawSel();
 }).catch(function(){});
 }
