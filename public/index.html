@@ -2198,9 +2198,16 @@ function peerNearHtml(c){
 function paintPeerNear(){var el=$('#peNear');if(el&&peerCfg)el.innerHTML=peerNearHtml(peerCfg)}
 function loadPeerPage(){
   $('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';
-  Promise.all([fetch('/api/peer').then(function(r){return r.json()}),fetch('/api/sessions').then(function(r){return r.json()})]).then(function(x){
-    peerCfg=x[0];peerList=Array.isArray(x[1])?x[1]:[];
-    if(!peerCfg.dir&&peerCfg.sessions.length){var f=peerList.find(function(s){return s.id===peerCfg.sessions[0]});if(f)peerCfg.dir=f.cwd}
+  var j=function(u){return fetch(u).then(function(r){return r.json()}).catch(function(){return []})};
+  // 协同会话可以来自任意 Claw：这台电脑装了、能用的 Claw 的会话都列出来，按「Claw + 目录」分组挑
+  Promise.all([fetch('/api/peer').then(function(r){return r.json()}),j('/api/sessions'),j('/api/claws').then(function(cl){
+    return Promise.all((Array.isArray(cl)?cl:[]).filter(function(c){return c.id!=='claude'&&c.installed&&c.supported&&c.running!==false}).map(function(c){
+      return j('/api/sessions?claw='+c.id).then(function(l){return (Array.isArray(l)?l:[]).map(function(s){s.claw=c.id;return s})});
+    })).then(function(ls){return [].concat.apply([],ls)});
+  })]).then(function(x){
+    peerCfg=x[0];peerList=(Array.isArray(x[1])?x[1]:[]).map(function(s){s.claw=s.claw||'claude';return s}).concat(x[2]||[]);
+    if(peerCfg.dir&&peerCfg.dir.indexOf('|')<0)peerCfg.dir='claude|'+peerCfg.dir;   // 旧配置只存了目录
+    if(!peerCfg.dir&&peerCfg.sessions.length){var f=peerList.find(function(s){return s.id===peerCfg.sessions[0]});if(f)peerCfg.dir=peDirKey(f)}
     renderPeer();peerWatch(true);peerCheckNow();peerScan();
   }).catch(function(e){$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
@@ -2245,7 +2252,7 @@ function peerPeersHtml(c){
     // 按会话目录分组：先写目录（完整路径），下面是这个目录里加入协同的会话
     var byDir={},dirOrder=[];pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
     var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+dirOrder.map(function(d){
-      return '<div class="pe-allow-dir">'+esc(d.replace(/^\/(Users|home)\/[^\/]+/,'~')||'(未知目录)')+'</div>'+byDir[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
+      return '<div class="pe-allow-dir">'+esc(peDirLabel(d))+'</div>'+byDir[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
         return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+(c.local?'':' disabled')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
     }).join('')+'</div>':'协同会话池是空的';
     var det=kv('开放会话',allowHtml)+kv('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
@@ -2268,7 +2275,10 @@ function paintPeerLive(){
 function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div class="pe-err">'+esc(peerMsg.err)+'</div>':'')+(peerMsg.ok?'<div class="pe-ok">'+esc(peerMsg.ok)+'</div>':'')}
 // 会话池摘要：加入了几个会话、分布在几个目录
 function poolTitle(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?(s.title||'(无标题)'):id.slice(0,8)}
-function poolCwd(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?String(s.cwd||''):''}
+var CLAW_NAMES={claude:'Claude Code',openclaw:'OpenClaw',deepseek:'DeepSeek',opencode:'OpenCode'};
+function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':(s.cwd||''))}   // OpenClaw 没有目录，全部归一组
+function peDirLabel(k){var i=k.indexOf('|'),cl=k.slice(0,i),d=k.slice(i+1).replace(/^\/(Users|home)\/[^\/]+/,'~');return cl==='claude'?(d||'(未知目录)'):CLAW_NAMES[cl]+(d?' · '+d:'')}
+function poolCwd(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?peDirKey(s):'claude|'}
 function poolDir(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?String(s.cwd||'').split('/').pop():''}
 function poolSumText(){
   var ids=(peerCfg&&peerCfg.sessions)||[];if(!ids.length)return '还没加入会话';
@@ -2284,7 +2294,7 @@ function renderPeer(){
     var pool=c.sessions||[],byDir={},dirOrder=[];
     pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
     var poolHtml=pool.length?dirOrder.map(function(d){
-      return '<div class="pe-allow-dir">'+esc(d.replace(/^\/(Users|home)\/[^\/]+/,'~')||'(未知目录)')+'</div>'+byDir[d].map(function(id){return '<div class="pe-ro-s">'+esc(poolTitle(id))+'</div>'}).join('')}).join(''):'没有';
+      return '<div class="pe-allow-dir">'+esc(peDirLabel(d))+'</div>'+byDir[d].map(function(id){return '<div class="pe-ro-s">'+esc(poolTitle(id))+'</div>'}).join('')}).join(''):'没有';
     h+='<div id="pePeers">'+peerPeersHtml(c)+'</div>'+
       hSec('我们这边',hRow('状态',c.enabled?(c.listening?'已开启，正在接收':'已开启，但没在监听'):'未开启')+hRow('名字',esc(c.name||''))+
         (c.baseName||c.base?hRow('地址','<span class="pe-mono">'+esc(c.baseName||'')+(c.baseName&&c.base?'<br>':'')+esc(c.base||'')+'</span>'):''))+
@@ -2293,11 +2303,11 @@ function renderPeer(){
     $('#hostBody').innerHTML=h;paintPeerMsg();return;
   }
   h+='<div id="pePeers">'+peerPeersHtml(c)+'</div><div id="pePending">'+peerPendingHtml(c)+'</div>';   // 已配对放最上面，配对申请紧跟着，一进来就看到
-  var dirs=[];peerList.forEach(function(s){if(s.cwd&&!s.claw&&dirs.indexOf(s.cwd)<0)dirs.push(s.cwd)});
+  var dirs=[];peerList.forEach(function(s){var k=peDirKey(s);if((s.cwd||s.claw==='openclaw')&&dirs.indexOf(k)<0)dirs.push(k)});
   if(c.dir&&dirs.indexOf(c.dir)<0)dirs.unshift(c.dir);
-  var dirSel='<select id="peDir" class="pe-in"><option value="">选择目录</option>'+dirs.map(function(d){return '<option value="'+esc(d)+'"'+(d===c.dir?' selected':'')+'>'+esc(d.replace(/^\/(Users|home)\/[^\/]+/,'~'))+'</option>'}).join('')+'</select>';
-  var ss=peerList.filter(function(s){return s.cwd===c.dir&&!s.claw});
-  var ssHtml=c.dir?(ss.length?'<div class="pe-ss pool">'+ss.map(function(s){return '<label><input type="checkbox" value="'+esc(s.id)+'"'+(c.sessions.indexOf(s.id)>=0?' checked':'')+'><span>'+esc(s.title||'(无标题)')+'</span><small>'+esc(s.id.slice(0,8))+'</small></label>'}).join('')+'</div>':'<div class="pe-note" style="margin-bottom:10px">这个目录下没有会话</div>'):'';
+  var dirSel='<select id="peDir" class="pe-in"><option value="">选择目录</option>'+dirs.map(function(d){return '<option value="'+esc(d)+'"'+(d===c.dir?' selected':'')+'>'+esc(peDirLabel(d))+'</option>'}).join('')+'</select>';
+  var ss=peerList.filter(function(s){return peDirKey(s)===c.dir});
+  var ssHtml=c.dir?(ss.length?'<div class="pe-ss pool">'+ss.map(function(s){return '<label><input type="checkbox" value="'+esc(s.id)+'"'+(c.sessions.indexOf(s.id)>=0?' checked':'')+'><span>'+esc(s.title||'(无标题)')+'</span><small>'+esc(shortId(s.id))+'</small></label>'}).join('')+'</div>':'<div class="pe-note" style="margin-bottom:10px">这个目录下没有会话</div>'):'';
   h+='<div><div class="h-h">我们这边</div><div class="h-card">'+
     '<div class="h-row"><span class="k">状态</span><span class="v">'+(c.enabled?(c.listening?'已开启，正在接收':'已开启，但没在监听'):'未开启')+'</span></div>'+
     // 已经和别人配对后，名字和端口就锁住：端口一改对方就找不到我们，名字是配对时告诉对方的，改了对方那边也不会变

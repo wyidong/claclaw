@@ -585,9 +585,30 @@ function isLocalReq(req) {
 }
 // 某个对方能看到的会话：协同会话池 ∩ 开放给它的（没单独设过 = 全部开放）
 const peerAllowed = (c, p) => Array.isArray(p?.allow) ? c.sessions.filter(id => p.allow.includes(id)) : c.sessions;
+// 协同会话可以是任意 Claw 的：Claude（UUID）、DeepSeek（ds:）、OpenCode（op:）、OpenClaw（oc:）
+const PEER_SID = /^([0-9a-f-]{36}|(ds|op|oc):\S{1,200})$/;
+const clawOfId = id => isDs(id) ? 'deepseek' : isOp(id) ? 'opencode' : isOc(id) ? 'openclaw' : 'claude';
+const runnerOf = id => (isDs(id) ? dsRunners : isOp(id) ? opRunners : isOc(id) ? ocRunners : runners).get(id);
+// 给对方看的短 ID（对方用它的开头匹配会话）：Claude 取前 8 位；DeepSeek / OpenCode 保留前缀再取 8 位；OpenClaw 的 key 本来就短，原样给
+const peerShortId = id => { const m = id.match(/^(ds:(?:session-)?|op:(?:ses_)?)/); return m ? id.slice(0, m[0].length + 8) : isOc(id) ? id : id.slice(0, 8); };
+// 某个对方能看到的会话（统一成 {sessionId, claw, title, cwd}；Claude 的还带着 SDK 原来的字段，送消息时要用）
 async function peerSessionInfos(c, p) {
-  const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
-  return peerAllowed(c, p).map(id => list.find(s => s.sessionId === id)).filter(Boolean);
+  const ids = peerAllowed(c, p), lists = {};
+  const load = {
+    claude: () => listSessions({ includeProgrammatic: true, limit: 2000 }),
+    deepseek: () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy }),
+    opencode: () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() }),
+    openclaw: () => ocSessionList(log),
+  };
+  const out = [];
+  for (const id of ids) {
+    const claw = clawOfId(id);
+    if (!lists[claw]) { try { lists[claw] = await load[claw](); } catch { lists[claw] = []; } }   // 某个 Claw 读不了（网关没开等）：它的会话先不列
+    const list = lists[claw];
+    if (claw === 'claude') { const s = list.find(x => x.sessionId === id); if (s) out.push({ ...s, claw, title: s.customTitle || s.summary || '' }); }
+    else { const s = list.find(x => x.id === id); if (s) out.push({ sessionId: id, claw, title: s.title || '', cwd: s.cwd || '' }); }
+  }
+  return out;
 }
 // 回复是不是 Claude Code 的额度用完提示：只认以这句提示开头、整段不超过 120 字的回复（正文里提到这句话不算）
 function quotaHit(text) {
@@ -597,16 +618,52 @@ function quotaHit(text) {
   return { resets: m ? m[1].trim() : '' };
 }
 // 把对方的消息送进会话，收集这一轮的回复
-async function peerDeliver(info, text, from, peerId) {
-  if (peerId) markLast(info.sessionId, peerId);
+// 找到（没有就拉起）接收协同消息的会话进程；各 Claw 的进程对外接口一样：subscribe / send / emit / turn.done
+// 别的 Claw 的会话列表也标上协同：加入了协同（紫框）、最近和哪个对方通信（名字底色）
+function peerMark(list) {
+  const pc = loadPeer(), on = new Set(pc.enabled ? pc.sessions : []);
+  return list.map(x => {
+    const l = pc.last?.[x.id], p = l && pc.peers.find(y => y.id === l.peer);
+    return { ...x, peer: on.has(x.id) || undefined, peerLast: p ? { id: p.id, no: p.no, name: p.name, at: l.at } : undefined };
+  });
+}
+async function peerRunner(info) {
   const id = info.sessionId;
+  if (isDs(id)) {
+    let r = dsRunners.get(id);
+    if (!r) { if (!dsExists(id)) return [404, { ok: false, error: '会话不存在' }]; r = new DsRunner(id, dsOpts()); dsRunners.set(id, r); r.history(); }   // history() 顺带读出会话目录，发消息要用
+    return r;
+  }
+  if (isOp(id)) {
+    let r = opRunners.get(id);
+    if (!r) {
+      if (opTakeoverInfo(id, takeoverMin())) return [409, { ok: false, error: '这个会话正在对方电脑的终端里使用，暂时收不了消息' }];
+      if (!opExists(id)) return [404, { ok: false, error: '会话不存在' }];
+      r = new OpRunner(id, dsOpts()); opRunners.set(id, r); r.history();
+    }
+    return r;
+  }
+  if (isOc(id)) {
+    let r = ocRunners.get(id);
+    if (!r) {
+      r = new OcRunner(id, { log, onActivity: setActivity, onTurnDone: ocTurnDone }); ocRunners.set(id, r);
+      try { await r.open(); } catch (e) { r.dispose(); return [502, { ok: false, error: '连不上 OpenClaw 网关：' + e.message }]; }
+    }
+    return r;
+  }
   if (!runners.has(id)) {
     if (info.cwd && !fs.existsSync(info.cwd)) return [410, { ok: false, error: '会话目录已不存在' }];
     if (takeoverInfo(id, jsonlPathOf(info), liveRegistry())) return [409, { ok: false, error: '这个会话正在对方电脑的终端 / VS Code 里使用，暂时收不了消息' }];
     const inherited = inheritedMode(info);
     runners.set(id, new Runner(info, inherited, MODES.includes(inherited) ? MODES : [...MODES, inherited]));
   }
-  const r = runners.get(id);
+  return runners.get(id);
+}
+async function peerDeliver(info, text, from, peerId) {
+  if (peerId) markLast(info.sessionId, peerId);
+  const id = info.sessionId;
+  const r = await peerRunner(info);
+  if (Array.isArray(r)) return r;
   if (r.busy) return [409, { ok: false, error: '这个会话正在忙，稍后再发' }];
   const msg = '【claclaw 协同 · 来自对方：' + from + '（来信长的话先提炼要点再处理；回复言简意赅，只写结果或必要的问题）】\n' + text;
   // 协同消息到了：没人正看着这个会话就推一条通知（点开直接进这个会话）
@@ -628,7 +685,7 @@ async function peerDeliver(info, text, from, peerId) {
         const out = (cur.trim() || reply).trim();
         // 额度用完时 Claude Code 把「You've hit your session limit · resets 6:10pm」当普通回复吐出来，
         // 原样转给对方会被当成「已回复」。识别出来改成明确的错误，对方据此到点重发。
-        const q = quotaHit(out);
+        const q = info.claw === 'claude' || !info.claw ? quotaHit(out) : null;   // 额度提示的格式只认 Claude 的
         if (q) return end(429, { ok: false, code: 'quota_exhausted', error: '对方 Claude 额度已用完，消息未处理' + (q.resets ? '，' + q.resets + ' 恢复，之后请重发' : '，请稍后重发'), resets: q.resets || null, raw: out });
         end(200, { ok: m.subtype === 'success', reply: out, error: m.error });
       }
@@ -701,7 +758,7 @@ async function peerHandler(req, res) {
     if (!peer) { log('peer reject 401', ip, req.method, route, auth ? 'bad token' : 'no token'); return out(401, { ok: false, error: '还没配对，或钥匙不对：先 POST ' + PEER_BASE + '/pair 申请配对' }); }
     if (peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
     const infos = await peerSessionInfos(c, peer);
-    const brief = infos.map(s => ({ id: s.sessionId.slice(0, 8), title: s.customTitle || s.summary || '', busy: !!runners.get(s.sessionId)?.busy }));
+    const brief = infos.map(s => ({ id: peerShortId(s.sessionId), title: s.title, claw: s.claw, busy: !!runnerOf(s.sessionId)?.busy }));
     if (route === '/sessions') return out(200, { ok: true, name: myName(c), sessions: brief });
     if (route !== '/') return out(404, { ok: false, error: '没有这个接口' });
     if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST 发消息' });
@@ -711,7 +768,7 @@ async function peerHandler(req, res) {
     text = String(text || '').trim();
     if (!text) return out(400, { ok: false, error: '消息是空的' });
     if (text.length > 4000) return out(413, { ok: false, error: '消息太长（最多 4000 字）' });
-    const info = want ? infos.find(s => s.sessionId.startsWith(want.toLowerCase())) : infos.length === 1 ? infos[0] : null;
+    const info = want ? infos.find(s => s.sessionId.toLowerCase().startsWith(want.toLowerCase())) : infos.length === 1 ? infos[0] : null;
     if (!info) return out(400, { ok: false, error: want ? '没有这个会话' : '有多个会话，用 session 指定一个', sessions: brief });
     if (peerBusy.has(info.sessionId)) return out(429, { ok: false, error: '上一条还在处理，稍后再发' });
     peerBusy.add(info.sessionId);
@@ -1622,7 +1679,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/sessions/delete' && req.method === 'POST') return handleDelete(req, res);
     if (url.pathname === '/api/sessions/rename' && req.method === 'POST') return handleRename(req, res);
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'openclaw') {
-      try { return sendJson(res, 200, await ocSessionList(log), { 'cache-control': 'no-store' }); }
+      try { return sendJson(res, 200, peerMark(await ocSessionList(log)), { 'cache-control': 'no-store' }); }
       catch (e) { return sendJson(res, 502, { error: e.message }); }
     }
     if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
@@ -1695,7 +1752,7 @@ const handler = async (req, res) => {
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
       if (typeof b.dir === 'string') c.dir = b.dir;
       if (typeof b.name === 'string') c.name = b.name.replace(/\s+/g, ' ').trim().slice(0, 40);
-      if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && /^[0-9a-f-]{36}$/.test(x)).slice(0, 100);
+      if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);
       if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
       if (c.enabled && !c.sessions.length) return sendJson(res, 400, { error: '先选至少一个会话加入协同' });
       savePeer(c);
@@ -1733,11 +1790,11 @@ const handler = async (req, res) => {
       return sendJson(res, 200, info, { 'cache-control': 'no-store' });
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'opencode') {
-      try { return sendJson(res, 200, opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() }), { 'cache-control': 'no-store' }); }
+      try { return sendJson(res, 200, peerMark(opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() })), { 'cache-control': 'no-store' }); }
       catch (e) { return sendJson(res, 500, { error: e.message }); }
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'deepseek') {
-      try { return sendJson(res, 200, dsSessionList({ busy: id => !!dsRunners.get(id)?.busy }), { 'cache-control': 'no-store' }); }
+      try { return sendJson(res, 200, peerMark(dsSessionList({ busy: id => !!dsRunners.get(id)?.busy })), { 'cache-control': 'no-store' }); }
       catch (e) { return sendJson(res, 500, { error: e.message }); }
     }
     if (url.pathname === '/api/sessions') {
