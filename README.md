@@ -1,5 +1,7 @@
 # claclaw
 
+> 好的软件功能，总会在你需要的时候自动出现。
+
 在手机浏览器里接管本机的 [Claude Code](https://docs.claude.com/en/docs/claude-code) 会话。
 
 手机上用 SSH 进终端操作 Claude Code 很难受：没有方向键、容易断线、排版乱。claclaw 在开发机上起一个小网页服务，用手机浏览器打开就能：
@@ -51,6 +53,10 @@ npm start
 ## claclaw 协同：两台电脑的会话互发消息
 
 让局域网里两台电脑上的 AI 会话直接对话：你这边的 Claude 有问题可以直接问对方电脑上的会话，对方的回复自动回到你这边；两边的人在 claclaw 网页上都能看到它们在聊什么，随时插话或叫停。
+
+四个 Claw（Claude Code、DeepSeek、OpenCode、OpenClaw）的会话都能加入协同：
+- **收**：对方的消息由 claclaw 送进会话，这一轮的回复自动传回对方。
+- **发**：Claude 会话用内置的 `peer_send` 工具；其他 Claw 的 AI 执行本机命令 `~/.claclaw/bin/claclaw-peer`（`list` / `send` / `result`）。它们收到的协同消息开头会写明自己的会话 ID 和这个命令，所以不装技能也能用；装上「claclaw 协同」技能（见下面「技能」）用起来更顺手。
 
 - **只走局域网**：两台电脑连着同一个 Wi-Fi / 内网就行，**不需要 Tailscale**
 - **像蓝牙配对**：对方申请 → 你这边页面上出现一个两位数配对码 → 你把码告诉对方 → 配对完成；之后用钥匙通信，不用再输码
@@ -139,6 +145,20 @@ npm start
 - DeepSeek 改名：需要先关闭这个会话在 dsh web / 终端里的写入方；网页里打开的会话要先切走（claclaw 会先关掉网页里的 runner，再拿 dsh 的 `session.lock`）。改名前的日志备份在 `data/trash/`。
 - OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。改名走 opencode 自己的本机接口（终端里开着同一会话的要重开才看到新名）；删除前先导出到 data/trash（`opencode import` 可找回）
 
+## 技能
+
+仓库的 `skills/` 里预先准备了一些 [Agent Skills](https://agentskills.io)（`SKILL.md` + 脚本），平时不用管：用到相关功能时，claclaw 会在那里提示安装，点一下就装好。全部技能在 设置 › 宿主 › 技能 里能看、能装、能卸。
+
+- 装到两个位置就覆盖四个 Claw：`~/.claude/skills`（Claude Code，OpenCode 也读）和 `~/.agents/skills`（DeepSeek、OpenCode、OpenClaw 共用）。
+- 装的是复制件，带 `.claclaw-skill` 标记；claclaw 启动时会把它们同步成仓库里的最新版。卸载只删带标记的，你自己的同名技能不会被覆盖或删除。
+- 技能里的命令只和本机 claclaw 通信：地址和本机令牌在 `~/.claclaw/local.json`（只有本人可读），本地接口只接受 127.0.0.1 带令牌的请求；配对的钥匙始终只在 claclaw 里。
+
+| 技能 | 什么时候推荐 | 作用 |
+| --- | --- | --- |
+| `claclaw-peer` | 协同里加入了 DeepSeek / OpenCode / OpenClaw 的会话 | 让 AI 主动给对方电脑上的会话发消息、看对方有哪些会话 |
+
+新场景：在 `skills/` 里加一个技能目录，在 `skills/index.json` 里登记，再在用到它的页面放一张推荐卡片（`skillTip`）。
+
 ## 文件
 
 ```text
@@ -147,6 +167,8 @@ openclaw.mjs      OpenClaw 会话（通过本机 OpenClaw 网关）
 dsh.mjs           DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
 opencode.mjs      OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
 peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
+skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
+skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）
 host.mjs          「宿主」页：电脑、资源、网络、各 Claw 状态
 tts.mjs           电脑合成语音（微软在线语音 / macOS say）
 auth.mjs          登录
