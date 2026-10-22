@@ -1622,11 +1622,15 @@ function onEvent(m){
   if(narration)narration.onEvent(m);   // 过程播报：只读事件，不改现有逻辑
   switch(m.t){
   case 'session.opened':
+    var sameSess=!!(session&&session.id===m.id),wasStick=stick;
     if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
     session={id:m.id,title:m.title,cwd:m.cwd,branch:m.branch||''};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig);
     delete feedCache[m.id];
-    if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null;histStart=(m.historyTotal||0)-fc.kept;histMore=histStart>0}   // 记录没变：直接用上次画好的，不重画、不闪
+    // 重连后服务器会重发同一个会话：已经画好的不动（正在看的位置不跳），断线前后实时画的去掉、按服务器记录补上
+    var mergeFrom=sameSess?resumeTail(m):-1;
+    if(mergeFrom>=0){permQueue=[];aiEl=null;histMore=histStart>0;renderHistory(m.history.slice(mergeFrom),(m.historyStart||0)+mergeFrom);reuse=true}
+    else if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null;histStart=(m.historyTotal||0)-fc.kept;histMore=histStart>0}   // 记录没变：直接用上次画好的，不重画、不闪
     else{feed.innerHTML='';cards={};permQueue=[];aiEl=null}
     feedSig=hsig;feedDirty=false;histArmed=false;lastTop=0;histLoading=false;   // 刚打开不算「滑到顶」，要先离开顶部
     session.dir=(m.cwdShort||'').split('/').pop()||'';
@@ -1637,7 +1641,7 @@ function onEvent(m){
     setMode(m.mode,false);
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
-    renderHistory(m.history);
+    renderHistory(m.history,m.historyStart||0);
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
     addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||'')+(m.branch?' · 分支 '+m.branch:''));
     }
@@ -1648,6 +1652,7 @@ function onEvent(m){
     setBusy(m.busy);
     if(m.busy&&m.busyFor)workSince=Date.now()-m.busyFor;   // 用服务器记的开始时间（只传经过的毫秒数，不受手机时钟偏差影响）
     (m.pending||[]).forEach(onPermRequest);
+    var merged=mergeFrom>=0;
     if(outbox){
       var lastUser=m.history.filter(function(it){return it.kind==='user'}).pop();
       if(outbox.sid!==m.id)outboxRestore();                       // 换了会话：不往别的会话发，放回输入框
@@ -1655,7 +1660,7 @@ function onEvent(m){
       else if(m.busy)outboxRestore();                              // 会话正忙：放回输入框，等它忙完再发
       else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');outboxShow();trySend()}
     }
-    scrollDown(true);
+    if(merged){stick=wasStick;scrollDown()}else scrollDown(true);
     break;
   case 'session.busy':
     openFailed();clearOpening();
@@ -2874,15 +2879,28 @@ function openFromNotice(id){
 var feedCache={},feedSig=null,feedDirty=false;
 function histSig(h,total){var l=h[h.length-1]||{};return (total||h.length)+'|'+(l.kind||'')+'|'+(l.status||'')+'|'+String(l.text||l.output||l.target||l.name||'').slice(-120)}
 // 画一段历史；每条历史对应聊天区里一个元素，打上 data-h 好数「缓存里留了几条」
-function renderHistory(items){
-  items.forEach(function(it){
+function renderHistory(items,base){
+  base=base||0;
+  items.forEach(function(it,i){
     if(it.kind==='user'){var hu=addUser(it.text,it.images);if(it.waiting&&hu)hu.classList.add('queued');stamp(hu,it.at)}
     else if(it.kind==='ai'){addAi(it.text);stamp(feed.lastElementChild,it.at)}
     else if(it.kind==='peer')stamp(addPeer(it.from,it.text),it.at);
     else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no')}
     else return;
-    if(feed.lastElementChild)feed.lastElementChild.dataset.h='1';
+    if(feed.lastElementChild)feed.lastElementChild.dataset.h=String(base+i);   // 绝对序号（非空字符串，也用来数缓存里留了几条）
   });
+}
+// 重连回到同一个会话：找出聊天区里最后一条历史的序号，去掉它后面实时画的内容，返回服务器这页里要补画的起点（从它本身开始）；
+// 接不上（OpenClaw 序号不固定、断太久新内容超过一页、聊天区是空的）返回 -1，照旧整页重画
+function resumeTail(m){
+  if(/^oc:/.test(m.id))return -1;
+  var hs=feed.querySelectorAll('[data-h]'),last=hs[hs.length-1];if(!last)return -1;
+  var idx=Number(last.dataset.h),start=m.historyStart||0;
+  if(!(idx>=0)||idx<start||idx>=start+m.history.length)return -1;
+  // 最后一条历史也重画（工具卡片可能断线时才跑完）；实时画的（含工作中指示、发送中的消息）都在它之后
+  while(last.nextSibling)last.nextSibling.remove();
+  last.remove();thinkEl=null;if(outbox)outbox.el=null;
+  return idx-start;
 }
 // 往上滑到顶：向服务器要更早的一页，接到最上面，画面位置不跳
 // 一次上滑（包括它的惯性）最多加载一页：加载后要等滚动停下来（0.25 秒没动）才允许下一页；只在往上滑时触发
@@ -2907,7 +2925,7 @@ function prependHistory(m){
   histStart=m.start;histMore=!!m.more;
   if(!m.items.length)return;
   var real=feed,tmp=document.createElement('div'),keepStick=stick;
-  feed=tmp;stick=false;try{renderHistory(m.items)}finally{feed=real;stick=keepStick}
+  feed=tmp;stick=false;try{renderHistory(m.items,m.start)}finally{feed=real;stick=keepStick}
   var h0=feed.scrollHeight,top0=feed.scrollTop,f=document.createDocumentFragment();
   while(tmp.firstChild)f.appendChild(tmp.firstChild);
   // iPhone 惯性滚动时直接改 scrollTop 会被忽略，惯性会一路冲到顶、接着连续加载：先短暂停掉滚动，再放回原位

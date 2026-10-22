@@ -219,6 +219,9 @@ export function proxyWs(req, socket, head, id, wss, log = () => {}) {
     wss.handleUpgrade(req, socket, head, ws => {
       for (const [d, bin] of early) ws.send(d, { binary: bin });
       early = null;
+      // 这条连接也在 wss.clients 里，会被 server.mjs 的心跳 ping：不挂 pong 就永远 isAlive=false，第二轮（≤60 秒）被 terminate → 手机每分钟掉线重连
+      ws.isAlive = true;
+      ws.on('pong', () => { ws.isAlive = true; });
       ws.on('message', (d, bin) => up.readyState === 1 && up.send(d, { binary: bin }));
       up.on('message', (d, bin) => ws.readyState === 1 && ws.send(d, { binary: bin }));
       ws.on('close', () => up.close());

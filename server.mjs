@@ -2006,9 +2006,19 @@ wss.on('connection', (ws, req) => {
   send({ t: 'unread', unread: unreadMap() });
   send({ t: 'activity', activity: activityMap });
 
-  ws.on('message', async raw => {
+  // 打开 / 新建 / 离开会话要排队一个个处理：处理里有 await（列会话、读历史、起 ACP），
+  // 两次打开挨得近（重连自动打开 + 点通知 / 连点两个会话）时并发跑，后点的可能先完成，
+  // 页面停在先点的那个上，连接还同时订阅着两个会话 → 串台。还没轮到就已被更新的打开顶掉的直接丢弃。
+  let openChain = Promise.resolve(), openSeq = 0;
+  ws.on('message', raw => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
+    if (/^session\.(open|new|leave)$/.test(m?.t)) {
+      const seq = ++openSeq;
+      openChain = openChain.then(() => (m.t === 'session.open' && seq !== openSeq) ? null : handle(m));
+    } else handle(m);
+  });
+  async function handle(m) {
     try {
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
@@ -2272,7 +2282,7 @@ wss.on('connection', (ws, req) => {
       log('ws error', e?.message);
       send({ t: 'error', message: String(e?.message || e) });
     }
-  });
+  }
 
   // 心跳：手机断网后连接会半开着，watched() 一直为真，于是不再推送通知、会话也不会空闲关闭。
   // 每 30 秒 ping 一轮，连续两轮没收到 pong 就判定连接已死，terminate 掉（close 回调照常清理）。
