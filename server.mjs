@@ -18,7 +18,7 @@ import * as hosts from './hosts.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
-import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
+import { markLast, nextPeerNo, ourBaseName, ourInbox, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
@@ -846,7 +846,9 @@ async function peerHandler(req, res) {
   const sub = u.pathname.replace(/\/+$/, '');
   if (!c.enabled || (sub !== PEER_BASE && !sub.startsWith(PEER_BASE + '/'))) { log('peer reject 404', cleanIp(req.socket.remoteAddress), req.method, u.pathname.slice(0, 80)); res.writeHead(404); return res.end(); }
   const route = sub.slice(PEER_BASE.length) || '/';
-  const ip = cleanIp(req.socket.remoteAddress);
+  // 经中继隧道进来的请求：隧道就跑在本机（来源是本机地址），真正的来源 IP 在 x-forwarded-for 里（中继填的）
+  const sockIp = cleanIp(req.socket.remoteAddress), fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = fwd && /^[\d.:a-f]+$/i.test(fwd) && (sockIp === '127.0.0.1' || sockIp === '::1' || sockIp === lanIp()) ? cleanIp(fwd) : sockIp;
   const readJson = async () => { try { return JSON.parse(await readBody(req, 64 * 1024)); } catch { return null; } };
   try {
     // 1. 配对申请：谁都可以申请，但要我们这边的人把两位数配对码告诉对方才能完成
@@ -890,7 +892,7 @@ async function peerHandler(req, res) {
       c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
       savePeer(c2);
       log('peer paired', p.ip, p.name, theirToken ? 'two-way' : 'one-way');
-      return out(200, { ok: true, token, name: myName(c2), inbox: ourBaseName(c2) || ourBase(c2), inboxAlt: ourBase(c2) });
+      return out(200, { ok: true, token, name: myName(c2), ...ourInbox(c2) });
     }
     // 2. 配对后的正常收发：请求头带钥匙
     const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -921,7 +923,7 @@ async function peerHandler(req, res) {
 let outPair = null;   // {base, requestId, token, expiresAt}
 function peerPublic(c, local) {
   return {
-    local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c),
+    local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c), relay: c.relay || '',
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
     peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
@@ -1876,8 +1878,8 @@ const handler = async (req, res) => {
         try {
           const alt = /^https?:\/\/\S+$/i.test(String(b.urlAlt || '')) ? String(b.urlAlt).replace(/\/+$/, '') : '';
           let j, used = base;
-          try { j = await callPeer(base, '/pair', { body: { name: myName(c), inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c) }, ms: 8000 }); }
-          catch (e) { if (!alt) throw e; used = alt; j = await callPeer(alt, '/pair', { body: { name: myName(c), inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c) }, ms: 8000 }); }   // 名字连不上：用 IP
+          try { j = await callPeer(base, '/pair', { body: { name: myName(c), ...ourInbox(c) }, ms: 8000 }); }
+          catch (e) { if (!alt) throw e; used = alt; j = await callPeer(alt, '/pair', { body: { name: myName(c), ...ourInbox(c) }, ms: 8000 }); }   // 名字连不上：用 IP
           if (!j.ok || !j.requestId) return sendJson(res, 200, { error: '对方没有接受申请：' + (j.error || 'HTTP ' + j.status) });
           outPair = { base: used, baseAlt: used === base ? alt : base, requestId: j.requestId, token: newToken(), expiresAt: Date.now() + (Number(j.expiresIn) || 300) * 1000 };
           return sendJson(res, 200, peerPublic(c, true));
@@ -1910,6 +1912,13 @@ const handler = async (req, res) => {
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
       if (typeof b.dir === 'string') c.dir = b.dir;
       if (typeof b.name === 'string') c.name = b.name.replace(/\s+/g, ' ').trim().slice(0, 40);
+      // 中继地址（跨网络）：relay-tunnel.mjs 打印的公开地址 + 协同路径 + #pin=证书指纹；空 = 只走局域网
+      if (typeof b.relay === 'string') {
+        const r = b.relay.trim();
+        if (r && !/^https?:\/\/\S+$/.test(r)) return sendJson(res, 400, { error: '中继地址要以 http:// 或 https:// 开头' });
+        if (/^https:/.test(r) && !/#pin=sha256\/\/[A-Za-z0-9+/=]+$/.test(r)) return sendJson(res, 400, { error: 'https 中继地址末尾要带证书指纹：#pin=sha256//…' });
+        c.relay = r.slice(0, 500);
+      }
       if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);
       if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
       if (c.enabled && !c.sessions.length) return sendJson(res, 400, { error: '先选至少一个会话加入协同' });

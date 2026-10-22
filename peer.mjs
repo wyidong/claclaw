@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
+import tls from 'node:tls';
 import crypto from 'node:crypto';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 
@@ -76,6 +77,11 @@ export function lanIp() {
   }
   return null;
 }
+// 我们告诉对方的收件地址：设了中继地址（跨网络）就以它为主、局域网地址备用；没设就是局域网的名字地址 + IP 地址
+export const ourInbox = c => {
+  const lan = ourBaseName(c) || ourBase(c);
+  return c.relay ? { inbox: c.relay, inboxAlt: lan } : { inbox: lan, inboxAlt: ourBase(c) };
+};
 export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + ':' + c.port + PEER_BASE : ''; };
 
 // ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
@@ -163,16 +169,25 @@ export function applyListener(c, handler, log) {
 export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } = {}) {
   if (!base) return Promise.reject(Object.assign(new Error('没有对方的地址'), { connect: true }));
   const u = new URL(base);
+  // 走中继的地址：https://中继IP:端口/t/名字/claclaw-peer#pin=sha256//…（中继是自签证书，只认这个指纹）
+  const pin = (u.hash.match(/pin=(sha256\/\/[A-Za-z0-9+/=]+)/) || [])[1] || '';
+  u.hash = '';
   if (sub) u.pathname = u.pathname.replace(/\/+$/, '') + sub;
   const headers = {};
   if (token) headers.authorization = 'Bearer ' + token;
   const data = body ? Buffer.from(JSON.stringify(body)) : null;
   if (data) { headers['content-type'] = 'application/json'; headers['content-length'] = data.length; }
   const mod = u.protocol === 'https:' ? https : http;
+  const opt = { method: data ? 'POST' : 'GET', headers };
+  if (pin && u.protocol === 'https:') opt.createConnection = (o, cb) => {   // 握手后、发出钥匙之前核对指纹
+    const so = tls.connect({ host: o.host, port: o.port, servername: o.servername, rejectUnauthorized: false });
+    so.once('secureConnect', () => { const got = 'sha256//' + crypto.createHash('sha256').update(so.getPeerX509Certificate().publicKey.export({ type: 'spki', format: 'der' })).digest('base64'); if (got === pin) cb(null, so); else { so.destroy(); cb(Object.assign(new Error('中继证书指纹对不上'), { code: 'PIN_MISMATCH' })); } });
+    so.once('error', e => cb(e));
+  };
   return new Promise((resolve, reject) => {
     let connected = false, done = false;
     const fail = (msg, connect) => { if (done) return; done = true; clearTimeout(t); req.destroy(); reject(Object.assign(new Error(msg), { connect })); };
-    const req = mod.request(u, { method: data ? 'POST' : 'GET', headers }, res => {
+    const req = mod.request(u, opt, res => {
       const chunks = [];
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
@@ -256,7 +271,7 @@ export async function discover(c) {
 // 请求已配对的对方：先用名字地址，连不上再用 IP 地址（成功的那个以后优先用）
 export async function peerCall(c, p, sub, opts) {
   const tries = [p.inbox, p.inboxAlt].filter(Boolean);
-  if (p.ip && p.inbox) { try { const u = new URL(p.inbox); if (u.hostname !== p.ip) { u.hostname = p.ip; tries.push(u.toString().replace(/\/$/, '')); } } catch {} }
+  if (p.ip && p.inbox && !/^https:|#pin=/.test(p.inbox)) { try { const u = new URL(p.inbox); if (u.hostname !== p.ip) { u.hostname = p.ip; tries.push(u.toString().replace(/\/$/, '')); } } catch {} }
   let err;
   for (const [i, url] of [...new Set(tries)].entries()) {
     try {
