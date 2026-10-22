@@ -533,9 +533,6 @@ select.pe-in{text-align-last:right}
 .pe-btn.pri{background:var(--accent);color:var(--accent-ink);font-weight:600}
 .pe-btn.del{color:var(--deny)}
 .pe-note{margin:8px 14px 0;font-size:12.5px;line-height:1.6;color:var(--muted)}
-/* 用到某个场景时冒出来的技能推荐：一句话 + 一个按钮 */
-.sk-tip{display:flex;align-items:center;gap:12px;margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--user-bg);font-size:13px;line-height:1.5}
-.sk-tip span{flex:1;min-width:0}
 .sk-row{display:flex;align-items:center;gap:10px}
 .sk-row .k{flex:1;min-width:0}
 .pe-err{margin:8px 14px 0;font-size:13px;color:var(--deny)}
@@ -2099,8 +2096,8 @@ hostTrouble=function(j){
   }else if(j.hostDown)banner('连不上宿主「'+(hostName||'')+'」：它可能关机或没启动 claclaw。可以到「宿主」页切回其他宿主');
 };
 // ---------- 宿主 → claclaw 协同 ----------
-// ---------- 技能：仓库 skills/ 里预先准备好的技能，用到相关场景时才推荐安装 ----------
-// 推荐卡片 skillTip(名字, 安装位置, 说明)：哪个页面用到就放在哪；设置 › 宿主 › 技能 里能看全部、装 / 卸
+// ---------- 技能：仓库 skills/ 里预先准备好的技能，用到相关场景时自动安装 ----------
+// 用到时服务端自动装（不用用户点）；设置 › 宿主 › 技能 里能看全部、装 / 卸
 var skillsSt=null,skillMsg={};
 function loadSkills(){
   fetch('/api/skills').then(function(r){return r.json()}).then(function(j){
@@ -2110,10 +2107,6 @@ function loadSkills(){
 }
 function skillState(name,target){var s=(skillsSt||[]).find(function(x){return x.name===name});var t=s&&s.targets.find(function(x){return x.id===target});return t?t.state:'none'}
 function skillsSum(){if(!skillsSt)return '';var n=0;skillsSt.forEach(function(s){if(s.targets.some(function(t){return t.state!=='none'}))n++});return n?'已装 '+n+' 个':skillsSt.length+' 个可装'}
-function skillTip(name,target,text){
-  if(!skillsSt||skillState(name,target)!=='none')return '';
-  return '<div class="sk-tip"><span>'+esc(text)+'</span><button type="button" class="pe-btn pri" data-act="skill-install" data-name="'+esc(name)+'" data-target="'+esc(target)+'">安装</button></div>';
-}
 function skillPost(op,name,target){
   fetch('/api/skills/'+op,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:name,target:target})}).then(function(r){return r.json()}).then(function(j){
     if(!Array.isArray(j)){skillMsg={err:j.error||'操作失败'};toast(j.error||'操作失败')}
@@ -2136,7 +2129,7 @@ function renderSkills(){
         return '<div class="h-row sk-row"><span class="k">'+esc(t.label)+'<br><small style="color:var(--muted)">'+st+'</small></span>'+btn+'</div>';
       }).join(''):'<div class="h-row"><span class="v">这台电脑上没有用得上它的 Claw</span></div>')+
       '</div></div>';
-  }).join('')+'<div class="pe-note">技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时，claclaw 会在那里提示安装。</div>';
+  }).join('')+'<div class="pe-note">技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。</div>';
   $('#hostBody').innerHTML=h;
 }
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
@@ -2334,13 +2327,7 @@ function poolSumText(){
   var dirs={};ids.forEach(function(id){dirs[poolDir(id)]=1});
   return '已加入 '+ids.length+' 个会话（'+Object.keys(dirs).length+' 个目录）：'+ids.map(function(id){return poolTitle(id)+'（'+poolDir(id)+'）'}).join('、')+'。改完点「保存」。';
 }
-function paintPoolSum(){var el=$('#pePoolSum');if(el)el.textContent=poolSumText();var t=$('#peSkillTip');if(t)t.innerHTML=peerSkillTip()}
-// 协同池里有非 Claude 的会话：要能主动找对方，推荐装 claclaw-peer 技能（Claude 会话有内置工具，不用装）
-function peerSkillTip(){
-  var o={};((peerCfg&&peerCfg.sessions)||[]).forEach(function(id){var k=clawOf(id);if(k!=='claude')o[CLAW_NAMES[k]]=1});
-  var n=Object.keys(o);if(!n.length)return '';
-  return skillTip('claclaw-peer','agents','加入协同的 '+n.join('、')+' 会话要能主动联系对方，建议装「claclaw 协同」技能（DeepSeek、OpenCode、OpenClaw 共用一份）。不装也能收发，只是要靠消息里附的说明。');
-}
+function paintPoolSum(){var el=$('#pePoolSum');if(el)el.textContent=poolSumText()}
 function renderPeer(){
   if(hostView!=='peer'||!peerCfg)return;
   var c=peerCfg,h='<button type="button" class="pe-back" data-act="peer-back">‹ 宿主</button><div id="peMsg"></div>';
@@ -2372,7 +2359,7 @@ function renderPeer(){
     :
       '<div class="h-row"><span class="k">名字</span><input id="peName" class="pe-in" maxlength="40" value="'+esc(c.name||'')+'"></div>'+
       '<div class="h-row"><span class="k">端口</span><input id="pePort" class="pe-in mono" type="number" min="1024" max="65535" value="'+c.port+'"></div>')+
-    '<div class="h-row"><span class="k">会话目录</span>'+dirSel+'</div>'+ssHtml+'<div class="pe-note" id="pePoolSum" style="margin:6px 14px">'+poolSumText()+'</div><div id="peSkillTip" style="margin:0 10px">'+peerSkillTip()+'</div>'+
+    '<div class="h-row"><span class="k">会话目录</span>'+dirSel+'</div>'+ssHtml+'<div class="pe-note" id="pePoolSum" style="margin:6px 14px">'+poolSumText()+'</div>'+
     '<div class="pe-btns">'+(c.enabled?'<button type="button" class="pe-btn pri" data-act="peer-save">保存</button><button type="button" class="pe-btn del" data-act="peer-off">关闭协同</button>':'<button type="button" class="pe-btn pri" data-act="peer-on">开启协同</button>')+'</div>'+
     '</div><div class="pe-note">'+(c.peers&&c.peers.length?'已经有配对，名字和端口不能再改（改了对方就找不到这台电脑了）；确实要改，先撤销全部配对。':'名字会显示在对方那边。')+'切换目录可以勾选不同目录里的会话，跨目录的都能加入；再到「已配对」里给每个对方分别设开放哪些。</div></div>';
   if(c.enabled&&c.base){

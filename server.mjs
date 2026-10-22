@@ -533,20 +533,21 @@ function claclawMcp(sessionId) {
       // claclaw 协同：只有加入协同的会话能用（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
-        '查看协同对方（局域网里另一台电脑上、已经和我们配对的 claclaw 或兼容服务）有哪些会话可以对话。只在用户要你和「对方 / 另一台电脑的会话」沟通时使用。不填 peer 就列出所有已配对的对方。',
-        { peer: z.string().optional().describe('对方名字（已配对列表里的名字），可省略') },
+        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
+        '只在用户要你和「别的会话 / 对方 / 另一台电脑的会话」沟通时使用。peer 填「本机」只列本机，填对方名字只列那个对方，不填两边都列。',
+        { peer: z.string().optional().describe('「本机」或对方名字，可省略') },
         async ({ peer }) => {
           const j = await peerListCore({ fromId: sessionId, to: peer });
-          return j.ok ? { content: [{ type: 'text', text: JSON.stringify(j.peers, null, 2) }] } : { content: [{ type: 'text', text: j.error }], isError: true };
+          return j.ok ? { content: [{ type: 'text', text: JSON.stringify({ local: j.local, peers: j.peers, note: j.peerNote }, null, 2) }] } : { content: [{ type: 'text', text: j.error }], isError: true };
         },
         { alwaysLoad: true },
       ),
       tool(
         'peer_send',
-        '给协同对方（局域网里另一台电脑上、已配对的 AI 会话）发一条消息，等对方这一轮回复完，返回对方的回复原文（最多等 10 分钟）。' +
+        '给另一个 AI 会话发一条消息，等它这一轮回复完，返回回复原文（最多等 10 分钟）。peer 填「本机」就是发给本机 claclaw 里的会话（session 必填，peer_sessions 的 local 一栏）；填对方名字或不填就是发给协同对方（另一台已配对的电脑）。' +
         '用于和对方的会话沟通、提问、交付结果。消息要言简意赅：只写对方需要的信息，不寒暄、不复述。不要在消息里发送密码、令牌、密钥。' +
         '有多个已配对对方时用 peer 指定名字；对方有多个会话时用 session 指定（peer_sessions 列出的 id），只有一个时可以不填。',
-        { text: z.string().describe('消息正文，4000 字以内'), peer: z.string().optional().describe('对方名字，只配对了一个时可省略'), session: z.string().optional().describe('对方会话 id，可省略') },
+        { text: z.string().describe('消息正文，4000 字以内'), peer: z.string().optional().describe('「本机」或对方名字；只配对了一个对方时可省略'), session: z.string().optional().describe('目标会话 id（peer_sessions 列出的）；发给本机时必填') },
         async ({ text, peer, session }) => {
           const j = await peerSendCore({ fromId: sessionId, to: peer, session, text });
           return { content: [{ type: 'text', text: j.ok ? j.reply : (j.peer ? '对方返回错误：' : '') + j.error }], isError: !j.ok };
@@ -601,42 +602,123 @@ function quotaHit(text) {
 }
 // 把对方的消息送进会话，收集这一轮的回复
 // 找到（没有就拉起）接收协同消息的会话进程；各 Claw 的进程对外接口一样：subscribe / send / emit / turn.done
-// ---------- claclaw 协同：发件（Claude 会话的 peer_send 工具、本机命令 claclaw-peer 共用）----------
-// fromId：发起的会话（知道的话）。知道就按原规矩：这个会话要在协同池里，只能找开放了它的对方；
-// 不知道（本机命令没带 --from）就当本机用户自己发：所有能联系的对方都行
-async function peerListCore({ fromId, to } = {}) {
-  const c = loadPeer();
-  if (!c.enabled) return { ok: false, error: 'claclaw 协同没有开启' };
-  if (fromId && !c.sessions.includes(fromId)) return { ok: false, code: 'not-joined', error: '这个会话没有加入 claclaw 协同' };
-  const list = c.peers.filter(p => p.inbox && p.theirToken && (!to || p.name === to) && (!fromId || peerAllowed(c, p).includes(fromId)));
-  if (!list.length) return { ok: false, error: to ? '没有叫「' + to + '」的已配对对方' : '还没有可以联系的已配对对方（对方配对时没有提供收件地址的话，只能由对方来找我们）' };
-  const peers = [];
-  for (const p of list) {
-    try { const j = await peerCall(c, p, '/sessions', { ms: 15000 }); peers.push({ peer: p.name, ok: j.ok, sessions: j.sessions, error: j.error }); }
-    catch (e) { peers.push({ peer: p.name, ok: false, error: e.message }); }
-  }
-  return { ok: true, peers };
+// ---------- 会话找会话：本机四个 Claw 之间、以及跨电脑（协同）----------
+// Claude 会话的 peer_sessions / peer_send 工具、本机命令 claclaw-peer 共用这一套。
+// 发起方必须认得出是哪个会话（fromId）：本机命令没带 --from 时，按「命令在哪个目录跑 + 哪个会话正在回复」自动认；认不出就拒绝。
+// 规矩：本机的会话之间都能互相找；找另一台电脑，发起的会话要在协同池里，且只能找开放了它的对方。
+// （这是用法上的规矩，不是安全边界：本机以你的身份运行的程序本来就读得到 claclaw 的数据。）
+const LOCAL_NAMES = ['本机', 'local'];
+const isLocalTo = to => LOCAL_NAMES.includes(String(to || '').trim().toLowerCase());
+const CLAW_LABEL = { claude: 'Claude', deepseek: 'DeepSeek', opencode: 'OpenCode', openclaw: 'OpenClaw' };
+const realp = p => { try { return fs.realpathSync(p); } catch { return p; } };
+function allRunners() {
+  return [[runners, 'claude'], [dsRunners, 'deepseek'], [opRunners, 'opencode'], [ocRunners, 'openclaw']]
+    .flatMap(([m, claw]) => [...m.values()].filter(r => !r.closed).map(r => ({ r, claw })));
 }
-async function peerSendCore({ fromId, to, session, text }) {
+// 本机所有会话（统一成 {sessionId, claw, title, cwd}；Claude 的带着 SDK 原字段）
+async function localSessions() {
+  const out = [];
+  const add = async (claw, load) => { let l = []; try { l = await load(); } catch {} return l; };
+  for (const s of await add('claude', () => listSessions({ includeProgrammatic: true, limit: 2000 }))) out.push({ ...s, claw: 'claude', title: s.customTitle || s.summary || s.firstPrompt || '' });
+  for (const [claw, load] of [['deepseek', () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy })], ['opencode', () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() })], ['openclaw', () => ocSessionList(log)]]) {
+    if (!detectClaws().some(c => c.id === claw && c.installed && c.supported)) continue;
+    for (const s of await add(claw, load)) out.push({ sessionId: s.id, claw, title: s.title || '', cwd: claw === 'openclaw' ? '' : s.cwd || '', lastModified: s.lastModified || 0 });
+  }
+  return out;
+}
+async function findLocalSession(prefix) {
+  const k = String(prefix || '').trim().toLowerCase();
+  if (k.length < 6) return { error: '会话 ID 太短，至少写 6 位' };
+  const hit = (await localSessions()).filter(s => s.sessionId.toLowerCase().startsWith(k));
+  if (hit.length === 1) return { info: hit[0] };
+  return { error: hit.length ? '有多个会话的 ID 以「' + prefix + '」开头，写长一点' : '本机没有这个会话：' + prefix };
+}
+// 自动认发起方：命令在哪个目录跑（AI 的命令就在它会话的目录里跑）+ 哪个会话正在回复
+function callerCandidates(cwd) {
+  const c = cwd ? realp(cwd) : '', busy = allRunners().filter(x => x.r.busy);
+  const byDir = busy.filter(x => x.claw !== 'openclaw' && c && (() => { const d = realp(x.r.cwd || x.r.info?.cwd || ''); return d && (c === d || c.startsWith(d + path.sep)); })());
+  return (byDir.length ? byDir : busy.filter(x => x.claw === 'openclaw')).map(x => x.r.id);
+}
+async function resolveFrom(from, cwd) {
+  if (from) {
+    const r = runnerOf(from);
+    if (r) return { id: from };
+    const f = await findLocalSession(from);
+    return f.info ? { id: f.info.sessionId } : { error: '--from 的会话认不出：' + f.error };
+  }
+  const c = callerCandidates(cwd);
+  if (c.length === 1) return { id: c[0] };
+  return { error: c.length ? '认不出是哪个会话在发（同时有 ' + c.length + ' 个会话在回复）：用 --from 写上你的会话 ID' : '认不出是哪个会话在发：只有 claclaw 里正在回复的会话能自动认出来，其他情况用 --from 写上你的会话 ID' };
+}
+function senderLabel(fromId) {
+  const r = runnerOf(fromId);
+  return (r?.info?.customTitle || r?.info?.summary || r?.title || '会话') + '（' + CLAW_LABEL[clawOfId(fromId)] + ' · ' + peerShortId(fromId) + '）';
+}
+// 用到时自动装技能（不用用户点）：非 Claude 的 Claw 一用上就装好 claclaw-peer，AI 才知道怎么找别的会话
+function ensureSkill(claw) {
+  if (!claw || claw === 'claude' || skills.stateAt('claclaw-peer', 'agents') !== 'none') return;
+  try { skills.install('claclaw-peer', 'agents'); log('skill auto-installed claclaw-peer →', claw); } catch (e) { log('skill auto-install failed', e.message); }
+}
+async function peerListCore({ fromId, to } = {}) {
+  const out = { ok: true };
+  if (!to || isLocalTo(to)) {
+    // 本机：claclaw 里开着的、24 小时内有动静的会话，最近的在前，最多 40 个（全部会话太多；更早的直接写 ID 也能发）
+    const recent = Date.now() - 24 * 3600e3, open = new Set(allRunners().map(x => x.r.id));
+    const at = s => Math.max(s.lastModified || 0, webActive[s.sessionId] || 0, open.has(s.sessionId) ? Date.now() : 0);
+    out.local = (await localSessions())
+      .filter(s => s.sessionId !== fromId && at(s) > recent)
+      .sort((a, b) => at(b) - at(a)).slice(0, 40)
+      .map(s => ({ id: peerShortId(s.sessionId), title: String(s.title || '').replace(/\s+/g, ' ').slice(0, 60), claw: s.claw, busy: !!runnerOf(s.sessionId)?.busy }));
+    if (isLocalTo(to)) return out;
+  }
   const c = loadPeer();
-  if (!c.enabled) return { ok: false, error: 'claclaw 协同没有开启' };
-  if (fromId && !c.sessions.includes(fromId)) return { ok: false, code: 'not-joined', error: '这个会话没有加入 claclaw 协同' };
+  if (!c.enabled) { out.peerNote = 'claclaw 协同没有开启，只能找本机的会话'; return out; }
+  if (fromId && !c.sessions.includes(fromId)) { out.peerNote = '这个会话没有加入 claclaw 协同，只能找本机的会话'; return out; }
+  const list = c.peers.filter(p => p.inbox && p.theirToken && (!to || p.name === to) && (!fromId || peerAllowed(c, p).includes(fromId)));
+  if (!list.length) { if (to) return { ok: false, error: '没有叫「' + to + '」的已配对对方' }; out.peerNote = '还没有可以联系的已配对对方'; return out; }
+  out.peers = [];
+  for (const p of list) {
+    try { const j = await peerCall(c, p, '/sessions', { ms: 15000 }); out.peers.push({ peer: p.name, ok: j.ok, sessions: j.sessions, error: j.error }); }
+    catch (e) { out.peers.push({ peer: p.name, ok: false, error: e.message }); }
+  }
+  return out;
+}
+const localBusy = new Set();
+async function peerSendCore({ fromId, to, session, text }) {
   text = String(text || '').trim();
   if (!text) return { ok: false, error: '消息是空的' };
-  const can = c.peers.filter(p => p.inbox && p.theirToken && (!fromId || peerAllowed(c, p).includes(fromId)));   // 只有把这个会话开放给它的对方
+  if (!fromId) return { ok: false, error: '认不出是哪个会话在发' };
+  if (isLocalTo(to)) {
+    if (!session) return { ok: false, error: '找本机的会话要写 --session（会话 ID，list 里有）' };
+    const f = await findLocalSession(session);
+    if (!f.info) return { ok: false, error: f.error };
+    if (f.info.sessionId === fromId) return { ok: false, error: '不能发给自己' };
+    const id = f.info.sessionId;
+    if (localBusy.has(id) || peerBusy.has(id)) return { ok: false, error: '对方会话上一条还在处理，稍后再发' };
+    localBusy.add(id);
+    log('local send', peerShortId(fromId), '→', peerShortId(id), text.length + ' chars');
+    try {
+      const [code, obj] = await peerDeliver(f.info, text.slice(0, 4000), senderLabel(fromId), null, { local: true, fromId });
+      return obj.ok ? { ok: true, peer: '本机 · ' + (f.info.title || peerShortId(id)), reply: obj.reply || '（对方这一轮没有文字回复）' } : { ok: false, error: obj.error || 'HTTP ' + code, code: obj.code, resets: obj.resets };
+    } finally { localBusy.delete(id); }
+  }
+  const c = loadPeer();
+  if (!c.enabled) return { ok: false, error: 'claclaw 协同没有开启（本机的会话可以用 --to 本机 找）' };
+  if (!c.sessions.includes(fromId)) return { ok: false, code: 'not-joined', error: '这个会话没有加入 claclaw 协同，不能找另一台电脑（本机的会话可以用 --to 本机 找）' };
+  const can = c.peers.filter(p => p.inbox && p.theirToken && peerAllowed(c, p).includes(fromId));   // 只有把这个会话开放给它的对方
   const p = to ? can.find(x => x.name === to) : can.length === 1 ? can[0] : null;
   if (!p) return { ok: false, error: to ? '没有叫「' + to + '」的已配对对方' : can.length ? '有多个已配对对方，指定一个：' + can.map(x => x.name).join('、') : '还没有可以联系的已配对对方' };
-  const r = fromId && runnerOf(fromId);
-  const from = (fromId ? (r?.info?.customTitle || r?.info?.summary || r?.title || '会话') : '本机') + ' · ' + myName(c);
+  const r = runnerOf(fromId);
+  const from = (r?.info?.customTitle || r?.info?.summary || r?.title || '会话') + ' · ' + myName(c);
   try {
     const j = await peerCall(c, p, '', { body: { from, text: text.slice(0, 4000), session: session || undefined } });
-    log('peer send', fromId ? fromId.slice(0, 12) : 'local', '→', p.name, j.ok ? 'ok' : 'fail');
-    if (fromId) markLast(fromId, p.id);
+    log('peer send', peerShortId(fromId), '→', p.name, j.ok ? 'ok' : 'fail');
+    markLast(fromId, p.id);
     return j.ok ? { ok: true, peer: p.name, reply: j.reply || '（对方这一轮没有文字回复）' } : { ok: false, peer: p.name, error: j.error || '未知', code: j.code, resets: j.resets };
   } catch (e) { return { ok: false, error: e.message }; }
 }
 // 本机命令发的消息可能要等很久（对方最多 10 分钟）：命令先等一阵，没等到就给个任务号，之后凭任务号取
-const localJobs = new Map();   // job → { promise, result, at }
+const localJobs = new Map();   // job → { promise, at }
 async function waitJob(job, sec) {
   const j = localJobs.get(job);
   if (!j) return { ok: false, error: '没有这个任务（任务号不对，或已经过期）' };
@@ -649,14 +731,25 @@ async function handleLocal(req, res, url) {
   const ip = req.socket.remoteAddress || '';
   if (!/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip) || req.headers['x-forwarded-for'] || !skills.checkLocal(req.headers['x-claclaw-local'])) return sendJson(res, 403, { ok: false, error: '只接受本机带令牌的请求' });
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
-  const wait = Math.max(5, Math.min(Number(url.searchParams.get('wait')) || 110, 590));
-  if (url.pathname === '/api/local/peer/list') return sendJson(res, 200, await peerListCore({ fromId: url.searchParams.get('from') || '' }));
-  if (url.pathname === '/api/local/peer/result') return sendJson(res, 200, await waitJob(url.searchParams.get('job') || '', wait));
+  const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 590));
+  if (url.pathname === '/api/local/peer/result') return sendJson(res, 200, await waitJob(q.get('job') || '', wait));
+  if (url.pathname === '/api/local/peer/whoami') {
+    const f = await resolveFrom(q.get('from') || '', q.get('cwd') || '');
+    if (!f.id) return sendJson(res, 200, { ok: false, error: f.error });
+    const r = runnerOf(f.id);
+    return sendJson(res, 200, { ok: true, id: f.id, claw: clawOfId(f.id), title: r?.info?.customTitle || r?.info?.summary || r?.title || '', pool: loadPeer().sessions.includes(f.id) });
+  }
+  if (url.pathname === '/api/local/peer/list') {
+    const f = await resolveFrom(q.get('from') || '', q.get('cwd') || '');
+    if (!f.id) return sendJson(res, 200, { ok: false, error: f.error });
+    return sendJson(res, 200, await peerListCore({ fromId: f.id, to: q.get('to') || '' }));
+  }
   if (url.pathname === '/api/local/peer/send' && req.method === 'POST') {
     let b = {}; try { b = JSON.parse(await readBody(req, 64 * 1024)); } catch {}
-    const fromId = String(b.from || '').trim();
+    const f = await resolveFrom(String(b.from || '').trim(), String(b.cwd || ''));
+    if (!f.id) return sendJson(res, 200, { ok: false, error: f.error });
     const job = crypto.randomBytes(4).toString('hex');
-    localJobs.set(job, { at: Date.now(), promise: peerSendCore({ fromId, to: String(b.to || '').trim(), session: String(b.session || '').trim(), text: b.text }) });
+    localJobs.set(job, { at: Date.now(), promise: peerSendCore({ fromId: f.id, to: String(b.to || '').trim(), session: String(b.session || '').trim(), text: b.text }) });
     return sendJson(res, 200, await waitJob(job, Math.max(5, Math.min(Number(b.wait) || 110, 590))));
   }
   return sendJson(res, 404, { ok: false, error: 'not found' });
@@ -701,22 +794,23 @@ async function peerRunner(info) {
   }
   return runners.get(id);
 }
-async function peerDeliver(info, text, from, peerId) {
+async function peerDeliver(info, text, from, peerId, { local = false } = {}) {
   if (peerId) markLast(info.sessionId, peerId);
   const id = info.sessionId;
   const r = await peerRunner(info);
   if (Array.isArray(r)) return r;
   if (r.busy) return [409, { ok: false, error: '这个会话正在忙，稍后再发' }];
-  // 非 Claude 的会话没有 peer_send 工具：开头写明它自己的会话 ID 和主动联系对方的办法（装了 claclaw-peer 技能就提技能名）
-  const hint = info.claw && info.claw !== 'claude'
-    ? '你的会话 ID：' + id + '；这一轮的回复会自动传回对方，要主动联系对方用' + (skills.installedFor('claclaw-peer', info.claw) ? ' claclaw-peer 技能' : '命令 ~/.claclaw/bin/claclaw-peer send --from ' + id + ' "消息"') + '；'
-    : '';
-  const msg = '【claclaw 协同 · 来自对方：' + from + '（' + hint + '来信长的话先提炼要点再处理；回复言简意赅，只写结果或必要的问题）】\n' + text;
+  // 开头写明它自己的会话 ID 和主动找别的会话的办法：Claude 会话用内置工具，其他 Claw 用 claclaw-peer 技能（用到时自动装好）
+  const claw = info.claw || clawOfId(id);
+  ensureSkill(claw);
+  const how = claw === 'claude' ? 'peer_send 工具' : 'claclaw-peer 技能';
+  const hint = '你的会话 ID：' + id + '；这一轮的回复会自动传回给' + (local ? '它' : '对方') + '，要主动找别的会话用 ' + how + '；';
+  const msg = (local ? '【claclaw 本机 · 来自会话：' : '【claclaw 协同 · 来自对方：') + from + '（' + hint + '来信长的话先提炼要点再处理；回复言简意赅，只写结果或必要的问题）】\n' + text;
   // 协同消息到了：没人正看着这个会话就推一条通知（点开直接进这个会话）
   if (!r.watched()) {
     localSound();
     const badge = markUnread(id);
-    push.sendAll({ title: '协同消息 · ' + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge }, log)
+    push.sendAll({ title: (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge }, log)
       .then(n => log('peer msg push →', n)).catch(() => {});
   }
   return new Promise(resolve => {
@@ -1933,6 +2027,7 @@ wss.on('connection', (ws, req) => {
         return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
       }
       if (m.t === 'session.new' && (isOc(m.from) || m.claw === 'openclaw')) {
+        ensureSkill('openclaw');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         // OpenClaw：网关新建会话（没有目录的概念），建好直接打开
         const title = String(m.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
         let id;
@@ -1952,6 +2047,7 @@ wss.on('connection', (ws, req) => {
         });
       }
       if (m.t === 'session.new' && (isOp(m.from) || m.claw === 'opencode')) {
+        ensureSkill('opencode');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         // OpenCode：用 opencode 的 ACP 在目录里新建会话；目录默认用参照会话的
         let cwd = isOp(m.from) ? (opRunners.get(m.from)?.cwd || opSessionList().find(s => s.id === m.from)?.cwd) : '';
         if (typeof m.cwd === 'string' && m.cwd.trim()) {
@@ -1976,6 +2072,7 @@ wss.on('connection', (ws, req) => {
         });
       }
       if (m.t === 'session.new' && (isDs(m.from) || m.claw === 'deepseek')) {
+        ensureSkill('deepseek');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         // DeepSeek：用 dsh 的 ACP 在目录里新建会话；目录默认用参照会话的
         let cwd = isDs(m.from) ? (dsRunners.get(m.from)?.cwd || dsSessionList().find(s => s.id === m.from)?.cwd) : '';
         if (typeof m.cwd === 'string' && m.cwd.trim()) {
@@ -2032,6 +2129,7 @@ wss.on('connection', (ws, req) => {
           commands: runner.commands || null, isNew: true,
         });
       } else if (m.t === 'session.open' && isDs(m.id)) {
+        ensureSkill('deepseek');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         runner?.unsubscribe(ws);
         let r = dsRunners.get(m.id);
         if (!r) { r = new DsRunner(m.id, dsOpts()); dsRunners.set(m.id, r); }
@@ -2051,6 +2149,7 @@ wss.on('connection', (ws, req) => {
           pending: [...r.pending.values()].map(p => p.req), suggestion: null,
         });
       } else if (m.t === 'session.open' && isOp(m.id)) {
+        ensureSkill('opencode');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         let r = opRunners.get(m.id);
         if (!r) {
           // 终端里的 opencode 正开着它：和 Claude 会话一样，闲置够久才能接管，接管会结束终端里的 opencode
@@ -2079,6 +2178,7 @@ wss.on('connection', (ws, req) => {
           pending: [...r.pending.values()].map(p => p.req), suggestion: null,
         });
       } else if (m.t === 'session.open' && isOc(m.id)) {
+        ensureSkill('openclaw');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         runner?.unsubscribe(ws);
         let r = ocRunners.get(m.id);
         if (!r) { r = new OcRunner(m.id, { log, onActivity: setActivity, onTurnDone: ocTurnDone }); ocRunners.set(m.id, r); }

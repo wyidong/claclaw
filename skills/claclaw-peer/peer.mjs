@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// claclaw 协同命令：给另一台电脑上已配对的 AI 会话发消息。任何 Claw 的 AI 都能通过执行命令来用。
+// claclaw 会话互找命令：给本机 claclaw 里的其他 AI 会话、或另一台电脑上已配对的会话发消息。任何 Claw 的 AI 都能通过执行命令来用。
+// 发起方是哪个会话：不写 --from 时 claclaw 按「命令在哪个目录跑 + 哪个会话正在回复」自动认。
 // 只和本机 claclaw 说话：地址和本机令牌在 ~/.claclaw/local.json（claclaw 启动时写，只有本人可读）。
 // 配对的钥匙始终只在 claclaw 里，这个命令碰不到。
 import fs from 'node:fs';
@@ -8,9 +9,12 @@ import path from 'node:path';
 
 const HOME_DIR = process.env.CLACLAW_HOME || path.join(os.homedir(), '.claclaw');
 const USAGE = `用法：
-  claclaw-peer list
-  claclaw-peer send [--from 你的会话ID] [--to 对方名字] [--session 对方会话ID] [--wait 秒] "消息"
-  claclaw-peer result <任务号> [--wait 秒]`;
+  claclaw-peer whoami
+  claclaw-peer list [--to 本机|对方名字]
+  claclaw-peer send --to 本机 --session 会话ID [--wait 秒] "消息"
+  claclaw-peer send [--to 对方名字] [--session 对方会话ID] [--wait 秒] "消息"
+  claclaw-peer result <任务号> [--wait 秒]
+  （认不出你是哪个会话时，加 --from 你的会话ID）`;
 
 function die(msg, code = 1) { process.stdout.write(msg.replace(/\n?$/, '\n')); process.exit(code); }
 
@@ -52,7 +56,7 @@ async function call(pathname, body, waitSec) {
 }
 
 function done(j) {
-  if (j.pending) die('对方还在处理。任务号 ' + j.job + '，过一会儿运行：claclaw-peer result ' + j.job, 2);
+  if (j.pending) die('对方还在处理。任务号 ' + j.job + '，过一会儿运行：~/.claclaw/bin/claclaw-peer result ' + j.job, 2);
   if (!j.ok) die('出错：' + (j.error || '未知错误') + (j.resets ? '（' + j.resets + ' 恢复）' : ''));
   die((j.peer ? '【' + j.peer + ' 的回复】\n' : '') + (j.reply || '（对方这一轮没有文字回复）'), 0);
 }
@@ -61,21 +65,32 @@ const [cmd, ...args] = process.argv.slice(2);
 const { opts, rest } = parse(args);
 const wait = Math.max(5, Math.min(Number(opts.wait) || 110, 590));
 
-if (cmd === 'list') {
-  const j = await call('/api/local/peer/list', null, 30);
+const who = () => '&from=' + encodeURIComponent(opts.from || '') + '&cwd=' + encodeURIComponent(process.cwd());
+if (cmd === 'whoami') {
+  const j = await call('/api/local/peer/whoami?' + who().slice(1), null, 15);
+  if (!j.ok) die('出错：' + (j.error || '未知错误'));
+  die('会话 ID：' + j.id + '\nClaw：' + j.claw + (j.title ? '\n标题：' + j.title : '') + '\n' + (j.pool ? '已加入协同，能找另一台电脑' : '没加入协同，只能找本机的会话'), 0);
+} else if (cmd === 'list') {
+  const j = await call('/api/local/peer/list?to=' + encodeURIComponent(opts.to || '') + who(), null, 30);
   if (!j.ok) die('出错：' + (j.error || '未知错误'));
   const lines = [];
+  if (j.local) {
+    lines.push('本机（--to 本机）');
+    for (const s of j.local) lines.push('  ' + s.id + '  ' + (s.title || '(无标题)') + '  [' + s.claw + ']' + (s.busy ? '  （忙）' : ''));
+    if (!j.local.length) lines.push('  （没有别的会话）');
+  }
+  if (j.peerNote) lines.push(j.peerNote);
   for (const p of j.peers || []) {
     lines.push('对方「' + p.peer + '」' + (p.ok ? '' : '：连不上（' + (p.error || '离线') + '）'));
     for (const s of p.sessions || []) lines.push('  ' + s.id + '  ' + (s.title || '(无标题)') + (s.claw && s.claw !== 'claude' ? '  [' + s.claw + ']' : '') + (s.busy ? '  （忙）' : ''));
     if (p.ok && !(p.sessions || []).length) lines.push('  （没有开放会话）');
   }
-  die(lines.join('\n') || '还没有可以联系的已配对对方', 0);
+  die(lines.join('\n') || '没有能联系的会话', 0);
 } else if (cmd === 'send') {
   let text = rest.join(' ').trim();
   if (text === '-' || (!text && !process.stdin.isTTY)) text = fs.readFileSync(0, 'utf8').trim();
   if (!text) die('消息是空的\n' + USAGE);
-  done(await call('/api/local/peer/send', { text, from: opts.from || '', to: opts.to || '', session: opts.session || '', wait }, wait));
+  done(await call('/api/local/peer/send', { text, from: opts.from || '', cwd: process.cwd(), to: opts.to || '', session: opts.session || '', wait }, wait));
 } else if (cmd === 'result') {
   const job = rest[0] || opts.job;
   if (!job) die('缺少任务号\n' + USAGE);

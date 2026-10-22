@@ -54,9 +54,10 @@ npm start
 
 让局域网里两台电脑上的 AI 会话直接对话：你这边的 Claude 有问题可以直接问对方电脑上的会话，对方的回复自动回到你这边；两边的人在 claclaw 网页上都能看到它们在聊什么，随时插话或叫停。
 
-四个 Claw（Claude Code、DeepSeek、OpenCode、OpenClaw）的会话都能加入协同：
-- **收**：对方的消息由 claclaw 送进会话，这一轮的回复自动传回对方。
-- **发**：Claude 会话用内置的 `peer_send` 工具；其他 Claw 的 AI 执行本机命令 `~/.claclaw/bin/claclaw-peer`（`list` / `send` / `result`）。它们收到的协同消息开头会写明自己的会话 ID 和这个命令，所以不装技能也能用；装上「claclaw 协同」技能（见下面「技能」）用起来更顺手。
+四个 Claw（Claude Code、DeepSeek、OpenCode、OpenClaw）的会话都能加入协同，**同一台电脑上的会话之间也能互相找**：
+- **收**：别的会话的消息由 claclaw 送进会话，这一轮的回复自动传回去。
+- **发**：Claude 会话用内置的 `peer_sessions` / `peer_send` 工具（`peer` 填「本机」就是找本机的会话）；其他 Claw 的 AI 用 claclaw-peer 技能，也就是本机命令 `~/.claclaw/bin/claclaw-peer`（`whoami` / `list` / `send` / `result`）。技能在用上这个 Claw 时自动装好，不用你操作。
+- **规矩**：本机的会话之间都能互相找；找另一台电脑，发起的会话要加入协同池，且只能找开放了它的对方。发起方必须认得出是哪个会话：命令不写 `--from` 时，claclaw 按「命令在哪个目录跑 + 哪个会话正在回复」自动认，认不出就拒绝。（这是用法上的规矩，不是安全边界：本机以你的身份运行的程序本来就读得到 claclaw 的数据。）
 
 - **只走局域网**：两台电脑连着同一个 Wi-Fi / 内网就行，**不需要 Tailscale**
 - **像蓝牙配对**：对方申请 → 你这边页面上出现一个两位数配对码 → 你把码告诉对方 → 配对完成；之后用钥匙通信，不用再输码
@@ -147,7 +148,7 @@ npm start
 
 ## 技能
 
-仓库的 `skills/` 里预先准备了一些 [Agent Skills](https://agentskills.io)（`SKILL.md` + 脚本），平时不用管：用到相关功能时，claclaw 会在那里提示安装，点一下就装好。全部技能在 设置 › 宿主 › 技能 里能看、能装、能卸。
+仓库的 `skills/` 里预先准备了一些 [Agent Skills](https://agentskills.io)（`SKILL.md` + 脚本），平时不用管：用到相关功能时 claclaw 自动装好，不用你点。全部技能在 设置 › 宿主 › 技能 里能看、能装、能卸。
 
 - 装到两个位置就覆盖四个 Claw：`~/.claude/skills`（Claude Code，OpenCode 也读）和 `~/.agents/skills`（DeepSeek、OpenCode、OpenClaw 共用）。
 - 装的是复制件，带 `.claclaw-skill` 标记；claclaw 启动时会把它们同步成仓库里的最新版。卸载只删带标记的，你自己的同名技能不会被覆盖或删除。
@@ -155,9 +156,9 @@ npm start
 
 | 技能 | 什么时候推荐 | 作用 |
 | --- | --- | --- |
-| `claclaw-peer` | 协同里加入了 DeepSeek / OpenCode / OpenClaw 的会话 | 让 AI 主动给对方电脑上的会话发消息、看对方有哪些会话 |
+| `claclaw-peer` | 第一次在 claclaw 里用 DeepSeek / OpenCode / OpenClaw 的会话，或它们收到别的会话的消息时自动装 | 让 AI 找本机其他会话、另一台电脑上的会话，发消息、拿回复 |
 
-新场景：在 `skills/` 里加一个技能目录，在 `skills/index.json` 里登记，再在用到它的页面放一张推荐卡片（`skillTip`）。
+新场景：在 `skills/` 里加一个技能目录，在 `skills/index.json` 里登记，再在服务端用到它的地方调一次自动安装（参照 `ensureSkill`）。
 
 ## 文件
 
