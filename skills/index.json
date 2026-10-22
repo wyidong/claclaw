@@ -1,0 +1,9 @@
+[
+  {
+    "name": "claclaw-peer",
+    "title": "claclaw 协同",
+    "desc": "让会话能主动给另一台电脑上的 AI 会话发消息、看对方有哪些会话",
+    "scene": "peer",
+    "claws": ["claude", "deepseek", "opencode", "openclaw"]
+  }
+]
