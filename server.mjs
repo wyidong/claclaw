@@ -18,7 +18,7 @@ import * as hosts from './hosts.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
-import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, notePairFail, clearPairFails, PEER_BASE } from './peer.mjs';
+import { markLast, nextPeerNo, ourBaseName, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename } from './dsh.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
 const STARTED_AT = Date.now();
@@ -627,7 +627,7 @@ async function peerHandler(req, res) {
   const ip = cleanIp(req.socket.remoteAddress);
   const readJson = async () => { try { return JSON.parse(await readBody(req, 64 * 1024)); } catch { return null; } };
   try {
-    // 1. 配对申请：谁都可以申请，但要我们这边的人把六位数配对码告诉对方才能完成
+    // 1. 配对申请：谁都可以申请，但要我们这边的人把两位数配对码告诉对方才能完成
     if (route === '/pair') {
       if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
       const b = await readJson() || {};
@@ -641,23 +641,26 @@ async function peerHandler(req, res) {
       localSound();
       push.sendAll({ title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/?view=peer' }, log)
         .then(n => log('peer pair push sent →', n)).catch(e => log('peer pair push failed', e.message));
-      return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要六位数配对码，然后调用 pair/confirm' });
+      return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要两位数配对码，然后调用 pair/confirm' });
     }
     if (route === '/pair/confirm') {
       if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
       const b = await readJson() || {};
-      const p = getPending(String(b.requestId || ''));
+      const rid = String(b.requestId || '');
+      // 输错后的冷却：输错的一方一直显示「配对中」，到时才告诉它失败；别人这时也配不了
+      const hold = pairHoldState(rid);
+      if (hold?.done) return out(403, { ok: false, failed: true, error: '配对码错误，配对失败' });
+      if (hold) return hold.mine ? out(202, { ok: false, pairing: true, retryIn: Math.ceil(hold.left / 1000) }) : out(429, { ok: false, error: '正在配对中，稍后再试' });
+      const p = getPending(rid);
       if (!p) return out(404, { ok: false, error: '配对申请不存在或已过期，请重新申请' });
       if (String(b.code || '').trim() !== p.code) {
-        p.tries++;
-        // 猜错次数按来源 IP 累计（不是按申请算，不然反复申请就绕过去了）
-        const fl = notePairFail(ip);
-        if (p.tries >= 3) { dropPending(p.id); return out(403, { ok: false, error: '配对码错了 3 次，这次申请作废，请重新申请' }); }
-        if (fl.until > Date.now()) return out(429, { ok: false, error: '这个地址配对码试错太多，请一小时后再试' });
-        return out(403, { ok: false, error: '配对码不对，还能试 ' + (3 - p.tries) + ' 次' });
+        dropPending(p.id);
+        const wait = notePairFail(p.id);
+        log('peer pair wrong code from', ip, 'hold', wait / 1000 + 's');
+        return out(202, { ok: false, pairing: true, retryIn: Math.ceil(wait / 1000) });
       }
       dropPending(p.id);
-      clearPairFails(ip);
+      clearPairFails();
       const token = newToken();
       const theirToken = typeof b.token === 'string' && b.token.length >= 16 ? b.token.slice(0, 200) : '';
       const c2 = loadPeer();
@@ -700,7 +703,7 @@ function peerPublic(c, local) {
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
     peers: c.peers.map(p => ({ id: p.id, no: p.no, name: p.name, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
-    outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt } : null,
+    outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt, pairing: !!outPair.pairing } : null,
   };
 }
 setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); applyAdvert(c, log); }, 1000);
@@ -1639,7 +1642,8 @@ const handler = async (req, res) => {
         if (!outPair || outPair.expiresAt < Date.now()) return sendJson(res, 400, { error: '配对申请已过期，请重新发起' });
         try {
           const j = await callPeer(outPair.base, '/pair/confirm', { body: { requestId: outPair.requestId, code: String(b.code || '').trim(), token: outPair.token }, ms: 8000 });
-          if (!j.ok || !j.token) { if (/作废|过期|不存在/.test(j.error || '')) outPair = null; return sendJson(res, 200, { error: j.error || '配对失败' }); }
+          if (j.pairing) { outPair.pairing = true; outPair.expiresAt = Math.max(outPair.expiresAt, Date.now() + (Number(j.retryIn) || 30) * 1000 + 5 * 60e3); return sendJson(res, 200, { ...peerPublic(c, true), retryIn: Number(j.retryIn) || 30 }); }
+          if (!j.ok || !j.token) { if (j.failed || /作废|过期|不存在|失败/.test(j.error || '')) outPair = null; return sendJson(res, 200, { error: j.error || '配对失败' }); }
           const c2 = loadPeer();
           const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
           const inbox = okUrl(j.inbox) || outPair.base, inboxAlt = okUrl(j.inboxAlt) || (inbox !== outPair.base ? outPair.base : outPair.baseAlt || '');

@@ -2,11 +2,12 @@
 //
 // 对外只有一个固定地址：http://<局域网 IP>:<端口>/claclaw-peer（地址里不含密码）。
 // 配对（像蓝牙）：
-//   1. 对方 POST /claclaw-peer/pair {name, inbox?}           → {requestId}；我们这边页面上出现申请（对方 IP、名字、六位数配对码）
-//   2. 我们的人核对后，把六位数配对码告诉对方（微信 / 口头）
+//   1. 对方 POST /claclaw-peer/pair {name, inbox?}           → {requestId}；我们这边页面上出现申请（对方 IP、名字、两位数配对码）
+//   2. 我们的人核对后，把两位数配对码告诉对方（微信 / 口头）
 //   3. 对方 POST /claclaw-peer/pair/confirm {requestId, code, token?} → {token, name, inbox}
 //      token：以后对方找我们用的钥匙；对方带上的 token：以后我们找对方用的钥匙（双向一次配好）
-//   配对码只对这一次申请有效，5 分钟过期；同一申请最多输错 3 次，同一个 IP 累计输错 10 次锁一小时。
+//   配对码只对这一次申请有效，5 分钟过期。输错不马上说错：返回 {pairing:true, retryIn}，对方隔 retryIn 秒再用同一个 requestId 来问，
+//   冷却结束才回「配对码错误，配对失败」。冷却 30 秒 → 3 分钟 → 30 分钟 → 之后每次 2 小时（全局）。
 // 配对后（请求头 Authorization: Bearer <token>）：
 //   GET  /claclaw-peer/sessions → 加入协同的会话
 //   POST /claclaw-peer {from, text, session?} → 送进会话，等这一轮回复完，返回 {ok, reply}
@@ -67,14 +68,19 @@ export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + '
 
 // ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
 export const PAIR_TTL = 5 * 60 * 1000;
-export const PAIR_CODE_LEN = 6;                 // 六位数字（两位数只有 90 种，平均三十来次请求就能猜中）
+export const PAIR_CODE_LEN = 2;                 // 两位数字，好口传；防猜靠下面的「输错后冷却」
 const PAIR_MIN_INTERVAL = 10 * 1000;            // 同一个 IP 10 秒内只能申请一次
 const PAIR_GLOBAL_MAX = 30;                     // 全局：每小时最多 30 次申请
 const PAIR_GLOBAL_WINDOW = 60 * 60 * 1000;
-const PAIR_FAIL_MAX = 10, PAIR_FAIL_LOCK = 60 * 60 * 1000;   // 配对码猜错 10 次锁一小时
+// 输错冷却（全局，不分 IP，换 IP 也绕不过去）：第 1 次错 30 秒、第 2 次 3 分钟、第 3 次 30 分钟、之后每次 2 小时；
+// 冷却期间所有配对都显示「配对中」，到时才告诉输错的一方「配对码错误，配对失败」。24 小时没再输错就清零。
+// 90 种码平均要猜 45 次 ≈ 80 多小时。
+export const PAIR_WAITS = [30e3, 3 * 60e3, 30 * 60e3, 2 * 60 * 60e3];
+const PAIR_FAIL_RESET = 24 * 60 * 60e3;
+let pairFail = { n: 0, last: 0 };
+let pairHold = null;          // { requestId, until }：输错后的冷却
 const pending = new Map();   // requestId → {id, name, ip, inbox, code, expiresAt, tries}
 const pairLimit = new Map();  // ip → 上次申请的时间
-const pairFails = new Map();  // ip → { n, until }
 let pairGlobal = [];         // 最近的申请时间，用来算每小时的上限
 export function pendingList() {
   const now = Date.now();
@@ -91,30 +97,36 @@ export function addPending(name, ip, inbox) {
   if (last && now - last < PAIR_MIN_INTERVAL) {
     throw Object.assign(new Error('申请太频繁，' + Math.ceil((PAIR_MIN_INTERVAL - (now - last)) / 1000) + ' 秒后再试'), { code: 429 });
   }
-  // 这个 IP 猜错过太多次：先冷静一小时
-  const fl = pairFails.get(ip);
-  if (fl && fl.until > now) throw Object.assign(new Error('这个地址配对码试错太多，请一小时后再试'), { code: 429 });
+  if (pairHold && pairHold.until > now) throw Object.assign(new Error('正在配对中，稍后再试'), { code: 429 });
   const list = pendingList();
   if (list.length >= 5) throw Object.assign(new Error('配对申请太多，稍后再试'), { code: 429 });
   for (const p of list) if (p.ip === ip) pending.delete(p.id);   // 同一台电脑只保留最新一条
   pairLimit.set(ip, now);
   pairGlobal.push(now);
-  const code = String(100000 + crypto.randomInt(900000)).slice(0, PAIR_CODE_LEN);
+  const code = String(10 + crypto.randomInt(90));
   const p = { id: newId(), name, ip, inbox, code, expiresAt: now + PAIR_TTL, tries: 0 };
   pending.set(p.id, p);
   return p;
 }
 export const getPending = id => (pendingList(), pending.get(id) || null);
 export const dropPending = id => pending.delete(id);
-// 配对码猜错次数按来源 IP 累计（不是按申请算，不然反复申请就绕过去了）
-export function notePairFail(ip) {
-  const f = pairFails.get(ip) || { n: 0, until: 0 };
-  f.n++;
-  if (f.n >= PAIR_FAIL_MAX) f.until = Date.now() + PAIR_FAIL_LOCK;
-  pairFails.set(ip, f);
-  return f;
+// 输错：开始冷却，返回冷却毫秒数
+export function notePairFail(requestId, now = Date.now()) {
+  if (now - pairFail.last > PAIR_FAIL_RESET) pairFail.n = 0;
+  const wait = PAIR_WAITS[Math.min(pairFail.n, PAIR_WAITS.length - 1)];
+  pairFail = { n: pairFail.n + 1, last: now };
+  pairHold = { requestId, until: now + wait };
+  return wait;
 }
-export function clearPairFails(ip) { pairFails.delete(ip); }
+// 冷却状态：null = 没在冷却；{mine, left} 冷却中；{mine, done:true} 这次申请的冷却刚结束（该告诉它失败了）
+export function pairHoldState(requestId, now = Date.now()) {
+  if (!pairHold) return null;
+  const mine = !!requestId && requestId === pairHold.requestId;
+  if (pairHold.until > now) return { mine, left: pairHold.until - now };
+  if (mine) { pairHold = null; return { mine, done: true }; }
+  return null;
+}
+export function clearPairFails() { pairFail = { n: 0, last: 0 }; pairHold = null; }
 
 // ---------- 收件服务 ----------
 let srv = null, srvKey = '', srvErr = '';
