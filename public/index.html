@@ -23,7 +23,7 @@
 <style>
 :root{
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
-  --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;--peer:#C4B5F4;--peer-bg:#EEE9FC;
+  --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;--peer:#C4B5F4;
   --allow:#17794A;--on-allow:#FFFFFF;--deny:#B23A2E;--warn:#A86200;
   --add-bg:#E2F3E8;--del-bg:#FBE5E2;--code-bg:#E9ECEF;--banner-bg:#FFF4DC;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -34,7 +34,7 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
-    --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;--peer-bg:#2A2346;
+    --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
     --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
     --pc0b:#881337;--pc0f:#FFE4E6;--pc0r:#4C0519;--pc1b:#78350F;--pc1f:#FEF3C7;--pc1r:#451A03;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc2r:#082F49;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc3r:#431407;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc4r:#042F2E;--pc5b:#701A75;--pc5f:#FAE8FF;--pc5r:#4A044E;--pc6b:#365314;--pc6f:#ECFCCB;--pc6r:#1A2E05;
@@ -42,7 +42,7 @@
 }
 :root[data-theme="dark"]{
   --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
-  --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;--peer-bg:#2A2346;
+  --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
   --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
   --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
   --pc0b:#881337;--pc0f:#FFE4E6;--pc0r:#4C0519;--pc1b:#78350F;--pc1f:#FEF3C7;--pc1r:#451A03;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc2r:#082F49;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc3r:#431407;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc4r:#042F2E;--pc5b:#701A75;--pc5f:#FAE8FF;--pc5r:#4A044E;--pc6b:#365314;--pc6f:#ECFCCB;--pc6r:#1A2E05;
@@ -612,7 +612,6 @@ select.pe-in{text-align-last:right}
   .s-row:has(> .s-item[aria-current="true"]){border-color:var(--user-bg);background:var(--user-bg)}
   /* 加入了 claclaw 协同的会话：浅紫色边框（选中时也保留）；在干活 / 等确认时仍以绿 / 黄框为准 */
   .s-row.collab:not(.working):not(.waiting){border-color:var(--peer)}
-  .s-row.collab:has(> .s-item[aria-current="true"]),.s-row.collab > .s-item[aria-current="true"]{background:var(--peer-bg);border-color:var(--peer-bg)}   /* 选中：浅紫底代替浅绿底 */
   .s-row > .s-item[aria-current="true"]{background:var(--user-bg)}
   .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
   .s-row.dragging .s-item{transition:none}
@@ -694,7 +693,6 @@ select.pe-in{text-align-last:right}
   .s-row:hover .s-item{background:var(--bg)}
   .s-item[aria-current="true"]{background:var(--user-bg)!important;border-color:var(--user-bg)!important}
   .s-row.collab:not(.working):not(.waiting) .s-item{border-color:var(--peer)!important}
-  .s-row.collab .s-item[aria-current="true"]{background:var(--peer-bg)!important;border-color:var(--peer-bg)!important}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
