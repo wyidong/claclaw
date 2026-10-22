@@ -2186,7 +2186,7 @@ function pePairPoll(sec){clearTimeout(pePairT);pePairT=setTimeout(function(){peP
 function peerPost(path,body,okText){
   fetch('/api/peer'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x.ok||(x.j.error&&!x.j.local)){clearTimeout(pePairT);pePairT=null;peerMsg={err:x.j.error||'操作失败'};if(path==='/pair-finish'&&peerCfg){peerCfg.outPair=null;renderPeer()}else paintPeerMsg();return}
-    peerCfg=x.j;peerSt=x.j;
+    peerCfg=peNormCfg(x.j);peerSt=x.j;
     if(x.j.retryIn)pePairPoll(x.j.retryIn+1);
     peerMsg=x.j.error?{err:x.j.error}:x.j.paired?{ok:'和「'+x.j.paired+'」配对成功'}:x.j.retryIn?{ok:'配对中…'}:okText?{ok:okText}:{};
     renderPeer();if(x.j.paired)peerCheckNow();
@@ -2254,7 +2254,7 @@ function loadPeerPage(){
     })).then(function(ls){return [].concat.apply([],ls)});
   })]).then(function(x){
     peerCfg=x[0];peerList=(Array.isArray(x[1])?x[1]:[]).map(function(s){s.claw=s.claw||'claude';return s}).concat(x[2]||[]);
-    if(peerCfg.dir&&peerCfg.dir.indexOf('|')<0)peerCfg.dir='claude|'+peerCfg.dir;   // 旧配置只存了目录
+    peNormCfg(peerCfg);
     if(!peerCfg.dir&&peerCfg.sessions.length){var f=peerList.find(function(s){return s.id===peerCfg.sessions[0]});if(f)peerCfg.dir=peDirKey(f)}
     renderPeer();peerWatch(true);peerCheckNow();peerScan();loadSkills();
   }).catch(function(e){$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
@@ -2324,6 +2324,7 @@ function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div cl
 // 会话池摘要：加入了几个会话、分布在几个目录
 function poolTitle(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?(s.title||'(无标题)'):id.slice(0,8)}
 var CLAW_NAMES={claude:'Claude Code',openclaw:'OpenClaw',deepseek:'DeepSeek',opencode:'OpenCode'};
+function peNormCfg(c){if(c&&c.dir&&c.dir.indexOf('|')<0)c.dir='claude|'+c.dir;return c}   // 旧配置只存了目录（没有「Claw|」前缀）：初次载入、每次操作后服务端回的配置都要转
 function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':(s.cwd||''))}   // OpenClaw 没有目录，全部归一组
 function peDirLabel(k){var i=k.indexOf('|'),cl=k.slice(0,i),d=k.slice(i+1).replace(/^\/(Users|home)\/[^\/]+/,'~');return cl==='claude'?(d||'(未知目录)'):CLAW_NAMES[cl]+(d?' · '+d:'')}
 function poolCwd(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?peDirKey(s):'claude|'}
