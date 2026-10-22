@@ -105,6 +105,11 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .msg.ai{align-self:stretch}
 .msg[data-ts]::after,.peer[data-ts]::after{content:attr(data-ts);display:block;margin-top:3px;font-size:11px;line-height:1.3;color:var(--muted);text-align:right;white-space:nowrap}
 .msg.ai[data-ts]::after{text-align:left}
+/* 用户消息、协同消息：时间放在气泡外面、下方右侧 */
+.msg.user[data-ts]:not(.queued),.peer[data-ts]{position:relative;margin-bottom:17px}
+.msg.user[data-ts]:not(.queued)::after,.peer[data-ts]::after{position:absolute;right:4px;top:100%;margin-top:3px;opacity:1}
+/* 手机：发出的消息长按复制、连点两下放回输入框；关掉系统的选字 / 放大，免得和这两个手势打架 */
+@media (pointer:coarse){.msg.user.lp{filter:brightness(.9)}.msg.user{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}}
 .msg code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
 /* 渲染后的 Markdown（流式输出期间仍是纯文本，结束后才渲染） */
 .msg.md{white-space:normal}
@@ -1151,6 +1156,43 @@ document.addEventListener('touchmove',function(e){
   if(Math.abs(t.clientX-lpStart.x)>10||Math.abs(t.clientY-lpStart.y)>10){clearTimeout(lpTimer);lpTimer=null}   // 在滑动：不是长按
 },{passive:true,capture:true});
 ['touchend','touchcancel'].forEach(function(ev){document.addEventListener(ev,function(){clearTimeout(lpTimer);lpTimer=null},{passive:true,capture:true})});
+// 手机：发出的消息长按 0.5 秒复制，连点两下放回输入框（输入框里有字就接在后面）。电脑上不做
+(function(){
+  if(!TOUCH)return;
+  var el=null,timer=null,x0=0,y0=0,moved=false,lastEl=null,lastAt=0;
+  var textOf=function(m){var u=m.querySelector('.ut');return u?u.textContent:''};
+  feed.addEventListener('touchstart',function(e){
+    el=e.target.closest&&e.target.closest('.msg.user');moved=false;clearTimeout(timer);timer=null;
+    if(!el||e.touches.length!==1||el.classList.contains('pending')||!textOf(el)){el=null;return}
+    var t=e.touches[0];x0=t.clientX;y0=t.clientY;var me=el;
+    timer=setTimeout(function(){
+      timer=null;lpFiredAt=Date.now();lastAt=0;
+      if(navigator.vibrate)try{navigator.vibrate(15)}catch(_){}
+      me.classList.add('lp');setTimeout(function(){me.classList.remove('lp')},300);
+      copyText(textOf(me));
+    },500);
+  },{passive:true});
+  feed.addEventListener('touchmove',function(e){
+    if(!el)return;var t=e.touches[0];
+    if(Math.abs(t.clientX-x0)>10||Math.abs(t.clientY-y0)>10){moved=true;clearTimeout(timer);timer=null}
+  },{passive:true});
+  feed.addEventListener('touchend',function(e){
+    var me=el;el=null;
+    if(!me||moved)return;
+    if(!timer)return;            // 长按已经复制过了
+    clearTimeout(timer);timer=null;
+    var now=Date.now();
+    if(lastEl===me&&now-lastAt<350){
+      e.preventDefault();lastAt=0;
+      var t=textOf(me),cur=ta.value;
+      ta.value=cur.trim()?cur.replace(/\s+$/,'')+'\n'+t:t;
+      ta.dispatchEvent(new Event('input',{bubbles:true}));
+      ta.focus();try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch(_){}
+      toast(cur.trim()?'已接在输入框后面':'已放回输入框');
+    }else{lastEl=me;lastAt=now}
+  },{passive:false});
+  feed.addEventListener('touchcancel',function(){clearTimeout(timer);timer=null;el=null},{passive:true});
+})();
 function copyText(t){
   function legacy(){
     var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');
