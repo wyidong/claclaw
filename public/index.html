@@ -574,6 +574,8 @@ select.pe-in{text-align-last:right}
   .claw-card:disabled{opacity:.45;cursor:default}
   .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
   .claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
+  /* Claude Code：用它终端里那只像素螃蟹 Clawd（LobeHub 图标库 claudecode-color.svg，MIT），
+     原图眼睛是镂空的，这里补成深色，浅色主题、选中底色上都是黑眼睛 */
   /* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比另外三个重得多也小得多。
      这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
      颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
@@ -742,7 +744,7 @@ select.pe-in{text-align-last:right}
     <!-- 电脑端的 Claw 切换：点哪个，会话列表就显示哪一种的会话（只列这台电脑装了、能用的） -->
     <div id="rclaws">
     <button type="button" id="rclawMore" aria-label="更多 Claw" title="更多 Claw" aria-expanded="false" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
-    <button type="button" class="rclaw" data-claw="claude" aria-label="Claude Code" title="Claude Code"><img class="tile" src="https://claude.com/apple-touch-icon.png" alt=""></button>
+    <button type="button" class="rclaw" data-claw="claude" aria-label="Claude Code" title="Claude Code"><svg class="cc-mark" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z" fill="#D97757"/><path d="M6 8.102h1.488v2.847H6zM16.51 8.102H18v2.847h-1.49z" fill="#141413"/></svg></button>
     <button type="button" class="rclaw" data-claw="openclaw" aria-label="OpenClaw" title="OpenClaw"><img src="https://openclaw.ai/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="deepseek" aria-label="DeepSeek Harness" title="DeepSeek Harness"><img class="tile" src="https://cdn.deepseek.com/chat/icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="opencode" aria-label="OpenCode" title="OpenCode"><svg class="oc-mark" viewBox="128 96 256 320" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="var(--ink)"/><path d="M320 224V352H192V224H320Z" fill="var(--muted)"/></svg></button>
@@ -847,13 +849,13 @@ select.pe-in{text-align-last:right}
       <h2>会话</h2>
       <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
-      <!-- Claw：选择接管哪一种 AI 助手的会话。logo 不放仓库，直接用各家官网公开的图标地址，
-           Service Worker 第一次取到后缓存在手机上（见 sw.js） -->
+      <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
+           Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
       <div id="clawPane">
         <div class="claw-h">选择 Claw</div>
         <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode 中任意一个后再来。</div>
         <button type="button" class="claw-card" data-claw="claude">
-          <img class="claw-ic tile" src="https://claude.com/apple-touch-icon.png" alt="">
+          <svg class="claw-ic cc-mark" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z" fill="#D97757"/><path d="M6 8.102h1.488v2.847H6zM16.51 8.102H18v2.847h-1.49z" fill="#141413"/></svg>
           <span class="claw-tx"><b>Claude Code</b><small>终端、VS Code、网页里开的会话都在这里</small></span>
           <span class="claw-st"></span>
         </button>
