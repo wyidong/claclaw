@@ -225,6 +225,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
 .h-row.pe-peer.ptint{background:hsl(var(--ph) var(--pts) var(--ptl));border-radius:10px;margin:4px 6px}
+.s-row.ptint .t .ptn{background:hsl(var(--ph) var(--pts) var(--ptl2));border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
@@ -2492,7 +2493,9 @@ function openSheet(silent){
       if(bz&&!bz.canTakeover)b.dataset.busy='1';
       b.innerHTML='<div class="t"></div><div class="m"><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
-      if(s.peerLast){   // 协同会话：名字和别的会话一样显示（不加底色标签），悬停看最近和哪个对方通信
+      if(s.peerLast){   // 协同会话：最近和哪个对方通信，用那个对方的背景色（和协同页「已配对」里的一致）
+        row.classList.add('ptint');row.style.setProperty('--ph',peerHue(s.peerLast.id));
+        var tn=document.createElement('span');tn.className='ptn';tn.textContent=s.title;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
         b.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);
       }
       // 目录已经在分组标题里了，只显示分支；非 git 目录没有分支：显示最后一条用户消息（放不下就截断）
