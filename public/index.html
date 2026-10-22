@@ -221,7 +221,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item .t{font-weight:600}
 /* 最近活跃：标题行 = 标题（截断）+ 最右边的目录名 */
 .s-row.rec .s-item .t{display:flex;align-items:baseline;gap:8px}
-.s-row.rec .tt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s-row.rec .rtt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
 .h-row.pe-peer.ptint{background:hsl(var(--ph) var(--pts) var(--ptl));border-radius:10px;margin:4px 6px}
@@ -2503,7 +2503,7 @@ function openSheet(silent){
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
       if(inRecent){
         row.classList.add('rec');
-        var tt0=b.querySelector('.t'),tw=document.createElement('span');tw.className='tt';
+        var tt0=b.querySelector('.t'),tw=document.createElement('span');tw.className='rtt';
         while(tt0.firstChild)tw.appendChild(tt0.firstChild);if(!tw.childNodes.length)tw.textContent=s.title;
         var rd=document.createElement('span');rd.className='rdir';rd.title=s.cwd||'';
         rd.textContent=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~';
