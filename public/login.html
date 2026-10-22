@@ -72,6 +72,13 @@ if(setup){
   document.getElementById('again').hidden=false;
   pw.setAttribute('autocomplete','new-password');
   go.textContent='设置并进入';
+  // 首次设置只能用 127.0.0.1 打开：别的地址打开就说明怎么做，不给填
+  if(!/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname)){
+    var port=location.port||'8787';
+    f.innerHTML='<p style="line-height:1.7;font-size:15px">还没设置登录账号。为了不被别人抢先设置，首次设置只能用 <b>http://127.0.0.1:'+port+'</b> 打开：</p>'+
+      '<p style="line-height:1.7;font-size:14px">· 在运行 claclaw 的电脑上，用浏览器打开上面这个地址；<br>· 那台电脑没有显示器时，在你自己的电脑上运行<br><code style="user-select:all;word-break:break-all">ssh -L '+port+':127.0.0.1:'+port+' 用户名@那台电脑</code><br>再在自己的电脑上打开 http://127.0.0.1:'+port+'。</p>';
+    return;
+  }
 }
 f.addEventListener('submit',function(e){
   e.preventDefault();err.textContent='';

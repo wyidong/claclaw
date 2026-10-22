@@ -1500,6 +1500,9 @@ function loginCookie(token) {
 // 首次设置初始账号：只在还没设置过时可用，设好直接登录
 async function handleSetup(req, res) {
   if (isSetUp()) return sendJson(res, 409, { error: '初始账号已经设置过了，请直接登录' });
+  // 首次设置只认 127.0.0.1 直连（本机浏览器，或 SSH 隧道 ssh -L 8787:127.0.0.1:8787）：
+  // 不然谁先打开网页谁就能设置初始账号
+  if (!isLocalReq(req)) { log('setup refused from', req.socket.remoteAddress); return sendJson(res, 403, { error: '首次设置只能用 http://127.0.0.1:' + PORT + ' 打开（本机浏览器，或 SSH 隧道）' }); }
   let body = {};
   try { body = JSON.parse(await readBody(req)); } catch {}
   try {
