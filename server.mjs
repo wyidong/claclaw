@@ -960,7 +960,8 @@ setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); app
 // 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
 // clarelay 是独立项目：装成 npm 包，或者放在 claclaw 旁边的 ../clarelay 目录；都没有就提示。
 let clarelay = null;
-const relayTuns = new Map();   // 邀请码 → { to, t, state: { status, error } }   status: connecting | online | offline | error
+const relayTuns = new Map();
+const relayRetryFails = new Map();   // 邀请码 → 连续登记失败次数（决定下次重试等多久）   // 邀请码 → { to, t, state: { status, error } }   status: connecting | online | offline | error
 // 中继邀请码（主 → 备）：兼容旧的单个 relayInvite
 const relayInvitesOf = c => (Array.isArray(c.relayInvites) ? c.relayInvites : c.relayInvite ? [c.relayInvite] : []).filter(Boolean);
 const relayHostOf = inv => { try { return new URL(clarelay.parseInvite(inv).relay).host; } catch { return '?'; } };
@@ -977,7 +978,7 @@ const applyRelay = c => (relayChain = relayChain.then(() => applyRelayNow(c)).ca
 async function applyRelayNow(c) {
   const to = (ourBase(c) || '').replace(new RegExp(PEER_BASE + '$'), '');   // 隧道转给本机的协同收件服务（局域网 IP + 协同端口）
   const invites = c.enabled && to ? relayInvitesOf(c) : [];
-  for (const [inv, r] of relayTuns) if (!invites.includes(inv) || r.to !== to) { try { r.t?.stop(); } catch {} relayTuns.delete(inv); }
+  for (const [inv, r] of relayTuns) if (!invites.includes(inv) || r.to !== to) { clearTimeout(r.retry); try { r.t?.stop(); } catch {} relayTuns.delete(inv); }
   const mod = invites.length ? await loadClarelay() : null;
   for (const inv of invites) {
     if (relayTuns.has(inv)) continue;
@@ -990,10 +991,18 @@ async function applyRelayNow(c) {
         onStatus: st => { if (relayTuns.get(inv) === cur) cur.state = { status: st.online ? 'online' : 'offline', error: st.error }; },
       });
       if (relayTuns.get(inv) !== cur) { t.stop(); continue; }
-      cur.t = t; cur.state = { status: 'online' };
+      cur.t = t; cur.state = { status: 'online' }; relayRetryFails.delete(inv);
       cur.addr = t.urlFor ? t.urlFor(PEER_BASE) : t.publicUrl + PEER_BASE + (t.pin ? '#pin=' + t.pin : '');   // clarelay 0.2：带 #pin=…&key=…（端到端加密）
       log('relay tunnel online', relayHostOf(inv));
-    } catch (e) { cur.state = { status: 'error', error: e.message }; log('relay tunnel failed', e.message); }
+    } catch (e) {
+      // 第一次登记失败（网络抖动、中继正在重启……）clarelay 不会自己重试：过一阵从头再连，间隔 30 秒起、翻倍，最多 5 分钟
+      cur.state = { status: 'error', error: e.message };
+      cur.fails = (relayTuns.get(inv) === cur ? (relayRetryFails.get(inv) || 0) : 0) + 1;
+      relayRetryFails.set(inv, cur.fails);
+      const wait = Math.min(30e3 * 2 ** (cur.fails - 1), 5 * 60e3);
+      log('relay tunnel failed', e.message, '· retry in', Math.round(wait / 1000) + 's');
+      cur.retry = setTimeout(() => { if (relayTuns.get(inv) === cur) { relayTuns.delete(inv); applyRelay(loadPeer()); } }, wait);
+    }
   }
   // 存地址：连不上的那个沿用上次的地址（名字存在隧道状态文件里，重启不变）
   const c2 = loadPeer(), old = c2.relayAddrOf || {}, map = {};
