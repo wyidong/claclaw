@@ -18,7 +18,7 @@ import * as hosts from './hosts.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
-import { markLast, nextPeerNo, ourBaseName, ourInbox, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
+import { markLast, nextPeerNo, ourBaseName, ourInbox, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
@@ -1917,8 +1917,12 @@ const handler = async (req, res) => {
         // 带 id 只查这一个：网页按对方分别查，在线的不用等离线的那个超时
         const out = await Promise.all(c.peers.filter(p => !b?.id || p.id === b.id).map(async p => {
           if (!p.inbox || !p.theirToken) return { id: p.id, online: null };
-          try { const j = await peerCall(c, p, '/sessions', { ms: 6000 }); return { id: p.id, online: !!j.ok, sessions: j.sessions || [], error: j.ok ? undefined : j.error }; }
-          catch (e) { return { id: p.id, online: false, error: e.message }; }
+          // route：这次实际走的路（局域网 / 中继）；relay：单独试中继的结果（null = 没有中继地址）
+          const [main, relay] = await Promise.all([
+            peerCall(c, p, '/sessions', { ms: 6000 }).then(j => ({ online: !!j.ok, sessions: j.sessions || [], error: j.ok ? undefined : j.error }), e => ({ online: false, error: e.message })),
+            probeRelay(p),
+          ]);
+          return { id: p.id, ...main, route: main.online ? peerRoute.get(p.id)?.via : undefined, relay };
         }));
         return sendJson(res, 200, out);
       }

@@ -300,6 +300,24 @@ export async function discover(c) {
 // 只在「连都没连上」时换地址；已经送到对方的请求出错不重发（不然同一条消息会送两遍）。
 export const isRelayAddr = u => /^https:|#.*\bkey=/.test(String(u || ''));
 const lanDownUntil = new Map();   // 对方 id → 这之前不先试局域网
+export const peerRoute = new Map();   // 对方 id → { via: 'lan' | 'relay', at, ms }：最近一次实际走的路（协同页标「局域网 / 中继」）
+export const relayOf = p => [p.relay, p.inbox, p.inboxAlt].find(u => u && isRelayAddr(u)) || '';
+// 单独试一次中继（局域网通着时也试）：协同页显示「离开局域网后能不能续上」。同一个对方 60 秒内只真试一次
+const relayProbe = new Map();
+export async function probeRelay(p) {
+  const addr = relayOf(p);
+  if (!addr) return null;
+  const r = peerRoute.get(p.id);
+  if (r?.via === 'relay' && Date.now() - r.at < 60e3) return { ok: true, ms: r.ms };
+  const hit = relayProbe.get(p.id);
+  if (hit && hit.addr === addr && Date.now() - hit.at < 60e3) return hit.res;
+  const t0 = Date.now();
+  let res;
+  try { const j = await callPeer(addr, '/sessions', { token: p.theirToken, ms: 15000 }); res = j.ok ? { ok: true, ms: Date.now() - t0 } : { ok: false, error: j.error || 'HTTP ' + j.status }; }
+  catch (e) { res = { ok: false, error: e.message }; }
+  relayProbe.set(p.id, { addr, at: Date.now(), res });
+  return res;
+}
 export async function peerCall(c, p, sub, opts) {
   const lan = [p.inbox, p.inboxAlt].filter(u => u && !isRelayAddr(u));
   if (p.ip && lan[0]) { try { const u = new URL(lan[0]); if (u.hostname !== p.ip) { u.hostname = p.ip; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
@@ -308,9 +326,10 @@ export async function peerCall(c, p, sub, opts) {
   const tries = [...new Set(lanFirst ? [...lan, ...relays] : [...relays, ...lan])];
   let err;
   for (const url of tries) {
-    const viaRelay = isRelayAddr(url);
+    const viaRelay = isRelayAddr(url), t0 = Date.now();
     try {
       const j = await callPeer(url, sub, { token: p.theirToken, ...opts, connectMs: viaRelay ? 0 : 3000 });
+      peerRoute.set(p.id, { via: viaRelay ? 'relay' : 'lan', at: Date.now(), ms: Date.now() - t0 });
       if (viaRelay) { if (lan.length) lanDownUntil.set(p.id, Date.now() + 5 * 60e3); }
       else {
         lanDownUntil.delete(p.id);

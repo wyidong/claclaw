@@ -506,6 +506,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-peer-top{display:flex;align-items:center;gap:12px;width:100%}
 .pe-peer-name{flex:1;min-width:0;display:flex;align-items:center;gap:0;padding:0;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .pe-peer-name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 已配对：这次实际走的路（局域网 / 中继） */
+.pe-route{flex:none;margin-left:6px;padding:0 6px;border:1px solid var(--line);border-radius:6px;font-style:normal;font-size:11.5px;line-height:18px;color:var(--muted)}
+.pe-route.rl{color:var(--accent);border-color:var(--accent)}
 .pe-chev{flex:none;width:7px;height:7px;margin-left:8px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
 .pe-chev.open{transform:rotate(225deg) translateY(-2px)}
 .pe-peer-desc{font-size:13px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
@@ -2167,6 +2170,12 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-on')peerPost('',peerForm(true),'协同已开启');
   if(act==='peer-save')peerPost('',peerForm(peerCfg&&peerCfg.enabled),'已保存');
   if(act==='peer-relay-save'){var v=(($('#peRelayInv')||{}).value||'').trim();if(!v){peerMsg={err:'先粘贴中继邀请码'};paintPeerMsg();return}peerPost('',{relayInvite:v},'已保存，正在连中继…');setTimeout(function(){if(hostView==='peer')loadPeerPage()},4000)}
+  if(act==='peer-relay-of'){   // 给已配对的对方补 / 改中继地址（对方给的整段 https://…#pin=…&key=…；清空 = 不走中继）
+    var pp=(peerCfg.peers||[]).find(function(x){return x.id===a.dataset.id});
+    var v=prompt('「'+(pp?pp.name:'')+'」的中继地址（整段，带 #pin=…&key=…；清空表示不走中继）',pp&&typeof pp.relay==='string'?pp.relay:'');
+    if(v!==null)peerPost('/peer-relay',{id:a.dataset.id,relay:v.trim()},v.trim()?'中继地址已保存':'已清除中继地址');
+    return;
+  }
   if(act==='peer-relay-clear')peerPost('',{relayInvite:''},'已改回只走局域网');
   if(act==='peer-off')peerPost('',{enabled:false},'协同已关闭');
   if(act==='peer-reject')peerPost('/reject',{id:a.dataset.id},'已拒绝');
@@ -2331,10 +2340,16 @@ function peerPeersHtml(c){
     var det=kv('开放会话',allowHtml)+kv('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
       kv('地址','<span class="pe-mono">'+esc(p.inbox||'')+'</span>'+(p.inboxAlt?'<br><span class="pe-mono">'+esc(p.inboxAlt)+'</span>':''))+
       kv('配对','IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt))+
+      // 中继：对方有没有中继地址、单独试一次通不通（在公司直连时也试，回家后能不能续上一眼可知）
+      kv('中继',(function(){
+        var rs=o&&o.relay,t=!p.relay?'没有中继地址：离开局域网就联系不上':!o?'检查中…':!rs?'检查中…':rs.ok?'可用（约 '+(rs.ms<1000?rs.ms+' 毫秒':(rs.ms/1000).toFixed(1)+' 秒')+'）':'不通：'+esc(rs.error||'');
+        if(c.local&&typeof p.relay==='string'&&p.relay)t+='<br><span class="pe-mono">'+esc(p.relay.replace(/#.*$/,'#…'))+'</span>';
+        return t+(c.local&&p.canCall?' <button type="button" class="pe-btn pe-mini" data-act="peer-relay-of" data-id="'+esc(p.id)+'">'+(p.relay?'改':'填')+'中继地址</button>':'');
+      })())+
       (!p.canCall?'':!o?kv('状态','检查中…'):!o.online?kv('状态','离线'+(o.error?'：'+esc(o.error):'')):
         kv('对方会话',ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'没有开放会话'));
     // 第一行：名字 + 撤销；第二行：在线状态、对方会话、IP 和配对时间（占满整行，左对齐）
-    return '<div class="h-row pe-peer ptint '+peerPc(p)+'"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+'<span>'+esc(p.name)+'</span><i class="pe-chev'+(open?' open':'')+'"></i></button>'+
+    return '<div class="h-row pe-peer ptint '+peerPc(p)+'"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+'<span>'+esc(p.name)+'</span>'+(o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+(o.route==='relay'?'中继':'局域网')+'</em>':'')+'<i class="pe-chev'+(open?' open':'')+'"></i></button>'+
       (c.local?'<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button>':'')+'</div>'+
       (open?'<div class="pe-peer-desc">'+det+'</div>':'')+'</div>';
   }).join('')+'</div></div>';
