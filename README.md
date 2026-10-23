@@ -190,7 +190,6 @@ openclaw.mjs      OpenClaw 会话（通过本机 OpenClaw 网关）
 dsh.mjs           DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
 opencode.mjs      OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
 peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
-hosts.mjs         多宿主：在「宿主」页切到同一 Tailscale 网络里的另一台 claclaw
 skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
 skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）
 host.mjs          「宿主」页：电脑、资源、网络、各 Claw 状态

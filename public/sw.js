@@ -39,8 +39,8 @@ self.addEventListener('notificationclick', e => {
   // 先把「要打开哪个会话」记到缓存里：iPhone 常常把后台的网页 App 直接丢掉、点通知时重新启动，
   // 光靠 postMessage 会丢；页面启动 / 回到前台时会来读这条记录
   const q = new URL(url, self.location.href).searchParams;
-  const id = q.get('s'), view = q.get('view'), host = q.get('host') || '';   // view=peer：配对申请 → 协同页；host：别的宿主交过来的通知
-  const remember = id || view ? caches.open('claclaw-nav').then(c => c.put('/__pending-open', new Response(JSON.stringify({ id, view, host, at: Date.now() })))).catch(() => {}) : Promise.resolve();
+  const id = q.get('s'), view = q.get('view');   // view=peer：配对申请 → 协同页
+  const remember = id || view ? caches.open('claclaw-nav').then(c => c.put('/__pending-open', new Response(JSON.stringify({ id, view, at: Date.now() })))).catch(() => {}) : Promise.resolve();
   e.waitUntil(remember.then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true })).then(list => {
     for (const c of list) {
       if ('focus' in c) { c.postMessage({ t: 'open', url }); return c.focus(); }
