@@ -551,7 +551,8 @@ function isLocalReq(req) {
   const ip = req.socket.remoteAddress || '';
   const host = String(req.headers.host || '').replace(/:\d+$/, '');
   return /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip) && /^(127\.0\.0\.1|localhost|\[::1\])$/.test(host)
-    && !req.headers['x-forwarded-for'] && !Object.keys(req.headers).some(k => k.startsWith('tailscale-'));
+    && !req.headers['x-forwarded-for'] && !req.headers['x-forwarded-proto'] && !req.headers['x-forwarded-host'] && !req.headers.forwarded
+    && !Object.keys(req.headers).some(k => k.startsWith('tailscale-'));   // 任何转发痕迹（clarelay 门卫、tailscale serve、反向代理）都不算本机
 }
 // 某个对方能看到的会话：协同会话池 ∩ 开放给它的（没单独设过 = 全部开放）
 const peerAllowed = (c, p) => Array.isArray(p?.allow) ? c.sessions.filter(id => p.allow.includes(id)) : c.sessions;
@@ -720,7 +721,7 @@ async function waitJob(job, sec) {
 }
 async function handleLocal(req, res, url) {
   const ip = req.socket.remoteAddress || '';
-  if (!/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip) || req.headers['x-forwarded-for'] || !skills.checkLocal(req.headers['x-claclaw-local'])) return sendJson(res, 403, { ok: false, error: '只接受本机带令牌的请求' });
+  if (!isDirectLocal(req) || req.headers['x-forwarded-proto'] || req.headers.forwarded || !skills.checkLocal(req.headers['x-claclaw-local'])) return sendJson(res, 403, { ok: false, error: '只接受本机带令牌的请求' });
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
   if (url.pathname === '/api/local/peer/result') return sendJson(res, 200, await waitJob(q.get('job') || '', wait));
@@ -1581,16 +1582,47 @@ function sendJson(res, code, obj, headers = {}) {
   res.end(JSON.stringify(obj));
 }
 
-function loginCookie(token) {
-  return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(TOKEN_TTL_MS / 1000)}`;
+// ---------- 来源和 https ----------
+// 真实来源 IP：连接来自本机（127.0.0.1，即经本机的转发进来：clarelay 门卫、tailscale serve……）时才采信 x-forwarded-for 的第一个；
+// 其余（局域网、Tailscale IP 直连）一律用连接地址——别人自己带的 x-forwarded-for 不认
+const LOOPBACK = /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/;
+function realIp(req) {
+  const sock = String(req.socket.remoteAddress || '');
+  if (LOOPBACK.test(sock)) {
+    const f = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (f && /^[0-9a-fA-F.:]{3,45}$/.test(f)) return f.replace(/^::ffff:/, '');
+  }
+  return sock.replace(/^::ffff:/, '');
 }
+// 本机直连：在这台电脑上直接打开（连接来自本机、没有经过任何转发）
+const isDirectLocal = req => LOOPBACK.test(req.socket.remoteAddress || '') && !req.headers['x-forwarded-for'];
+// 这次请求是不是 https：自己就是 TLS，或者本机的转发说它是 https（clarelay 门卫、tailscale serve）
+const isHttps = req => !!req.socket.encrypted || (LOOPBACK.test(req.socket.remoteAddress || '') && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https');
+// 登录 cookie：SameSite=Lax（嵌在 clarelay 外壳的 iframe 里也能用；改状态的都是 POST / WebSocket，另有同源检查）；https 时加 Secure
+// （http 打开时不能加 Secure，不然局域网、Tailscale IP 直连就登录不上了）
+function loginCookie(token, req, maxAge = Math.floor(TOKEN_TTL_MS / 1000)) {
+  return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` + (req && isHttps(req) ? '; Secure' : '');
+}
+// 全局失败上限（不分 IP）：外部来源 10 分钟内失败满 20 次，外部登录全部暂停 15 分钟，防止换很多 IP 分散地猜。
+// 本机直连不算、也不受影响：被锁时还能在这台电脑上登录
+const GLOBAL_WINDOW = 10 * 60e3, GLOBAL_MAX = 20, GLOBAL_LOCK = 15 * 60e3;
+let globalFails = [], globalUntil = 0;
+const globalLocked = req => !isDirectLocal(req) && globalUntil > Date.now();
+function noteGlobalFail(req) {
+  if (isDirectLocal(req)) return;
+  const now = Date.now();
+  globalFails = globalFails.filter(t => now - t < GLOBAL_WINDOW);
+  globalFails.push(now);
+  if (globalFails.length >= GLOBAL_MAX) { globalUntil = now + GLOBAL_LOCK; globalFails = []; log('login: too many failures overall — external logins paused 15 min'); }
+}
+const globalLockMsg = () => '登录失败太多，暂停 ' + Math.max(1, Math.ceil((globalUntil - Date.now()) / 60000)) + ' 分钟（在这台电脑上直接打开可以登录）';
 
 // 首次设置初始账号：只在还没设置过时可用，设好直接登录
 async function handleSetup(req, res) {
   if (isSetUp()) return sendJson(res, 409, { error: '初始账号已经设置过了，请直接登录' });
   // 首次设置只认 127.0.0.1 直连（本机浏览器，或 SSH 隧道 ssh -L 8787:127.0.0.1:8787）：
   // 不然谁先打开网页谁就能设置初始账号
-  if (!isLocalReq(req)) { log('setup refused from', req.socket.remoteAddress); return sendJson(res, 403, { error: '首次设置只能用 http://127.0.0.1:' + PORT + ' 打开（本机浏览器，或 SSH 隧道）' }); }
+  if (!isLocalReq(req)) { log('setup refused from', realIp(req)); return sendJson(res, 403, { error: '首次设置只能用 http://127.0.0.1:' + PORT + ' 打开（本机浏览器，或 SSH 隧道）' }); }
   let body = {};
   try { body = JSON.parse(await readBody(req)); } catch {}
   try {
@@ -1598,13 +1630,14 @@ async function handleSetup(req, res) {
   } catch (e) {
     return sendJson(res, 400, { error: e.message });
   }
-  const ip = req.socket.remoteAddress;
+  const ip = realIp(req);
   log('initial login set up from', ip);
-  sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(issueToken('master', ip)) });
+  sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(issueToken('master', ip), req) });
 }
 
 async function handleLogin(req, res) {
-  const ip = req.socket.remoteAddress;
+  const ip = realIp(req);
+  if (globalLocked(req)) return sendJson(res, 429, { error: globalLockMsg() });
   const f = lockedFor(ip);
   if (f) return sendJson(res, 429, { error: tooManyTries(f) });
   let body = {};
@@ -1612,13 +1645,14 @@ async function handleLogin(req, res) {
   const via = verify(body.username, body.password);
   if (!via) {
     const { n } = noteFail(ip);
+    noteGlobalFail(req);
     log('login failed from', ip, 'fails=' + n);
     return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '用户名或密码不对' });
   }
   clearFails(ip);
   const token = issueToken(via, ip);
   log('login ok from', ip, 'via', via);
-  sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(token) });
+  sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(token, req) });
 }
 
 // ---------- 删除会话：要求再次输入初始账号；文件挪进 data/trash/，不直接删 ----------
@@ -1637,7 +1671,8 @@ function trimTrash() {
 }
 
 async function handleDelete(req, res) {
-  const ip = req.socket.remoteAddress;
+  const ip = realIp(req);
+  if (globalLocked(req)) return sendJson(res, 429, { error: globalLockMsg() });
   const f = lockedFor(ip);
   if (f) return sendJson(res, 429, { error: tooManyTries(f) });
   if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
@@ -1645,6 +1680,7 @@ async function handleDelete(req, res) {
   try { body = JSON.parse(await readBody(req)); } catch {}
   if (!verifyMaster(body.username, body.password)) {
     const { n } = noteFail(ip);
+    noteGlobalFail(req);
     log('delete: wrong initial credentials from', ip, 'fails=' + n);
     return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '初始用户名或密码不对' });
   }
@@ -1785,7 +1821,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/login' && req.method === 'POST') return handleLogin(req, res);
     if (url.pathname === '/api/logout' && req.method === 'POST') {
       revokeToken(cookieToken(req));
-      return sendJson(res, 200, { ok: true }, { 'set-cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0` });
+      return sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie('', req, 0) });
     }
     if (!authed(req)) {
       if (url.pathname.startsWith('/api/')) return sendJson(res, 401, { error: 'login required' });
@@ -2063,7 +2099,7 @@ function sameOrigin(req) {
 const wss = new WebSocketServer({ noServer: true });
 function onUpgrade(req, socket, head) {
   if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
-    log('ws rejected', req.headers.origin || '', req.socket.remoteAddress);
+    log('ws rejected', req.headers.origin || '', realIp(req));
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     return socket.destroy();
   }
@@ -2075,7 +2111,7 @@ function onUpgrade(req, socket, head) {
 }
 
 wss.on('connection', (ws, req) => {
-  log('ws connected from', req.socket.remoteAddress);
+  log('ws connected from', realIp(req));
   ws.visible = true; // 页面会在切到后台 / 回到前台时告诉我们
   let runner = null;
   const send = o => ws.readyState === 1 && ws.send(JSON.stringify(o));
