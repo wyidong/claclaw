@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, execFile } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
@@ -924,13 +924,55 @@ let outPair = null;   // {base, requestId, token, expiresAt}
 function peerPublic(c, local) {
   return {
     local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c), relay: c.relay || '',
+    relayInvite: !!c.relayInvite, relayState,
+    // 「复制邀请」里给对方的：让我们也能主动找他（含注册口令，只在本机打开时给）
+    relayTunnelCmd: local && c.relayInvite && clarelay ? clarelay.tunnelCommand(c.relayInvite, '<你本机收消息的服务地址>') : '',
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
     peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt, pairing: !!outPair.pairing } : null,
   };
 }
-setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); applyAdvert(c, log); }, 1000);
+setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c); }, 1000);
+
+// ---------- 跨网络：经 clarelay 中继 ----------
+// 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
+// clarelay 是独立项目：装成 npm 包，或者放在 claclaw 旁边的 ../clarelay 目录；都没有就提示。
+let clarelay = null, relayTun = null, relayState = { status: 'off' };   // status: off | connecting | online | offline | error
+async function loadClarelay() {
+  if (clarelay) return clarelay;
+  for (const p of ['clarelay/tunnel.mjs', pathToFileURL(path.join(ROOT, '..', 'clarelay', 'tunnel.mjs')).href]) {
+    try { return clarelay = await import(p); } catch {}
+  }
+  return null;
+}
+async function applyRelay(c) {
+  const to = (ourBase(c) || '').replace(new RegExp(PEER_BASE + '$'), '');   // 隧道转给本机的协同收件服务（局域网 IP + 协同端口）
+  const want = c.enabled && c.relayInvite && to ? c.relayInvite + '|' + to : '';
+  if ((relayTun?.key || '') === want) return;
+  if (relayTun) { try { relayTun.t?.stop(); } catch {} relayTun = null; }
+  if (!want) { relayState = { status: 'off' }; return; }
+  const mod = await loadClarelay();
+  if (!mod) { relayState = { status: 'error', error: '没找到 clarelay：把它放在 claclaw 旁边的 clarelay 目录，或用 npm 装上' }; return; }
+  const cur = relayTun = { key: want };
+  relayState = { status: 'connecting' };
+  try {
+    const t = await mod.startTunnel({
+      invite: c.relayInvite, to, state: path.join(DATA, 'relay-tunnel.json'), log,
+      onStatus: st => { if (relayTun === cur) relayState = { status: st.online ? 'online' : 'offline', error: st.error }; },
+    });
+    if (relayTun !== cur) { t.stop(); return; }
+    cur.t = t;
+    relayState = { status: 'online' };
+    const addr = t.publicUrl + PEER_BASE + (t.pin ? '#pin=' + t.pin : '');
+    const c2 = loadPeer();
+    if (c2.relay !== addr) { c2.relay = addr; savePeer(c2); }
+    log('relay tunnel online');
+  } catch (e) {
+    if (relayTun === cur) relayState = { status: 'error', error: e.message };
+    log('relay tunnel failed', e.message);
+  }
+}
 
 class Runner {
   constructor(info, mode, allowedModes, opts = {}) {
@@ -1912,7 +1954,15 @@ const handler = async (req, res) => {
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
       if (typeof b.dir === 'string') c.dir = b.dir;
       if (typeof b.name === 'string') c.name = b.name.replace(/\s+/g, ' ').trim().slice(0, 40);
-      // 中继地址（跨网络）：relay-tunnel.mjs 打印的公开地址 + 协同路径 + #pin=证书指纹；空 = 只走局域网
+      // 中继邀请码（clarelay1.…）：粘贴后 claclaw 自己连隧道、生成中继地址；空 = 不走中继
+      if (typeof b.relayInvite === 'string') {
+        const inv = b.relayInvite.trim(), mod = inv ? await loadClarelay() : null;
+        if (inv && !mod) return sendJson(res, 400, { error: '没找到 clarelay：把它放在 claclaw 旁边的 clarelay 目录，或用 npm 装上' });
+        if (inv && !mod.isInvite(inv)) return sendJson(res, 400, { error: '这不是中继邀请码（应该以 clarelay1. 开头）' });
+        c.relayInvite = inv ? mod.parseInvite(inv) && (inv.match(/clarelay1\.[A-Za-z0-9_-]+/) || [inv])[0] : '';
+        if (!inv) c.relay = '';
+      }
+      // 中继地址（不用 clarelay、自己开隧道时手填）：公开地址 + 协同路径 + #pin=证书指纹
       if (typeof b.relay === 'string') {
         const r = b.relay.trim();
         if (r && !/^https?:\/\/\S+$/.test(r)) return sendJson(res, 400, { error: '中继地址要以 http:// 或 https:// 开头' });
@@ -1923,7 +1973,7 @@ const handler = async (req, res) => {
       if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
       if (c.enabled && !c.sessions.length) return sendJson(res, 400, { error: '先选至少一个会话加入协同' });
       savePeer(c);
-      applyListener(c, peerHandler, log); applyAdvert(c, log);
+      applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c).catch(() => {});
       await new Promise(ok => setTimeout(ok, 300));   // 等监听结果（端口被占用会马上报错）
       log('peer config saved', c.enabled ? 'on' : 'off', c.sessions.length, 'sessions');
       return sendJson(res, 200, peerPublic(c, true));

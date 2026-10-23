@@ -2166,7 +2166,8 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
   if(act==='peer-on')peerPost('',peerForm(true),'协同已开启');
   if(act==='peer-save')peerPost('',peerForm(peerCfg&&peerCfg.enabled),'已保存');
-  if(act==='peer-relay-save')peerPost('',{relay:($('#peRelay')||{}).value||''},'中继地址已保存');
+  if(act==='peer-relay-save'){var v=(($('#peRelayInv')||{}).value||'').trim();if(!v){peerMsg={err:'先粘贴中继邀请码'};paintPeerMsg();return}peerPost('',{relayInvite:v},'已保存，正在连中继…');setTimeout(function(){if(hostView==='peer')loadPeerPage()},4000)}
+  if(act==='peer-relay-clear')peerPost('',{relayInvite:''},'已改回只走局域网');
   if(act==='peer-off')peerPost('',{enabled:false},'协同已关闭');
   if(act==='peer-reject')peerPost('/reject',{id:a.dataset.id},'已拒绝');
   if(act==='peer-revoke'){if(confirm('撤销和「'+a.dataset.name+'」的配对？撤销后对方要重新申请才能联系我们'))peerPost('/revoke',{id:a.dataset.id},'已撤销')}
@@ -2277,6 +2278,12 @@ function loadPeerPage(){
 function fmtLeft(t){var s=Math.max(0,Math.round((t-Date.now())/1000));return Math.floor(s/60)+':'+('0'+s%60).slice(-2)}
 function fmtWhen(t){return t?new Date(t).toLocaleString():''}
 // 「复制邀请」：对方（或对方的 AI）照着就能申请配对、然后收发消息
+function peerInviteBack(c){
+  if(!c.relayTunnelCmd)return '';
+  return '\n\n让我们也能主动找你（可选）：\n'+
+    '1. 在你的电脑上运行（把 <你本机收消息的服务地址> 换成你接收消息的服务，例如 http://127.0.0.1:端口）：\n'+c.relayTunnelCmd+'\n'+
+    '2. 它会打印一个公开地址和证书指纹。配对申请时把「公开地址#pin=证书指纹」填在 inbox 里，我们就能主动给你发消息了（请求格式和你收到的一样）。';
+}
 function peerInvite(c){
   // 设了中继：地址是中继上的公开地址，# 后面是中继证书指纹（请求时不带 #…，用来核对证书）
   var rl=c.relay||'',pin=(rl.match(/#pin=(\S+)$/)||[])[1]||'',b=rl?rl.replace(/#.*$/,''):(c.baseName||c.base);
@@ -2291,7 +2298,7 @@ function peerInvite(c){
     '- 查看会话：GET '+b+'/sessions → {"sessions":[{"id","title","busy"}]}\n'+
     '- 发消息：POST '+b+'  {"from":"你是谁","text":"正文（4000 字内）","session":"可选，会话 id"} → {"ok":true,"reply":"我们这一轮的回复原文"}（最多等 10 分钟）\n'+
     '- 错误码：400 消息为空或没指定会话，401 没配对或钥匙不对，409 会话正忙，413 太长，429 上一条还在处理，504 超时。\n\n'+
-    '如果你也用 claclaw：在「宿主 → claclaw 协同」开启后，「附近的 claclaw」里会直接列出我们，点「申请配对」即可；列不出来就在「向对方申请配对」里填上面的协同地址。';
+    '如果你也用 claclaw：在「宿主 → claclaw 协同」开启后，「附近的 claclaw」里会直接列出我们，点「申请配对」即可；列不出来就在「向对方申请配对」里填上面的协同地址'+(c.relay?'（带上 #pin=… 整串）':'')+'。'+peerInviteBack(c);
 }
 function peerPendingHtml(c){
   if(!c.pending||!c.pending.length)return '';
@@ -2392,9 +2399,11 @@ function renderPeer(){
       (c.relay?'<span class="pe-url">'+esc(c.relay)+'</span><div class="pe-note" style="margin:-4px 14px 6px">经中继，跨网络能用（上面是中继地址）；同一个局域网里也可以用下面的：</div>':'')+
       (c.baseName?'<span class="pe-url">'+esc(c.baseName)+'</span><div class="pe-note" style="margin:-4px 14px 6px">按电脑名找，路由器换了 IP 也不用改；名字找不到时用这个：</div>':'')+
       '<span class="pe-url">'+esc(c.base)+'</span>'+
-      '<div class="h-row pe-urlrow"><span class="k">中继地址</span><textarea id="peRelay" class="pe-in pe-ta mono" rows="2" placeholder="跨网络协同才要填：https://中继IP:端口/t/名字/claclaw-peer#pin=sha256//…">'+esc(c.relay||'')+'</textarea></div>'+
-      '<div class="pe-note" style="margin:0 14px 6px">在这台电脑上运行 relay/relay-tunnel.mjs（说明见 relay/README.md），把它打印的公开地址加上 /claclaw-peer#pin=证书指纹 填这里。之后新配对的对方走中继；已经配对的要重新配对一次才会改用中继。</div>'+
-      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-relay-save">保存中继地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.relay||c.baseName||c.base)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请（含配对说明）</button></div>'+
+      (function(){var st=c.relayState||{},t={online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上'}[st.status];
+        return c.relayInvite&&t?'<div class="h-row"><span class="k">中继</span><span class="v">'+t+(st.error?'：'+esc(st.error):'')+'</span></div>':''})()+
+      '<div class="h-row pe-urlrow"><span class="k">中继邀请码</span><textarea id="peRelayInv" class="pe-in pe-ta mono" rows="2" placeholder="'+(c.relayInvite?'已设置（粘贴新的可以替换）':'跨网络协同才要填：粘贴中继邀请码 clarelay1.…')+'"></textarea></div>'+
+      '<div class="pe-note" style="margin:0 14px 6px">粘贴后 claclaw 自己连上中继、生成上面的中继地址，配对时告诉对方。之后新配对的对方走中继；已经配对的要重新配对一次才会改用中继。</div>'+
+      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-relay-save">保存邀请码</button>'+(c.relayInvite?'<button type="button" class="pe-btn del" data-act="peer-relay-clear">不走中继</button>':'')+'<button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.relay||c.baseName||c.base)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请（含配对说明）</button></div>'+
       '</div><div class="pe-note">地址里不含密码：别人拿到只能申请配对，要你在这页把两位数配对码告诉他才能配上。</div></div>';
   }
   h+='<div id="peNear">'+peerNearHtml(c)+'</div>';
