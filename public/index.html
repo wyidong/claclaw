@@ -3681,7 +3681,7 @@ pushBtn.addEventListener('click',function(){
     return step('正在准备…',Promise.all([navigator.serviceWorker.ready,fetch('/api/push/key').then(function(r){return r.json()})]),15).then(function(x){
       return step('正在向推送服务登记…',x[0].pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(x[1].publicKey)}),20);
     }).then(function(sub){
-      return fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})}).then(function(r){if(r.ok)pushPick(sub);return r});
+      return fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})})
     }).then(function(r){
       if(!r.ok)throw new Error('保存订阅失败');
       return fetch('/api/push/test',{method:'POST'});
