@@ -1378,7 +1378,7 @@ function addFiles(list){
     var a={url:URL.createObjectURL(f),data:null,media_type:null};
     attachments.push(a);renderAtts();
     compressImage(f).then(function(r){a.data=r.data;a.media_type=r.media_type;renderAtts()})
-      .catch(function(){attachments.splice(attachments.indexOf(a),1);renderAtts();addSys('这张图片读不出来，换一张试试')});
+      .catch(function(){var i=attachments.indexOf(a);if(i>=0){attachments.splice(i,1);renderAtts()}addSys('这张图片读不出来，换一张试试')});   // 已切到别的会话：这张在别的草稿里，不动当前的
   });
 }
 // 长边压到 2000px 内转 JPEG；小于 1.5MB 的 PNG（截图）和 GIF 保持原样，免得文字糊或动图变静态
@@ -1401,6 +1401,15 @@ function compressImage(f){
     img.onerror=reject;
     img.src=URL.createObjectURL(f);
   });
+}
+// 每个会话各自的待发送内容（文字 + 图片）：切会话时把输入框里的收起来、换成新会话的；不在会话之间共用
+var drafts={},draftOwner=null;
+function switchDraft(id){
+  if(draftOwner===id)return;
+  if(draftOwner===null){draftOwner=id;if(!drafts[id])return}   // 第一次打开会话：输入框里已有的字（比如刷新前没发的）归它
+  else if(ta.value||attachments.length)drafts[draftOwner]={text:ta.value,atts:attachments};else delete drafts[draftOwner];
+  var d=drafts[id]||{text:'',atts:[]};delete drafts[id];
+  draftOwner=id;ta.value=d.text;attachments=d.atts;renderAtts();ta.dispatchEvent(new Event('input'));
 }
 function renderAtts(){
   attsEl.innerHTML='';
@@ -1625,6 +1634,7 @@ function onEvent(m){
     var sameSess=!!(session&&session.id===m.id),wasStick=stick;
     if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
     session={id:m.id,title:m.title,cwd:m.cwd,branch:m.branch||''};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
+    switchDraft(m.id);
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig);
     delete feedCache[m.id];
     // 重连后服务器会重发同一个会话：已经画好的不动（正在看的位置不跳），断线前后实时画的去掉、按服务器记录补上
@@ -2480,10 +2490,12 @@ var reloadToSet=false;try{reloadToSet=sessionStorage.getItem('claclaw.reloadTo')
 if(reloadToSet&&DESKTOP.matches){reloadToSet=false;railTab(true)}
 // 刷新：重新加载页面（拿到最新版本）。输入框里没发的字先存起来，刷新后放回去
 $('#railReload').addEventListener('click',function(){
-  try{if(ta.value)sessionStorage.setItem('claclaw.draft',ta.value)}catch(_){}
+  // 各会话没发的字都存起来（图片存不了）
+  try{var all={};for(var k in drafts)if(drafts[k].text)all[k]=drafts[k].text;if(ta.value)all[draftOwner||'']=ta.value;if(Object.keys(all).length)sessionStorage.setItem('claclaw.drafts',JSON.stringify(all))}catch(_){}
   location.reload();
 });
-try{var dr=sessionStorage.getItem('claclaw.draft');if(dr){sessionStorage.removeItem('claclaw.draft');ta.value=dr;ta.dispatchEvent(new Event('input'))}}catch(_){}
+try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionStorage.removeItem('claclaw.drafts');
+  if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
 $('#railSet').addEventListener('click',function(){railTab(true)});
 $('#railHost').addEventListener('click',function(){mTab('hosts')});
 $('#setHost').addEventListener('click',function(){mTab('host')});
