@@ -1886,7 +1886,12 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
       const local = isLocalReq(req), c = loadPeer();
-      if (req.method === 'GET' && url.pathname === '/api/peer') return sendJson(res, 200, peerPublic(c, local));
+      if (req.method === 'GET' && url.pathname === '/api/peer') {
+        // 协同池里每个会话的名字、目录（有的会话不在会话列表里，比如网页里新建的，页面上只能显示 ID）
+        const all = c.sessions.length ? await localSessions().catch(() => []) : [];
+        const poolInfo = c.sessions.map(id => { const s = all.find(x => x.sessionId === id); return s ? { id, title: String(s.title || '').replace(/\s+/g, ' ').slice(0, 80), cwd: s.cwd || '', claw: s.claw } : { id }; });
+        return sendJson(res, 200, { ...peerPublic(c, local), poolInfo });
+      }
       let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024) || '{}'); } catch {}
       const act = url.pathname.slice('/api/peer'.length);
       // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
