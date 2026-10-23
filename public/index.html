@@ -1622,17 +1622,17 @@ function onEvent(m){
   switch(m.t){
   case 'session.opened':
     var sameSess=!!(session&&session.id===m.id),wasStick=stick;
-    if(session&&session.id!==m.id)saveFeed(session.id);   // 电脑端直接切会话：把当前会话画好的内容留着
+    if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
     session={id:m.id,title:m.title,cwd:m.cwd,branch:m.branch||''};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     switchDraft(m.id);
-    var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig);
+    var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
     delete feedCache[m.id];
     // 重连后服务器会重发同一个会话：已经画好的不动（正在看的位置不跳），断线前后实时画的去掉、按服务器记录补上
     var mergeFrom=sameSess?resumeTail(m):-1;
     if(mergeFrom>=0){permQueue=[];aiEl=null;histMore=histStart>0;renderHistory(m.history.slice(mergeFrom),(m.historyStart||0)+mergeFrom);reuse=true}
     else if(reuse){if(!fc.inDom){feed.innerHTML='';feed.appendChild(fc.frag)}cards=fc.cards;permQueue=[];aiEl=null;histStart=(m.historyTotal||0)-fc.kept;histMore=histStart>0}   // 记录没变：直接用上次画好的，不重画、不闪
     else{feed.innerHTML='';cards={};permQueue=[];aiEl=null}
-    feedSig=hsig;feedDirty=false;histArmed=false;lastTop=0;histLoading=false;   // 刚打开不算「滑到顶」，要先离开顶部
+    feedOwner=m.id;feedSig=hsig;feedDirty=false;histArmed=false;lastTop=0;histLoading=false;   // 刚打开不算「滑到顶」，要先离开顶部
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
@@ -2716,7 +2716,7 @@ function openSheet(silent){
         var w=b.querySelector('.when');if(w)w.textContent='打开中…';
         if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
           $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#modeTag').textContent='';
-          if(!restoreFeed(s.id))feed.innerHTML='<div class="sys">加载中…</div>';goChat();
+          showFeedFor(s.id);goChat();
         }
         wsSend({t:'session.open',id:s.id,mode:mode});
         // 8 秒没回应：连接多半已经悄悄断了（手机切后台后常见），重连并提示再点一次
@@ -2878,7 +2878,7 @@ var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
 var startOnClaw=!DESKTOP.matches&&(window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true);
 function goList(toClaw){
   if(DESKTOP.matches)return;
-  if(session){wsSend({t:'session.leave'});saveFeed(session.id);session=null;setBusy(false)}   // 先存（聊天区还可见，量得出高度）再切到列表
+  if(session){wsSend({t:'session.leave'});if(feedOwner===session.id)saveFeed(session.id);feedOwner=null;session=null;setBusy(false)}   // 先存（聊天区还可见，量得出高度）再切到列表
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
@@ -2936,7 +2936,7 @@ document.addEventListener('visibilitychange',function(){
 function openFromNotice(id){
   if(session&&session.id===id&&!mList)return;
   pendingOpen=id;
-  if(!DESKTOP.matches){if(!restoreFeed(id))feed.innerHTML='<div class="sys">加载中…</div>';$('#nm').textContent='';$('#sid').textContent=shortId(id);goChat()}
+  if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);goChat()}
   if(ws&&ws.readyState===1)wsSend({t:'session.open',id:id,mode:mode});else reconnectNow();
   setTimeout(function(){if(pendingOpen===id)reconnectNow()},3000);   // 3 秒没打开：连接多半是死的，重连（连上后会自动打开）
 }
@@ -3005,8 +3005,9 @@ function fillShort(){
   if(session&&histMore&&!histLoading&&feed.scrollHeight<=feed.clientHeight+80){histLoading=true;wsSend({t:'history.more',before:histStart});setTimeout(function(){histLoading=false},4000)}
 }
 // 离开会话：只留最后大约一屏半（手机内存省着用），再进来立刻显示；更早的往上滑时再从服务器取
+var feedOwner=null;   // 聊天区现在画的是哪个会话：只有它的内容才能存进它的缓存（防止 A 的内容存到 B 名下）
 function saveFeed(id){
-  if(!id||!feed.firstChild)return;
+  if(!id||!feed.firstChild||feedOwner!==id)return;
   if(thinkEl){thinkEl.remove();thinkEl=null}
   var need=Math.max(600,feed.clientHeight*1.5),acc=0,kept=0,n=feed.lastElementChild;
   while(n&&acc<need){acc+=n.offsetHeight||0;if(n.dataset.h)kept++;n=n.previousElementSibling}
@@ -3015,10 +3016,14 @@ function saveFeed(id){
   delete feedCache[id];feedCache[id]={frag:f,cards:cards,kept:kept,sig:feedDirty?null:feedSig};   // 看的时候有新内容进来：回来时一定按服务器的重画
   var ks=Object.keys(feedCache);while(ks.length>8)delete feedCache[ks.shift()];
 }
+function showFeedFor(id){   // 手机点开会话：先存好正在显示的，再放这个会话的缓存或「加载中」
+  if(feedOwner&&feedOwner!==id)saveFeed(feedOwner);
+  if(feedOwner!==id&&!restoreFeed(id)){feedOwner=null;feed.innerHTML='<div class="sys">加载中…</div>'}
+}
 function restoreFeed(id){
   var c=feedCache[id];if(!c)return false;
   if(c.inDom){delete feedCache[id];return false}   // 上次放回去后没打开成功：作废，按服务器的重画
-  feed.innerHTML='';feed.appendChild(c.frag);c.inDom=true;stick=true;feed.scrollTop=feed.scrollHeight;return true;
+  feed.innerHTML='';feed.appendChild(c.frag);c.inDom=true;feedOwner=id;stick=true;feed.scrollTop=feed.scrollHeight;return true;
 }
 // ---------- 主题 ----------
 function applyTheme(t){
