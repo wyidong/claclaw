@@ -964,7 +964,7 @@ async function applyRelay(c) {
     if (relayTun !== cur) { t.stop(); return; }
     cur.t = t;
     relayState = { status: 'online' };
-    const addr = t.publicUrl + PEER_BASE + (t.pin ? '#pin=' + t.pin : '');
+    const addr = t.urlFor ? t.urlFor(PEER_BASE) : t.publicUrl + PEER_BASE + (t.pin ? '#pin=' + t.pin : '');   // clarelay 0.2：带 #pin=…&key=…（端到端加密）
     const c2 = loadPeer();
     if (c2.relay !== addr) { c2.relay = addr; savePeer(c2); }
     log('relay tunnel online');
@@ -1966,7 +1966,7 @@ const handler = async (req, res) => {
       if (typeof b.relay === 'string') {
         const r = b.relay.trim();
         if (r && !/^https?:\/\/\S+$/.test(r)) return sendJson(res, 400, { error: '中继地址要以 http:// 或 https:// 开头' });
-        if (/^https:/.test(r) && !/#pin=sha256\/\/[A-Za-z0-9+/=]+$/.test(r)) return sendJson(res, 400, { error: 'https 中继地址末尾要带证书指纹：#pin=sha256//…' });
+        if (/^https:/.test(r) && !/#pin=sha256\/\/[A-Za-z0-9+/=]+(&key=\S+)?$/.test(r)) return sendJson(res, 400, { error: 'https 中继地址末尾要带证书指纹：#pin=sha256//…' });
         c.relay = r.slice(0, 500);
       }
       if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);

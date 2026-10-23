@@ -19,6 +19,7 @@ import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 
 const FILE = path.join(DATA, 'peer.json');
@@ -166,8 +167,34 @@ export function applyListener(c, handler, log) {
 // 用 http.request 不用 fetch：fetch 等响应头最多 5 分钟就断，对方一轮回复可能要 10 分钟。
 // 出错时标出是不是「连都没连上」（connect: true）：只有这种情况才换对方的另一个地址重试，
 // 已经送到对方、只是等回复时出的错不能重试，不然同一条消息会被送两遍
+// 经 clarelay 中继、端到端加密的地址（…/t/<名>/…#pin=…&key=…）：交给 clarelay 的 relayRequest（核对证书指纹 + 加解密）
+let relayLib = null;
+async function loadRelayLib() {
+  if (relayLib) return relayLib;
+  for (const p of ['clarelay/tunnel.mjs', pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'clarelay', 'tunnel.mjs')).href]) {
+    try { const m = await import(p); if (m.relayRequest) return relayLib = m; } catch {}
+  }
+  return null;
+}
+async function callRelay(base, sub, { token, body, ms }) {
+  const mod = await loadRelayLib();
+  if (!mod) throw Object.assign(new Error('对方走中继，这台电脑没装 clarelay'), { connect: true });
+  const i = base.indexOf('#'), addr = base.slice(0, i).replace(/\/+$/, '') + (sub || '') + base.slice(i);
+  const headers = {};
+  if (token) headers.authorization = 'Bearer ' + token;
+  let r;
+  try { r = await mod.relayRequest(addr, { method: body ? 'POST' : 'GET', headers, body: body || undefined, timeout: ms }); }
+  catch (e) { throw Object.assign(new Error('连不上对方（中继）：' + (e.code || e.message)), { connect: /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN/.test(String(e.code || e.message)) }); }
+  const ok = r.status >= 200 && r.status < 300;
+  let j; try { j = r.json(); } catch { j = { ok, reply: r.text() }; }
+  if (!j || typeof j !== 'object') j = { ok, reply: String(j ?? '') };
+  if (!ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + r.status; }
+  j.status = r.status;
+  return j;
+}
 export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } = {}) {
   if (!base) return Promise.reject(Object.assign(new Error('没有对方的地址'), { connect: true }));
+  if (/#.*\bkey=/.test(base)) return callRelay(base, sub, { token, body, ms });
   const u = new URL(base);
   // 走中继的地址：https://中继IP:端口/t/名字/claclaw-peer#pin=sha256//…（中继是自签证书，只认这个指纹）
   const pin = (u.hash.match(/pin=(sha256\/\/[A-Za-z0-9+/=]+)/) || [])[1] || '';
