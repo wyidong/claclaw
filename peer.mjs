@@ -258,7 +258,9 @@ export function applyAdvert(c, log) {
   if (advert) { try { advert.kill(); } catch {} advert = null; }
   advertKey = key;
   if (!key) return;
-  advert = spawn('dns-sd', ['-R', myName(c), SVC, 'local', String(c.port), 'path=' + PEER_BASE, 'id=' + instanceId(c), 'host=' + localHostName() + '.local'], { stdio: 'ignore' });
+  // 包一层看门狗：claclaw 不管怎么退出（包括被强杀），dns-sd 都跟着结束，不会留下一个还在广播的「附近的 claclaw」
+  const watch = 'dns-sd "$@" & d=$!; trap \'kill $d 2>/dev/null\' EXIT INT TERM; while kill -0 ' + process.pid + ' 2>/dev/null && kill -0 $d 2>/dev/null; do sleep 3; done';
+  advert = spawn('/bin/sh', ['-c', watch, 'sh', '-R', myName(c), SVC, 'local', String(c.port), 'path=' + PEER_BASE, 'id=' + instanceId(c), 'host=' + localHostName() + '.local'], { stdio: 'ignore' });
   advert.on('exit', () => { advert = null; advertKey = ''; });
   log?.('peer bonjour advertised as', myName(c));
 }

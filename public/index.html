@@ -495,6 +495,14 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
 .pe-ta::placeholder{text-align:left}
 .pe-urlrow{align-items:flex-start}
+/* 设置类页面的「名称 — 值」行：值一行放不下（会被挤变形）时改成上下结构——名称在上，值另起一行、左对齐（脚本量过后加 .stack） */
+.h-row.stack{flex-wrap:wrap;align-items:flex-start;row-gap:6px}
+.h-row.stack>.k{flex:1 0 100%}
+.h-row.stack>.v{flex:1 1 100%;text-align:left}
+.h-row.stack>.v .h-bar{margin-left:0}
+.h-row.pe-urlrow{flex-wrap:wrap;row-gap:6px}   /* 填长地址 / 邀请码的输入框：总是上下结构、占满整行 */
+.h-row.pe-urlrow>.k{flex:1 0 100%}
+.h-row.pe-urlrow>.pe-in{flex:1 1 100%;width:100%;margin-left:0}
 .pe-req{display:flex;align-items:center;gap:12px;padding:12px 14px}
 .pe-req+.pe-req{border-top:.5px solid var(--line)}
 .pe-req-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:14px}
@@ -2004,6 +2012,25 @@ function hostLive(on){
 }
 function fmtBytes(n){if(n==null)return '';var u=['B','KB','MB','GB','TB'],i=0;while(n>=1024&&i<4){n/=1024;i++}return (n>=100||i===0?Math.round(n):n.toFixed(1))+' '+u[i]}
 function fmtDur(ms){var m=Math.floor(ms/60000),d=Math.floor(m/1440),h=Math.floor(m%1440/60);m%=60;return d?d+' 天 '+h+' 小时':h?h+' 小时 '+m+' 分':m+' 分钟'}
+// 宿主页（含协同等子页面）里的「名称 — 值」行：值放不下一行就改成上下结构（.stack）。内容一变、窗口一变都重新量
+function stackRows(){
+  document.querySelectorAll('#hostPane .h-row, #hostsPane .h-row').forEach(function(r){
+    var k=r.querySelector(':scope>.k'),v=r.querySelector(':scope>.v');
+    if(!k||!v||r.classList.contains('pe-col')||r.classList.contains('pe-peer')||r.classList.contains('pe-relay'))return;
+    r.classList.remove('stack');
+    if(!v.textContent.trim())return;
+    // 看值的第一段（文字 / 第一个元素）有没有被挤成多行；值本身设计成两行的（下面带 <small> 说明、<br> 分行）不算
+    var f=v.firstChild;if(!f)return;
+    var rg=document.createRange();rg.selectNodeContents(f);
+    var tops={};[].forEach.call(rg.getClientRects(),function(x){if(x.width>0)tops[Math.round(x.top)]=1});
+    if(Object.keys(tops).length>1||v.scrollWidth>v.clientWidth+1)r.classList.add('stack');
+  });
+}
+(function(){
+  var t=null,run=function(){clearTimeout(t);t=setTimeout(stackRows,30)};
+  ['hostPane','hostsPane'].forEach(function(id){var el=document.getElementById(id);if(el)new MutationObserver(run).observe(el,{childList:true,subtree:true})});
+  addEventListener('resize',run);
+})();
 function hRow(k,v,sub,bar,low){   // bar：0~1 的占用条；low：越低越要警告（电池）
   return '<div class="h-row"><span class="k">'+esc(k)+'</span><span class="v">'+v+(sub?'<small>'+esc(sub)+'</small>':'')+
     (bar!=null?'<span class="h-bar'+((low?bar<=0.2:bar>=0.85)?' hi':'')+'"><i style="width:'+Math.round(bar*100)+'%"></i></span>':'')+'</span></div>';
