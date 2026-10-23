@@ -308,9 +308,17 @@ export const peerRelays = p => [...new Set([...(Array.isArray(p.relays) ? p.rela
 export const relayOf = p => peerRelays(p)[0] || '';
 // 我们的中继地址（主 → 备）
 export const ourRelays = c => (Array.isArray(c.relays) && c.relays.length ? c.relays : [c.relay]).filter(Boolean);
-// 同步中继地址的请求头：我们每次请求对方都带上自己当前的中继地址（主 → 备，空格分隔；没有就是空串），对方据此更新记的地址
+// 同步中继地址的请求头：我们每次请求对方都带上自己配置的全部中继地址（主 → 备，空格分隔），不管隧道这会儿在不在线
+// （中继重启后公开地址不变，短暂掉线不该影响对外公布的地址）；一个中继都没配就发 none。
+// 收到时：none = 对方没有中继，清空记的；有合格地址就按它替换；空值、没有合格地址一律忽略、保留原值
 export const RELAYS_HEADER = 'x-claclaw-relays';
-export const parseRelaysHeader = v => String(v || '').split(/\s+/).filter(u => /^https:\/\/\S+#pin=sha256\/\/\S+$/.test(u)).slice(0, 5);
+export const relaysHeaderValue = c => ourRelays(c).join(' ') || 'none';
+export const parseRelaysHeader = v => {
+  const s = String(v ?? '').trim();
+  if (s.toLowerCase() === 'none') return [];
+  const list = s.split(/\s+/).filter(u => /^https:\/\/\S+#pin=sha256\/\/\S+$/.test(u)).slice(0, 5);
+  return list.length ? list : null;   // null = 忽略
+};
 // 单独试一次每个中继（局域网通着时也试）：协同页显示「离开局域网后能不能续上」。同一个地址 60 秒内只真试一次
 const relayProbe = new Map();
 async function probeOne(p, addr) {
@@ -338,7 +346,7 @@ export async function peerCall(c, p, sub, opts) {
   for (const url of tries) {
     const viaRelay = isRelayAddr(url), t0 = Date.now();
     try {
-      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: ourRelays(c).join(' ') }, connectMs: viaRelay ? 0 : 3000 });
+      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c) }, connectMs: viaRelay ? 0 : 3000 });
       peerRoute.set(p.id, { via: viaRelay ? 'relay' : 'lan', at: Date.now(), ms: Date.now() - t0 });
       if (viaRelay) { if (lan.length) lanDownUntil.set(p.id, Date.now() + 5 * 60e3); }
       else {

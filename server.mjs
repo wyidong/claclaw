@@ -907,7 +907,7 @@ async function peerHandler(req, res) {
     let dirty = false;
     if (RELAYS_HEADER in req.headers) {
       const rs = parseRelaysHeader(req.headers[RELAYS_HEADER]);
-      if (JSON.stringify(rs) !== JSON.stringify(peerRelays({ relays: peer.relays, relay: peer.relay }))) { peer.relays = rs; delete peer.relay; dirty = true; log('peer relays updated', peer.name, rs.length); }
+      if (rs && JSON.stringify(rs) !== JSON.stringify(peerRelays({ relays: peer.relays, relay: peer.relay }))) { peer.relays = rs; delete peer.relay; dirty = true; log('peer relays updated', peer.name, rs.length); }
     }
     if (dirty || peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
     const infos = await peerSessionInfos(c, peer);
@@ -998,7 +998,9 @@ async function applyRelayNow(c) {
   // 存地址：连不上的那个沿用上次的地址（名字存在隧道状态文件里，重启不变）
   const c2 = loadPeer(), old = c2.relayAddrOf || {}, map = {};
   for (const inv of relayInvitesOf(c2)) { const a = relayTuns.get(inv)?.addr || old[inv]; if (a) map[inv] = a; }
-  const relays = relayInvitesOf(c2).map(inv => map[inv]).filter(Boolean);
+  let relays = relayInvitesOf(c2).map(inv => map[inv]).filter(Boolean);
+  // 有中继这次没连上、也没记过它的地址：保留原来对外公布的地址（中继重启时公开地址不变），别让对方以为我们没有中继
+  if (relays.length < relayInvitesOf(c2).length) for (const a of (c2.relays || [])) if (!relays.includes(a)) relays.push(a);
   if (JSON.stringify(relays) !== JSON.stringify(c2.relays || []) || JSON.stringify(map) !== JSON.stringify(old)) {
     c2.relayAddrOf = map; c2.relays = relays; c2.relay = relays[0] || ''; savePeer(c2);
   }
