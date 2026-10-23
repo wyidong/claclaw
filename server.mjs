@@ -1467,17 +1467,32 @@ function webSessions() {
   } catch { return {}; }
 }
 const webSessionIds = () => new Set(Object.keys(webSessions()));
-function rememberWebSession(id, mode) {
+function rememberWebSession(id, mode, force) {
   const all = webSessions();
-  all[id] = { mode };
+  all[id] = force ? { mode, force: true } : { mode };
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
   const tmp = WEB_SESSIONS + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(all, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, WEB_SESSIONS);
 }
+// 切到「跳过确认」：换一个允许跳过确认的进程（会话内容不变，接着 resume），看着它的网页都转到新进程上
+function switchToBypass(old) {
+  rememberWebSession(old.id, 'bypassPermissions', true);
+  const subs = [...old.subs];
+  old.subs.clear();   // 先摘掉订阅：dispose 发的 session.closed 不要让网页以为会话关了
+  old.dispose('mode');
+  const r = new Runner(old.info, 'bypassPermissions', [...MODES, 'bypassPermissions']);
+  runners.set(old.id, r);
+  for (const w of subs) r.subscribe(w);
+  r.emit({ t: 'mode', mode: 'bypassPermissions', modes: r.allowedModes });
+  log('mode → bypassPermissions (restart)', old.id.slice(0, 8));
+  return r;
+}
 // 会话该继承的模式：原处（VS Code / 终端）最后用的优先；网页新建的会话用新建时记下的
 function inheritedMode(info) {
-  const m = originalMode(jsonlPathOf(info)) || webSessions()[info.sessionId]?.mode;
+  const w = webSessions()[info.sessionId];
+  if (w?.force && ALL_MODES.includes(w.mode)) return w.mode;   // 在网页上明确切过的（比如切到跳过确认）：以它为准
+  const m = originalMode(jsonlPathOf(info)) || w?.mode;
   return ALL_MODES.includes(m) ? m : 'default';
 }
 
@@ -2145,6 +2160,8 @@ wss.on('connection', (ws, req) => {
   });
   async function handle(m) {
     try {
+      // 这个会话的进程被换过（比如切到「跳过确认」要重启进程）：改用新的那个
+      if (runner?.closed && runners.get(runner.id) && !runners.get(runner.id).closed) runner = runners.get(runner.id);
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
       if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }
@@ -2401,7 +2418,14 @@ wss.on('connection', (ws, req) => {
       } else if (m.t === 'interrupt') {
         await runner.interrupt();
       } else if (m.t === 'mode.set') {
-        await runner.setMode(m.mode);
+        if (m.mode === 'bypassPermissions' && runner instanceof Runner && !runner.allowedModes.includes('bypassPermissions')) {
+          // 「跳过确认」要在进程启动时就允许：这一轮结束后重启这个会话的进程，并记住（以后再打开也是跳过确认）
+          if (runner.busy || runner.pending.size) return send({ t: 'error', message: '这一轮结束后再切到「跳过确认」（要重启这个会话的进程）' });
+          runner = switchToBypass(runner);
+        } else {
+          await runner.setMode(m.mode);
+          if (runner instanceof Runner && webSessions()[runner.id]?.force) rememberWebSession(runner.id, m.mode);   // 切回别的模式：不再强制
+        }
       }
     } catch (e) {
       log('ws error', e?.message);

@@ -1019,7 +1019,7 @@ var MODES=[
  {key:'default',label:'默认',note:'改文件、运行命令前会先问你（你的权限设置里已允许的除外）。'},
  {key:'acceptEdits',label:'自动改文件',note:'改文件不再询问，运行命令仍会询问。'},
  {key:'plan',label:'计划',note:'只读：不会改文件，也不会运行命令。'},
- {key:'bypassPermissions',label:'跳过确认',note:'所有操作都不再询问（继承自原会话）。'},
+ {key:'bypassPermissions',label:'跳过确认',note:'所有操作都不再询问。'},
  {key:'dontAsk',label:'不询问',note:'没预先允许的操作直接拒绝，不询问。'},
  {key:'auto',label:'自动判断',note:'由模型判断是否放行，拿不准时再问你。'}
 ];
@@ -1784,6 +1784,7 @@ function onEvent(m){
     setBusy(false);
     break;
   case 'mode':
+    if(m.modes)sessionModes=m.modes;   // 换了进程（比如切到跳过确认）：能切的模式也变了
     setMode(m.mode,true);
     break;
   case 'session.renamed':
@@ -1944,7 +1945,10 @@ function setMode(key,announce){
   mode=m.key;
   var dm=m.key==='acceptEdits'?'accept':m.key==='bypassPermissions'?'bypass':m.key;
   // 下拉框：只列这个会话能切换的模式（继承来的特殊模式也在里面）
-  var sel=$('#modeSel'),want=sessionModes.indexOf(m.key)<0?sessionModes.concat(m.key):sessionModes;
+  var want=sessionModes.indexOf(m.key)<0?sessionModes.concat(m.key):sessionModes;
+  // Claude 会话随时可以切到「跳过确认」（服务端会在这一轮结束后重启这个会话的进程）
+  if(session&&!/^(ds|op|oc):/.test(session.id)&&want.indexOf('bypassPermissions')<0)want=want.concat('bypassPermissions');
+  var sel=$('#modeSel');
   if(sel.dataset.opts!==want.join(',')){
     sel.innerHTML='';
     want.forEach(function(k){var x=MODES.find(function(y){return y.key===k});if(!x)return;var o=document.createElement('option');o.value=k;o.textContent=x.label;sel.appendChild(o)});
@@ -1957,6 +1961,7 @@ function setMode(key,announce){
 $('#modeSel').addEventListener('change',function(e){
   var next=e.target.value;
   e.target.value=mode;   // 等服务器确认后再真正切过去（setMode 会更新显示）
+  if(next==='bypassPermissions'&&sessionModes.indexOf(next)<0&&!confirm('切到「跳过确认」：这个会话以后运行命令、改文件都不再询问。\n要重启这个会话的进程（聊天内容不变），确定吗？'))return;
   if(session)wsSend({t:'mode.set',mode:next});else setMode(next,true);
 });
 setMode(mode,false);
