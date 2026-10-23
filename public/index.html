@@ -534,13 +534,21 @@ select.pe-in{text-align-last:right}
 .pe-ss{display:flex;flex-direction:column}
 /* 协同会话页：Claw 分段选择、已加入按 Claw 分组 */
 .pe-seg{display:flex;gap:4px;margin:10px 12px 2px;padding:3px;border-radius:10px;background:var(--bg);overflow-x:auto}
-.pe-seg button{flex:1 0 auto;padding:6px 10px;border:0;border-radius:8px;background:none;color:var(--muted);font:inherit;font-size:13px;white-space:nowrap;cursor:pointer}
-.pe-seg button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
-.pe-seg i{font-style:normal;font-size:11px;padding:0 5px;border-radius:8px;background:var(--accent);color:var(--accent-ink)}
-.pe-q{width:100%;text-align:left}
+.pe-seg button{position:relative;flex:1 0 auto;display:grid;place-items:center;height:38px;padding:0 10px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
+.pe-seg button img,.pe-seg button svg{width:24px;height:24px;object-fit:contain}
+.pe-seg button img.tile{border-radius:22.5%}
+.pe-seg button.on{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.pe-seg i{position:absolute;top:2px;right:calc(50% - 22px);min-width:16px;font-style:normal;font-size:10.5px;line-height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:var(--accent-ink);text-align:center}
+.pe-q{width:100%;text-align:left!important}
+.pe-q::placeholder{text-align:left}
 .pe-pool-dir{margin:10px 14px 2px}
 .pe-claw-h{display:flex;justify-content:space-between;padding:10px 14px 2px;font-size:12.5px;color:var(--muted)}
-.pe-claw-h b{font-weight:600;color:var(--ink)}
+.pe-claw-h b{display:flex;align-items:center;font-weight:600;color:var(--ink)}
+.pe-claw-g{display:flex;align-items:center;margin:12px 0 2px;font-size:13px;font-weight:600;color:var(--ink)}
+.pe-claw-g:first-child{margin-top:0}
+.pe-claw-ic{display:inline-grid;place-items:center;width:18px;height:18px;margin-right:6px}
+.pe-claw-ic img,.pe-claw-ic svg{width:18px;height:18px;object-fit:contain}
+.pe-claw-ic img.tile{border-radius:22.5%}
 .h-row.pe-pool-row{min-height:40px}
 .h-row.pe-pool-row .k{flex:1;min-width:0;display:flex;flex-direction:column}
 .h-row.pe-pool-row .pe-pt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2385,11 +2393,15 @@ function peerDetailLive(c,p){
     (o&&o.online?'<div class="h-row pe-col"><span class="k">对方开放的会话</span>'+(ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'<span class="v pe-left">没有</span>')+'</div>':'');
 }
 function peerDetailHtml(c,p){
-  var pool=c.sessions||[],allow=p.allow,byDir={},dirOrder=[];
-  pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
-  var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+dirOrder.map(function(d){
-    return '<div class="pe-allow-dir">'+esc(peDirLabel(d))+'</div>'+byDir[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
-      return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+(c.local?'':' disabled')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
+  // 先按 Claw（图标 + 名字）、再按目录分组
+  var pool=c.sessions||[],allow=p.allow,byClaw={};
+  pool.forEach(function(id){var k=clawOf(id),d=poolCwd(id);var g=byClaw[k]=byClaw[k]||{dirs:{},order:[]};if(!g.dirs[d]){g.dirs[d]=[];g.order.push(d)}g.dirs[d].push(id)});
+  var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+CLAW_ORDER.filter(function(k){return byClaw[k]}).map(function(k){
+    var g=byClaw[k];
+    return '<div class="pe-claw-g"><span class="pe-claw-ic">'+clawIcon(k)+'</span>'+esc(CLAW_NAMES[k])+'</div>'+g.order.map(function(d){
+      return (k==='openclaw'?'':'<div class="pe-allow-dir">'+esc(peDirLabel(d).replace(/^[^·]*· /,''))+'</div>')+g.dirs[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
+        return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+(c.local?'':' disabled')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
+    }).join('');
   }).join('')+'</div>':'<span class="v pe-left">协同会话池是空的，先到「协同会话」里加</span>';
   var h='<div class="claw-h pe-title ptint '+peerPc(p)+'"><span class="pe-peer-name">'+peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span></div>';
   h+='<div><div class="h-card" id="peDetLive">'+peerDetailLive(c,p)+'</div></div>';
@@ -2426,13 +2438,16 @@ function peerAddHtml(c){
 // 下面「添加会话」：先选 Claw，再搜 / 按目录勾选，勾上马上加入。不用再点保存
 var peerPoolClaw='',peerPoolQ='';
 var CLAW_ORDER=['claude','deepseek','opencode','openclaw'];
+// Claw 的图标：和左边栏用同一份（左边栏的按钮里就是图标）
+function clawIcon(k){var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:esc(CLAW_NAMES[k])}
+function clawSegBtn(k,n,on){return '<button type="button" data-act="pool-claw" data-claw="'+k+'" title="'+esc(CLAW_NAMES[k])+'" aria-label="'+esc(CLAW_NAMES[k])+'"'+(on?' class="on"':'')+'>'+clawIcon(k)+(n?'<i>'+n+'</i>':'')+'</button>'}
 function poolInfo(id){return (peerList||[]).find(function(x){return x.id===id})||((peerCfg&&peerCfg.poolInfo)||[]).find(function(x){return x.id===id&&x.title})}
 function poolJoinedHtml(c){
   var ids=c.sessions||[];
   if(!ids.length)return '<div class="h-row"><span class="v pe-left">还没有。在下面勾选要加入协同的会话。</span></div>';
   var by={};ids.forEach(function(id){var k=clawOf(id);(by[k]=by[k]||[]).push(id)});
   return CLAW_ORDER.filter(function(k){return by[k]}).map(function(k){
-    return '<div class="pe-claw-h"><b>'+CLAW_NAMES[k]+'</b><span>'+by[k].length+' 个</span></div>'+by[k].map(function(id){
+    return '<div class="pe-claw-h"><b><span class="pe-claw-ic">'+clawIcon(k)+'</span>'+CLAW_NAMES[k]+'</b><span>'+by[k].length+' 个</span></div>'+by[k].map(function(id){
       var s=poolInfo(id),d=s?peDirLabel(peDirKey(s)).replace(/^[^·]*· /,''):'';
       return '<div class="h-row pe-pool-row"><span class="k"><span class="pe-pt">'+esc(s?(s.title||'(无标题)'):shortId(id))+'</span>'+(d&&k!=='openclaw'?'<small>'+esc(d)+'</small>':'')+'</span>'+
         (c.local?'<button type="button" class="pe-btn del pe-mini" data-act="pool-del" data-id="'+esc(id)+'">移出</button>':'')+'</div>';
@@ -2456,7 +2471,7 @@ function peerPoolHtml(c){
   if(have.indexOf(peerPoolClaw)<0)peerPoolClaw=have[0]||'claude';
   var cnt=function(k){return (c.sessions||[]).filter(function(id){return clawOf(id)===k}).length};
   h+='<div><div class="h-h">添加会话</div><div class="h-card">'+
-    '<div class="pe-seg">'+have.map(function(k){var n=cnt(k);return '<button type="button" data-act="pool-claw" data-claw="'+k+'"'+(k===peerPoolClaw?' class="on"':'')+'>'+CLAW_NAMES[k]+(n?' <i>'+n+'</i>':'')+'</button>'}).join('')+'</div>'+
+    '<div class="pe-seg">'+have.map(function(k){return clawSegBtn(k,cnt(k),k===peerPoolClaw)}).join('')+'</div>'+
     '<div class="h-row"><input id="pePoolQ" class="pe-in pe-q" placeholder="搜索会话名、目录" value="'+esc(peerPoolQ)+'"></div>'+
     '<div id="pePoolList">'+poolListHtml(c)+'</div>'+
     '</div><div class="pe-note">勾上马上加入、取消马上移出。加入的会话，再到每个对方的详情里设它能看到哪些。'+(c.enabled?'':'协同还没开启：加好会话后回上一页点「开启」。')+'</div></div>';
@@ -2473,7 +2488,7 @@ function poolSave(arr){
 function poolPaint(){
   var j=$('#pePoolJoined');if(j){j.innerHTML=poolJoinedHtml(peerCfg);var hh=j.parentNode.querySelector('.h-h');if(hh)hh.textContent='已加入（'+(peerCfg.sessions||[]).length+'）'}
   var l=$('#pePoolList');if(l)l.innerHTML=poolListHtml(peerCfg);
-  document.querySelectorAll('.pe-seg button').forEach(function(b){var k=b.dataset.claw,n=(peerCfg.sessions||[]).filter(function(id){return clawOf(id)===k}).length;b.innerHTML=CLAW_NAMES[k]+(n?' <i>'+n+'</i>':'')});
+  document.querySelectorAll('.pe-seg button').forEach(function(b){var k=b.dataset.claw,n=(peerCfg.sessions||[]).filter(function(id){return clawOf(id)===k}).length;b.outerHTML=clawSegBtn(k,n,k===peerPoolClaw)});
 }
 // 本机与网络：名字、端口、我们的地址、中继
 function peerNetHtml(c){
