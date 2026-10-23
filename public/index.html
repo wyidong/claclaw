@@ -356,6 +356,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 /* 未读红点 */
 .s-row.unread .s-item .t::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 #railChats{position:relative}
+#railPeer{position:relative}
+#railPeer.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
 #railChats.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
 #sessBtn{position:relative}
 #sessBtn.unr::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
@@ -783,6 +785,7 @@ select.pe-in{text-align-last:right}
     </div>
     <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+    <button type="button" id="railPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button>
     <button type="button" id="railHost" aria-label="宿主" title="宿主（点开切换）"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
@@ -1988,7 +1991,7 @@ function mTab(t){
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');app.classList.toggle('hosts-on',t==='hosts');
   if(t!=='host'){hostView='';peerWatch(false)}
   hostLive(t==='host');if(t==='hosts')loadHosts();if(t==='claw')loadClaws();
-  $('#railSet').classList.toggle('on',t==='set'||t==='host');$('#railHost').classList.toggle('on',t==='hosts');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host'&&t!=='hosts');
+  $('#railSet').classList.toggle('on',t==='set'||t==='host');$('#railPeer').classList.remove('on');$('#railHost').classList.toggle('on',t==='hosts');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host'&&t!=='hosts');
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===(t==='host'?'set':t))});
   $('.sheet-p').scrollTop=0;
 }
@@ -2192,11 +2195,11 @@ var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=
 $('#hostBody').addEventListener('click',function(e){
   var a=e.target.closest('[data-act]');if(!a)return;
   var act=a.dataset.act;
-  if(act==='peer'){hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();return}
+  if(act==='peer'){hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();return}
   if(act==='peer-sub'){peerGo(a.dataset.sub);return}
   if(act==='pool-claw'){peerPoolClaw=a.dataset.claw;poolPaint();document.querySelectorAll('.pe-seg button').forEach(function(b){b.classList.toggle('on',b.dataset.claw===peerPoolClaw)});return}
   if(act==='pool-del'){poolSave((peerCfg.sessions||[]).filter(function(x){return x!==a.dataset.id}));return}
-  if(act==='peer-back'){hostView='';peerWatch(false);$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return}
+  if(act==='peer-back'){hostView='';peerWatch(false);$('#railPeer').classList.remove('on');$('#railSet').classList.add('on');$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return}
   if(act==='skills'){hostView='skills';skillMsg={};renderSkills();loadSkills();return}
   if(act==='skill-install'||act==='skill-remove'){skillPost(act==='skill-install'?'install':'uninstall',a.dataset.name,a.dataset.target);return}
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
@@ -2275,6 +2278,7 @@ function peerCheckNow(){
 // 页面开着时来了配对申请：顶部横幅（App 在前台时系统通知往往不弹），15 秒后自动收起
 var pairBannerT=null;
 function pairBanner(m){
+  if(!($('#app').classList.contains('host-on')&&hostView==='peer'))$('#railPeer').classList.add('dot');   // 左边栏「协同」也标红点
   var el=$('#pairBanner');
   if(!el){el=document.createElement('button');el.type='button';el.id='pairBanner';document.body.appendChild(el);
     el.addEventListener('click',function(){el.classList.remove('on');openPeerView()})}
@@ -2286,8 +2290,11 @@ function pairBanner(m){
 var wantPeer=new URLSearchParams(location.search).get('view')==='peer';
 function openPeerView(){
   if(!DESKTOP.matches&&!mList)goList();
-  mTab('host');hostView='peer';peerMsg={};peerOnline={};loadPeerPage();
+  mTab('host');hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();
 }
+// 左边栏的「协同」快捷入口：在协同页时亮起（这时「设置」不亮）；有配对申请时带红点
+function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#railSet').classList.remove('on')}}
+$('#railPeer').addEventListener('click',openPeerView);
 // 附近的 claclaw（局域网里开着协同的电脑，Bonjour 广播找到的）
 function peerScan(){
   if(!peerCfg||!peerCfg.local||!peerCfg.enabled||peerScanning)return;
