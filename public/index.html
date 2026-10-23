@@ -236,7 +236,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
 .pc0{--pbg:var(--pc0b);--pfg:var(--pc0f)}.pc1{--pbg:var(--pc1b);--pfg:var(--pc1f)}.pc2{--pbg:var(--pc2b);--pfg:var(--pc2f)}.pc3{--pbg:var(--pc3b);--pfg:var(--pc3f)}.pc4{--pbg:var(--pc4b);--pfg:var(--pc4f)}.pc5{--pbg:var(--pc5b);--pfg:var(--pc5f)}.pc6{--pbg:var(--pc6b);--pfg:var(--pc6f)}
-.h-row.pe-peer.ptint .pe-peer-name>span{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px}   /* 只给名字加底色，和会话列表里这个对方的名字标签一样 */
+.ptint .pe-peer-name>span{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px}   /* 只给名字加底色，和会话列表里这个对方的名字标签一样 */
 .s-row.ptint .t .ptn{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
@@ -459,7 +459,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #clawPane{display:none}
 #hostPane{display:none}
 #hostsPane{display:none}
-#hostPane:has([data-act="peer-back"]) #hostBack{display:none}   /* 协同子页面有自己的「‹ 宿主」 */
+#hostPane:has(.pe-back) #hostBack{display:none}   /* 协同子页面有自己的「‹ 宿主」 */
 /* 选择宿主：卡片（手机和电脑共用，手机上更大） */
 .hcard{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:64px;margin:0 0 8px;padding:12px 14px;border:.5px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);box-sizing:border-box;cursor:pointer;-webkit-user-select:none;user-select:none}
 .hcard[aria-current="true"]{border-color:var(--user-bg);background:var(--user-bg)}
@@ -502,20 +502,19 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pe-req-b small{color:var(--muted);font-size:12px;font-family:var(--mono)}
 .pe-mini{height:28px;padding:0 10px;font-size:13px;flex:none}
 .pe-tag{flex:none;font-size:12px;color:var(--allow)}
-.h-row.pe-peer{flex-direction:column;align-items:stretch;gap:6px}
-.pe-peer-top{display:flex;align-items:center;gap:12px;width:100%}
 .pe-peer-name{flex:1;min-width:0;display:flex;align-items:center;gap:0;padding:0;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .pe-peer-name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 已配对：这次实际走的路（局域网 / 中继） */
 .pe-route{flex:none;margin-left:6px;padding:0 6px;border:1px solid var(--line);border-radius:6px;font-style:normal;font-size:11.5px;line-height:18px;color:var(--muted)}
 .pe-route.rl{color:var(--accent);border-color:var(--accent)}
-.pe-chev{flex:none;width:7px;height:7px;margin-left:8px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
-.pe-chev.open{transform:rotate(225deg) translateY(-2px)}
-.pe-peer-desc{font-size:13px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
-.pe-kv{display:flex;gap:10px;padding:3px 0}
-.pe-kv>span:first-child{flex:none;width:4.5em;color:var(--muted)}
-.pe-kv>span:last-child{flex:1;min-width:0;color:var(--ink);overflow-wrap:anywhere}
-.pe-kv .pe-mono{font-size:12px;color:var(--muted)}
+.h-row.pe-col{flex-direction:column;align-items:stretch;gap:6px}
+.h-row.pe-col>.k{flex:none}
+.pe-left{text-align:left!important}
+.pe-btns.pe-end{margin:14px 6px 4px}
+.claw-h.pe-title{background:none}
+.h-row.pe-peer{flex-direction:row;align-items:center;flex-wrap:nowrap}
+.h-row.pe-peer .pe-peer-name{flex:1;min-width:0;display:flex;align-items:center}
+.h-row.pe-peer>.v{flex:none}
 .pe-ss-list{margin:0;padding-left:1.2em}
 .pe-allow label{display:flex;align-items:center;gap:8px;padding:2px 0;cursor:pointer}
 .pe-allow label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2158,16 +2157,17 @@ function renderSkills(){
 }
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
 // 只有在本机用 127.0.0.1 打开时能改设置；第一版只走局域网
-var peerOpen={},peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
+var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
 $('#hostBody').addEventListener('click',function(e){
   var a=e.target.closest('[data-act]');if(!a)return;
   var act=a.dataset.act;
-  if(act==='peer'){hostView='peer';peerMsg={};peerOnline={};loadPeerPage();return}
+  if(act==='peer'){hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();return}
+  if(act==='peer-sub'){peerGo(a.dataset.sub);return}
   if(act==='peer-back'){hostView='';peerWatch(false);$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return}
   if(act==='skills'){hostView='skills';skillMsg={};renderSkills();loadSkills();return}
   if(act==='skill-install'||act==='skill-remove'){skillPost(act==='skill-install'?'install':'uninstall',a.dataset.name,a.dataset.target);return}
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
-  if(act==='peer-on')peerPost('',peerForm(true),'协同已开启');
+  if(act==='peer-on'){if(!(peerCfg.sessions||[]).length){peerGo('pool');peerMsg={err:'先勾选要加入协同的会话，再开启'};paintPeerMsg();return}peerPost('',peerForm(true),'协同已开启')}
   if(act==='peer-save')peerPost('',peerForm(peerCfg&&peerCfg.enabled),'已保存');
   if(act==='peer-relay-save'){var v=(($('#peRelayInv')||{}).value||'').trim();if(!v){peerMsg={err:'先粘贴中继邀请码'};paintPeerMsg();return}peerPost('',{relayInvite:v},'已保存，正在连中继…');setTimeout(function(){if(hostView==='peer')loadPeerPage()},4000)}
   if(act==='peer-relay-of'){   // 给已配对的对方补 / 改中继地址（对方给的整段 https://…#pin=…&key=…；清空 = 不走中继）
@@ -2183,7 +2183,6 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-start'){peerMsg={ok:'正在向对方申请…'};paintPeerMsg();peerPost('/pair-start',{url:$('#peUrl').value.replace(/\s+/g,'')},'已向对方申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
   if(act==='peer-near-pair'){peerMsg={ok:'正在向「'+a.dataset.name+'」申请…'};paintPeerMsg();peerPost('/pair-start',{url:a.dataset.url,urlAlt:a.dataset.alt||''},'已向「'+a.dataset.name+'」申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
   if(act==='peer-scan')peerScan();
-  if(act==='peer-more'){peerOpen[a.dataset.id]=!peerOpen[a.dataset.id];paintPeerLive();return}
   if(act==='peer-finish')peerPost('/pair-finish',{code:$('#peCode').value.trim()},'');
   if(act==='peer-cancel'){clearTimeout(pePairT);pePairT=null;peerPost('/pair-cancel',{},'')}
 });
@@ -2213,6 +2212,7 @@ function peerPost(path,body,okText){
     if(!x.ok||(x.j.error&&!x.j.local)){clearTimeout(pePairT);pePairT=null;peerMsg={err:x.j.error||'操作失败'};if(path==='/pair-finish'&&peerCfg){peerCfg.outPair=null;renderPeer()}else paintPeerMsg();return}
     peerCfg=peNormCfg(x.j);peerSt=x.j;
     if(x.j.retryIn)pePairPoll(x.j.retryIn+1);
+    if(x.j.paired)peerSub='';   // 配对成功：回主页看「已配对」
     peerMsg=x.j.error?{err:x.j.error}:x.j.paired?{ok:'和「'+x.j.paired+'」配对成功'}:x.j.retryIn?{ok:'配对中…'}:okText?{ok:okText}:{};
     renderPeer();if(x.j.paired)peerCheckNow();
   }).catch(function(e){peerMsg={err:e.message};paintPeerMsg()});
@@ -2321,45 +2321,6 @@ function peerPendingHtml(c){
 // 对方的颜色：按对方 id 算出一个色相（看起来随机，同一个对方永远同一个颜色）
 // 对方的配色组：服务端配对时从 7 组预设里随机分好（color）；老版本服务端没给就按 id 算一个
 function peerPc(p){var c=p&&p.color;if(!(c>=0&&c<7)){var h=0,id=String(p&&p.id||'');for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0;c=h%7}return 'pc'+c}
-function peerPeersHtml(c){
-  if(!c.peers||!c.peers.length)return '';
-  return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
-    var o=peerOnline[p.id],dot=p.canCall?'<i class="h-dot'+(!o?' wait':o.online?' on':'')+'" title="'+(!o?'检查中':o.online?'在线':'离线')+'"></i>':'';
-    // 在线与否看绿点；展开后才显示对方会话、离线原因、IP 和配对时间
-    var open=peerOpen[p.id];
-    // 展开的详情：一项一行；对方开放的会话一个一行（标题里本身就有顿号、括号，连成一串没法看）
-    var kv=function(k,v){return '<div class="pe-kv"><span>'+k+'</span><span>'+v+'</span></div>'};
-    var ss=o&&o.online&&o.sessions||[];
-    var pool=c.sessions||[],allow=p.allow;
-    // 按会话目录分组：先写目录（完整路径），下面是这个目录里加入协同的会话
-    var byDir={},dirOrder=[];pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
-    var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+dirOrder.map(function(d){
-      return '<div class="pe-allow-dir">'+esc(peDirLabel(d))+'</div>'+byDir[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
-        return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+(c.local?'':' disabled')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
-    }).join('')+'</div>':'协同会话池是空的';
-    var det=kv('开放会话',allowHtml)+kv('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
-      kv('地址','<span class="pe-mono">'+esc(p.inbox||'')+'</span>'+(p.inboxAlt?'<br><span class="pe-mono">'+esc(p.inboxAlt)+'</span>':''))+
-      kv('配对','IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt))+
-      // 中继：对方有没有中继地址、单独试一次通不通（在公司直连时也试，回家后能不能续上一眼可知）
-      kv('中继',(function(){
-        var rs=o&&o.relay,t=!p.relay?'没有中继地址：离开局域网就联系不上':!o?'检查中…':!rs?'检查中…':rs.ok?'可用（约 '+(rs.ms<1000?rs.ms+' 毫秒':(rs.ms/1000).toFixed(1)+' 秒')+'）':'不通：'+esc(rs.error||'');
-        if(c.local&&typeof p.relay==='string'&&p.relay)t+='<br><span class="pe-mono">'+esc(p.relay.replace(/#.*$/,'#…'))+'</span>';
-        return t+(c.local&&p.canCall?' <button type="button" class="pe-btn pe-mini" data-act="peer-relay-of" data-id="'+esc(p.id)+'">'+(p.relay?'改':'填')+'中继地址</button>':'');
-      })())+
-      (!p.canCall?'':!o?kv('状态','检查中…'):!o.online?kv('状态','离线'+(o.error?'：'+esc(o.error):'')):
-        kv('对方会话',ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'没有开放会话'));
-    // 第一行：名字 + 撤销；第二行：在线状态、对方会话、IP 和配对时间（占满整行，左对齐）
-    return '<div class="h-row pe-peer ptint '+peerPc(p)+'"><div class="pe-peer-top"><button type="button" class="pe-peer-name" data-act="peer-more" data-id="'+esc(p.id)+'" aria-expanded="'+(open?'true':'false')+'">'+dot+'<span>'+esc(p.name)+'</span>'+(o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+(o.route==='relay'?'中继':'局域网')+'</em>':'')+'<i class="pe-chev'+(open?' open':'')+'"></i></button>'+
-      (c.local?'<button type="button" class="pe-btn del pe-mini" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销</button>':'')+'</div>'+
-      (open?'<div class="pe-peer-desc">'+det+'</div>':'')+'</div>';
-  }).join('')+'</div></div>';
-}
-function paintPeerLive(){
-  if(hostView!=='peer'||!peerCfg)return;
-  var a=$('#pePending'),b=$('#pePeers');
-  if(a)a.innerHTML=peerPendingHtml(peerCfg);
-  if(b)b.innerHTML=peerPeersHtml(peerCfg);
-}
 function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div class="pe-err">'+esc(peerMsg.err)+'</div>':'')+(peerMsg.ok?'<div class="pe-ok">'+esc(peerMsg.ok)+'</div>':'')}
 // 会话池摘要：加入了几个会话、分布在几个目录
 function poolTitle(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?(s.title||'(无标题)'):id.slice(0,8)}
@@ -2375,65 +2336,147 @@ function poolSumText(){
   return '已加入 '+ids.length+' 个会话（'+Object.keys(dirs).length+' 个目录）：'+ids.map(function(id){return poolTitle(id)+'（'+poolDir(id)+'）'}).join('、')+'。改完点「保存」。';
 }
 function paintPoolSum(){var el=$('#pePoolSum');if(el)el.textContent=poolSumText()}
-function renderPeer(){
-  if(hostView!=='peer'||!peerCfg)return;
-  var c=peerCfg,h='<button type="button" class="pe-back" data-act="peer-back">‹ 宿主</button><div id="peMsg"></div>';
-  if(!c.local){
-    // 不是本机打开：只能看，不能改。已配对的对方（点开看开放给他的会话、对方的会话）、我们这边加入协同的会话、地址
-    var pool=c.sessions||[],byDir={},dirOrder=[];
-    pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
-    var poolHtml=pool.length?dirOrder.map(function(d){
-      return '<div class="pe-allow-dir">'+esc(peDirLabel(d))+'</div>'+byDir[d].map(function(id){return '<div class="pe-ro-s">'+esc(poolTitle(id))+'</div>'}).join('')}).join(''):'没有';
-    h+='<div id="pePeers">'+peerPeersHtml(c)+'</div>'+
-      hSec('我们这边',hRow('状态',c.enabled?(c.listening?'已开启，正在接收':'已开启，但没在监听'):'未开启')+hRow('名字',esc(c.name||''))+
-        (c.baseName||c.base?hRow('地址','<span class="pe-mono">'+esc(c.baseName||'')+(c.baseName&&c.base?'<br>':'')+esc(c.base||'')+'</span>'):''))+
-      '<div><div class="h-h">加入协同的会话（'+pool.length+'）</div><div class="h-card"><div class="h-row pe-ro">'+poolHtml+'</div></div></div>'+
-      '<div class="pe-note">这里只能看。配对、撤销、改开放的会话，要在这台电脑上用 <span class="pe-mono">http://127.0.0.1:'+location.port+'</span> 打开网页。</div>';
-    $('#hostBody').innerHTML=h;paintPeerMsg();return;
-  }
-  h+='<div id="pePeers">'+peerPeersHtml(c)+'</div><div id="pePending">'+peerPendingHtml(c)+'</div>';   // 已配对放最上面，配对申请紧跟着，一进来就看到
-  var dirs=[];peerList.forEach(function(s){var k=peDirKey(s);if((s.cwd||s.claw==='openclaw')&&dirs.indexOf(k)<0)dirs.push(k)});
-  if(c.dir&&dirs.indexOf(c.dir)<0)dirs.unshift(c.dir);
-  var dirSel='<select id="peDir" class="pe-in"><option value="">选择目录</option>'+dirs.map(function(d){return '<option value="'+esc(d)+'"'+(d===c.dir?' selected':'')+'>'+esc(peDirLabel(d))+'</option>'}).join('')+'</select>';
-  var ss=peerList.filter(function(s){return peDirKey(s)===c.dir});
-  var ssHtml=c.dir?(ss.length?'<div class="pe-ss pool">'+ss.map(function(s){return '<label><input type="checkbox" value="'+esc(s.id)+'"'+(c.sessions.indexOf(s.id)>=0?' checked':'')+'><span>'+esc(s.title||'(无标题)')+'</span><small>'+esc(shortId(s.id))+'</small></label>'}).join('')+'</div>':'<div class="pe-note" style="margin-bottom:10px">这个目录下没有会话</div>'):'';
-  h+='<div><div class="h-h">我们这边</div><div class="h-card">'+
-    '<div class="h-row"><span class="k">状态</span><span class="v">'+(c.enabled?(c.listening?'已开启，正在接收':'已开启，但没在监听'):'未开启')+'</span></div>'+
-    // 已经和别人配对后，名字和端口就锁住：端口一改对方就找不到我们，名字是配对时告诉对方的，改了对方那边也不会变
-    (c.peers&&c.peers.length?
-      '<div class="h-row"><span class="k">名字</span><span class="v">'+esc(c.name||'')+'</span></div>'+
-      '<div class="h-row"><span class="k">端口</span><span class="v pe-mono">'+c.port+'</span></div>'
-    :
-      '<div class="h-row"><span class="k">名字</span><input id="peName" class="pe-in" maxlength="40" value="'+esc(c.name||'')+'"></div>'+
-      '<div class="h-row"><span class="k">端口</span><input id="pePort" class="pe-in mono" type="number" min="1024" max="65535" value="'+c.port+'"></div>')+
-    '<div class="h-row"><span class="k">会话目录</span>'+dirSel+'</div>'+ssHtml+'<div class="pe-note" id="pePoolSum" style="margin:6px 14px">'+poolSumText()+'</div>'+
-    '<div class="pe-btns">'+(c.enabled?'<button type="button" class="pe-btn pri" data-act="peer-save">保存</button><button type="button" class="pe-btn del" data-act="peer-off">关闭协同</button>':'<button type="button" class="pe-btn pri" data-act="peer-on">开启协同</button>')+'</div>'+
-    '</div><div class="pe-note">'+(c.peers&&c.peers.length?'已经有配对，名字和端口不能再改（改了对方就找不到这台电脑了）；确实要改，先撤销全部配对。':'名字会显示在对方那边。')+'切换目录可以勾选不同目录里的会话，跨目录的都能加入；再到「已配对」里给每个对方分别设开放哪些。</div></div>';
-  if(c.enabled&&c.base){
-    h+='<div><div class="h-h">我们的协同地址</div><div class="h-card">'+
-      (c.relay?'<span class="pe-url">'+esc(c.relay)+'</span><div class="pe-note" style="margin:-4px 14px 6px">经中继，跨网络能用（上面是中继地址）；同一个局域网里也可以用下面的：</div>':'')+
-      (c.baseName?'<span class="pe-url">'+esc(c.baseName)+'</span><div class="pe-note" style="margin:-4px 14px 6px">按电脑名找，路由器换了 IP 也不用改；名字找不到时用这个：</div>':'')+
-      '<span class="pe-url">'+esc(c.base)+'</span>'+
-      (function(){var st=c.relayState||{},t={online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上'}[st.status];
-        return c.relayInvite&&t?'<div class="h-row"><span class="k">中继</span><span class="v">'+t+(st.error?'：'+esc(st.error):'')+'</span></div>':''})()+
-      '<div class="h-row pe-urlrow"><span class="k">中继邀请码</span><textarea id="peRelayInv" class="pe-in pe-ta mono" rows="2" placeholder="'+(c.relayInvite?'已设置（粘贴新的可以替换）':'跨网络协同才要填：粘贴中继邀请码 clarelay1.…')+'"></textarea></div>'+
-      '<div class="pe-note" style="margin:0 14px 6px">粘贴后 claclaw 自己连上中继、生成上面的中继地址，配对时告诉对方。之后新配对的对方走中继；已经配对的要重新配对一次才会改用中继。</div>'+
-      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-relay-save">保存邀请码</button>'+(c.relayInvite?'<button type="button" class="pe-btn del" data-act="peer-relay-clear">不走中继</button>':'')+'<button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(c.relay||c.baseName||c.base)+'">复制地址</button><button type="button" class="pe-btn" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请（含配对说明）</button></div>'+
-      '</div><div class="pe-note">地址里不含密码：别人拿到只能申请配对，要你在这页把两位数配对码告诉他才能配上。</div></div>';
-  }
+// ---------- 协同页：主页 + 子页面 ----------
+// 主页：状态、配对申请、已配对（一行一个，点进详情）、三个入口（添加对方 / 协同会话 / 本机与网络）、复制邀请
+// 子页面：p:<对方 id> 对方详情 | add 添加对方 | pool 协同会话 | net 本机与网络
+var peerSub='';
+function peerGo(sub){peerSub=sub||'';peerMsg={};renderPeer();var sp=$('.sheet-p');if(sp)sp.scrollTop=0}
+function fmtMs(ms){return ms<1000?ms+' 毫秒':(ms/1000).toFixed(1)+' 秒'}
+function peerDot(p){var o=peerOnline[p.id];return p.canCall?'<i class="h-dot'+(!o?' wait':o.online?' on':'')+'" title="'+(!o?'检查中':o.online?'在线':'离线')+'"></i>':''}
+function peerRouteTag(p){var o=peerOnline[p.id];return o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+(o.route==='relay'?'中继':'局域网')+'</em>':''}
+function relayStateText(c){
+  if(!c.relayInvite)return c.relay?'已设置地址':'没设置';
+  var st=c.relayState||{};return ({online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上'}[st.status]||'没连')+(st.error?'：'+esc(st.error):'');
+}
+function peerLink(act,sub,k,v){return '<div class="h-row h-link" data-act="'+act+'" data-sub="'+sub+'"><span class="k">'+k+'</span><span class="v">'+(v||'')+'</span><span class="chev" aria-hidden="true"></span></div>'}
+// 已配对列表（主页）
+function peerPeersHtml(c){
+  if(!c.peers||!c.peers.length)return hSec('已配对','<div class="h-row"><span class="v pe-left">还没有配对。'+(c.local?'点「添加对方」，或者把「复制邀请」发给对方。':'')+'</span></div>');
+  return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
+    var o=peerOnline[p.id];
+    var v=!p.canCall?'只能对方找我们':!o?'检查中…':o.online?(o.sessions||[]).length+' 个会话':'离线';
+    return '<div class="h-row h-link pe-peer ptint '+peerPc(p)+'" data-act="peer-sub" data-sub="p:'+esc(p.id)+'"><span class="k pe-peer-name">'+peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span><span class="v">'+v+'</span><span class="chev" aria-hidden="true"></span></div>';
+  }).join('')+'</div></div>';
+}
+// 对方详情里会随在线检查变的部分（每 10 秒刷新，不动下面的勾选框）
+function peerDetailLive(c,p){
+  var o=peerOnline[p.id],rs=o&&o.relay;
+  var st=!p.canCall?'单向：只能对方找我们':!o?'检查中…':o.online?'在线'+(o.route?' · 走'+(o.route==='relay'?'中继':'局域网'):''):'离线'+(o.error?'：'+esc(o.error):'');
+  var rl=!p.relay?'没有中继地址：离开局域网就联系不上':!o||!rs?'检查中…':rs.ok?'可用（约 '+fmtMs(rs.ms)+'）':'不通：'+esc(rs.error||'');
+  var ss=o&&o.online&&o.sessions||[];
+  return hRow('状态',st)+hRow('中继',rl)+
+    (o&&o.online?'<div class="h-row pe-col"><span class="k">对方开放的会话</span>'+(ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'<span class="v pe-left">没有</span>')+'</div>':'');
+}
+function peerDetailHtml(c,p){
+  var pool=c.sessions||[],allow=p.allow,byDir={},dirOrder=[];
+  pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
+  var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+dirOrder.map(function(d){
+    return '<div class="pe-allow-dir">'+esc(peDirLabel(d))+'</div>'+byDir[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
+      return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+(c.local?'':' disabled')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
+  }).join('')+'</div>':'<span class="v pe-left">协同会话池是空的，先到「协同会话」里加</span>';
+  var h='<div class="claw-h pe-title ptint '+peerPc(p)+'"><span class="pe-peer-name">'+peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span></div>';
+  h+='<div><div class="h-card" id="peDetLive">'+peerDetailLive(c,p)+'</div></div>';
+  h+='<div><div class="h-h">开放给它的会话</div><div class="h-card"><div class="h-row pe-col">'+allowHtml+'</div></div>'+
+    '<div class="pe-note">它只能看到、找到勾上的会话；勾选马上生效。</div></div>';
+  var relayRow=typeof p.relay==='string'&&p.relay?'<span class="pe-mono">'+esc(p.relay.replace(/#.*$/,'#…'))+'</span>':(p.relay?'已设置':'没有');
+  h+=hSec('连接',
+    hRow('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
+    hRow('局域网地址','<span class="pe-mono">'+esc(p.inbox||'')+'</span>'+(p.inboxAlt?'<br><span class="pe-mono">'+esc(p.inboxAlt)+'</span>':''))+
+    hRow('中继地址',relayRow+(c.local&&p.canCall?' <button type="button" class="pe-btn pe-mini" data-act="peer-relay-of" data-id="'+esc(p.id)+'">'+(p.relay?'改':'填')+'</button>':''))+
+    hRow('配对','IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt)));
+  if(c.local)h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn del" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销配对</button></div>';
+  return h;
+}
+// 添加对方：附近的 claclaw + 手动填地址申请
+function peerAddHtml(c){
+  var h=c.enabled?'':'<div class="pe-err">要先开启我们这边的协同（对方要能回连我们）</div>';
   h+='<div id="peNear">'+peerNearHtml(c)+'</div>';
-  h+='<div><div class="h-h">向对方申请配对</div><div class="h-card">'+
+  h+='<div><div class="h-h">填对方地址申请</div><div class="h-card">'+
     (c.outPair?
-      '<div class="h-row"><span class="k">对方</span><span class="v pe-mono">'+esc(c.outPair.base)+'</span></div>'+
+      '<div class="h-row"><span class="k">对方</span><span class="v pe-mono">'+esc(c.outPair.base.replace(/#.*$/,'#…'))+'</span></div>'+
       (c.outPair.pairing?(pePairT||pePairPoll(10),
       '<div class="h-row"><span class="k">状态</span><span class="v">配对中…</span></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-cancel">取消</button></div>'):
       '<div class="h-row"><span class="k">配对码</span><input id="peCode" class="pe-in mono" inputmode="numeric" maxlength="2" placeholder="对方告诉你的两位数"></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-finish">完成配对</button><button type="button" class="pe-btn" data-act="peer-cancel">取消</button></div>')
     :
-      '<div class="h-row pe-urlrow"><span class="k">对方地址</span><textarea id="peUrl" class="pe-in pe-ta mono" rows="2" placeholder="http://电脑名.local:8788/claclaw-peer（或 IP）"></textarea></div>'+
+      '<div class="h-row pe-urlrow"><span class="k">对方地址</span><textarea id="peUrl" class="pe-in pe-ta mono" rows="2" placeholder="对方给的协同地址（局域网的，或带 #pin= 的中继地址）"></textarea></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-start">申请配对</button></div>')+
-    '</div><div class="pe-note">填对方的协同地址申请配对；对方页面上会出现一个两位数配对码，问对方要来填上就配好了，之后双方都能主动找对方。'+(c.enabled?'':'要先开启我们这边的协同。')+'</div></div>';
+    '</div><div class="pe-note">申请后对方页面上会出现一个两位数配对码，问对方要来填上就配好了，之后双方都能主动找对方。</div></div>';
+  return h;
+}
+// 协同会话：按「Claw + 目录」挑要加入协同的会话
+function peerPoolHtml(c){
+  if(!c.local){
+    var pool=c.sessions||[],byDir={},dirOrder=[];
+    pool.forEach(function(id){var d=poolCwd(id);if(!byDir[d]){byDir[d]=[];dirOrder.push(d)}byDir[d].push(id)});
+    return hSec('加入协同的会话（'+pool.length+'）','<div class="h-row pe-col">'+(pool.length?dirOrder.map(function(d){
+      return '<div class="pe-allow-dir">'+esc(peDirLabel(d))+'</div>'+byDir[d].map(function(id){return '<div class="pe-ro-s">'+esc(poolTitle(id))+'</div>'}).join('')}).join(''):'没有')+'</div>');
+  }
+  var dirs=[];peerList.forEach(function(s){var k=peDirKey(s);if((s.cwd||s.claw==='openclaw')&&dirs.indexOf(k)<0)dirs.push(k)});
+  if(c.dir&&dirs.indexOf(c.dir)<0)dirs.unshift(c.dir);
+  var dirSel='<select id="peDir" class="pe-in"><option value="">选择目录</option>'+dirs.map(function(d){return '<option value="'+esc(d)+'"'+(d===c.dir?' selected':'')+'>'+esc(peDirLabel(d))+'</option>'}).join('')+'</select>';
+  var ss=peerList.filter(function(s){return peDirKey(s)===c.dir});
+  var ssHtml=c.dir?(ss.length?'<div class="pe-ss pool">'+ss.map(function(s){return '<label><input type="checkbox" value="'+esc(s.id)+'"'+(c.sessions.indexOf(s.id)>=0?' checked':'')+'><span>'+esc(s.title||'(无标题)')+'</span><small>'+esc(shortId(s.id))+'</small></label>'}).join('')+'</div>':'<div class="pe-note" style="margin-bottom:10px">这个目录下没有会话</div>'):'';
+  return '<div><div class="h-h">加入协同的会话</div><div class="h-card">'+
+    '<div class="h-row"><span class="k">会话目录</span>'+dirSel+'</div>'+ssHtml+'<div class="pe-note" id="pePoolSum" style="margin:6px 14px">'+poolSumText()+'</div>'+
+    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="'+(c.enabled?'peer-save':'peer-on')+'">'+(c.enabled?'保存':'保存并开启协同')+'</button></div>'+
+    '</div><div class="pe-note">切换目录可以勾选不同目录里的会话，都会加入；再到每个对方的详情里设它能看到哪些。</div></div>';
+}
+// 本机与网络：名字、端口、我们的地址、中继
+function peerNetHtml(c){
+  var locked=c.peers&&c.peers.length;
+  var h='<div><div class="h-h">本机</div><div class="h-card">'+
+    (!c.local||locked?hRow('名字',esc(c.name||''))+hRow('端口','<span class="pe-mono">'+c.port+'</span>'):
+      '<div class="h-row"><span class="k">名字</span><input id="peName" class="pe-in" maxlength="40" value="'+esc(c.name||'')+'"></div>'+
+      '<div class="h-row"><span class="k">端口</span><input id="pePort" class="pe-in mono" type="number" min="1024" max="65535" value="'+c.port+'"></div>'+
+      '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-save">保存</button></div>')+
+    '</div>'+(c.local?'<div class="pe-note">'+(locked?'已经有配对，名字和端口不能再改（改了对方就找不到这台电脑了）；确实要改，先撤销全部配对。':'名字会显示在对方那边。')+'</div>':'')+'</div>';
+  if(c.base)h+='<div><div class="h-h">我们的协同地址</div><div class="h-card">'+
+    (c.relay?hRow('中继',c.local?'<span class="pe-mono">'+esc(c.relay.replace(/#.*$/,'#…'))+'</span> <button type="button" class="pe-btn pe-mini" data-act="peer-copy" data-copy="'+esc(c.relay)+'">复制</button>':'已设置'):'')+
+    (c.baseName?hRow('局域网','<span class="pe-mono">'+esc(c.baseName)+'</span>'):'')+
+    hRow(c.baseName?'局域网 IP':'局域网','<span class="pe-mono">'+esc(c.base)+'</span>')+
+    '</div><div class="pe-note">地址里不含密码：别人拿到只能申请配对，要你把两位数配对码告诉他才能配上。同一个局域网里优先直连，连不上自动走中继。</div></div>';
+  if(c.local)h+='<div><div class="h-h">中继（跨网络）</div><div class="h-card">'+
+    hRow('状态',relayStateText(c))+
+    '<div class="h-row pe-urlrow"><span class="k">邀请码</span><textarea id="peRelayInv" class="pe-in pe-ta mono" rows="2" placeholder="'+(c.relayInvite?'已设置（粘贴新的可以替换）':'粘贴中继邀请码 clarelay1.…')+'"></textarea></div>'+
+    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">保存邀请码</button>'+(c.relayInvite?'<button type="button" class="pe-btn del" data-act="peer-relay-clear">不走中继</button>':'')+'</div>'+
+    '</div><div class="pe-note">不在同一个局域网时经中继互发。粘贴邀请码后 claclaw 自己连上中继、生成中继地址，配对时告诉对方；已经配对的对方，在它的详情里填它的中继地址。</div></div>';
+  return h;
+}
+function peerMainHtml(c){
+  var on=c.enabled?(c.listening?'已开启':'已开启，但没在监听'):'未开启';
+  var h='<div><div class="h-card">'+
+    '<div class="h-row"><span class="k">协同</span><span class="v">'+on+'</span>'+(c.local?(c.enabled?'<button type="button" class="pe-btn del pe-mini" data-act="peer-off">关闭</button>':'<button type="button" class="pe-btn pri pe-mini" data-act="peer-on">开启</button>'):'')+'</div>'+
+    hRow('名字',esc(c.name||''))+
+    hRow('网络','局域网'+(c.relay||c.relayInvite?' + 中继（'+relayStateText(c)+'）':''))+
+    '</div></div>';
+  h+='<div id="pePending">'+peerPendingHtml(c)+'</div><div id="pePeers">'+peerPeersHtml(c)+'</div>';
+  h+='<div><div class="h-card">'+
+    (c.local?peerLink('peer-sub','add','添加对方',''):'')+
+    peerLink('peer-sub','pool','协同会话',(c.sessions||[]).length+' 个')+
+    peerLink('peer-sub','net','本机与网络',c.relay||c.relayInvite?'中继'+relayStateText(c):'只走局域网')+
+    '</div></div>';
+  if(c.local&&c.enabled&&c.base)h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请</button></div>'+
+    '<div class="pe-note">邀请里有我们的地址和配对说明，发给对方（或对方的 AI）照着就能申请配对。</div>';
+  if(!c.local)h+='<div class="pe-note">这里只能看。配对、撤销、改设置，要在这台电脑上用 <span class="pe-mono">http://127.0.0.1:'+location.port+'</span> 打开网页。</div>';
+  return h;
+}
+function paintPeerLive(){
+  if(hostView!=='peer'||!peerCfg)return;
+  if(!peerSub){var a=$('#pePending'),b=$('#pePeers');if(a)a.innerHTML=peerPendingHtml(peerCfg);if(b)b.innerHTML=peerPeersHtml(peerCfg);return}
+  if(peerSub.indexOf('p:')===0){var p=(peerCfg.peers||[]).find(function(x){return 'p:'+x.id===peerSub}),d=$('#peDetLive');if(p&&d)d.innerHTML=peerDetailLive(peerCfg,p)}
+}
+function renderPeer(){
+  if(hostView!=='peer'||!peerCfg)return;
+  var c=peerCfg,p=null;
+  if(peerSub.indexOf('p:')===0){p=(c.peers||[]).find(function(x){return 'p:'+x.id===peerSub});if(!p)peerSub=''}   // 对方已经撤销：回主页
+  if(peerSub==='add'&&!c.local)peerSub='';
+  var titles={add:'添加对方',pool:'协同会话',net:'本机与网络'};
+  var h=peerSub?'<button type="button" class="pe-back" data-act="peer-sub" data-sub="">‹ 协同</button>':'<button type="button" class="pe-back" data-act="peer-back">‹ 宿主</button>';
+  if(titles[peerSub])h+='<div class="claw-h">'+titles[peerSub]+'</div>';
+  h+='<div id="peMsg"></div>';
+  h+=p?peerDetailHtml(c,p):peerSub==='add'?peerAddHtml(c):peerSub==='pool'?peerPoolHtml(c):peerSub==='net'?peerNetHtml(c):peerMainHtml(c);
   $('#hostBody').innerHTML=h;paintPeerMsg();
 }
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
