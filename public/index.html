@@ -1815,6 +1815,7 @@ function connect(){
     var last=fromUrl||(session?session.id:localStorage.getItem(hk('session')));
     if(!DESKTOP.matches&&!fromUrl){
       var view='';try{view=sessionStorage.getItem('claclaw.view')||''}catch(_){}
+      if(startOnClaw){startOnClaw=false;goList(true);return}   // 主屏幕 App / 嵌在外壳里：先到 Claw 页
       if(mList||view!=='chat'||!last){goList();return}   // 手机：打开 App 先到会话列表（像微信）
     }
     if(last)wsSend({t:'session.open',id:last,mode:mode});
@@ -2513,6 +2514,7 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
   var t=b.dataset.tab;
   if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
   mTab(t);
+  if(t==='chats'&&clawSel&&!$('#sList .s-row'))openSheet();   // 一打开停在 Claw 页、还没加载过会话：点「会话」时再加载
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){railTab(false)});
@@ -2867,14 +2869,18 @@ sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 $('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)return;if(String(getSelection()||'').trim())return;goList()});
 // ---------- 手机：列表页 ⇄ 聊天页 ----------
 var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
-function goList(){
+// 手机上以主屏幕 App 打开、或嵌在 clarelay 外壳里：一打开先到 Claw 页（只要一个很轻的请求），不先拉会话列表——
+// 经中继访问时每多一个请求都明显变慢；选了 Claw 才加载它的会话。通知点进来的照旧直接打开那个会话
+var startOnClaw=!DESKTOP.matches&&(window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true);
+function goList(toClaw){
   if(DESKTOP.matches)return;
   if(session){wsSend({t:'session.leave'});saveFeed(session.id);session=null;setBusy(false)}   // 先存（聊天区还可见，量得出高度）再切到列表
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
-  if(!clawSel)mTab('claw');   // 首次使用：先选 Claw
+  if(!clawSel||toClaw)mTab('claw');   // 首次使用：先选 Claw
   if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：刷新后回到设置页
+  if(toClaw){syncPushBtn();return}   // 停在 Claw 页：会话列表等选了 Claw 再加载
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
   renderUnread();renderActivity();
 }
