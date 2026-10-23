@@ -63,7 +63,7 @@ function done(j) {
 
 const [cmd, ...args] = process.argv.slice(2);
 const { opts, rest } = parse(args);
-const wait = Math.max(5, Math.min(Number(opts.wait) || 110, 590));
+const wait = Math.max(5, Math.min(Number(opts.wait) || 110, 280));   // fetch 等响应头最多 5 分钟：再久就断，用 result 分段取
 
 const who = () => '&from=' + encodeURIComponent(opts.from || '') + '&cwd=' + encodeURIComponent(process.cwd());
 if (cmd === 'whoami') {

@@ -731,7 +731,7 @@ async function handleLocal(req, res, url) {
   const ip = req.socket.remoteAddress || '';
   if (!/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip) || req.headers['x-forwarded-for'] || !skills.checkLocal(req.headers['x-claclaw-local'])) return sendJson(res, 403, { ok: false, error: '只接受本机带令牌的请求' });
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
-  const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 590));
+  const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
   if (url.pathname === '/api/local/peer/result') return sendJson(res, 200, await waitJob(q.get('job') || '', wait));
   if (url.pathname === '/api/local/peer/whoami') {
     const f = await resolveFrom(q.get('from') || '', q.get('cwd') || '');
@@ -750,7 +750,7 @@ async function handleLocal(req, res, url) {
     if (!f.id) return sendJson(res, 200, { ok: false, error: f.error });
     const job = crypto.randomBytes(4).toString('hex');
     localJobs.set(job, { at: Date.now(), promise: peerSendCore({ fromId: f.id, to: String(b.to || '').trim(), session: String(b.session || '').trim(), text: b.text }) });
-    return sendJson(res, 200, await waitJob(job, Math.max(5, Math.min(Number(b.wait) || 110, 590))));
+    return sendJson(res, 200, await waitJob(job, Math.max(5, Math.min(Number(b.wait) || 110, 280))));
   }
   return sendJson(res, 404, { ok: false, error: 'not found' });
 }
