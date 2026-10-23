@@ -1504,7 +1504,7 @@ function showPerm(){
   $('#permSub').textContent=sub;
   $('#bAllow').textContent=p.name==='Bash'?'允许运行':/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(p.name)?'允许修改':'允许';
   var al=$('#bAlways');
-  if(p.canAlways){al.hidden=false;al.textContent='本会话内同类操作都不再询问'}else{al.hidden=true}
+  if(p.canAlways){al.hidden=false;al.textContent=p.alwaysLabel||'本会话内同类操作都不再询问'}else{al.hidden=true}
   setDock('perm');
   (p.defaultToNo?$('#bDeny'):$('#bAllow')).focus({preventScroll:true});
 }
@@ -1606,7 +1606,7 @@ function reply(decision){
   var p=permQueue[0];if(!p)return;
   wsSend({t:'permission.reply',requestId:p.requestId,decision:decision});
   dropPerm(p.requestId,decision==='deny'?'deny':'allow');
-  if(decision==='allow_session')addSys('本会话内同类操作不再询问');
+  if(decision==='allow_session')addSys(p.alwaysLabel?'这一轮同类操作不再询问':'本会话内同类操作不再询问');
 }
 $('#bAllow').addEventListener('click',function(){reply('allow')});
 $('#bDeny').addEventListener('click',function(){reply('deny')});

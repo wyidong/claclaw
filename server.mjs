@@ -26,6 +26,8 @@ setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启�
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody } from './httpbody.mjs';
+import { peerRisk, sensitiveRoots } from './peerguard.mjs';
+const PEER_ROOTS = sensitiveRoots(DATA);
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
 // CLACLAW_HOST 可以写逗号分隔的列表覆盖默认值
@@ -786,7 +788,7 @@ async function peerRunner(info) {
   }
   return runners.get(id);
 }
-async function peerDeliver(info, text, from, peerId, { local = false } = {}) {
+async function peerDeliver(info, text, from, peerId, { local = false, fromId = null } = {}) {
   if (peerId) markLast(info.sessionId, peerId);
   const id = info.sessionId;
   const r = await peerRunner(info);
@@ -825,6 +827,8 @@ async function peerDeliver(info, text, from, peerId, { local = false } = {}) {
     const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); resolve([code, obj]); };
     const timer = setTimeout(() => end(504, { ok: false, error: '10 分钟内没等到回复', partial: (cur || reply).trim() }), 10 * 60 * 1000);
     r.subscribe(sub);
+    // 对方发来的、或本机会话在处理对方消息时转过来的：这一轮有风险的操作要用户确认
+    if (r instanceof Runner && (!local || runners.get(fromId)?.peerTurn)) r.peerTurn = { from: from || '对方', allowed: new Set() };
     r.send(msg);
     r.emit({ t: 'user', text: msg, images: [] });
   });
@@ -1051,6 +1055,8 @@ class Runner {
         env: CHILD_ENV,
         mcpServers: { claclaw: claclawMcp(this.id) },
         canUseTool: (name, input, o) => this.askPermission(name, input, o),
+        // 协同消息触发的那一轮：不管什么权限模式（包括跳过确认），有风险的操作都要用户确认（钩子在跳过确认模式下也会跑）
+        hooks: { PreToolUse: [{ hooks: [(inp, toolUseID, o) => this.peerGuard(inp, toolUseID, o)], timeout: 3600 }] },
         stderr: d => log('[stderr]', this.id.slice(0, 8), String(d).trim().slice(0, 300)),
       },
     });
@@ -1161,6 +1167,7 @@ class Runner {
       } else if (m.type === 'result') {
         touchWeb(this.id);
         if (!this.sawState) this.busy = false;   // 有 session_state 时以它的 idle 为准
+        this.peerTurn = null;
         this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined });
         this.notify(m.subtype === 'success' ? snippet(m.result, '回复完了') : '这一轮出错结束了', 'done-' + this.id);
         // 有插话排着时 CLI 可能接着干：网页端的「工作中」以 CLI 的 idle 为准，这里先把状态同步回去
@@ -1207,10 +1214,27 @@ class Runner {
     return true;
   }
 
+  async peerGuard(inp, toolUseID, o) {
+    const pt = this.peerTurn;
+    if (!pt || inp?.hook_event_name !== 'PreToolUse') return {};
+    const risk = peerRisk(inp.tool_name, inp.tool_input, this.cwd, PEER_ROOTS);
+    if (!risk) return {};
+    if (pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
+    log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason);
+    const res = await this.askPermission(inp.tool_name, inp.tool_input, {
+      toolUseID, signal: o?.signal, title: '对方（' + pt.from + '）发来的请求要' + risk.reason + '，允许吗？',
+      description: '这一轮是协同消息触发的，有风险的操作要你确认', peerKey: risk.key,
+    });
+    const ok = res.behavior === 'allow';
+    log('peer-guard', ok ? 'allowed' : 'denied', this.id.slice(0, 8), inp.tool_name);
+    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: ok ? 'allow' : 'deny',
+      permissionDecisionReason: ok ? '用户已确认' : '用户拒绝了这次操作（协同消息触发的操作需要用户确认）' } };
+  }
+
   askPermission(name, input, o) {
     // 网页端还不支持回答选择题：拒绝并让 Claude 改成在回复里直接问
     const requestId = crypto.randomUUID();
-    const canAlways = !!(o.suggestions?.length) && !o.suppressAlwaysAllowRule;
+    const canAlways = !!o.peerKey || (!!(o.suggestions?.length) && !o.suppressAlwaysAllowRule);
     const req = {
       t: 'perm.request', requestId, toolUseID: o.toolUseID, name,
       title: o.title || null,
@@ -1224,10 +1248,10 @@ class Runner {
             options: (q.options || []).map(o => ({ label: String(o.label || ''), description: String(o.description || '') })) }))
         : undefined,
       reason: o.decisionReason || '',
-      canAlways, defaultToNo: !!o.defaultToNo,
+      canAlways, defaultToNo: !!o.defaultToNo, alwaysLabel: o.peerKey ? '本轮同类都允许' : undefined,
     };
     return new Promise(resolve => {
-      this.pending.set(requestId, { resolve, input, suggestions: o.suggestions, req });
+      this.pending.set(requestId, { resolve, input, suggestions: o.suggestions, req, peerKey: o.peerKey });
       o.signal?.addEventListener('abort', () => {
         if (this.pending.delete(requestId)) {
           this.emit({ t: 'perm.cancel', requestId, toolUseID: o.toolUseID });
@@ -1258,6 +1282,7 @@ class Runner {
       decision = 'deny';
     }
     if (decision === 'allow') p.resolve({ behavior: 'allow', updatedInput: p.input });
+    else if (decision === 'allow_session' && p.peerKey) { this.peerTurn?.allowed.add(p.peerKey); p.resolve({ behavior: 'allow', updatedInput: p.input }); }
     else if (decision === 'allow_session' && p.req.canAlways) p.resolve({ behavior: 'allow', updatedInput: p.input, updatedPermissions: p.suggestions });
     else p.resolve({ behavior: 'deny', message: p.req.questions ? '用户没有回答这个问题（在网页上取消了）。' : '用户在网页上拒绝了这次操作。' });
     this.emit({ t: 'perm.done', requestId, toolUseID: p.req.toolUseID, decision });
