@@ -1949,7 +1949,7 @@ function mTab(t){
   var app=$('#app');
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   if(t!=='host'){hostView='';peerWatch(false)}
-  hostLive(t==='host');if(t==='claw')loadClaws();
+  hostLive(t==='host');if(t==='claw')loadClaws();if(t==='set')loadSetData();
   $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host');
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t)});
   $('.sheet-p').scrollTop=0;
@@ -2482,7 +2482,10 @@ function showClawSel(){
 showClawSel();
 // 只列出这台电脑装了的 Claw；之前选过、现在卸载了的就清掉选择
 // 装没装、启没启动：打开页面时查一次，之后每次切到 Claw 页再查（网关后来开了 / 关了都能跟上）
+// 启动时和切到 Claw 页会连着调两次：3 秒内只请求一次（经中继打开时每个请求都慢）
+var clawsAt=0;
 function loadClaws(){
+if(Date.now()-clawsAt<3000)return;clawsAt=Date.now();
 fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
   var any=false,ok=[];
   list.forEach(function(c){
@@ -3105,7 +3108,8 @@ function ttsPickVoice(){
   $('#setTtsVoiceSub').textContent=srv.length?'选了会试听一句；电脑合成的声音更自然':'选了会试听一句';
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
-ttsLoadSrv();
+// 电脑合成的声音列表：开着朗读且选的是电脑声音才在启动时拉，否则等进设置页再拉
+if(tts.on&&/^srv:/.test(tts.want))ttsLoadSrv();
 // 电脑合成的播放：一句一句向电脑要音频（电脑已经把首尾静音裁掉、按标点留好了停顿），
 // 用两个 <audio> 轮流放：放这一句时，下一句已经在另一个里面加载好，这句一完立刻接上。
 // 用 <audio> 而不是 Web Audio：iPhone 上 Web Audio 会被静音键、睡眠模式、来电打断等各种情况弄得没声音。
@@ -3567,7 +3571,7 @@ document.addEventListener('visibilitychange',function(){
   }
   else{ttsWake();ttsPickVoice();if(narration&&narration.onVisible)narration.onVisible()}
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
-$('#mtabs [data-tab="set"]').addEventListener('click',ttsLoadSrv);$('#railSet').addEventListener('click',ttsLoadSrv);
+
 document.addEventListener('pointerdown',ttsUnlock,{capture:true});
 ttsSync();
 (function(){
@@ -3644,7 +3648,8 @@ $('#soundSel').addEventListener('change',function(e){
   fetch('/api/sound',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:e.target.value})})
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+(SOUND_CN[j.name]||j.name)+'」')});
 });
-syncSound();
+// 设置页里的数据（提示音、会话设置、电脑合成的声音）进设置页再拉，启动时少几个请求
+function loadSetData(){syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
 // 会话相关设置：空闲关闭时间、接管等待时间（存在服务器，所有设备共用）
 function showSessSet(j){
   [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
@@ -3653,7 +3658,6 @@ function showSessSet(j){
     sel.value=v;
   });
 }
-fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});
 ['#setIdle','#setTake'].forEach(function(id){
   $(id).addEventListener('change',function(){
     var body={};body[id==='#setIdle'?'idleCloseMin':'takeoverMin']=Number(this.value);
