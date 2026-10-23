@@ -79,10 +79,7 @@ export function lanIp() {
   return null;
 }
 // 我们告诉对方的收件地址：设了中继地址（跨网络）就以它为主、局域网地址备用；没设就是局域网的名字地址 + IP 地址
-export const ourInbox = c => {
-  const lan = ourBaseName(c) || ourBase(c);
-  return c.relay ? { inbox: c.relay, inboxAlt: lan } : { inbox: lan, inboxAlt: ourBase(c) };
-};
+export const ourInbox = c => ({ inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c), ...(c.relay ? { relay: c.relay } : {}) });   // 局域网地址 + 中继地址（有的话），对方局域网优先
 export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + ':' + c.port + PEER_BASE : ''; };
 
 // ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
@@ -192,7 +189,7 @@ async function callRelay(base, sub, { token, body, ms }) {
   j.status = r.status;
   return j;
 }
-export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } = {}) {
+export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000, connectMs = 0 } = {}) {
   if (!base) return Promise.reject(Object.assign(new Error('没有对方的地址'), { connect: true }));
   if (/#.*\bkey=/.test(base)) return callRelay(base, sub, { token, body, ms });
   const u = new URL(base);
@@ -228,6 +225,8 @@ export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000 } = {}) {
       res.on('error', e => fail('对方的回复中断了：' + e.message, false));
     });
     req.on('socket', so => { if (!so.connecting) connected = true; else so.once('connect', () => { connected = true; }); });
+    // 局域网地址：几秒连不上就算不在同一个网络，赶紧换中继，别干等
+    if (connectMs) setTimeout(() => { if (!connected) fail('连不上对方：超时', true); }, connectMs);
     req.on('error', e => fail('连不上对方：' + (e.code || e.message), !connected));
     const t = setTimeout(() => fail(connected ? '对方超时没有回复' : '连不上对方：超时', !connected), ms);
     if (data) req.write(data);
@@ -296,14 +295,27 @@ export async function discover(c) {
 }
 
 // 请求已配对的对方：先用名字地址，连不上再用 IP 地址（成功的那个以后优先用）
+// 对方的地址：局域网的（名字地址、IP 地址）优先，几毫秒就到；连不上（3 秒）再走中继（约 1 秒一个来回）。
+// 局域网连不上之后 5 分钟内直接走中继，过了再试局域网——回到公司自动切回直连。
+// 只在「连都没连上」时换地址；已经送到对方的请求出错不重发（不然同一条消息会送两遍）。
+export const isRelayAddr = u => /^https:|#.*\bkey=/.test(String(u || ''));
+const lanDownUntil = new Map();   // 对方 id → 这之前不先试局域网
 export async function peerCall(c, p, sub, opts) {
-  const tries = [p.inbox, p.inboxAlt].filter(Boolean);
-  if (p.ip && p.inbox && !/^https:|#pin=/.test(p.inbox)) { try { const u = new URL(p.inbox); if (u.hostname !== p.ip) { u.hostname = p.ip; tries.push(u.toString().replace(/\/$/, '')); } } catch {} }
+  const lan = [p.inbox, p.inboxAlt].filter(u => u && !isRelayAddr(u));
+  if (p.ip && lan[0]) { try { const u = new URL(lan[0]); if (u.hostname !== p.ip) { u.hostname = p.ip; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
+  const relays = [p.relay, p.inbox, p.inboxAlt].filter(u => u && isRelayAddr(u));
+  const lanFirst = !(lanDownUntil.get(p.id) > Date.now());
+  const tries = [...new Set(lanFirst ? [...lan, ...relays] : [...relays, ...lan])];
   let err;
-  for (const [i, url] of [...new Set(tries)].entries()) {
+  for (const url of tries) {
+    const viaRelay = isRelayAddr(url);
     try {
-      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, ms: i ? Math.min(opts?.ms || 8000, 8000) : opts?.ms });
-      if (i && url !== p.inbox) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; savePeer(c); }   // 换了能用的那个当首选
+      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, connectMs: viaRelay ? 0 : 3000 });
+      if (viaRelay) { if (lan.length) lanDownUntil.set(p.id, Date.now() + 5 * 60e3); }
+      else {
+        lanDownUntil.delete(p.id);
+        if (url !== lan[0] && lan.includes(url) && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; savePeer(c); }   // 局域网里换了能用的那个当首选
+      }
       return j;
     } catch (e) { err = e; if (!e.connect) break; }   // 已经送到对方了：不换地址重发
   }

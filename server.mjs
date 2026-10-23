@@ -858,7 +858,7 @@ async function peerHandler(req, res) {
       const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || ip;
       const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
       const inbox = okUrl(b.inbox), inboxAlt = okUrl(b.inboxAlt);   // 对方的名字地址（.local）和 IP 地址
-      let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }
+      let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; p.relay = okUrl(b.relay); } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }   // relay：对方的中继地址（跨网络时用）
       log('peer pair request from', ip, name);
       // 开着的网页也提醒一下（App 在前台时 iPhone 不弹推送横幅）
       { const msg = JSON.stringify({ t: 'peer.pair', name, ip, code: p.code }); for (const w of wss.clients) if (w.readyState === 1) w.send(msg); }
@@ -889,7 +889,7 @@ async function peerHandler(req, res) {
       const theirToken = typeof b.token === 'string' && b.token.length >= 16 ? b.token.slice(0, 200) : '';
       const c2 = loadPeer();
       c2.peers = c2.peers.filter(x => !(p.inbox && (x.inbox === p.inbox || x.inboxAlt === p.inbox)));   // 同一个对方重新配对：替换旧的
-      c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
+      c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', relay: p.relay || '', tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
       savePeer(c2);
       log('peer paired', p.ip, p.name, theirToken ? 'two-way' : 'one-way');
       return out(200, { ok: true, token, name: myName(c2), ...ourInbox(c2) });
@@ -929,7 +929,7 @@ function peerPublic(c, local) {
     relayTunnelCmd: local && c.relayInvite && clarelay ? clarelay.tunnelCommand(c.relayInvite, '<你本机收消息的服务地址>') : '',
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
-    peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relay: local ? p.relay || '' : !!p.relay, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt, pairing: !!outPair.pairing } : null,
   };
 }
@@ -1892,6 +1892,16 @@ const handler = async (req, res) => {
       // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
       if (act !== '/check' && !local) return sendJson(res, 403, { error: '只能在这台电脑上用 127.0.0.1 打开网页时设置协同' });
       if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
+      if (act === '/peer-relay') {
+        // 给已配对的对方补上 / 改掉它的中继地址（跨网络时用；局域网仍然优先）
+        const p = c.peers.find(x => x.id === b.id);
+        if (!p) return sendJson(res, 404, { error: '没有这个对方' });
+        const r = String(b.relay || '').trim();
+        if (r && !/^https:\/\/\S+#pin=sha256\/\/\S+$/.test(r)) return sendJson(res, 400, { error: '中继地址要是 https://…#pin=…（&key=…）整段' });
+        p.relay = r.slice(0, 2000); savePeer(c);
+        log('peer relay', p.name, r ? 'set' : 'cleared');
+        return sendJson(res, 200, peerPublic(c, true));
+      }
       if (act === '/allow') {
         // 给某个对方单独设开放哪些会话（null = 全部开放）
         const p = c.peers.find(x => x.id === b.id);
@@ -1937,7 +1947,7 @@ const handler = async (req, res) => {
           const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
           const inbox = okUrl(j.inbox) || outPair.base, inboxAlt = okUrl(j.inboxAlt) || (inbox !== outPair.base ? outPair.base : outPair.baseAlt || '');
           c2.peers = c2.peers.filter(p => ![inbox, inboxAlt, outPair.base].includes(p.inbox));
-          c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
+          c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, relay: okUrl(j.relay), tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
           savePeer(c2); outPair = null;
           log('peer paired (we asked)', c2.peers.at(-1).name);
           return sendJson(res, 200, { ...peerPublic(c2, true), paired: c2.peers.at(-1).name });
