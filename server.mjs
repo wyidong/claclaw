@@ -711,9 +711,13 @@ async function peerSendCore({ fromId, to, session, text }) {
   const r = runnerOf(fromId);
   const from = (r?.info?.customTitle || r?.info?.summary || r?.title || '会话') + ' · ' + myName(c);
   try {
-    const j = await peerCall(c, p, '', { body: { from, text: text.slice(0, 4000), session: session || undefined } });
-    log('peer send', peerShortId(fromId), '→', p.name, j.ok ? 'ok' : 'fail');
+    // msg_id：这条消息的编号，对方据此去重（同一个编号收到两次只投递一次）；from_session：对方要事后回复时找哪个会话
+    const msgId = crypto.randomUUID();
+    const j = await peerCall(c, p, '', { body: { msg_id: msgId, from, from_session: peerShortId(fromId), text: text.slice(0, 4000), session: session || undefined } });
+    log('peer send', peerShortId(fromId), '→', p.name, j.ok ? (j.accepted || j.status === 202 ? 'accepted' : 'ok') : 'fail');
     markLast(fromId, p.id);
+    // 202 / accepted：对方收到了，但这一轮没等到回复——回复会由对方另发一条消息，开头写「回复 <编号>」。别重发
+    if (j.ok && (j.status === 202 || j.accepted)) return { ok: true, accepted: true, peer: p.name, id: j.id || msgId, reply: '对方已收到（编号 ' + (j.id || msgId) + '），回复稍后会单独发来，开头写「回复 ' + (j.id || msgId) + '」。不用重发。' + (j.note ? '（' + j.note + '）' : '') };
     return j.ok ? { ok: true, peer: p.name, reply: j.reply || '（对方这一轮没有文字回复）' } : { ok: false, peer: p.name, error: j.error || '未知', code: j.code, resets: j.resets };
   } catch (e) { return { ok: false, error: e.message }; }
 }
@@ -838,6 +842,7 @@ async function peerDeliver(info, text, from, peerId, { local = false } = {}) {
   });
 }
 const peerBusy = new Set();
+const peerSeen = new Map();   // 对方 id:msg_id → { at, result }：去重
 const cleanIp = ip => String(ip || '').replace(/^::ffff:/, '');
 async function peerHandler(req, res) {
   const out = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
@@ -906,7 +911,12 @@ async function peerHandler(req, res) {
     if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST 发消息' });
     let body = ''; try { body = await readBody(req, 64 * 1024); } catch { return out(413, { ok: false, error: '消息太长' }); }
     let text = body, from = '', want = '';
-    try { const j = JSON.parse(body); text = j.text; from = String(j.from || '').replace(/\s+/g, ' ').slice(0, 60); want = String(j.session || ''); } catch {}
+    let msgId = '';
+    try { const j = JSON.parse(body); text = j.text; from = String(j.from || '').replace(/\s+/g, ' ').slice(0, 60); want = String(j.session || ''); msgId = String(j.msg_id || '').slice(0, 100); } catch {}
+    // 去重：同一个对方、同一个 msg_id 30 分钟内再来，直接给上次的结果（还在处理就等同一个结果），不再投递
+    const dupKey = msgId && peer.id + ':' + msgId;
+    for (const [k, v] of peerSeen) if (Date.now() - v.at > 30 * 60e3) peerSeen.delete(k);
+    if (dupKey && peerSeen.has(dupKey)) { log('peer dup', peer.name, msgId.slice(0, 12)); const [code, obj] = await peerSeen.get(dupKey).result; return out(code, obj); }
     text = String(text || '').trim();
     if (!text) return out(400, { ok: false, error: '消息是空的' });
     if (text.length > 4000) return out(413, { ok: false, error: '消息太长（最多 4000 字）' });
@@ -915,8 +925,13 @@ async function peerHandler(req, res) {
     if (peerBusy.has(info.sessionId)) return out(429, { ok: false, error: '上一条还在处理，稍后再发' });
     peerBusy.add(info.sessionId);
     log('peer in', peer.name, ip, '→', info.sessionId.slice(0, 8), text.length + ' chars');
-    try { const [code, obj] = await peerDeliver(info, text, peer.name + (from && from !== peer.name ? ' · ' + from : ''), peer.id); out(code, obj); }
-    finally { peerBusy.delete(info.sessionId); }
+    const result = peerDeliver(info, text, peer.name + (from && from !== peer.name ? ' · ' + from : ''), peer.id);
+    if (dupKey) peerSeen.set(dupKey, { at: Date.now(), result });
+    try {
+      const [code, obj] = await result;
+      if (dupKey && !(code < 300 || code === 504)) peerSeen.delete(dupKey);   // 没送达（忙、出错）的不记：同一个编号重发要能再投递
+      out(code, obj);
+    } finally { peerBusy.delete(info.sessionId); }
   } catch (e) { out(500, { ok: false, error: e.message }); }
 }
 // 我们向对方发起的配对（只放内存）
@@ -1886,16 +1901,18 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
       const local = isLocalReq(req), c = loadPeer();
+      const pub = cc => ({ ...peerPublic(cc, true), canAssign: local });   // canAssign：能不能改开放哪些会话（只在本机）
       if (req.method === 'GET' && url.pathname === '/api/peer') {
         // 协同池里每个会话的名字、目录（有的会话不在会话列表里，比如网页里新建的，页面上只能显示 ID）
         const all = c.sessions.length ? await localSessions().catch(() => []) : [];
         const poolInfo = c.sessions.map(id => { const s = all.find(x => x.sessionId === id); return s ? { id, title: String(s.title || '').replace(/\s+/g, ' ').slice(0, 80), cwd: s.cwd || '', claw: s.claw } : { id }; });
-        return sendJson(res, 200, { ...peerPublic(c, local), poolInfo });
+        return sendJson(res, 200, { ...pub(c), poolInfo });
       }
       let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024) || '{}'); } catch {}
       const act = url.pathname.slice('/api/peer'.length);
       // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
-      if (act !== '/check' && !local) return sendJson(res, 403, { error: '只能在这台电脑上用 127.0.0.1 打开网页时设置协同' });
+      // 手机（不是本机打开）也能做全部操作——只有「开放哪些会话」（协同池、给某个对方开放哪些）要在这台电脑上用 127.0.0.1 设
+      if (!local && (act === '/allow' || (act === '' && Array.isArray(b.sessions)))) return sendJson(res, 403, { error: '开放哪些会话只能在这台电脑上用 127.0.0.1 打开网页时设置' });
       if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
       if (act === '/peer-relay') {
         // 给已配对的对方补上 / 改掉它的中继地址（跨网络时用；局域网仍然优先）
@@ -1905,7 +1922,7 @@ const handler = async (req, res) => {
         if (r && !/^https:\/\/\S+#pin=sha256\/\/\S+$/.test(r)) return sendJson(res, 400, { error: '中继地址要是 https://…#pin=…（&key=…）整段' });
         p.relay = r.slice(0, 2000); savePeer(c);
         log('peer relay', p.name, r ? 'set' : 'cleared');
-        return sendJson(res, 200, peerPublic(c, true));
+        return sendJson(res, 200, pub(c));
       }
       if (act === '/allow') {
         // 给某个对方单独设开放哪些会话（null = 全部开放）
@@ -1914,9 +1931,9 @@ const handler = async (req, res) => {
         if (b.sessions === null) delete p.allow;
         else if (Array.isArray(b.sessions)) p.allow = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);
         savePeer(c); log('peer allow', p.name, Array.isArray(p.allow) ? p.allow.length : 'all');
-        return sendJson(res, 200, peerPublic(c, true));
+        return sendJson(res, 200, pub(c));
       }
-      if (act === '/revoke') { c.peers = c.peers.filter(p => p.id !== b.id); savePeer(c); log('peer revoked', b.id); return sendJson(res, 200, peerPublic(c, true)); }
+      if (act === '/revoke') { c.peers = c.peers.filter(p => p.id !== b.id); savePeer(c); log('peer revoked', b.id); return sendJson(res, 200, pub(c)); }
       if (act === '/check') {
         // 已配对的对方在不在线：能用钥匙列出对方的会话就算在线
         // 带 id 只查这一个：网页按对方分别查，在线的不用等离线的那个超时
@@ -1943,14 +1960,14 @@ const handler = async (req, res) => {
           catch (e) { if (!alt) throw e; used = alt; j = await callPeer(alt, '/pair', { body: { name: myName(c), ...ourInbox(c) }, ms: 8000 }); }   // 名字连不上：用 IP
           if (!j.ok || !j.requestId) return sendJson(res, 200, { error: '对方没有接受申请：' + (j.error || 'HTTP ' + j.status) });
           outPair = { base: used, baseAlt: used === base ? alt : base, requestId: j.requestId, token: newToken(), expiresAt: Date.now() + (Number(j.expiresIn) || 300) * 1000 };
-          return sendJson(res, 200, peerPublic(c, true));
+          return sendJson(res, 200, pub(c));
         } catch (e) { return sendJson(res, 200, { error: e.message }); }
       }
       if (act === '/pair-finish') {
         if (!outPair || outPair.expiresAt < Date.now()) return sendJson(res, 400, { error: '配对申请已过期，请重新发起' });
         try {
           const j = await callPeer(outPair.base, '/pair/confirm', { body: { requestId: outPair.requestId, code: String(b.code || '').trim(), token: outPair.token }, ms: 8000 });
-          if (j.pairing) { outPair.pairing = true; outPair.expiresAt = Math.max(outPair.expiresAt, Date.now() + (Number(j.retryIn) || 30) * 1000 + 5 * 60e3); return sendJson(res, 200, { ...peerPublic(c, true), retryIn: Number(j.retryIn) || 30 }); }
+          if (j.pairing) { outPair.pairing = true; outPair.expiresAt = Math.max(outPair.expiresAt, Date.now() + (Number(j.retryIn) || 30) * 1000 + 5 * 60e3); return sendJson(res, 200, { ...pub(c), retryIn: Number(j.retryIn) || 30 }); }
           if (!j.ok || !j.token) { if (j.failed || /作废|过期|不存在|失败/.test(j.error || '')) outPair = null; return sendJson(res, 200, { error: j.error || '配对失败' }); }
           const c2 = loadPeer();
           const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
@@ -1959,7 +1976,7 @@ const handler = async (req, res) => {
           c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, relay: okUrl(j.relay), tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
           savePeer(c2); outPair = null;
           log('peer paired (we asked)', c2.peers.at(-1).name);
-          return sendJson(res, 200, { ...peerPublic(c2, true), paired: c2.peers.at(-1).name });
+          return sendJson(res, 200, { ...pub(c2), paired: c2.peers.at(-1).name });
         } catch (e) { return sendJson(res, 200, { error: e.message }); }
       }
       if (act === '/nearby') {
@@ -1967,7 +1984,7 @@ const handler = async (req, res) => {
         const list = await discover(c);
         return sendJson(res, 200, list.map(n => ({ ...n, paired: c.peers.some(p => [p.inbox, p.inboxAlt].some(u => u && (u.startsWith(n.base) || (n.baseIp && u.startsWith(n.baseIp))))) })));
       }
-      if (act === '/pair-cancel') { outPair = null; return sendJson(res, 200, peerPublic(c, true)); }
+      if (act === '/pair-cancel') { outPair = null; return sendJson(res, 200, pub(c)); }
       if (act !== '') return sendJson(res, 404, { error: 'not found' });
       if (c.peers.length && ((b.port != null && Number(b.port) !== c.port) || (typeof b.name === 'string' && b.name.trim() !== (c.name || '')))) return sendJson(res, 400, { error: '已经有配对，名字和端口不能改；要改先撤销全部配对' });
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
@@ -1995,7 +2012,7 @@ const handler = async (req, res) => {
       applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c).catch(() => {});
       await new Promise(ok => setTimeout(ok, 300));   // 等监听结果（端口被占用会马上报错）
       log('peer config saved', c.enabled ? 'on' : 'off', c.sessions.length, 'sessions');
-      return sendJson(res, 200, peerPublic(c, true));
+      return sendJson(res, 200, pub(c));
     }
     // 电脑合成语音：手机网页拿去播放（登录后才能用）
     if (url.pathname === '/api/tts/voices') return sendJson(res, 200, await ttsVoices());
