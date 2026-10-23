@@ -507,6 +507,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 /* 已配对：这次实际走的路（局域网 / 中继） */
 .pe-route{flex:none;margin-left:6px;padding:0 6px;border:1px solid var(--line);border-radius:6px;font-style:normal;font-size:11.5px;line-height:18px;color:var(--muted)}
 .pe-route.rl{color:var(--accent);border-color:var(--accent)}
+.h-row.pe-relay .k{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.h-row.pe-relay .pe-rl1{display:flex;align-items:center;gap:6px;min-width:0}
+.h-row.pe-relay .pe-rl1 .pe-mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-row.pe-relay .k .pe-route{margin-left:0}
+.h-row.pe-relay small{font-size:12px;color:var(--muted)}
 .h-row.pe-col{flex-direction:column;align-items:stretch;gap:6px}
 .h-row.pe-col>.k{flex:none}
 .pe-left{text-align:left!important}
@@ -2192,10 +2197,12 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
   if(act==='peer-on'){if(!(peerCfg.sessions||[]).length){peerGo('pool');peerMsg={err:peerCfg.canAssign?'先勾选要加入协同的会话，再开启':'还没有加入协同的会话：要先在这台电脑上用 127.0.0.1 打开网页加'};paintPeerMsg();return}peerPost('',peerForm(true),'协同已开启')}
   if(act==='peer-save')peerPost('',peerForm(peerCfg&&peerCfg.enabled),'已保存');
-  if(act==='peer-relay-save'){var v=(($('#peRelayInv')||{}).value||'').trim();if(!v){peerMsg={err:'先粘贴中继邀请码'};paintPeerMsg();return}peerPost('',{relayInvite:v},'已保存，正在连中继…');setTimeout(function(){if(hostView==='peer')loadPeerPage()},4000)}
+  if(act==='peer-relay-save'){var v=(($('#peRelayInv')||{}).value||'').trim();if(!v){peerMsg={err:'先粘贴中继邀请码'};paintPeerMsg();return}peerPost('',{relayAdd:v},'已添加，正在连中继…');setTimeout(function(){if(hostView==='peer')loadPeerPage()},4000)}
+  if(act==='relay-primary'){peerPost('',{relayPrimary:+a.dataset.i},'已设为主中继');return}
+  if(act==='relay-remove'){if(confirm('删除中继 '+a.dataset.host+'？删了以后不再经它联系对方'))peerPost('',{relayRemove:+a.dataset.i},'已删除');return}
   if(act==='peer-relay-of'){   // 给已配对的对方补 / 改中继地址（对方给的整段 https://…#pin=…&key=…；清空 = 不走中继）
     var pp=(peerCfg.peers||[]).find(function(x){return x.id===a.dataset.id});
-    var v=prompt('「'+(pp?pp.name:'')+'」的中继地址（整段，带 #pin=…&key=…；清空表示不走中继）',pp&&typeof pp.relay==='string'?pp.relay:'');
+    var v=prompt('「'+(pp?pp.name:'')+'」的中继地址（整段，带 #pin=…&key=…；多个用空格分开，第一个是主；清空表示不走中继）',pp&&Array.isArray(pp.relays)?pp.relays.join(' '):'');
     if(v!==null)peerPost('/peer-relay',{id:a.dataset.id,relay:v.trim()},v.trim()?'中继地址已保存':'已清除中继地址');
     return;
   }
@@ -2368,9 +2375,11 @@ function peerGo(sub){peerSub=sub||'';peerMsg={};renderPeer();var sp=$('.sheet-p'
 function fmtMs(ms){return ms<1000?ms+' 毫秒':(ms/1000).toFixed(1)+' 秒'}
 function peerDot(p){var o=peerOnline[p.id];return p.canCall?'<i class="h-dot'+(!o?' wait':o.online?' on':'')+'" title="'+(!o?'检查中':o.online?'在线':'离线')+'"></i>':''}
 function peerRouteTag(p){var o=peerOnline[p.id];return o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+(o.route==='relay'?'中继':'局域网')+'</em>':''}
-function relayStateText(c){
+var RELAY_ST={online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上',off:'没开'};
+function relayStateText(c){   // 主中继的状态（有备用的话带上个数）
   if(!c.relayInvite)return c.relay?'已设置地址':'没设置';
-  var st=c.relayState||{};return ({online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上'}[st.status]||'没连')+(st.error?'：'+esc(st.error):'');
+  var l=c.relayList||[],st=l[0]||c.relayState||{},on=l.filter(function(x){return x.status==='online'}).length;
+  return (RELAY_ST[st.status]||'没连')+(l.length>1?'，'+on+'/'+l.length+' 个在线':'');
 }
 function peerLink(act,sub,k,v){return '<div class="h-row h-link" data-act="'+act+'" data-sub="'+sub+'"><span class="k">'+k+'</span><span class="v">'+(v||'')+'</span><span class="chev" aria-hidden="true"></span></div>'}
 // 已配对列表（主页）
@@ -2386,7 +2395,8 @@ function peerPeersHtml(c){
 function peerDetailLive(c,p){
   var o=peerOnline[p.id],rs=o&&o.relay;
   var st=!p.canCall?'单向：只能对方找我们':!o?'检查中…':o.online?'在线'+(o.route?' · 走'+(o.route==='relay'?'中继':'局域网'):''):'离线'+(o.error?'：'+esc(o.error):'');
-  var rl=!p.relay?'没有中继地址：离开局域网就联系不上':!o||!rs?'检查中…':rs.ok?'可用（约 '+fmtMs(rs.ms)+'）':'不通：'+esc(rs.error||'');
+  var one=function(x){return x.ok?'可用（约 '+fmtMs(x.ms)+'）':'不通：'+esc(x.error||'')};
+  var rl=!p.relay?'没有中继地址：离开局域网就联系不上':!o||!rs?'检查中…':!Array.isArray(rs)?one(rs):rs.length===1?one(rs[0]):rs.map(function(x,i){return (i?'备':'主')+' '+one(x)}).join('<br>');
   var ss=o&&o.online&&o.sessions||[];
   return hRow('状态',st)+hRow('中继',rl)+
     (o&&o.online?'<div class="h-row pe-col"><span class="k">对方开放的会话</span>'+(ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'<span class="v pe-left">没有</span>')+'</div>':'');
@@ -2406,7 +2416,8 @@ function peerDetailHtml(c,p){
   h+='<div><div class="h-card" id="peDetLive">'+peerDetailLive(c,p)+'</div></div>';
   h+='<div><div class="h-h">开放给它的会话</div><div class="h-card"><div class="h-row pe-col">'+allowHtml+'</div></div>'+
     '<div class="pe-note">'+(c.canAssign?'它只能看到、找到勾上的会话；勾选马上生效。':'它只能看到、找到勾上的会话。开放哪些会话只能在这台电脑上用 127.0.0.1 打开网页时改。')+'</div></div>';
-  var relayRow=typeof p.relay==='string'&&p.relay?'<span class="pe-mono">'+esc(p.relay.replace(/#.*$/,'#…'))+'</span>':(p.relay?'已设置':'没有');
+  var prs=Array.isArray(p.relays)?p.relays:[];
+  var relayRow=prs.length?prs.map(function(r,i){return '<span class="pe-mono">'+(prs.length>1?(i?'备 ':'主 '):'')+esc(r.replace(/#.*$/,'#…'))+'</span>'}).join('<br>'):(p.relays?p.relays+' 个':'没有');
   h+=hSec('连接',
     hRow('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
     hRow('局域网地址','<span class="pe-mono">'+esc(p.inbox||'')+'</span>'+(p.inboxAlt?'<br><span class="pe-mono">'+esc(p.inboxAlt)+'</span>':''))+
@@ -2504,10 +2515,15 @@ function peerNetHtml(c){
     hRow(c.baseName?'局域网 IP':'局域网','<span class="pe-mono">'+esc(c.base)+'</span>')+
     '</div><div class="pe-note">地址里不含密码：别人拿到只能申请配对，要你把两位数配对码告诉他才能配上。同一个局域网里优先直连，连不上自动走中继。</div></div>';
   if(c.local)h+='<div><div class="h-h">中继（跨网络）</div><div class="h-card">'+
-    hRow('状态',relayStateText(c))+
-    '<div class="h-row pe-urlrow"><span class="k">邀请码</span><textarea id="peRelayInv" class="pe-in pe-ta mono" rows="2" placeholder="'+(c.relayInvite?'已设置（粘贴新的可以替换）':'粘贴中继邀请码 clarelay1.…')+'"></textarea></div>'+
-    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">保存邀请码</button>'+(c.relayInvite?'<button type="button" class="pe-btn del" data-act="peer-relay-clear">不走中继</button>':'')+'</div>'+
-    '</div><div class="pe-note">不在同一个局域网时经中继互发。粘贴邀请码后 claclaw 自己连上中继、生成中继地址，配对时告诉对方；已经配对的对方，在它的详情里填它的中继地址。</div></div>';
+    (c.relayList||[]).map(function(r){
+      return '<div class="h-row pe-relay"><span class="k"><span class="pe-rl1"><em class="pe-route'+(r.primary?' rl':'')+'">'+(r.primary?'主':'备')+'</em><span class="pe-mono">'+esc(r.host||'')+'</span></span>'+
+        '<small>'+(RELAY_ST[r.status]||r.status)+(r.error?'：'+esc(r.error):'')+'</small></span>'+
+        (r.primary?'':'<button type="button" class="pe-btn pe-mini" data-act="relay-primary" data-i="'+r.i+'">设为主</button>')+
+        '<button type="button" class="pe-btn del pe-mini" data-act="relay-remove" data-i="'+r.i+'" data-host="'+esc(r.host||'')+'">删除</button></div>';
+    }).join('')+
+    '<div class="h-row pe-urlrow"><span class="k">'+(c.relayInvite?'加一个':'邀请码')+'</span><textarea id="peRelayInv" class="pe-in pe-ta mono" rows="2" placeholder="粘贴中继邀请码 clarelay1.…'+(c.relayInvite?'（加进来先当备用）':'')+'"></textarea></div>'+
+    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">'+(c.relayInvite?'添加中继':'保存邀请码')+'</button></div>'+
+    '</div><div class="pe-note">不在同一个局域网时经中继互发，可以同时连几个（主 → 备）：联系对方时先局域网、再主中继、再备用中继。中继地址每次联系对方时自动告诉它（用 claclaw 的对方会自动更新），换中继、加备用都不用重新配对。</div></div>';
   return h;
 }
 function peerMainHtml(c){

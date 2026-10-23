@@ -18,7 +18,7 @@ import * as hosts from './hosts.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
-import { markLast, nextPeerNo, ourBaseName, ourInbox, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
+import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
@@ -863,7 +863,7 @@ async function peerHandler(req, res) {
       const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || ip;
       const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
       const inbox = okUrl(b.inbox), inboxAlt = okUrl(b.inboxAlt);   // 对方的名字地址（.local）和 IP 地址
-      let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; p.relay = okUrl(b.relay); } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }   // relay：对方的中继地址（跨网络时用）
+      let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; p.relays = (Array.isArray(b.relays) ? b.relays : [b.relay]).map(okUrl).filter(Boolean).slice(0, 5); } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }   // relay：对方的中继地址（跨网络时用）
       log('peer pair request from', ip, name);
       // 开着的网页也提醒一下（App 在前台时 iPhone 不弹推送横幅）
       { const msg = JSON.stringify({ t: 'peer.pair', name, ip, code: p.code }); for (const w of wss.clients) if (w.readyState === 1) w.send(msg); }
@@ -894,7 +894,7 @@ async function peerHandler(req, res) {
       const theirToken = typeof b.token === 'string' && b.token.length >= 16 ? b.token.slice(0, 200) : '';
       const c2 = loadPeer();
       c2.peers = c2.peers.filter(x => !(p.inbox && (x.inbox === p.inbox || x.inboxAlt === p.inbox)));   // 同一个对方重新配对：替换旧的
-      c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', relay: p.relay || '', tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
+      c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', relays: p.relays || [], tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
       savePeer(c2);
       log('peer paired', p.ip, p.name, theirToken ? 'two-way' : 'one-way');
       return out(200, { ok: true, token, name: myName(c2), ...ourInbox(c2) });
@@ -903,7 +903,13 @@ async function peerHandler(req, res) {
     const auth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     const peer = findPeerByToken(c, auth);
     if (!peer) { log('peer reject 401', ip, req.method, route, auth ? 'bad token' : 'no token'); return out(401, { ok: false, error: '还没配对，或钥匙不对：先 POST ' + PEER_BASE + '/pair 申请配对' }); }
-    if (peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
+    // 对方带来了它当前的中继地址（主 → 备）：和记的不一样就更新（对方换中继、加备用都不用重新配对）
+    let dirty = false;
+    if (RELAYS_HEADER in req.headers) {
+      const rs = parseRelaysHeader(req.headers[RELAYS_HEADER]);
+      if (JSON.stringify(rs) !== JSON.stringify(peerRelays({ relays: peer.relays, relay: peer.relay }))) { peer.relays = rs; delete peer.relay; dirty = true; log('peer relays updated', peer.name, rs.length); }
+    }
+    if (dirty || peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
     const infos = await peerSessionInfos(c, peer);
     const brief = infos.map(s => ({ id: peerShortId(s.sessionId), title: s.title, claw: s.claw, busy: !!runnerOf(s.sessionId)?.busy }));
     if (route === '/sessions') return out(200, { ok: true, name: myName(c), sessions: brief });
@@ -938,13 +944,13 @@ async function peerHandler(req, res) {
 let outPair = null;   // {base, requestId, token, expiresAt}
 function peerPublic(c, local) {
   return {
-    local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c), relay: c.relay || '',
-    relayInvite: !!c.relayInvite, relayState,
+    local, enabled: c.enabled, port: c.port, dir: c.dir, sessions: c.sessions, name: myName(c), relay: ourRelays(c)[0] || '', relays: ourRelays(c),
+    relayInvite: relayInvitesOf(c).length > 0, relayList: relayList(c), relayState: relayList(c)[0] || { status: 'off' },
     // 「复制邀请」里给对方的：让我们也能主动找他（含注册口令，只在本机打开时给）
-    relayTunnelCmd: local && c.relayInvite && clarelay ? clarelay.tunnelCommand(c.relayInvite, '<你本机收消息的服务地址>') : '',
+    relayTunnelCmd: local && relayInvitesOf(c)[0] && clarelay ? clarelay.tunnelCommand(relayInvitesOf(c)[0], '<你本机收消息的服务地址>') : '',
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
-    peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relay: local ? p.relay || '' : !!p.relay, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relay: local ? relayOfPeer(p) : !!relayOfPeer(p), relays: local ? peerRelays(p) : peerRelays(p).length, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt, pairing: !!outPair.pairing } : null,
   };
 }
@@ -953,7 +959,11 @@ setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); app
 // ---------- 跨网络：经 clarelay 中继 ----------
 // 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
 // clarelay 是独立项目：装成 npm 包，或者放在 claclaw 旁边的 ../clarelay 目录；都没有就提示。
-let clarelay = null, relayTun = null, relayState = { status: 'off' };   // status: off | connecting | online | offline | error
+let clarelay = null;
+const relayTuns = new Map();   // 邀请码 → { to, t, state: { status, error } }   status: connecting | online | offline | error
+// 中继邀请码（主 → 备）：兼容旧的单个 relayInvite
+const relayInvitesOf = c => (Array.isArray(c.relayInvites) ? c.relayInvites : c.relayInvite ? [c.relayInvite] : []).filter(Boolean);
+const relayHostOf = inv => { try { return new URL(clarelay.parseInvite(inv).relay).host; } catch { return '?'; } };
 async function loadClarelay() {
   if (clarelay) return clarelay;
   for (const p of ['clarelay/tunnel.mjs', pathToFileURL(path.join(ROOT, '..', 'clarelay', 'tunnel.mjs')).href]) {
@@ -961,33 +971,39 @@ async function loadClarelay() {
   }
   return null;
 }
-async function applyRelay(c) {
+// 每个中继一条隧道（主备同时在线：切换、换中继都不断）；连好后把各自的中继地址按主 → 备存进 relays，配对和每次请求都告诉对方
+let relayChain = Promise.resolve();
+const applyRelay = c => (relayChain = relayChain.then(() => applyRelayNow(c)).catch(e => log('relay apply failed', e.message)));
+async function applyRelayNow(c) {
   const to = (ourBase(c) || '').replace(new RegExp(PEER_BASE + '$'), '');   // 隧道转给本机的协同收件服务（局域网 IP + 协同端口）
-  const want = c.enabled && c.relayInvite && to ? c.relayInvite + '|' + to : '';
-  if ((relayTun?.key || '') === want) return;
-  if (relayTun) { try { relayTun.t?.stop(); } catch {} relayTun = null; }
-  if (!want) { relayState = { status: 'off' }; return; }
-  const mod = await loadClarelay();
-  if (!mod) { relayState = { status: 'error', error: '没找到 clarelay：把它放在 claclaw 旁边的 clarelay 目录，或用 npm 装上' }; return; }
-  const cur = relayTun = { key: want };
-  relayState = { status: 'connecting' };
-  try {
-    const t = await mod.startTunnel({
-      invite: c.relayInvite, to, state: path.join(DATA, 'relay-tunnel.json'), log,
-      onStatus: st => { if (relayTun === cur) relayState = { status: st.online ? 'online' : 'offline', error: st.error }; },
-    });
-    if (relayTun !== cur) { t.stop(); return; }
-    cur.t = t;
-    relayState = { status: 'online' };
-    const addr = t.urlFor ? t.urlFor(PEER_BASE) : t.publicUrl + PEER_BASE + (t.pin ? '#pin=' + t.pin : '');   // clarelay 0.2：带 #pin=…&key=…（端到端加密）
-    const c2 = loadPeer();
-    if (c2.relay !== addr) { c2.relay = addr; savePeer(c2); }
-    log('relay tunnel online');
-  } catch (e) {
-    if (relayTun === cur) relayState = { status: 'error', error: e.message };
-    log('relay tunnel failed', e.message);
+  const invites = c.enabled && to ? relayInvitesOf(c) : [];
+  for (const [inv, r] of relayTuns) if (!invites.includes(inv) || r.to !== to) { try { r.t?.stop(); } catch {} relayTuns.delete(inv); }
+  const mod = invites.length ? await loadClarelay() : null;
+  for (const inv of invites) {
+    if (relayTuns.has(inv)) continue;
+    const cur = { to, state: { status: 'connecting' } };
+    relayTuns.set(inv, cur);
+    if (!mod) { cur.state = { status: 'error', error: '没找到 clarelay：把它放在 claclaw 旁边的 clarelay 目录，或用 npm 装上' }; continue; }
+    try {
+      const t = await mod.startTunnel({
+        invite: inv, to, state: path.join(DATA, 'relay-tunnel.json'), log,
+        onStatus: st => { if (relayTuns.get(inv) === cur) cur.state = { status: st.online ? 'online' : 'offline', error: st.error }; },
+      });
+      if (relayTuns.get(inv) !== cur) { t.stop(); continue; }
+      cur.t = t; cur.state = { status: 'online' };
+      cur.addr = t.urlFor ? t.urlFor(PEER_BASE) : t.publicUrl + PEER_BASE + (t.pin ? '#pin=' + t.pin : '');   // clarelay 0.2：带 #pin=…&key=…（端到端加密）
+      log('relay tunnel online', relayHostOf(inv));
+    } catch (e) { cur.state = { status: 'error', error: e.message }; log('relay tunnel failed', e.message); }
+  }
+  // 存地址：连不上的那个沿用上次的地址（名字存在隧道状态文件里，重启不变）
+  const c2 = loadPeer(), old = c2.relayAddrOf || {}, map = {};
+  for (const inv of relayInvitesOf(c2)) { const a = relayTuns.get(inv)?.addr || old[inv]; if (a) map[inv] = a; }
+  const relays = relayInvitesOf(c2).map(inv => map[inv]).filter(Boolean);
+  if (JSON.stringify(relays) !== JSON.stringify(c2.relays || []) || JSON.stringify(map) !== JSON.stringify(old)) {
+    c2.relayAddrOf = map; c2.relays = relays; c2.relay = relays[0] || ''; savePeer(c2);
   }
 }
+const relayList = c => relayInvitesOf(c).map((inv, i) => ({ i, host: clarelay ? relayHostOf(inv) : '', primary: i === 0, ...(relayTuns.get(inv)?.state || { status: c.enabled ? 'connecting' : 'off' }) }));
 
 class Runner {
   constructor(info, mode, allowedModes, opts = {}) {
@@ -1918,10 +1934,11 @@ const handler = async (req, res) => {
         // 给已配对的对方补上 / 改掉它的中继地址（跨网络时用；局域网仍然优先）
         const p = c.peers.find(x => x.id === b.id);
         if (!p) return sendJson(res, 404, { error: '没有这个对方' });
-        const r = String(b.relay || '').trim();
-        if (r && !/^https:\/\/\S+#pin=sha256\/\/\S+$/.test(r)) return sendJson(res, 400, { error: '中继地址要是 https://…#pin=…（&key=…）整段' });
-        p.relay = r.slice(0, 2000); savePeer(c);
-        log('peer relay', p.name, r ? 'set' : 'cleared');
+        const raw = Array.isArray(b.relays) ? b.relays.join(' ') : String(b.relay || '');
+        const list = raw.split(/\s+/).filter(Boolean);
+        if (list.some(r => !/^https:\/\/\S+#pin=sha256\/\/\S+$/.test(r))) return sendJson(res, 400, { error: '中继地址要是 https://…#pin=…（&key=…）整段，多个用换行分开（第一个是主）' });
+        p.relays = list.slice(0, 5).map(r => r.slice(0, 2000)); delete p.relay; savePeer(c);
+        log('peer relay', p.name, p.relays.length);
         return sendJson(res, 200, pub(c));
       }
       if (act === '/allow') {
@@ -1973,7 +1990,7 @@ const handler = async (req, res) => {
           const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
           const inbox = okUrl(j.inbox) || outPair.base, inboxAlt = okUrl(j.inboxAlt) || (inbox !== outPair.base ? outPair.base : outPair.baseAlt || '');
           c2.peers = c2.peers.filter(p => ![inbox, inboxAlt, outPair.base].includes(p.inbox));
-          c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, relay: okUrl(j.relay), tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
+          c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, relays: (Array.isArray(j.relays) ? j.relays : [j.relay]).map(okUrl).filter(Boolean).slice(0, 5), tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
           savePeer(c2); outPair = null;
           log('peer paired (we asked)', c2.peers.at(-1).name);
           return sendJson(res, 200, { ...pub(c2), paired: c2.peers.at(-1).name });
@@ -1990,13 +2007,26 @@ const handler = async (req, res) => {
       if (b.port != null) { const p = Number(b.port); if (!Number.isInteger(p) || p < 1024 || p > 65535 || p === PORT) return sendJson(res, 400, { error: '端口要在 1024–65535 之间，且不能和 claclaw 自己的端口相同' }); c.port = p; }
       if (typeof b.dir === 'string') c.dir = b.dir;
       if (typeof b.name === 'string') c.name = b.name.replace(/\s+/g, ' ').trim().slice(0, 40);
-      // 中继邀请码（clarelay1.…）：粘贴后 claclaw 自己连隧道、生成中继地址；空 = 不走中继
-      if (typeof b.relayInvite === 'string') {
-        const inv = b.relayInvite.trim(), mod = inv ? await loadClarelay() : null;
-        if (inv && !mod) return sendJson(res, 400, { error: '没找到 clarelay：把它放在 claclaw 旁边的 clarelay 目录，或用 npm 装上' });
-        if (inv && !mod.isInvite(inv)) return sendJson(res, 400, { error: '这不是中继邀请码（应该以 clarelay1. 开头）' });
-        c.relayInvite = inv ? mod.parseInvite(inv) && (inv.match(/clarelay1\.[A-Za-z0-9_-]+/) || [inv])[0] : '';
-        if (!inv) c.relay = '';
+      // 中继邀请码（clarelay1.…，可以多个，主 → 备）：relayAdd 加一个（排在最后，当备用）、relayRemove 删第几个、relayPrimary 把第几个设为主；
+      // 旧的 relayInvite：非空 = 加一个，空 = 全部删掉
+      if (typeof b.relayInvite === 'string' && !b.relayInvite.trim()) { c.relayInvites = []; delete c.relayInvite; c.relays = []; c.relay = ''; c.relayAddrOf = {}; }
+      const add = typeof b.relayAdd === 'string' ? b.relayAdd : typeof b.relayInvite === 'string' ? b.relayInvite : '';
+      if (add.trim()) {
+        const mod = await loadClarelay();
+        if (!mod) return sendJson(res, 400, { error: '没找到 clarelay：把它放在 claclaw 旁边的 clarelay 目录，或用 npm 装上' });
+        const inv = (add.match(/clarelay1\.[A-Za-z0-9_-]+/) || [''])[0];
+        if (!inv || !mod.isInvite(inv)) return sendJson(res, 400, { error: '这不是中继邀请码（应该以 clarelay1. 开头）' });
+        const list = relayInvitesOf(c);
+        if (list.some(x => relayHostOf(x) === relayHostOf(inv))) c.relayInvites = list.map(x => relayHostOf(x) === relayHostOf(inv) ? inv : x);   // 同一台中继换了口令：原位替换
+        else c.relayInvites = [...list, inv].slice(0, 3);
+        delete c.relayInvite;
+      }
+      if (Number.isInteger(b.relayRemove) || Number.isInteger(b.relayPrimary)) {
+        const list = relayInvitesOf(c), k = Number.isInteger(b.relayRemove) ? b.relayRemove : b.relayPrimary;
+        if (!(k >= 0 && k < list.length)) return sendJson(res, 400, { error: '没有这个中继' });
+        c.relayInvites = Number.isInteger(b.relayRemove) ? list.filter((_, i) => i !== k) : [list[k], ...list.filter((_, i) => i !== k)];
+        delete c.relayInvite;
+        const m = c.relayAddrOf || {}; c.relays = c.relayInvites.map(x => m[x]).filter(Boolean); c.relay = c.relays[0] || '';
       }
       // 中继地址（不用 clarelay、自己开隧道时手填）：公开地址 + 协同路径 + #pin=证书指纹
       if (typeof b.relay === 'string') {

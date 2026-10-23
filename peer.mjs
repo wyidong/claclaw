@@ -79,7 +79,7 @@ export function lanIp() {
   return null;
 }
 // 我们告诉对方的收件地址：设了中继地址（跨网络）就以它为主、局域网地址备用；没设就是局域网的名字地址 + IP 地址
-export const ourInbox = c => ({ inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c), ...(c.relay ? { relay: c.relay } : {}) });   // 局域网地址 + 中继地址（有的话），对方局域网优先
+export const ourInbox = c => { const rs = ourRelays(c); return { inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c), ...(rs.length ? { relay: rs[0], relays: rs } : {}) }; };   // 局域网地址 + 中继地址（有的话），对方局域网优先
 export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + ':' + c.port + PEER_BASE : ''; };
 
 // ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
@@ -173,11 +173,11 @@ async function loadRelayLib() {
   }
   return null;
 }
-async function callRelay(base, sub, { token, body, ms }) {
+async function callRelay(base, sub, { token, body, ms, extra = {} }) {
   const mod = await loadRelayLib();
   if (!mod) throw Object.assign(new Error('对方走中继，这台电脑没装 clarelay'), { connect: true });
   const i = base.indexOf('#'), addr = base.slice(0, i).replace(/\/+$/, '') + (sub || '') + base.slice(i);
-  const headers = {};
+  const headers = { ...extra };
   if (token) headers.authorization = 'Bearer ' + token;
   let r;
   try { r = await mod.relayRequest(addr, { method: body ? 'POST' : 'GET', headers, body: body || undefined, timeout: ms }); }
@@ -189,15 +189,15 @@ async function callRelay(base, sub, { token, body, ms }) {
   j.status = r.status;
   return j;
 }
-export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000, connectMs = 0 } = {}) {
+export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000, connectMs = 0, headers: extra = {} } = {}) {
   if (!base) return Promise.reject(Object.assign(new Error('没有对方的地址'), { connect: true }));
-  if (/#.*\bkey=/.test(base)) return callRelay(base, sub, { token, body, ms });
+  if (/#.*\bkey=/.test(base)) return callRelay(base, sub, { token, body, ms, extra });
   const u = new URL(base);
   // 走中继的地址：https://中继IP:端口/t/名字/claclaw-peer#pin=sha256//…（中继是自签证书，只认这个指纹）
   const pin = (u.hash.match(/pin=(sha256\/\/[A-Za-z0-9+/=]+)/) || [])[1] || '';
   u.hash = '';
   if (sub) u.pathname = u.pathname.replace(/\/+$/, '') + sub;
-  const headers = {};
+  const headers = { ...extra };
   if (token) headers.authorization = 'Bearer ' + token;
   const data = body ? Buffer.from(JSON.stringify(body)) : null;
   if (data) { headers['content-type'] = 'application/json'; headers['content-length'] = data.length; }
@@ -301,34 +301,42 @@ export async function discover(c) {
 export const isRelayAddr = u => /^https:|#.*\bkey=/.test(String(u || ''));
 const lanDownUntil = new Map();   // 对方 id → 这之前不先试局域网
 export const peerRoute = new Map();   // 对方 id → { via: 'lan' | 'relay', at, ms }：最近一次实际走的路（协同页标「局域网 / 中继」）
-export const relayOf = p => [p.relay, p.inbox, p.inboxAlt].find(u => u && isRelayAddr(u)) || '';
-// 单独试一次中继（局域网通着时也试）：协同页显示「离开局域网后能不能续上」。同一个对方 60 秒内只真试一次
+// 对方的中继地址（主 → 备）：relays 数组；兼容旧的单个 relay 字段、以及配对时 inbox 本身就是中继地址的
+export const peerRelays = p => [...new Set([...(Array.isArray(p.relays) ? p.relays : []), p.relay, p.inbox, p.inboxAlt].filter(u => u && isRelayAddr(u)))];
+export const relayOf = p => peerRelays(p)[0] || '';
+// 我们的中继地址（主 → 备）
+export const ourRelays = c => (Array.isArray(c.relays) && c.relays.length ? c.relays : [c.relay]).filter(Boolean);
+// 同步中继地址的请求头：我们每次请求对方都带上自己当前的中继地址（主 → 备，空格分隔；没有就是空串），对方据此更新记的地址
+export const RELAYS_HEADER = 'x-claclaw-relays';
+export const parseRelaysHeader = v => String(v || '').split(/\s+/).filter(u => /^https:\/\/\S+#pin=sha256\/\/\S+$/.test(u)).slice(0, 5);
+// 单独试一次每个中继（局域网通着时也试）：协同页显示「离开局域网后能不能续上」。同一个地址 60 秒内只真试一次
 const relayProbe = new Map();
-export async function probeRelay(p) {
-  const addr = relayOf(p);
-  if (!addr) return null;
-  const r = peerRoute.get(p.id);
-  if (r?.via === 'relay' && Date.now() - r.at < 60e3) return { ok: true, ms: r.ms };
-  const hit = relayProbe.get(p.id);
-  if (hit && hit.addr === addr && Date.now() - hit.at < 60e3) return hit.res;
+async function probeOne(p, addr) {
+  const hit = relayProbe.get(p.id + ' ' + addr);
+  if (hit && Date.now() - hit.at < 60e3) return hit.res;
   const t0 = Date.now();
   let res;
   try { const j = await callPeer(addr, '/sessions', { token: p.theirToken, ms: 15000 }); res = j.ok ? { ok: true, ms: Date.now() - t0 } : { ok: false, error: j.error || 'HTTP ' + j.status }; }
   catch (e) { res = { ok: false, error: e.message }; }
-  relayProbe.set(p.id, { addr, at: Date.now(), res });
+  relayProbe.set(p.id + ' ' + addr, { at: Date.now(), res });
   return res;
+}
+export async function probeRelay(p) {   // 返回每个中继的结果（主 → 备）；没有中继地址返回 null
+  const addrs = peerRelays(p).slice(0, 3);
+  if (!addrs.length) return null;
+  return Promise.all(addrs.map(a => probeOne(p, a)));
 }
 export async function peerCall(c, p, sub, opts) {
   const lan = [p.inbox, p.inboxAlt].filter(u => u && !isRelayAddr(u));
   if (p.ip && lan[0]) { try { const u = new URL(lan[0]); if (u.hostname !== p.ip) { u.hostname = p.ip; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
-  const relays = [p.relay, p.inbox, p.inboxAlt].filter(u => u && isRelayAddr(u));
+  const relays = peerRelays(p);   // 主中继 → 备用中继
   const lanFirst = !(lanDownUntil.get(p.id) > Date.now());
   const tries = [...new Set(lanFirst ? [...lan, ...relays] : [...relays, ...lan])];
   let err;
   for (const url of tries) {
     const viaRelay = isRelayAddr(url), t0 = Date.now();
     try {
-      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, connectMs: viaRelay ? 0 : 3000 });
+      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: ourRelays(c).join(' ') }, connectMs: viaRelay ? 0 : 3000 });
       peerRoute.set(p.id, { via: viaRelay ? 'relay' : 'lan', at: Date.now(), ms: Date.now() - t0 });
       if (viaRelay) { if (lan.length) lanDownUntil.set(p.id, Date.now() + 5 * 60e3); }
       else {
