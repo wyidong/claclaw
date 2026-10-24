@@ -28,6 +28,8 @@ import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeC
 import { readBody } from './httpbody.mjs';
 import { peerRisk, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
+import { saveVideo, videoFile, videoFrames, uploadsDir } from './video.mjs';
+const UPLOADS = uploadsDir(DATA);
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
 // CLACLAW_HOST 可以写逗号分隔的列表覆盖默认值
@@ -1931,6 +1933,11 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(html.replace('__PAGE_VERSION__', ver));
     }
+    if (url.pathname === '/api/upload/video' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      try { const v = await saveVideo(req, UPLOADS); log('video uploaded', v.id, (v.bytes / 1048576).toFixed(1) + 'MB'); return sendJson(res, 200, { id: v.id, bytes: v.bytes }); }
+      catch (e) { return sendJson(res, e.code || 400, { error: e.message }); }
+    }
     if (url.pathname === '/api/push/key') return sendJson(res, 200, { publicKey: push.publicKey(), devices: push.subscriptionCount(), httpsUrl: getHttpsUrl() });
     if (url.pathname === '/api/push/status') return sendJson(res, 200, { subscribed: push.hasSubscription(url.searchParams.get('endpoint') || '') });
     if ((url.pathname === '/api/push/subscribe' || url.pathname === '/api/push/unsubscribe') && req.method === 'POST') {
@@ -2473,12 +2480,24 @@ wss.on('connection', (ws, req) => {
       } else if (!runner) {
         send({ t: 'error', message: '还没有打开会话' });
       } else if (m.t === 'message.send') {
-        const text = String(m.text || '').trim();
-        const images = Array.isArray(m.images) ? m.images : [];
+        let text = String(m.text || '').trim();
+        const images = Array.isArray(m.images) ? m.images.slice() : [];
         if (images.length > MAX_IMAGES) return send({ t: 'error', message: '一次最多 ' + MAX_IMAGES + ' 张图片' });
         for (const i of images) {
           if (!IMAGE_TYPES.includes(i?.media_type) || typeof i.data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(i.data)) return send({ t: 'error', message: '图片格式不支持（只支持 JPEG / PNG / GIF / WebP）' });
           if (i.data.length > MAX_IMAGE_B64) return send({ t: 'error', message: '图片太大了' });
+        }
+        if (m.video) {
+          // 视频：原文件已经传到 data/uploads/；这里截帧当图片，并把原文件路径告诉 AI
+          const file = videoFile(UPLOADS, m.video.id);
+          if (!file) return send({ t: 'error', message: '视频找不到了（超过 7 天会清掉），请重新发' });
+          const v = await videoFrames(file);
+          const name = String(m.video.name || '').replace(/[\r\n\]]/g, ' ').slice(0, 80);
+          const note = '[视频' + (name ? ' ' + name : '') + (v.dur ? ' ' + v.dur.toFixed(1) + ' 秒' : '') + '，原文件：' + file +
+            (v.frames.length ? '；按时间顺序截了 ' + v.frames.length + ' 帧（下面的图片），时间点：' + v.frames.map(f => f.t.toFixed(1) + 's').join('、') + '；要看更细的画面或声音，可以用 ffmpeg 处理原文件' : '；' + v.error) + ']';
+          text = note + (text ? '\n' + text : '');
+          images.push(...v.frames.map(f => ({ media_type: f.media_type, data: f.data })).slice(0, Math.max(0, MAX_IMAGES - images.length)));
+          log('video', path.basename(file), (v.dur || 0).toFixed(1) + 's', v.frames.length + ' frames');
         }
         if (!text && !images.length) return;
         const acp = runner instanceof DsRunner || runner instanceof OpRunner;

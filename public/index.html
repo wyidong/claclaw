@@ -1477,39 +1477,20 @@ function addFiles(list){
       .catch(function(){var i=attachments.indexOf(a);if(i>=0){attachments.splice(i,1);renderAtts()}addSys('这张图片读不出来，换一张试试')});   // 已切到别的会话：这张在别的草稿里，不动当前的
   });
 }
-// 视频：在手机上按时间均匀截帧（约每秒一帧，最多 VIDEO_FRAMES 帧），作为一组图片发出去，并附上每帧的时间点
-var VIDEO_FRAMES=12;
+// 视频：原文件传到服务器（data/uploads/），发消息时由服务器用 ffmpeg 截帧给 AI，AI 也能拿到原文件
 function addVideo(f){
   if(attachments.some(function(a){return a.video})){addSys('一次只能发一个视频');return}
-  var a={url:'',data:null,media_type:null,video:true,frames:null,dur:0};
+  var a={url:'',data:null,media_type:null,video:{id:'',name:f.name||''},pct:0,size:f.size};
   attachments.push(a);renderAtts();
-  videoFrames(f).then(function(r){a.frames=r.frames;a.dur=r.dur;a.url='data:image/jpeg;base64,'+r.frames[0].data;a.data=true;renderAtts()})
-    .catch(function(e){var i=attachments.indexOf(a);if(i>=0){attachments.splice(i,1);renderAtts()}addSys('这个视频读不出来'+(e&&e.message?'：'+e.message:'')+'，可以改发截图')});
-}
-function videoFrames(f){
-  return new Promise(function(resolve,reject){
-    var v=document.createElement('video'),url=URL.createObjectURL(f),done=false;
-    v.muted=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';
-    var fail=function(m){if(done)return;done=true;URL.revokeObjectURL(url);reject(new Error(m||''))};
-    var timer=setTimeout(function(){fail('超时')},30000);
-    v.onerror=function(){clearTimeout(timer);fail('格式不支持')};
-    v.onloadeddata=function(){
-      var dur=v.duration;
-      if(!isFinite(dur)||dur<=0){clearTimeout(timer);fail('读不出时长');return}
-      var n=Math.min(VIDEO_FRAMES,Math.max(2,Math.ceil(dur))),times=[],frames=[];
-      for(var i=0;i<n;i++)times.push(Math.min(dur-0.05,dur*(i+0.5)/n));
-      var w=v.videoWidth,h=v.videoHeight,k=Math.min(1,1280/Math.max(w,h)),c=document.createElement('canvas');
-      c.width=Math.round(w*k);c.height=Math.round(h*k);var g=c.getContext('2d');
-      var next=function(){
-        if(!times.length){clearTimeout(timer);done=true;URL.revokeObjectURL(url);resolve({frames:frames,dur:dur});return}
-        var t=times.shift();
-        v.onseeked=function(){g.drawImage(v,0,0,c.width,c.height);frames.push({media_type:'image/jpeg',data:c.toDataURL('image/jpeg',0.8).split(',')[1],t:t});next()};
-        v.currentTime=t;
-      };
-      next();
-    };
-    v.src=url;v.load();
-  });
+  var x=new XMLHttpRequest();a.xhr=x;
+  x.open('POST','/api/upload/video');x.setRequestHeader('content-type',f.type||'video/quicktime');
+  x.upload.onprogress=function(e){if(e.lengthComputable){a.pct=Math.floor(e.loaded*100/e.total);var b=a.badge;if(b)b.textContent=a.pct+'%'}};
+  var drop=function(msg){var i=attachments.indexOf(a);if(i>=0){attachments.splice(i,1);renderAtts()}if(msg)addSys(msg)};
+  x.onload=function(){var j={};try{j=JSON.parse(x.responseText)}catch(_){}
+    if(x.status===200&&j.id){a.video.id=j.id;a.data=true;renderAtts()}else drop('视频上传失败'+(j.error?'：'+j.error:''))};
+  x.onerror=function(){drop('视频上传失败（网络）')};
+  x.onabort=function(){drop('')};
+  x.send(f);
 }
 // 长边压到 2000px 内转 JPEG；小于 1.5MB 的 PNG（截图）和 GIF 保持原样，免得文字糊或动图变静态
 function compressImage(f){
@@ -1545,9 +1526,10 @@ function renderAtts(){
   attsEl.innerHTML='';
   attachments.forEach(function(a,i){
     var d=document.createElement('div');d.className='att'+(a.data?'':' loading');
-    d.innerHTML='<img alt=""><button type="button" aria-label="移除图片">×</button>'+(a.video?'<span class="att-vid">▶ '+(a.dur?Math.round(a.dur)+'s':'…')+'</span>':'');
-    if(a.url)d.querySelector('img').src=a.url;
-    d.querySelector('button').addEventListener('click',function(){URL.revokeObjectURL(a.url);attachments.splice(i,1);renderAtts()});
+    d.innerHTML='<img alt=""><button type="button" aria-label="移除图片">×</button>'+(a.video?'<span class="att-vid">'+(a.data?'▶ 视频':a.pct+'%')+'</span>':'');
+    if(a.url)d.querySelector('img').src=a.url;else d.querySelector('img').remove();
+    if(a.video)a.badge=d.querySelector('.att-vid');
+    d.querySelector('button').addEventListener('click',function(){if(a.xhr&&!a.data)a.xhr.abort();if(a.url)URL.revokeObjectURL(a.url);var k=attachments.indexOf(a);if(k>=0)attachments.splice(k,1);renderAtts()});
     attsEl.appendChild(d);
   });
   attsEl.hidden=!attachments.length;
@@ -1798,7 +1780,7 @@ function onEvent(m){
     if(outbox){
       var lastUser=m.history.filter(function(it){return it.kind==='user'}).pop();
       if(outbox.sid!==m.id)outboxRestore();                       // 换了会话：不往别的会话发，放回输入框
-      else if(lastUser&&lastUser.text===outbox.text)outboxDone();  // 其实已经送到了
+      else if(lastUser&&(lastUser.text===outbox.text||(outbox.video&&String(lastUser.text||'').indexOf(outbox.video.id)>=0)))outboxDone();  // 其实已经送到了
       else if(m.busy)outboxRestore();                              // 会话正忙：放回输入框，等它忙完再发
       else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');outboxShow();trySend()}
     }
@@ -1994,16 +1976,12 @@ function run(text){
   if((!text&&!attachments.length)||!session)return;   // 正在工作时也能发：作为插话排队
   if(attachments.some(function(a){return !a.data}))return; // 还在压缩
   cmdMenu.hidden=true;
-  var images=[];
-  attachments.forEach(function(a){
-    if(!a.video){images.push({media_type:a.media_type,data:a.data});return}
-    text='[视频 '+a.dur.toFixed(1)+' 秒，按时间顺序截了 '+a.frames.length+' 帧（下面的图片），时间点：'+a.frames.map(function(x){return x.t.toFixed(1)+'s'}).join('、')+']'+(text?'\n'+text:'');
-    a.frames.forEach(function(x){images.push({media_type:x.media_type,data:x.data})});
-  });
-  attachments.forEach(function(a){if(!a.video)URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
+  var images=[],video=null;
+  attachments.forEach(function(a){if(a.video)video={id:a.video.id,name:a.video.name};else images.push({media_type:a.media_type,data:a.data})});
+  attachments.forEach(function(a){if(a.url)URL.revokeObjectURL(a.url)});attachments=[];renderAtts();
   ta.value='';ta.style.height='auto';
   busy=true;setDock('busy');
-  outbox={text:text,images:images,sid:session.id};outboxShow();trySend();ttsUnlock();ttsHush=false;
+  outbox={text:text,images:images,video:video,sid:session.id};outboxShow();trySend();ttsUnlock();ttsHush=false;
 }
 // 待确认的消息：发出去后要等服务器回显（'user' 事件）才算送达。
 // 手机切后台、换网络后 WebSocket 常常「看着连着、其实已断」，消息会被悄悄吞掉：
@@ -2013,7 +1991,7 @@ function trySend(){
   if(!outbox)return;
   clearTimeout(outboxTimer);
   if(!ws||ws.readyState!==1){banner('连接已断开，恢复后会自动发送刚才那条消息');return}
-  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images}));
+  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images,video:outbox.video||undefined}));
   outboxTimer=setTimeout(function(){if(outbox)reconnectNow()},8000);
 }
 function outboxDone(){outbox=null;clearTimeout(outboxTimer)}
@@ -2028,12 +2006,13 @@ function reconnectNow(){
 function outboxShow(){
   if(!outbox)return;
   var imgs=(outbox.images||[]).map(function(i){return 'data:'+i.media_type+';base64,'+i.data});
-  outbox.el=addUser(outbox.text,imgs);outbox.el.classList.add('pending');
+  outbox.el=addUser((outbox.video?'[视频'+(outbox.video.name?' '+outbox.video.name:'')+'，服务器截帧中…]'+(outbox.text?'\n':''):'')+outbox.text,imgs);outbox.el.classList.add('pending');
 }
 function outboxRestore(){
   if(!outbox)return;
   if(outbox.el&&outbox.el.isConnected)outbox.el.remove();   // 没发出去：气泡收回，文字放回输入框
   if(!ta.value){ta.value=outbox.text;ta.dispatchEvent(new Event('input'))}
+  if(outbox.video&&!attachments.some(function(a){return a.video})){attachments.push({url:'',data:true,video:outbox.video,pct:100});renderAtts()}   // 视频已在服务器上：放回附件，重发不用再传
   outboxDone();
 }
 function stop(){wsSend({t:'interrupt'})}
