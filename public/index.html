@@ -62,14 +62,21 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 #app{position:relative;height:100%;display:flex;flex-direction:column;max-width:760px;margin:0 auto;background:var(--bg)}
 @media (min-width:800px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 
-header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;border-bottom:1px solid var(--line);background:var(--surface)}
-#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
+/* 标题栏：平的，不加底边框（白底坐在浅灰的聊天区上，边界自然就有）；左边两行「名字 ID / 目录 · 分支」，右边两行「模型 · 推理强度 / 权限」 */
+header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;background:var(--surface)}
+#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
 #sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:bottom;margin:0 6px;line-height:1.4;border-radius:2px;background:var(--code-bg);box-shadow:0 0 0 1px var(--code-bg),-6px 0 0 1px var(--code-bg),6px 0 0 1px var(--code-bg)}   /* 底色用阴影往两边延伸：padding 会把被裁掉的字露出来 */
 #sessBtn .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
-#sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#sessBtn .sid{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sessBtn .sid{flex:none;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
 #sessBtn svg{flex:none;color:var(--muted)}
+#sessBtn .st{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+#sessBtn .r1{display:flex;align-items:center;min-width:0}
+/* 第二行：目录 · 分支。放不下时从左边截（direction:rtl + 里面 bdi 保持正常顺序），目录名和分支一直看得见 */
+#sessBtn .where{display:block;font-family:var(--mono);font-size:12px;line-height:1.3;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+#sessBtn .where:empty{display:none}
+#sessBtn .where bdi{direction:ltr;unicode-bidi:isolate}
 /* 会话模式：右上角下拉选择；标题后面显示模式的英文名（无边框，颜色跟模式走） */
 /* 会话设置按钮：标题栏右边，两行——上「模型 · 推理强度」、下权限模式（颜色跟模式走）；点开是底部面板 */
 #cfgBtn{flex:none;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:1px;max-width:44%;min-height:44px;padding:2px 18px 2px 6px;border:0;color:var(--muted);font:inherit;text-align:right;cursor:pointer;-webkit-tap-highlight-color:transparent;
@@ -82,11 +89,8 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #cfgBtn[data-m="plan"] .c2{color:var(--accent)}
 #cfgBtn[data-m="bypass"] .c2{color:var(--deny);font-weight:600}
 #cfgBtn:active{opacity:.6}
-/* 会话信息 + 模式选择装在一块圆角色块里（和设置页「主题」那一行一样：无边框、有底色），返回键在色块外 */
-#hdCard{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 6px 0 12px;border-radius:12px;background:var(--bg)}
-#hdCard #sessBtn{min-height:40px}
-#sessBtn .mtag{flex:none;margin-left:2px;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
-#sessBtn .mtag:empty{display:none}
+#hdCard{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px}
+#sessBtn .mtag{display:none}   /* 权限模式右边按钮已经显示，这里不再重复 */
 .cpid{cursor:copy;border-radius:4px}
 .cpid:hover{text-decoration:underline dotted;text-underline-offset:3px;color:var(--accent)}
 /* 会话 ID：浅底小胶囊 + 透明扩大的点击范围（四周各多 8px），点 ID 复制时不容易误点成「打开会话」 */
@@ -95,10 +99,6 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 @media (pointer:fine){.cpid:active{background:var(--user-bg)!important;color:var(--accent)}}   /* 手机上短按是打开会话，不给「要复制」的反馈 */
 .cpid{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}   /* 长按时不弹系统的选字菜单 */
 .cpid.lp{background:var(--accent)!important;color:var(--accent-ink)!important}
-@media (max-width:599px){#sessBtn .mtag{display:none}}  /* 手机上太挤：右边下拉框已经显示模式 */
-#sessBtn .mtag[data-m="accept"]{color:var(--warn)}
-#sessBtn .mtag[data-m="plan"]{color:var(--accent)}
-#sessBtn .mtag[data-m="bypass"]{color:var(--deny);font-weight:600}
 
 #banner{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;background:var(--banner-bg);color:var(--warn);font-size:13px;line-height:1.4}
 #banner span{flex:1}
@@ -761,13 +761,15 @@ select.pe-in{text-align-last:right}
   #sList .s-row[hidden],#sList .s-grp[hidden]{display:none}
 
   /* 聊天区标题：像微信，只有名字加粗，没有框 */
-  header{padding:0 20px;min-height:56px;background:var(--surface)}
+  header{padding:0 20px;min-height:56px;border-bottom:1px solid var(--line);background:var(--surface)}
+  #sessBtn .st{flex-direction:row;align-items:baseline;gap:10px}
+  #sessBtn .r1{flex:none;max-width:60%}
+  #sessBtn .where{flex:0 1 auto;min-width:0;direction:ltr;font-size:12.5px}
   #sessBtn{border:0;background:none;padding:0;min-height:56px;cursor:text}
   #sessBtn .nm{font-size:17px}
   #sessBtn>svg{display:none}
   #cfgBtn{min-height:34px}
   header{gap:12px}
-  #sessBtn .sid{flex:0 1 auto}
   #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
 
   /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
@@ -814,7 +816,11 @@ select.pe-in{text-align-last:right}
     <div id="hdCard">
     <!-- 不用 <button>：按钮里的字不能用鼠标选中复制。会话名、ID、目录、分支都可以直接拖选 -->
     <div id="sessBtn" role="button" tabindex="0" aria-label="切换会话">
-      <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span>
+      <span class="dot"></span>
+      <span class="st">
+        <span class="r1"><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span></span>
+        <span class="where" id="where"></span>
+      </span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
     </div>
     <button type="button" id="cfgBtn" data-m="default" aria-label="模型、推理强度、权限"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span></button>
@@ -1676,7 +1682,7 @@ function onEvent(m){
   case 'session.opened':
     var sameSess=!!(session&&session.id===m.id),wasStick=stick;
     if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
-    session={id:m.id,title:m.title,cwd:m.cwd,branch:m.branch||''};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
+    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||''};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     switchDraft(m.id);
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
     delete feedCache[m.id];
@@ -1858,9 +1864,13 @@ function setHeader(){
   var full=/^[0-9a-f]{8}-/i.test(session.id);   // Claude 的 UUID：放完整 ID、只露出前 8 位；其它的直接放短 ID
   var idEl=document.createElement('span');idEl.className='hid';idEl.title=session.id;idEl.textContent=full?session.id:shortId(session.id);
   sid.appendChild(idEl);
-  // 目录 · 分支：标题栏放不下会被截断，鼠标停留看完整的；「已恢复会话」那行也写全了
-  var where=(t?dir:'')+(session.branch?(t&&dir?' · ':'')+session.branch:'');
-  if(where){var w=document.createElement('span');w.textContent='　'+where;w.title=(session.cwd||dir)+(session.branch?'\n分支：'+session.branch:'');sid.appendChild(w)}
+  // 第二行：目录（~/ 开头的完整路径）· 分支；名字本身就是目录名时只放分支。放不下从左边截，鼠标停留看完整的
+  var name=t||dir||'会话',place=session.cwdShort||dir,parts=[];
+  if(place&&place!==name)parts.push(place);
+  if(session.branch)parts.push(session.branch);
+  var w=$('#where');w.textContent='';
+  if(parts.length){var b=document.createElement('bdi');b.textContent=parts.join(' · ');w.appendChild(b)}
+  w.title=(session.cwd||place||'')+(session.branch?'\n分支：'+session.branch:'');
 }
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function connect(){
@@ -2858,7 +2868,7 @@ function openSheet(silent){
         opening=s.id;openingAt=Date.now();row.classList.add('opening');
         var w=b.querySelector('.when');if(w)w.textContent='打开中…';
         if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
-          $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#modeTag').textContent='';
+          $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#where').textContent='';$('#modeTag').textContent='';
           showFeedFor(s.id);goChat();
         }
         wsSend({t:'session.open',id:s.id,mode:mode});
@@ -3079,7 +3089,7 @@ document.addEventListener('visibilitychange',function(){
 function openFromNotice(id){
   if(session&&session.id===id&&!mList)return;
   pendingOpen=id;
-  if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);goChat()}
+  if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);$('#where').textContent='';goChat()}
   if(ws&&ws.readyState===1)wsSend({t:'session.open',id:id,mode:mode});else reconnectNow();
   setTimeout(function(){if(pendingOpen===id)reconnectNow()},3000);   // 3 秒没打开：连接多半是死的，重连（连上后会自动打开）
 }
