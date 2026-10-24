@@ -19,7 +19,10 @@
 <script>
 // 主题：跟随系统（默认）/ 普通 / 深色，按设备记在本机；在页面画出来之前就设好，免得先闪一下
 (function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}})();
+// 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
+(function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 </script>
+<style>html.boot #app{visibility:hidden}</style>
 <style>
 :root{
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
@@ -2716,7 +2719,11 @@ showClawSel();
 var clawsAt=0;
 function loadClaws(){
 if(Date.now()-clawsAt<3000)return;clawsAt=Date.now();
-fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
+fetch('/api/claws').then(function(r){return r.json()}).then(function(list){try{localStorage.setItem(hk('claws'),JSON.stringify(list))}catch(_){}applyClaws(list)}).catch(function(){});
+}
+// 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部 4 个、再少一个），服务器的结果到了再更新
+function applyClaws(list){
+  if(!Array.isArray(list))return;
   var any=false,ok=[];
   list.forEach(function(c){
     var down=c.installed&&c.supported&&c.running===false;   // 装了但没启动（OpenClaw 网关没开）：手机上灰着显示、不能选；电脑上不显示
@@ -2732,8 +2739,8 @@ fetch('/api/claws').then(function(r){return r.json()}).then(function(list){
   // 电脑端没选过 Claw 时默认 Claude；这台电脑没有可用的 Claude：改用第一个能用的（只在内存里，不记成用户的选择）
   if(DESKTOP.matches&&!clawSel&&ok.length&&ok.indexOf('claude')<0){clawSel=ok[0];lastList=null;$('#sList').innerHTML='';refreshList()}
   showClawSel();
-}).catch(function(){});
 }
+try{applyClaws(JSON.parse(localStorage.getItem(hk('claws'))||'null'))}catch(_){}
 loadClaws();
 function pickClaw(id){
   if(curClaw()!==id){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
@@ -3116,7 +3123,7 @@ function goList(toClaw){
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
-  if(!clawSel||toClaw)mTab('claw');   // 首次使用：先选 Claw
+  if((!clawSel||toClaw)&&!$('#app').classList.contains('set-on'))mTab('claw');   // 首次使用：先选 Claw（正在设置页就留在设置页）
   if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：刷新后回到设置页
   if(toClaw){syncPushBtn();return}   // 停在 Claw 页：会话列表等选了 Claw 再加载
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
@@ -4079,8 +4086,10 @@ syncSend();
 // 手机：不等连上就先切到该去的页面（列表 / Claw 页），免得先闪一下空的聊天页再跳
 if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
   var view0='';try{view0=sessionStorage.getItem('claclaw.view')||''}catch(_){}
-  if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||!clawSel)mTab('claw');else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
+  if(reloadToSet){reloadToSet=false;startOnClaw=false;mList=true;$('#app').classList.add('m-list');history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：直接回设置页，不经过别的页
+  else if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||!clawSel)mTab('claw');else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
 }
+document.documentElement.classList.remove('boot');
 takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});
 })();
 </script>
