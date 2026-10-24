@@ -147,6 +147,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md img.mdimg{display:block;max-width:100%;max-height:320px;margin:.3em 0;border-radius:10px;cursor:zoom-in}
 .peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:3px solid var(--muted);border-radius:4px 10px 10px 4px;background:var(--code-bg);font-size:14px;line-height:1.5}
 .md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px}
+.md li>.cb{margin:.4em 0 .5em}
 .cp{position:absolute;top:5px;right:6px;display:flex;align-items:center;justify-content:center;width:30px;height:28px;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:0;border-radius:7px}
 .cp svg,.ic svg{pointer-events:none;flex:none}
 .md :not(pre)>code{cursor:copy}
@@ -1132,6 +1133,17 @@ function mdBlockStart(l,next){
   return /^\s*(```|~~~)/.test(l)||/^#{1,6}\s/.test(l)||/^\s*>/.test(l)||MD_LIST.test(l)||/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)||(l.indexOf('|')>=0&&next!==undefined&&MD_TABLE_SEP.test(next));
 }
 function mdCells(l){l=l.trim().replace(/^\|/,'').replace(/\|$/,'');return l.split('|').map(function(c){return c.trim()})}
+function mdCode(code){return '<div class="cb"><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code)+'</code></pre></div>'}
+// 列表项内容：普通行用 <br> 连起来；\u0001n 是嵌在这一项里的第 n 个代码块
+function mdLi(text,blocks){
+  var out='',prevText=false;
+  text.split('\n').forEach(function(x){
+    var mm=x.match(/^\u0001(\d+)$/);
+    if(mm){out+=blocks[+mm[1]];prevText=false}
+    else{out+=(prevText?'<br>':'')+mdInline(x);prevText=true}
+  });
+  return out;
+}
 function md(src){
   var L=String(src).replace(/\r\n?/g,'\n').split('\n'),out=[],i=0,m;
   while(i<L.length){
@@ -1140,7 +1152,7 @@ function md(src){
     if((m=l.match(/^\s*(```|~~~)/))){            // 代码块
       var fence=m[1],code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
-      i++;out.push('<div class="cb"><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code.join('\n'))+'</code></pre></div>');continue;
+      i++;out.push(mdCode(code.join('\n')));continue;
     }
     if((m=l.match(/^(#{1,6})\s+(.*)$/))){var n=Math.min(m[1].length+2,6);out.push('<h'+n+'>'+mdInline(m[2])+'</h'+n+'>');i++;continue}
     if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)){out.push('<hr>');i++;continue}
@@ -1156,10 +1168,16 @@ function md(src){
       out.push('<blockquote><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button>'+md(q.join('\n'))+'</blockquote>');continue;
     }
     if(MD_LIST.test(l)){                          // 列表（按缩进嵌套）
-      var items=[];
+      var items=[],blocks=[],fm;
       while(i<L.length){
         var lm=L[i].match(MD_LIST);
         if(lm){items.push({ind:lm[1].replace(/\t/g,'    ').length,tag:/\d/.test(lm[2])?'ol':'ul',start:parseInt(lm[2],10),text:lm[3]});i++;continue}
+        // 列表项里缩进的代码块（「1. 说明」下面跟 ```）：整块收进这一项，照样带复制按钮；块里的空行、相对缩进都保留
+        if(items.length&&(fm=L[i].match(/^(\s+)(```|~~~)/))){
+          var fi=fm[1].length,fc=fm[2],cl=[];i++;
+          while(i<L.length&&L[i].trim().indexOf(fc)!==0){cl.push(L[i].slice(0,fi).trim()?L[i]:L[i].slice(fi));i++}
+          i++;items[items.length-1].text+='\n\u0001'+(blocks.push(mdCode(cl.join('\n')))-1);continue;
+        }
         if(L[i].trim()&&/^\s{2,}/.test(L[i])&&items.length){items[items.length-1].text+='\n'+L[i].trim();i++;continue}
         break;
       }
@@ -1170,7 +1188,7 @@ function md(src){
         if(!top||it.ind>top.ind){h+='<'+it.tag+(it.tag==='ol'&&it.start>1?' start="'+it.start+'"':'')+'>';st.push({ind:it.ind,tag:it.tag})}
         else if(top.tag!==it.tag){h+='</li></'+top.tag+'><'+it.tag+'>';top.tag=it.tag}
         else h+='</li>';
-        h+='<li>'+it.text.split('\n').map(mdInline).join('<br>');
+        h+='<li>'+mdLi(it.text,blocks);
       });
       while(st.length)h+='</li></'+st.pop().tag+'>';
       out.push(h);continue;
@@ -1302,6 +1320,9 @@ feed.addEventListener('click',function(e){
     else{var c=box.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}
     return;
   }
+  // 点一下代码块也能复制整块（手机上不用对准右上角的小按钮）；拖选文字时不算
+  var pb=t.closest&&t.closest('.md .cb pre');
+  if(pb&&!String(getSelection()||'').trim()){copyText(pb.textContent);return}
   // 点一下行内代码（`xxx`）也能复制
   if(t.tagName==='CODE'&&!(t.parentNode&&t.parentNode.tagName==='PRE')&&t.closest('.md')){copyText(t.textContent);return}
 });
