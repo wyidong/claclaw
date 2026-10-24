@@ -471,7 +471,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
      返回键、绿点和名字对齐；目录、分支不放（聊天区「已恢复会话」那行有）。
      会话名、ID 嵌在 #sessBtn 里（电脑端是一行）：手机上把外层拆掉（display:contents），直接排进 #hdCard 的网格 */
   header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
-  #backBtn{align-self:stretch;height:auto;place-items:start center;padding:3px 0 0}   /* 点击范围占满两行，箭头对齐第一行 */
+  #backBtn{align-self:stretch;height:auto;place-items:center;padding:0}   /* 返回键独占左边一栏（占满两行），箭头在这一栏里上下左右居中 */
   #hdCard{display:grid;grid-template-columns:8px minmax(0,1fr) auto;gap:0 8px;align-items:center;min-height:0}
   #hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
   #sessBtn .dot{grid-column:1;grid-row:1}
