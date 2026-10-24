@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { DATA } from './auth.mjs';
@@ -154,9 +155,10 @@ function dsRate(model, ms) {
 function addUsage(recs, acc) {
   let model = summarize(recs).model || '';
   for (const r of recs) {
-    if (r.type !== 'assistant/message' || !r.data?.usage) continue;
-    const u = r.data.usage;
-    const m = r.data.message?.source?.model;
+    if (r.type !== 'assistant/message' && r.type !== 'compaction/summary') continue;
+    const u = r.data?.usage;
+    if (!u) continue;
+    const m = r.type === 'compaction/summary' ? r.data.model : r.data.message?.source?.model;
     if (m) model = m;
     const input = Number(u.inputTokens || 0) || 0;
     const output = Number(u.outputTokens || 0) || 0;
@@ -340,6 +342,210 @@ function idleCheck() {
 }
 export function dsShutdown() { try { proc?.stdin.end(); } catch {} }
 
+// ---------- dsh 原生 /compact ----------
+// ACP 只暴露 session/new、resume、close、prompt 等，没有命令通道；/compact 是 dsh host 的
+// 原生命令。这里临时起一个 dsh web（随机端口、不打开浏览器），用它已认证的
+// POST /api/commands/execute 执行 /compact。该接口会自己 resume 目标会话，所以调用前
+// 必须先把 claclaw 的 ACP 会话关掉，让 session.lock 真正释放。
+const COMPACT_TIMEOUT = 10 * 60 * 1000;
+const WEB_START_TIMEOUT = 45 * 1000;
+const WEB_STOP_TIMEOUT = 2 * 1000;
+const WEB_URL_RE = /dsh web:\s+(http:\/\/[^\s]+?\/\?token=[A-Za-z0-9_-]+)/;
+const COMPACT_DONE_RE = /^Compacted \d+ history items/;
+
+// 从 dsh web 的启动输出里取带 token 的地址；单独导出，方便测试（不会真的起进程）
+export function parseDshWebUrl(text) {
+  const m = String(text || '').replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '').match(WEB_URL_RE);
+  return m ? m[1] : '';
+}
+
+const sleep = ms => new Promise(r => { const t = setTimeout(r, ms); t.unref?.(); });
+
+function startDshWeb(log) {
+  const bin = dshBin();
+  if (!bin) {
+    const ready = Promise.reject(new Error('没找到 dsh 命令，先装好 DeepSeek Harness'));
+    ready.catch(() => {});
+    return { ready, stop: async () => {} };
+  }
+  const js = /\.m?js$/.test(bin);
+  const profile = 'claclaw-compact';
+  const args = ['--profile', profile];
+  // 专用 profile，避免动用户自己的 web profile（也可能装着 TTS 等插件）。
+  // 第一次用时从 dsh 自带的 web 模板建一个空壳；之后一直复用。
+  if (!fs.existsSync(path.join(DSH_HOME, 'profiles', profile, 'package.json'))) args.push('--from-default-profile', 'web');
+  args.push('--host', '127.0.0.1', '--port', '0', '--no-open');
+  const p = spawn(js ? process.execPath : bin, js ? [bin, ...args] : args, {
+    stdio: ['ignore', 'pipe', 'pipe'], cwd: HOME,
+    env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin'].join(':') },
+  });
+  p.stdout.setEncoding('utf8');
+  p.stderr.setEncoding('utf8');
+  let out = '', err = '', stopped = false;
+  const ready = new Promise((resolve, reject) => {
+    let timer = null;
+    const cleanup = () => {
+      clearTimeout(timer);
+      p.stdout.off('data', onOut);
+      p.stderr.off('data', onErr);
+      p.off('exit', onExit);
+      p.off('error', onError);
+    };
+    const fail = (why) => { cleanup(); reject(new Error(why)); };
+    const onOut = (d) => {
+      out = (out + d).slice(-12000);
+      const url = parseDshWebUrl(out);
+      if (!url) return;
+      cleanup();
+      try {
+        const u = new URL(url);
+        if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost' && u.hostname !== '[::1]') throw new Error('dsh web 没有绑定本机地址');
+        resolve({ base: u.origin, token: u.searchParams.get('token') || '', url });
+      } catch (e) { reject(new Error('dsh web 地址不可用：' + e.message)); }
+    };
+    const onErr = (d) => { err = (err + d).slice(-4000); };
+    const onExit = (code, signal) => fail('dsh web 启动失败（' + (signal || 'exit ' + code) + '）' + (err.trim() ? '：' + err.trim().split('\n').pop() : ''));
+    const onError = (e) => fail('dsh web 启动失败：' + e.message);
+    p.stdout.on('data', onOut);
+    p.stderr.on('data', onErr);
+    p.once('exit', onExit);
+    p.once('error', onError);
+    timer = setTimeout(() => fail('dsh web ' + Math.round(WEB_START_TIMEOUT / 1000) + ' 秒没有启动完成' + (err.trim() ? '：' + err.trim().split('\n').pop() : '')), WEB_START_TIMEOUT);
+    timer.unref?.();
+  });
+  ready.catch(() => {});
+  const stop = async () => {
+    if (stopped) return;
+    stopped = true;
+    try { p.kill('SIGTERM'); } catch {}
+    await new Promise(resolve => {
+      if (p.exitCode !== null || p.signalCode !== null) return resolve();
+      const timer = setTimeout(() => { try { p.kill('SIGKILL'); } catch {} resolve(); }, WEB_STOP_TIMEOUT);
+      timer.unref?.();
+      p.once('exit', () => { clearTimeout(timer); resolve(); });
+    });
+    log?.('dsh compact host stopped');
+  };
+  return { ready, stop };
+}
+
+async function dshWebCookie(host) {
+  const u = new URL('/connect', host.base);
+  u.searchParams.set('token', host.token);
+  let last;
+  for (let i = 0; i < 20; i++) {
+    try {
+      const r = await fetch(u, { redirect: 'manual' });
+      if (r.status !== 302) throw new Error('dsh web 认证失败（HTTP ' + r.status + '）');
+      const jars = typeof r.headers.getSetCookie === 'function' ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || ''];
+      const raw = jars.find(c => /^dsh-auth-/.test(c)) || jars[0] || '';
+      const cookie = raw.split(';')[0];
+      if (!/^dsh-auth-[^=]+=.+/.test(cookie)) throw new Error('dsh web 没有返回登录 cookie');
+      return cookie;
+    } catch (e) {
+      last = e;
+      if (i < 19) await sleep(100);
+    }
+  }
+  throw last;
+}
+
+async function dshWebRpc(host, cookie, method, args, timeoutMs = COMPACT_TIMEOUT) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(new Error('dsh web 请求超时')), timeoutMs);
+  timer.unref?.();
+  try {
+    const r = await fetch(host.base + '/api/' + method, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ type: 'client-request', rpcId: randomUUID(), method, payload: { args } }),
+    });
+    const text = await r.text();
+    let j;
+    try { j = JSON.parse(text); } catch { throw new Error('dsh web 返回的不是 JSON（HTTP ' + r.status + '）'); }
+    if (!j?.result) throw new Error('dsh web 返回格式不对');
+    if (!j.result.ok) {
+      const e = j.result.error || {};
+      const x = new Error(e.message || e.code || 'dsh web 请求失败');
+      x.code = e.code;
+      throw x;
+    }
+    return j.result.value;
+  } finally { clearTimeout(timer); }
+}
+
+// 等日志里出现这次压缩成功的 command/done，确认写入已经落盘再杀 dsh web
+async function waitCompactDone(file, startedAt, ms = 5000) {
+  const until = Date.now() + ms;
+  for (;;) {
+    const recs = readRecords(file) || [];
+    for (let i = recs.length - 1; i >= 0; i--) {
+      const r = recs[i];
+      if (r.type !== 'command/done' || r.data?.kind !== 'success' || !COMPACT_DONE_RE.test(String(r.data?.text || ''))) continue;
+      if (Number(r.time || 0) >= startedAt - 1000) return;
+    }
+    if (Date.now() >= until) return;
+    await sleep(100);
+  }
+}
+
+// 等 dsh web 进程退出、session.lock 真正可拿：ACP 再 resume 才不会撞 owners
+async function waitDshUnlocked(dir, sid, ms = 5000) {
+  if (!(await dshFlock())) return;
+  const until = Date.now() + ms;
+  for (;;) {
+    let lease = null;
+    try {
+      lease = await acquireLease(dir, sid);
+      await lease.release();
+      return;
+    } catch (e) {
+      if (Date.now() >= until) throw e;
+      await sleep(100);
+    }
+  }
+}
+
+// 压缩串行化：同一时间只起一个 dsh web，也避免两个请求同时初始化 profile。
+let compactQueue = Promise.resolve();
+
+// 在已经关掉 ACP 会话的前提下，用 dsh host 压缩一个会话。
+// 返回 { ok, text }；失败时抛出可读错误（不抛 token）。
+export function dsCompactSession(sid, opts = {}) {
+  const run = () => compactSessionNow(sid, opts);
+  const p = compactQueue.then(run, run);
+  compactQueue = p.then(() => {}, () => {});
+  return p;
+}
+
+async function compactSessionNow(sid, { log } = {}) {
+  if (!dsSupported()) throw new Error(dsUnsupportedReason());
+  const file = fileOf(sid);
+  if (!file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
+  const dir = path.dirname(file);
+  const startedAt = Date.now();
+  const host = startDshWeb(log);
+  try {
+    const web = await host.ready;
+    const cookie = await dshWebCookie(web);
+    const value = await dshWebRpc(web, cookie, 'commands/execute', {
+      agentId: sid, line: '/compact', submittedAttachments: [],
+    });
+    const result = value?.result;
+    if (!result) throw new Error('这个 dsh 没有注册 /compact（缺少 command-compact 插件）');
+    if (result.kind !== 'success') return { ok: false, text: result.text || '压缩没有成功' };
+    if (COMPACT_DONE_RE.test(String(result.text || ''))) await waitCompactDone(file, startedAt);
+    return { ok: true, text: result.text || '压缩完成' };
+  } catch (e) {
+    if (e?.code === 'session/agent-busy') throw new Error('这个会话正在 dsh 网页版 / 终端里打开着，先在那边关掉再压缩');
+    if (e?.name === 'AbortError' || /aborted|超时/.test(String(e?.message || ''))) throw new Error('dsh 压缩超时，请稍后重试');
+    throw e;
+  } finally {
+    await host.stop();
+    await waitDshUnlocked(dir, sid).catch(() => {});
+  }
+}
+
 // 模型选项：value 是 JSON 字符串 ["provider","model"]
 const flatOptions = opt => (opt?.options || []).flatMap(o => o.options ? o.options : [o]);
 const modelName = (cfg) => {
@@ -353,7 +559,8 @@ const modelName = (cfg) => {
 export const COMMANDS = [
   { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
   { name: 'effort', description: '思考强度：off / low / high / max', hint: '<强度>', builtin: true },
-  // dsh 原生的 /compact /goal /feedback 走 dsh host，ACP 接不到：不放进菜单，只在 send() 里拦下并说明
+  // /compact 由 claclaw 临时起 dsh web 调 dsh host 原生命令；goal/feedback 仍只能去 dsh web / 终端
+  { name: 'compact', description: '压缩会话历史（压缩时会短暂断开）', builtin: true },
   { name: 'cost', description: '本次会话累计 token 和估算费用', builtin: true },
   { name: 'status', description: '当前模型、思考强度和估算费用', builtin: true },
   { name: 'stop', description: '停止当前正在跑的回合', builtin: true },
@@ -371,9 +578,11 @@ async function waitClosing(sid) {
 }
 
 export class DsRunner {
-  constructor(id, { log, onActivity, onTurnDone, onAsk, info }) {
+  constructor(id, { log, onActivity, onTurnDone, onAsk, onCompacted, compact, info }) {
     this.id = id; this.sid = sidOf(id);
     this.log = log; this.onActivity = onActivity; this.onTurnDone = onTurnDone; this.onAsk = onAsk;
+    this.onCompacted = onCompacted;
+    this.compactFn = compact || dsCompactSession;
     this.info = { sessionId: id, cwd: info?.cwd || '' };
     this.cwd = info?.cwd || '';
     this.title = info?.title || '';
@@ -383,6 +592,7 @@ export class DsRunner {
     this.subs = new Set(); this.pending = new Map();
     this.suggestion = null; this.commands = COMMANDS;
     this.closed = false; this.attached = false; this.config = null;
+    this.compacting = false;
     this.msgId = null; this.textOpen = false;
     this.queue = [];          // 回复中又发来的消息：这一轮结束（或被中断）后合成一条发出
   }
@@ -517,9 +727,9 @@ export class DsRunner {
     }
     if (name === 'help') {
       return '可用命令：\n' + COMMANDS.map(c => '`/' + c.name + (c.hint ? ' ' + c.hint : '') + '` ' + c.description).join('\n') +
-        '\n\ndsh 原生的 /compact、/goal、/feedback 走 dsh host，当前 ACP 连接接不到；需要到 dsh web 或终端执行。';
+        '\n\ndsh 原生的 /goal、/feedback 走 dsh host，当前 ACP 连接接不到；需要到 dsh web 或终端执行。';
     }
-    if (name === 'compact' || name === 'goal' || name === 'feedback') {
+    if (name === 'goal' || name === 'feedback') {
       return 'dsh 的 /' + name + ' 走 dsh host，当前 ACP 连接接不到；请到 dsh web 或终端执行。';
     }
     return '';
@@ -547,6 +757,13 @@ export class DsRunner {
     }
     const local = text.match(/^\/(cost|status|help|compact|goal|feedback)(?:\s+([\s\S]*))?$/);
     if (local) {
+      if (local[1] === 'compact') {
+        if ((local[2] || '').trim()) this.localReply(() => '用法：/compact（不带参数）');
+        else if (this.compacting) this.localReply(() => '正在压缩，稍等');
+        else if (this.busy) this.localReply(() => '这个会话正在跑，等这一轮结束再压缩');
+        else setImmediate(() => { this.compact().catch(e => this.finish({ error: '压缩失败：' + e.message })); });
+        return true;
+      }
       this.localReply(() => this.localCommand(local[1]));
       return true;
     }
@@ -631,6 +848,62 @@ export class DsRunner {
     this.emit({ t: 'sys', text: '已中断' });
   }
   async setMode() {}
+
+  // 关掉当前 ACP 会话，释放 session.lock；不销毁 runner，压缩完还能 resume 回来
+  async detach() {
+    if (!this.attached) return;
+    this.attached = false;
+    if (owners.get(this.sid) === this) owners.delete(this.sid);
+    idleCheck();
+    const p = rpc('session/close', { sessionId: this.sid }).catch(e => { this.log?.('dsh compact close failed', e.message); });
+    closing.set(this.sid, p);
+    try { await p; } finally { if (closing.get(this.sid) === p) closing.delete(this.sid); }
+  }
+
+  // dsh web 刚退出时锁可能晚一点释放；已经 owned 时短暂重试
+  async attachWithRetry() {
+    let last;
+    for (let i = 0; i < 40; i++) {
+      try { await this.attach(); return; } catch (e) {
+        last = e;
+        if (!/already owned|write handle|别处打开着|正在.*打开/i.test(e.message || '')) throw e;
+        await sleep(150);
+      }
+    }
+    throw last;
+  }
+
+  // /compact：把这一轮当成“本地命令”，但要做一次真实的会话切换。
+  async compact() {
+    if (this.closed || this.compacting) return;
+    this.compacting = true;
+    let compacted = false;
+    const wasAttached = this.attached;
+    for (const id of [...this.pending.keys()]) this.replyPermission(id, 'deny');
+    this.setBusy(true);
+    this.onActivity?.(this.id, '压缩中');
+    this.emit({ t: 'sys', text: '正在压缩会话历史…压缩期间 dsh 会短暂断开' });
+    try {
+      if (wasAttached) await this.detach();
+      const r = await this.compactFn(this.sid, { log: this.log });
+      if (!r || !r.ok) throw new Error(r?.text || '压缩没有成功');
+      compacted = true;
+      // 还有人看着才恢复 ACP；没人看就等下次打开时新建 runner 接上
+      const reattach = wasAttached && this.subs.size > 0;
+      if (reattach) await this.attachWithRetry();
+      this.compacting = false;
+      this.finish({ reason: 'command', text: '压缩完成：' + r.text + (reattach ? '' : '\n\n下次发消息会重新接上压缩后的会话。') });
+      if (!this.busy) { try { this.onCompacted?.(this); } catch (e) { this.log?.('dsh compact refresh failed', e.message); } }
+    } catch (e) {
+      this.compacting = false;
+      if (wasAttached && this.subs.size > 0) { try { await this.attachWithRetry(); } catch {} }
+      const why = compacted
+        ? '压缩完成，但重新接上会话失败：' + (e?.message || e) + '\n重新打开这个会话可看到压缩后的历史。'
+        : '压缩失败：' + (e?.message || e);
+      this.emit({ t: 'ai.full', text: why });
+      this.finish({ error: why });
+    }
+  }
 
   onAcpDead(why) {
     this.attached = false;

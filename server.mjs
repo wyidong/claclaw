@@ -1490,7 +1490,24 @@ function dsAsk(r, body) {
   const badge = markUnread(r.id);
   push.sendAll({ title: r.title || (isOp(r.id) ? 'OpenCode' : 'DeepSeek'), body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
 }
-const dsOpts = () => ({ log, onActivity: setActivity, onTurnDone: ocTurnDone, onAsk: dsAsk });
+// DS 压缩完：给还开着的页面重发一份 session.opened，让历史按压缩后的记录重画。
+// 压缩后总条数会变少，前端不能按旧序号续画，所以带 compacted 标记强制整页刷新。
+function announceDsOpened(r) {
+  if (!r || r.closed) return;
+  let hist;
+  try { hist = r.history(); } catch { return; }
+  const pg = historyPage(hist, hist.total, HISTORY_PAGE);
+  const payload = {
+    t: 'session.opened', sessionId: r.id, id: r.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
+    mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, compacted: true,
+    history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
+    pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(r.id),
+    busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
+  };
+  for (const w of r.subs) if (w.readyState === 1) { try { w.send(JSON.stringify(payload)); } catch {} }
+}
+
+const dsOpts = () => ({ log, onActivity: setActivity, onTurnDone: ocTurnDone, onAsk: dsAsk, onCompacted: announceDsOpened });
 function setActivity(id, a) {
   if (a) activityMap[id] = a; else delete activityMap[id];
   if (activityTimer) return;   // 0.5 秒合并一次，流式输出时不刷屏

@@ -2011,11 +2011,11 @@ function onEvent(m){
   if(narration)narration.onEvent(m);   // 过程播报：只读事件，不改现有逻辑
   switch(m.t){
   case 'session.opened':
-    var sameSess=!!(session&&session.id===m.id),wasStick=stick;
+    var sameSess=!!(session&&session.id===m.id)&&!m.compacted,wasStick=stick;
     if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
     session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     switchDraft(m.id);
-    var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
+    var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!m.compacted&&!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
     delete feedCache[m.id];
     // 重连后服务器会重发同一个会话：已经画好的不动（正在看的位置不跳），断线前后实时画的去掉、按服务器记录补上
     var mergeFrom=sameSess?resumeTail(m):-1;
@@ -2035,7 +2035,8 @@ function onEvent(m){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
     renderHistory(m.history,m.historyStart||0);
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
-    addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||'')+(m.branch?' · 分支 '+m.branch:''));
+    if(m.compacted)addSys('会话已压缩，历史已重新加载');
+    else addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||'')+(m.branch?' · 分支 '+m.branch:''));
     }
     localStorage.setItem(hk('session'),m.id);
     refreshList();goChat();bgRefreshList();

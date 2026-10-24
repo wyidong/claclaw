@@ -12,6 +12,7 @@ const SID = '22222222-3333-4444-8555-666666666666';
 const DIR = path.join(DSH, 'sessions', '--tmp-usage--', SID);
 // 父会话 + 两层子代理（子代理的日志在别的组里也要找得到）
 const PARENT = '33333333-4444-4555-8666-777777777777', SUB = '44444444-5555-4666-8777-888888888888', SUB2 = '55555555-6666-4777-8888-999999999999';
+const CMP = '66666666-7777-4888-8999-aaaaaaaaaaaa';
 const SAT = Date.parse('2026-10-24T02:00:00Z');   // 周六 10:00 北京时间：空闲
 const msg = (seq, model, usage) => ({ type: 'assistant/message', seq, time: SAT, data: { message: { source: { model } }, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, ...usage } } });
 function writeSession(group, sid, recs) {
@@ -34,6 +35,8 @@ if (HAS_ZSTD) {
   writeSession('--tmp-p--', PARENT, [head(PARENT), msg(0, 'deepseek-v4-pro', { inputTokens: 1e6 })]);              // Pro 空闲未命中 4.5
   writeSession('--tmp-p--', SUB, [head(SUB, PARENT), msg(0, 'deepseek-flash', { outputTokens: 1e6 })]);           // Flash 空闲输出 4
   writeSession('--tmp-q--', SUB2, [head(SUB2, SUB), msg(0, 'deepseek-flash', { cacheReadTokens: 1e6 })]);         // Flash 空闲命中 0.02
+  // 压缩本身也会调模型；compaction/summary 的 usage 要算进会话费用
+  writeSession('--tmp-cmp--', CMP, [head(CMP), { type: 'compaction/summary', seq: 0, time: SAT, data: { model: 'deepseek-flash', usage: { inputTokens: 1e6, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } } }]);
 }
 
 process.env.DSH_HOME = DSH;
@@ -58,6 +61,12 @@ test('子代理（多层）的用量算进父会话，模型仍显示父会话�
   assert.equal(u.costCny, 8.52);
   assert.equal(dsUsage('ds:' + SUB).costCny, 4.02);   // 子代理自己只算自己和下层
   assert.equal(dsUsage('ds:' + SID).subagents, 0);
+});
+
+test('压缩调用的 usage 也算进费用', { skip: !HAS_ZSTD }, () => {
+  const u = dsUsage('ds:' + CMP);
+  assert.equal(u.messages, 1);
+  assert.equal(u.costCny, 1);   // Flash 空闲未命中 1 元 / 百万
 });
 
 test('不存在的会话返回 null', { skip: !HAS_ZSTD }, () => {
