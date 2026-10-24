@@ -1544,6 +1544,17 @@ function think(on,label){
   tickWork();
 }
 function fmtSec(sec){return sec<60?sec+'s':Math.floor(sec/60)+'m'+('0'+sec%60).slice(-2)+'s'}
+function dsFeeText(u){
+  if(!u||typeof u.costCny!=='number')return '';
+  var c=u.costCny;
+  if(c<=0)return '≈¥0';
+  return '≈¥'+(c<0.01?c.toFixed(4):c.toFixed(2));
+}
+function dsFeeTitle(u){
+  var t=u.tokens||{};
+  return 'DeepSeek 估算：缓存命中 '+(t.cacheReadTokens||0)+' · 未命中 '+(t.uncachedInputTokens||0)+
+    ' · 输出 '+(t.outputTokens||0)+' tokens（按公开价估算，不是账单）';
+}
 var lastEvt=0;   // 最近一次收到这个会话的事件（输出、工具开始/结束……）
 function tickWork(){
   var sec=workSince?Math.floor((Date.now()-workSince)/1000):0;
@@ -1554,7 +1565,10 @@ function tickWork(){
   bar.hidden=false;bar.classList.toggle('quiet',stuck);
   var lg=$('#workLogo'),ck=clawKeyOf(session&&session.id);
   if(lg.dataset.k!==ck){lg.innerHTML=clawIcon(ck);lg.dataset.k=ck;lg.title=clawName(session&&session.id)+' 正在工作'}
-  $('#workT').textContent=workLabel+(sec?' · 已 '+fmtSec(sec):'')+
+  var dsFt=(session&&/^ds:/.test(session.id)&&session.usage)?dsFeeText(session.usage):'';
+  var dsFee=dsFt?' · '+dsFt:'';
+  bar.title=dsFee?dsFeeTitle(session.usage):'';
+  $('#workT').textContent=workLabel+(sec?' · 已 '+fmtSec(sec):'')+dsFee+
     (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':'');
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
@@ -1968,7 +1982,7 @@ function onEvent(m){
   case 'session.opened':
     var sameSess=!!(session&&session.id===m.id),wasStick=stick;
     if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
-    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||''};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
+    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     switchDraft(m.id);
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
     delete feedCache[m.id];
@@ -2083,6 +2097,9 @@ function onEvent(m){
     break;
   case 'busy':
     setBusy(!!m.on);
+    break;
+  case 'usage':   // DeepSeek：本轮结束后的累计 token / 估算费用
+    if(session&&m.usage){session.usage=m.usage;tickWork()}
     break;
   case 'session.meta':   // 会话信息变了（OpenClaw 换了模型）：更新标题栏
     if(session&&m.cwdShort){session.cwdShort=m.cwdShort;session.dir=m.cwdShort.split('/').pop()||'';setHeader()}

@@ -133,6 +133,52 @@ function readImage(att) {
 }
 
 const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : undefined; };   // 时间统一成毫秒（秒 / ISO 字符串都认）
+
+// 费用估算：只用 dsh 日志里 provider 上报的 usage 桶，乘 DeepSeek 公开价。
+// 缓存写入按未命中输入价；法定节假日、账号折扣/赠金不算，这是给用户“心里有数”的近似值。
+const DS_PRICE = {
+  flash: { hit: [0.02, 0.04], miss: [1, 2], out: [4, 8] },       // 元 / 百万 tokens： [空闲, 高峰]
+  pro: { hit: [0.15, 0.30], miss: [4.5, 9], out: [13.5, 27] },
+};
+function dsPeak(ms) {
+  const t = new Date((Number(ms) || Date.now()) + 8 * 3600 * 1000);   // 北京时间，无夏令时
+  const d = t.getUTCDay(), h = t.getUTCHours();
+  return d >= 1 && d <= 5 && ((h >= 9 && h < 12) || (h >= 14 && h < 18)) ? 1 : 0;
+}
+function dsRate(model, ms) {
+  const p = /pro/i.test(String(model || '')) ? DS_PRICE.pro : DS_PRICE.flash;
+  const k = dsPeak(ms);
+  return { hit: p.hit[k], miss: p.miss[k], out: p.out[k] };
+}
+// 本次会话累计：四个 provider 上报的桶 + 按每条消息当时模型/时段估的费用（CNY）
+export function dsUsage(id) {
+  if (!isDs(id)) return null;
+  const f = fileOf(sidOf(id));
+  if (!f) return null;
+  const recs = readRecords(f) || [];
+  const s = summarize(recs);
+  const tokens = { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  let cost = 0, messages = 0, model = s.model || '';
+  for (const r of recs) {
+    if (r.type !== 'assistant/message' || !r.data?.usage) continue;
+    const u = r.data.usage;
+    const m = r.data.message?.source?.model;
+    if (m) model = m;
+    const input = Number(u.inputTokens || 0) || 0;
+    const output = Number(u.outputTokens || 0) || 0;
+    const hit = Number(u.cacheReadTokens || 0) || 0;
+    const write = Number(u.cacheWriteTokens || 0) || 0;
+    tokens.uncachedInputTokens += input;
+    tokens.outputTokens += output;
+    tokens.cacheReadTokens += hit;
+    tokens.cacheWriteTokens += write;
+    const price = dsRate(model, tms(r.time));
+    // 缓存写入按未命中输入价；账号折扣/赠金/节假日不在估算里
+    cost += ((input + write) * price.miss + hit * price.hit + output * price.out) / 1e6;
+    messages++;
+  }
+  return { model, messages, tokens, costCny: Math.round(cost * 10000) / 10000 };
+}
 function toItems(recs) {
   const items = [], toolIdx = new Map();
   for (const r of recs) {
@@ -460,6 +506,8 @@ export class DsRunner {
     const ok = !error && (reason === 'end_turn' || reason === 'command');
     const subtype = error ? 'error' : reason === 'cancelled' ? 'aborted' : ok ? 'success' : reason;
     if (error) this.emit({ t: 'error', message: error });
+    const usage = dsUsage(this.id);
+    if (usage) this.emit({ t: 'usage', usage });
     this.busy = false;
     this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
     this.onActivity?.(this.id, null);

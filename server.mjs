@@ -18,7 +18,7 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
-import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename } from './dsh.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
 const STARTED_AT = Date.now();
@@ -2366,7 +2366,7 @@ wss.on('connection', (ws, req) => {
         return send({
           t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'deepseek',
           mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
-          commands: r.commands, isNew: true,
+          commands: r.commands, isNew: true, usage: dsUsage(r.id),
         });
       }
       if (m.t === 'session.new') {
@@ -2426,7 +2426,7 @@ wss.on('connection', (ws, req) => {
           mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands,
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
-          pending: [...r.pending.values()].map(p => p.req), suggestion: null,
+          pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(m.id),
         });
       } else if (m.t === 'session.open' && isOp(m.id)) {
         ensureSkill('opencode');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
