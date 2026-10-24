@@ -305,6 +305,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #vplayer video{max-width:100%;max-height:100%}
 #vplayer button{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-size:22px;line-height:36px;padding:0}
 .uvid{cursor:pointer}
+.ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:1px solid var(--line);color:var(--fg)}
+.ufile-n{font-size:14px;word-break:break-all}
+.att-file{width:auto;max-width:160px;padding:6px 26px 6px 8px;display:flex;align-items:center}
+.att-fn{font-size:12px;line-height:16px;max-height:48px;overflow:hidden;word-break:break-all}
 #lightbox img{max-width:100%;max-height:100%;object-fit:contain}
 .sheet-p{overflow-x:hidden}
 .ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
@@ -892,7 +896,7 @@ select.pe-in{text-align-last:right}
     <div id="atts" hidden></div>
     <div id="composer">
       <button type="button" id="attachBtn" aria-label="添加图片"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4.5v13M4.5 11h13"/></svg></button>
-      <input type="file" id="fileIn" accept="image/*,video/*" multiple hidden>
+      <input type="file" id="fileIn" multiple hidden>
       <div id="taWrap">
         <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
         <button type="button" id="sugBtn" hidden aria-label="填入建议" title="填入建议"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 5v5.5a2.5 2.5 0 0 1-2.5 2.5H5"/><path d="M8.5 9.5 5 13l3.5 3.5"/></svg></button>
@@ -1028,11 +1032,11 @@ select.pe-in{text-align-last:right}
         </div>
       </div>
       <div class="set-sec">
-        <div class="set-h">视频</div>
+        <div class="set-h">本机附件</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">本机保留<small id="vidUse">发过的视频存在这台设备上，聊天记录里点开直接播放</small></span>
+          <label class="set-item"><span class="lb">保留时间<small id="vidUse">发过的图片原图、视频、文件存在这台设备上，聊天记录里点开直接看</small></span>
             <select id="setVidKeep"><option value="30">1 个月</option><option value="60">2 个月</option><option value="180">6 个月</option><option value="365">1 年</option></select></label>
-          <label class="set-item"><span class="lb">本机空间上限<small>超过后先删最早的视频</small></span>
+          <label class="set-item"><span class="lb">空间上限<small>超过后先删最早的</small></span>
             <select id="setVidCap"><option value="512">500MB</option><option value="1024">1GB</option><option value="2048">2GB</option><option value="5120">5GB</option></select></label>
         </div>
       </div>
@@ -1231,11 +1235,17 @@ feed.addEventListener('scroll',function(){stick=feed.scrollHeight-feed.scrollTop
 if(window.ResizeObserver)new ResizeObserver(function(){if(stick)feed.scrollTop=feed.scrollHeight}).observe(feed);
 
 // 视频消息：服务器在文字前加了「[视频 … 原文件：…]」并附了截帧；聊天区只显示第一帧 + ▶ 时长，说明文字不显示
-var VIDEO_NOTE=/^\[视频[^\]]*原文件：[^\]]*\]\n?/,VIDEO_PENDING=/\n?\[随后还有一个视频[^\]]*\]$/;
+var VIDEO_NOTE=/^\[(视频|文件)[^\]]*原文件：[^\]]*\]\n?/,VIDEO_PENDING=/\n?\[随后还有一个(视频|文件)[^\]]*\]$/;
 function fillVideo(host,thumb,lab){
   host.dataset.vdone='1';var tile=host.querySelector('.uvid');if(!tile)return;
   if(!tile.querySelector('video')&&thumb){var im=tile.querySelector('img')||document.createElement('img');im.src=thumb;im.alt='视频';if(!im.parentNode)tile.insertBefore(im,tile.firstChild)}
   var b=tile.querySelector('.uvid-b');if(b)b.textContent=lab;
+}
+function fileTile(name,label){
+  var w=document.createElement('div');w.className='uvid ufile';
+  var n=document.createElement('span');n.className='ufile-n';n.textContent='📄 '+(name||'文件');w.appendChild(n);
+  var b=document.createElement('span');b.className='uvid-b';b.textContent=label;w.appendChild(b);
+  return w;
 }
 function videoTile(src,label,isVideoEl){
   var w=document.createElement('div');w.className='uvid';
@@ -1250,20 +1260,21 @@ function videoTile(src,label,isVideoEl){
 function addUser(t,images,vid){
   var e=document.createElement('div');e.className='msg user';
   var pend=null,pm=t&&VIDEO_PENDING.exec(t);
-  if(pm){t=t.replace(VIDEO_PENDING,'');var nm=/「([^」]*)」/.exec(pm[0]);pend=nm?nm[1]:'视频'}
+  var pkind='video';
+  if(pm){t=t.replace(VIDEO_PENDING,'');var nm=/「([^」]*)」/.exec(pm[0]);pend=nm?nm[1]:'视频';pkind=pm[1]==='文件'?'file':'video'}
   var vm=t&&VIDEO_NOTE.exec(t);
   if(vm){
-    var dm=/([\d.]+) 秒/.exec(vm[0]),idm=/uploads\/(v[0-9a-f]{16}\.\w+)/.exec(vm[0]),vn=/^\[视频「([^」]*)」/.exec(vm[0]);
-    var lab='▶ 视频'+(dm?' '+Math.round(+dm[1])+'s':''),thumb=(images||[])[0]||(idm?'/api/upload/thumb?id='+idm[1]:'');
+    var isFile=vm[1]==='文件',dm=/([\d.]+) 秒/.exec(vm[0]),idm=/uploads\/([vf][0-9a-f]{16}\.\w+)/.exec(vm[0]),vn=/^\[(?:视频|文件)「([^」]*)」/.exec(vm[0]),sm=/」 ([\d.]+(?:KB|MB|B))/.exec(vm[0]);
+    var lab=isFile?(sm?sm[1]:'文件'):'▶ 视频'+(dm?' '+Math.round(+dm[1])+'s':''),thumb=isFile?'':(images||[])[0]||(idm?'/api/upload/thumb?id='+idm[1]:'');
     t=t.slice(vm[0].length);images=[];
     if(!t&&vn){   // 只有视频：找前面那条等着它的文字消息，填进去，不另起一条
       var hosts=feed.querySelectorAll('.msg.user[data-vpend]'),host=null;
       for(var hi=hosts.length-1;hi>=0;hi--)if(!hosts[hi].dataset.vdone&&hosts[hi].dataset.vpend===vn[1]){host=hosts[hi];break}
-      if(host){fillVideo(host,thumb,lab);var ht=host.querySelector('.uvid');if(ht&&idm)ht.dataset.vid=idm[1];return host}
+      if(host){fillVideo(host,thumb,lab);var ht=host.querySelector('.uvid');if(ht&&idm){ht.dataset.vid=idm[1];ht.dataset.vname=vn[1]}return host}
     }
-    e.appendChild(videoTile(thumb,lab,false));e.dataset.vdone='1';if(idm)e.querySelector('.uvid').dataset.vid=idm[1];
-  }else if(vid){e.appendChild(videoTile(vid.url,vid.label||'▶ 视频',true));if(vid.pend)e.dataset.vpend=vid.pend}
-  else if(pend){e.appendChild(videoTile('','▶ 视频',false));e.dataset.vpend=pend}
+    e.appendChild(isFile?fileTile(vn?vn[1]:'',lab):videoTile(thumb,lab,false));e.dataset.vdone='1';if(idm){var nt=e.querySelector('.uvid');nt.dataset.vid=idm[1];nt.dataset.vname=vn?vn[1]:''}
+  }else if(vid){e.appendChild(vid.kind==='file'?fileTile(vid.name,vid.label||fmtSize(vid.size||0)):videoTile(vid.url,vid.label||'▶ 视频',true));if(vid.pend)e.dataset.vpend=vid.pend}
+  else if(pend){e.appendChild(pkind==='file'?fileTile(pend,'文件'):videoTile('','▶ 视频',false));e.dataset.vpend=pend}
   e.vbadge=e.querySelector('.uvid-b');
   if(images&&images.length){
     var g=document.createElement('div');g.className='uimgs';
@@ -1292,10 +1303,10 @@ function vidOpen(){
 function vidStore(mode,fn){return vidOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('v',mode),st=tx.objectStore('v'),out=fn(st);tx.oncomplete=function(){res(out&&out.result!==undefined?out.result:out)};tx.onerror=function(){rej(tx.error)}})})}
 function vidKeepDays(){var d=+localStorage.getItem('claclaw.vidKeep');return d>0?d:60}
 function vidCapMB(){var c=+localStorage.getItem('claclaw.vidCap');return c>0?c:2048}
-function vidSave(id,file,name){
+function vidSave(id,file,name,kind){
   if(!file||!window.indexedDB)return;
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(_){}
-  vidStore('readwrite',function(st){st.put({id:id,blob:file,size:file.size,name:name||'',at:Date.now()})}).then(vidPrune).catch(function(){});
+  vidStore('readwrite',function(st){st.put({id:id,blob:file,size:file.size,name:name||'',kind:kind||'video',at:Date.now()})}).then(vidPrune).catch(function(){});
 }
 function vidPrune(){
   var cut=Date.now()-vidKeepDays()*86400e3,cap=vidCapMB()*1048576;
@@ -1318,9 +1329,25 @@ function playVideo(id){
 }
 function closeVideo(){var pl=$('#vplayer'),v=pl.querySelector('video');pl.classList.remove('on');try{v.pause()}catch(_){}if(v.dataset.local)URL.revokeObjectURL(v.dataset.local);v.removeAttribute('src');v.load()}
 document.getElementById('vplayer').querySelector('button').addEventListener('click',closeVideo);
-feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&t.dataset.vid){e.preventDefault();playVideo(t.dataset.vid)}});
+feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
+// 文件：本机有就直接打开（看不了的类型浏览器会给下载 / 分享），没有再从电脑取
+function openFile(id,name){
+  vidStore('readonly',function(st){return st.get(id)}).then(function(rec){
+    if(rec&&rec.blob){var u=URL.createObjectURL(rec.blob);window.open(u,'_blank');setTimeout(function(){URL.revokeObjectURL(u)},60000)}
+    else window.open('/api/upload/file?id='+encodeURIComponent(id)+'&name='+encodeURIComponent(name||''),'_blank');
+  }).catch(function(){window.open('/api/upload/file?id='+encodeURIComponent(id)+'&name='+encodeURIComponent(name||''),'_blank')});
+}
+// 发过的图片：原图也存在本机（按发出去的压缩图算个指纹对应），聊天记录里点开看原图
+function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
-function showImage(src){lightbox.querySelector('img').src=src;lightbox.classList.add('on')}
+function showImage(src){
+  var im=lightbox.querySelector('img');im.onerror=null;im.src=src;lightbox.classList.add('on');
+  var m=/^data:image\/[\w.+-]+;base64,(.+)$/.exec(src||'');if(!m||!window.indexedDB)return;
+  vidStore('readonly',function(st){return st.get('img:'+imgKey(m[1]))}).then(function(rec){
+    if(!rec||!rec.blob||!lightbox.classList.contains('on')||im.src!==src)return;
+    var u=URL.createObjectURL(rec.blob);im.onerror=function(){im.onerror=null;im.src=src};im.src=u;   // 原图打不开（比如 HEIC）就退回压缩图
+  }).catch(function(){});
+}
 lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
 // 回复里的 Markdown 图片：点开全屏；加载完再滚到底，免得图片撑高后看不到最新内容
 feed.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))showImage(e.target.src)});
@@ -1562,10 +1589,10 @@ document.addEventListener('paste',function(e){
 });
 function addFiles(list){
   Array.prototype.slice.call(list).forEach(function(f){
-    if(/^video\//.test(f.type)||/\.(mov|mp4|m4v|webm)$/i.test(f.name||'')){addVideo(f);return}
-    if(!/^image\//.test(f.type)&&!/\.(heic|heif)$/i.test(f.name||''))return;
-    if(attachments.length>=MAX_IMAGES){addSys('一次最多 '+MAX_IMAGES+' 张图片');return}
-    var a={url:URL.createObjectURL(f),data:null,media_type:null};
+    if(/^video\//.test(f.type)||/\.(mov|mp4|m4v|webm)$/i.test(f.name||'')){addVideo(f,'video');return}
+    if(!/^image\/(jpeg|png|gif|webp|heic|heif)$/.test(f.type)&&!/\.(jpe?g|png|gif|webp|heic|heif)$/i.test(f.name||'')){addVideo(f,'file');return}   // 其他都按文件发
+    if(attachments.filter(function(a){return !a.video}).length>=MAX_IMAGES){addSys('一次最多 '+MAX_IMAGES+' 张图片');return}
+    var a={url:URL.createObjectURL(f),data:null,media_type:null,orig:f};
     attachments.push(a);renderAtts();
     compressImage(f).then(function(r){a.data=r.data;a.media_type=r.media_type;renderAtts()})
       .catch(function(){var i=attachments.indexOf(a);if(i>=0){attachments.splice(i,1);renderAtts()}addSys('这张图片读不出来，换一张试试')});   // 已切到别的会话：这张在别的草稿里，不动当前的
@@ -1573,27 +1600,32 @@ function addFiles(list){
 }
 // 视频：原文件传到服务器（data/uploads/），发消息时由服务器用 ffmpeg 截帧给 AI，AI 也能拿到原文件
 var VIDEO_MAX=10*1024*1024;
-function addVideo(f){
-  if(attachments.some(function(a){return a.video})){addSys('一次只能发一个视频');return}
-  if(f.size>VIDEO_MAX){alert('视频不能超过 10MB（这个是 '+(f.size/1048576).toFixed(1)+'MB），可以剪短一些再发');return}
-  attachments.push({url:URL.createObjectURL(f),data:true,video:{name:f.name||'',file:f,id:''}});renderAtts();   // 点了发送才上传；选错了点 × 就行
+// 视频和其他文件（kind = video / file）：一次一个，点了发送才上传；选错了点 × 就行
+function addVideo(f,kind){
+  var kn=kind==='file'?'文件':'视频';
+  if(attachments.some(function(a){return a.video})){addSys('一次只能发一个视频或文件');return}
+  if(f.size>VIDEO_MAX){alert(kn+'不能超过 10MB（这个是 '+(f.size/1048576).toFixed(1)+'MB）'+(kind==='file'?'':'，可以剪短一些再发'));return}
+  attachments.push({url:kind==='file'?'':URL.createObjectURL(f),data:true,video:{kind:kind,name:f.name||'',file:f,id:'',size:f.size}});renderAtts();
 }
+function fmtSize(n){return n>=1048576?(n/1048576).toFixed(1)+'MB':Math.max(1,Math.round(n/1024))+'KB'}
 // 带视频的消息：文字立刻发（附一句「视频随后到」，AI 自己决定先回还是等视频）；视频在后台上传，传完单独作为下一条发过去
 var videoJob=null;
 function vidName(n){return String(n||'视频').replace(/[\r\n\]「」]/g,' ').slice(0,80)}
 function startVideoJob(v,sid,host){
-  var job={v:v,sid:sid,el:host||addUser('',[],{url:v.url,label:'上传 0%'})};if(!host)job.el.classList.add('pending');videoJob=job;
+  var job={v:v,sid:sid,el:host||addUser('',[],{kind:v.kind,name:v.name,size:v.size,url:v.url,label:'上传 0%'})};if(!host)job.el.classList.add('pending');videoJob=job;
   var x=new XMLHttpRequest(),lab=function(t){if(job.el&&job.el.vbadge)job.el.vbadge.textContent=t};
-  x.open('POST','/api/upload/video');x.setRequestHeader('content-type',v.file.type||'video/quicktime');
+  var isDoc=v.kind==='file';
+  x.open('POST',isDoc?'/api/upload/doc':'/api/upload/video');x.setRequestHeader('content-type',v.file.type||(isDoc?'application/octet-stream':'video/quicktime'));
+  if(isDoc)x.setRequestHeader('x-file-name',encodeURIComponent(v.name||''));
   x.upload.onprogress=function(e){if(e.lengthComputable)lab('上传 '+Math.floor(e.loaded*100/e.total)+'%')};
   var fail=function(msg){
     if(videoJob===job)videoJob=null;
     if(job.el&&job.el.isConnected){if(job.el.dataset.vpend){var tl=job.el.querySelector('.uvid');if(tl)tl.remove();delete job.el.dataset.vpend}else job.el.remove()}
-    addSys('视频上传失败'+(msg?'：'+msg:'')+'，已放回输入框，可以重发');
-    if(session&&session.id===sid&&!attachments.some(function(a){return a.video})){attachments.push({url:v.url,data:true,video:{name:v.name,file:v.file,id:''}});renderAtts()}
+    addSys((v.kind==='file'?'文件':'视频')+'上传失败'+(msg?'：'+msg:'')+'，已放回输入框，可以重发');
+    if(session&&session.id===sid&&!attachments.some(function(a){return a.video})){attachments.push({url:v.url,data:true,video:{kind:v.kind,name:v.name,file:v.file,id:'',size:v.size}});renderAtts()}
   };
   x.onload=function(){var j={};try{j=JSON.parse(x.responseText)}catch(_){}
-    if(x.status===200&&j.id){v.id=j.id;vidSave(j.id,v.file,v.name);var tl=job.el&&job.el.querySelector('.uvid');if(tl)tl.dataset.vid=j.id;lab('等待发送…');job.ready=true;sendVideoJob()}else fail(j.error)};
+    if(x.status===200&&j.id){v.id=j.id;vidSave(j.id,v.file,v.name,v.kind);var tl=job.el&&job.el.querySelector('.uvid');if(tl)tl.dataset.vid=j.id;lab('等待发送…');job.ready=true;sendVideoJob()}else fail(j.error)};
   x.onerror=function(){fail('网络')};
   x.send(v.file);
 }
@@ -1601,9 +1633,9 @@ function startVideoJob(v,sid,host){
 function sendVideoJob(){
   var job=videoJob;if(!job||!job.ready||outbox)return;
   videoJob=null;
-  if(!session||session.id!==job.sid){addSys('视频没发出去（已经换了会话），可以重新选择发送');return}
+  if(!session||session.id!==job.sid){addSys((job.v.kind==='file'?'文件':'视频')+'没发出去（已经换了会话），可以重新选择发送');return}
   if(job.el&&job.el.vbadge)job.el.vbadge.textContent='服务器处理中…';
-  outbox={text:'',images:[],video:{id:job.v.id,name:job.v.name,url:job.v.url},sid:job.sid,el:job.el};
+  outbox={text:'',images:[],video:{kind:job.v.kind,id:job.v.id,name:job.v.name,url:job.v.url,size:job.v.size},sid:job.sid,el:job.el};
   trySend();
 }
 // 长边压到 2000px 内转 JPEG；小于 1.5MB 的 PNG（截图）和 GIF 保持原样，免得文字糊或动图变静态
@@ -1640,7 +1672,9 @@ function renderAtts(){
   attsEl.innerHTML='';
   attachments.forEach(function(a,i){
     var d=document.createElement('div');d.className='att'+(a.data?'':' loading');
-    d.innerHTML='<img alt=""><button type="button" aria-label="移除图片">×</button>'+(a.video?'<span class="att-vid">▶ 视频</span>':'');
+    var isF=a.video&&a.video.kind==='file';if(isF)d.className+=' att-file';
+    d.innerHTML='<img alt=""><button type="button" aria-label="移除">×</button>'+(isF?'<span class="att-fn"></span>':a.video?'<span class="att-vid">▶ 视频</span>':'');
+    if(isF)d.querySelector('.att-fn').textContent='📄 '+(a.video.name||'文件');
     var im0=d.querySelector('img');
     if(a.video){im0.remove();if(a.url){var vv=document.createElement('video');vv.muted=true;vv.playsInline=true;vv.setAttribute('playsinline','');vv.preload='metadata';vv.src=a.url+'#t=0.1';d.insertBefore(vv,d.firstChild)}}
     else if(a.url)im0.src=a.url;else im0.remove();
@@ -1923,11 +1957,11 @@ function onEvent(m){
     if(session&&m.text)liveLastPrompt(session.id,m.text);
     if(outbox&&outbox.video&&outbox.video.id&&String(m.text||'').indexOf(outbox.video.id)>=0){   // 视频消息：服务器的回显带了截帧，换掉本地那条
       var dm2=/([\d.]+) 秒/.exec(m.text||''),ob=outbox;outboxDone();
-      if(ob.el&&ob.el.isConnected){fillVideo(ob.el,'','▶ 视频'+(dm2?' '+Math.round(+dm2[1])+'s':''));ob.el.classList.remove('pending');if(!ob.el.dataset.vpend)stamp(ob.el,Date.now())}
+      if(ob.el&&ob.el.isConnected){fillVideo(ob.el,'',ob.video.kind==='file'?fmtSize(ob.video.size||0):'▶ 视频'+(dm2?' '+Math.round(+dm2[1])+'s':''));ob.el.classList.remove('pending');if(!ob.el.dataset.vpend)stamp(ob.el,Date.now())}
       else addUser(m.text,m.images);
       think(true);break;
     }
-    if(outbox&&outbox.videoPending&&String(m.text||'').replace(VIDEO_PENDING,'')===outbox.text)m={t:m.t,text:outbox.text,images:m.images,queued:m.queued};   // 文字后面服务器加了「视频随后到」
+    if(outbox&&(outbox.videoPending||outbox.filePending)&&String(m.text||'').replace(VIDEO_PENDING,'')===outbox.text)m={t:m.t,text:outbox.text,images:m.images,queued:m.queued};   // 文字后面服务器加了「视频随后到」
     if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');if(m.queued)outbox.el.classList.add('queued');stamp(outbox.el,Date.now());outboxDone();think(true);break}
     if(outbox&&m.text===outbox.text)outboxDone();
     var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');stamp(ue,Date.now());think(true);
@@ -2099,14 +2133,14 @@ function run(text){
   if(attachments.some(function(a){return !a.data}))return; // 还在压缩
   cmdMenu.hidden=true;
   var images=[],video=null;
-  attachments.forEach(function(a){if(a.video)video={id:a.video.id,name:a.video.name,file:a.video.file,url:a.url};else{images.push({media_type:a.media_type,data:a.data});URL.revokeObjectURL(a.url)}});
+  attachments.forEach(function(a){if(a.video)video={kind:a.video.kind||'video',id:a.video.id,name:a.video.name,file:a.video.file,url:a.url,size:a.video.size};else{images.push({media_type:a.media_type,data:a.data});if(a.orig)vidSave('img:'+imgKey(a.data),a.orig,a.orig.name,'image');URL.revokeObjectURL(a.url)}});
   attachments=[];renderAtts();   // 视频的预览地址留着：聊天区那条消息还要用
   ta.value='';ta.style.height='auto';
   busy=true;setDock('busy');
   if(video&&video.id){outbox={text:text,images:images,video:video,sid:session.id};outboxShow();trySend()}   // 视频早就传过（放回输入框后重发）
   else{
     var host=null;
-    if(text||images.length){outbox={text:text,images:images,videoPending:video?vidName(video.name):'',videoFile:video,sid:session.id};outboxShow();host=outbox.el;trySend()}
+    if(text||images.length){outbox={text:text,images:images,videoPending:video&&video.kind!=='file'?vidName(video.name):'',filePending:video&&video.kind==='file'?vidName(video.name):'',videoFile:video,sid:session.id};outboxShow();host=outbox.el;trySend()}
     if(video)startVideoJob(video,session.id,host);
   }
   ttsUnlock();ttsHush=false;
@@ -2120,7 +2154,7 @@ function trySend(){
   clearTimeout(outboxTimer);
   if(outbox.video&&!outbox.video.id)return;   // 视频还在上传：传完会再调
   if(!ws||ws.readyState!==1){banner('连接已断开，恢复后会自动发送刚才那条消息');return}
-  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images,video:outbox.video?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined}));
+  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images,video:outbox.video&&outbox.video.kind!=='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,file:outbox.video&&outbox.video.kind==='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined,filePending:outbox.filePending||undefined}));
   outboxTimer=setTimeout(function(){if(outbox)reconnectNow()},8000);
 }
 function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideoJob,0)}
@@ -2136,13 +2170,13 @@ function outboxShow(){
   if(!outbox)return;
   var imgs=(outbox.images||[]).map(function(i){return 'data:'+i.media_type+';base64,'+i.data});
   var vv=outbox.video||outbox.videoFile;
-  outbox.el=addUser(outbox.text,imgs,vv?{url:vv.url,label:outbox.video&&outbox.video.id?'服务器处理中…':'上传 0%',pend:outbox.videoPending||''}:null);outbox.el.classList.add('pending');
+  outbox.el=addUser(outbox.text,imgs,vv?{kind:vv.kind,name:vv.name,size:vv.size,url:vv.url,label:outbox.video&&outbox.video.id?'服务器处理中…':'上传 0%',pend:outbox.videoPending||outbox.filePending||''}:null);outbox.el.classList.add('pending');
 }
 function outboxRestore(){
   if(!outbox)return;
   if(outbox.el&&outbox.el.isConnected)outbox.el.remove();   // 没发出去：气泡收回，文字放回输入框
   if(!ta.value){ta.value=outbox.text;ta.dispatchEvent(new Event('input'))}
-  if(outbox.video&&!attachments.some(function(a){return a.video})){attachments.push({url:outbox.video.url||'',data:true,video:{name:outbox.video.name,file:outbox.video.file,id:outbox.video.id}});renderAtts()}   // 视频已在服务器上：放回附件，重发不用再传
+  if(outbox.video&&!attachments.some(function(a){return a.video})){attachments.push({url:outbox.video.url||'',data:true,video:{kind:outbox.video.kind,name:outbox.video.name,file:outbox.video.file,id:outbox.video.id,size:outbox.video.size}});renderAtts()}   // 视频已在服务器上：放回附件，重发不用再传
   outboxDone();
 }
 function stop(){wsSend({t:'interrupt'})}
@@ -3955,7 +3989,7 @@ ttsSync();
   k.addEventListener('change',function(){try{localStorage.setItem('claclaw.vidKeep',k.value)}catch(_){}vidPrune().then(showVidUse,function(){})});
   c.addEventListener('change',function(){try{localStorage.setItem('claclaw.vidCap',c.value)}catch(_){}vidPrune().then(showVidUse,function(){})});
 })();
-function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$('#vidUse').textContent='发过的视频存在这台设备上，点开直接播放；现在存了 '+u.n+' 个，共 '+(u.size/1048576).toFixed(1)+'MB'}).catch(function(){})}
+function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$('#vidUse').textContent='发过的图片原图、视频、文件存在这台设备上，点开直接看；现在存了 '+u.n+' 个，共 '+(u.size/1048576).toFixed(1)+'MB'}).catch(function(){})}
 (function(){
   var sel=$('#setTheme'),t='';try{t=localStorage.getItem('claclaw.theme')||''}catch(_){}
   sel.value=t;applyTheme(t);

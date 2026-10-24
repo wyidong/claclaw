@@ -9,7 +9,7 @@ export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
 export const VIDEO_FRAMES = 12;
 const KEEP_DAYS = 7;
 const EXT = { 'video/quicktime': 'mov', 'video/mp4': 'mp4', 'video/x-m4v': 'm4v', 'video/webm': 'webm', 'video/3gpp': '3gp' };
-const ID_RE = /^v[0-9a-f]{16}\.(mov|mp4|m4v|webm|3gp)$/;
+const ID_RE = /^(v[0-9a-f]{16}\.(mov|mp4|m4v|webm|3gp)|f[0-9a-f]{16}\.[a-z0-9]{1,8})$/;   // v = 视频，f = 其他文件
 
 const BIN_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'];
 function bin(name) {
@@ -25,16 +25,17 @@ const run = (cmd, args, opts = {}) => new Promise((resolve, reject) =>
 export function uploadsDir(data) { return path.join(data, 'uploads'); }
 
 // 存上传的视频：边收边写，超过上限就断开删掉
-export function saveVideo(req, dir) {
+// doc = 任意文件：扩展名取自文件名（只留字母数字），没有就用 bin
+export function saveVideo(req, dir, { doc = false, name = '' } = {}) {
   return new Promise((resolve, reject) => {
     const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
-    const ext = EXT[type];
+    const ext = doc ? ((/\.([a-z0-9]{1,8})$/i.exec(String(name || '')) || [])[1] || 'bin').toLowerCase() : EXT[type];
     if (!ext) return reject(Object.assign(new Error('不支持的视频格式：' + (type || '未知')), { code: 415 }));
     const len = Number(req.headers['content-length'] || 0);
-    if (len > MAX_VIDEO_BYTES) return reject(Object.assign(new Error('视频太大（上限 ' + (MAX_VIDEO_BYTES >> 20) + 'MB）'), { code: 413 }));
+    if (len > MAX_VIDEO_BYTES) return reject(Object.assign(new Error((doc ? '文件' : '视频') + '太大（上限 ' + (MAX_VIDEO_BYTES >> 20) + 'MB）'), { code: 413 }));
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     cleanup(dir);
-    const id = 'v' + crypto.randomBytes(8).toString('hex') + '.' + ext, file = path.join(dir, id);
+    const id = (doc ? 'f' : 'v') + crypto.randomBytes(8).toString('hex') + '.' + ext, file = path.join(dir, id);
     const out = fs.createWriteStream(file, { mode: 0o600 });
     let bytes = 0, failed = false;
     const fail = (e) => { if (failed) return; failed = true; out.destroy(); fs.rm(file, { force: true }, () => {}); reject(e); };
@@ -74,11 +75,14 @@ export async function videoFrames(file, maxFrames = VIDEO_FRAMES) {
 }
 
 // 播放原文件（手机本地没存时用）：支持 Range，iPhone 播视频必须
-const MIME = { mov: 'video/quicktime', mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', '3gp': 'video/3gpp' };
-export function serveVideo(req, res, file) {
+const MIME = { mov: 'video/quicktime', mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', '3gp': 'video/3gpp',
+  pdf: 'application/pdf', txt: 'text/plain; charset=utf-8', log: 'text/plain; charset=utf-8', md: 'text/plain; charset=utf-8', json: 'application/json', csv: 'text/csv; charset=utf-8',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', zip: 'application/zip' };
+export function serveVideo(req, res, file, name = '') {
   const size = fs.statSync(file).size, type = MIME[path.extname(file).slice(1)] || 'application/octet-stream';
   const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
-  const head = { 'content-type': type, 'accept-ranges': 'bytes', 'cache-control': 'private, max-age=604800' };
+  const head = { 'content-type': type, 'accept-ranges': 'bytes', 'cache-control': 'private, max-age=604800', 'x-content-type-options': 'nosniff',
+    ...(name ? { 'content-disposition': "inline; filename*=UTF-8''" + encodeURIComponent(String(name).slice(0, 120)) } : {}) };
   if (!m || (m[1] === '' && m[2] === '')) { res.writeHead(200, { ...head, 'content-length': size }); return fs.createReadStream(file).pipe(res); }
   let start = m[1] === '' ? size - Number(m[2]) : Number(m[1]), end = m[1] !== '' && m[2] !== '' ? Number(m[2]) : size - 1;
   start = Math.max(0, start); end = Math.min(size - 1, end);

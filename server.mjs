@@ -1937,7 +1937,10 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/upload/file') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));
       if (!f) return sendJson(res, 404, { error: 'not found' });
-      return serveVideo(req, res, f);
+      // 文件按附件名显示；网页类型（html/svg）一律当下载，免得在 claclaw 的源下执行
+      const nm = url.searchParams.get('name') || '';
+      if (/\.(html?|svg|xhtml|xml)$/i.test(f)) { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
+      return serveVideo(req, res, f, nm);
     }
     if (url.pathname === '/api/upload/thumb') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));
@@ -1946,9 +1949,11 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=604800' });
       return fs.createReadStream(t).pipe(res);
     }
-    if (url.pathname === '/api/upload/video' && req.method === 'POST') {
+    if ((url.pathname === '/api/upload/video' || url.pathname === '/api/upload/doc') && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
-      try { const v = await saveVideo(req, UPLOADS); log('video uploaded', v.id, (v.bytes / 1048576).toFixed(1) + 'MB'); return sendJson(res, 200, { id: v.id, bytes: v.bytes }); }
+      const doc = url.pathname === '/api/upload/doc';
+      let fname = ''; try { fname = decodeURIComponent(String(req.headers['x-file-name'] || '')); } catch {}
+      try { const v = await saveVideo(req, UPLOADS, { doc, name: fname }); log('video uploaded', v.id, (v.bytes / 1048576).toFixed(1) + 'MB'); return sendJson(res, 200, { id: v.id, bytes: v.bytes }); }
       catch (e) { return sendJson(res, e.code || 400, { error: e.message }); }
     }
     if (url.pathname === '/api/push/key') return sendJson(res, 200, { publicKey: push.publicKey(), devices: push.subscriptionCount(), httpsUrl: getHttpsUrl() });
@@ -2512,9 +2517,20 @@ wss.on('connection', (ws, req) => {
           text = note + (text ? '\n' + text : '');
           log('video', path.basename(file), dur.toFixed(1) + 's');
         }
-        if (typeof m.videoPending === 'string' && m.videoPending && text) {
-          // 这条文字带着一个还在上传的视频：先把文字交给 AI，由它决定马上回复还是等视频（视频传完会作为下一条单独发来）
-          text += '\n[随后还有一个视频「' + vidName(m.videoPending) + '」正在上传，传完会单独发来。回答这条如果需要看视频，就只简短说一句在等视频；不需要就直接回复]';
+        const pendName = typeof m.videoPending === 'string' && m.videoPending ? m.videoPending : typeof m.filePending === 'string' && m.filePending ? m.filePending : '';
+        if (pendName && text) {
+          // 这条文字带着一个还在上传的视频 / 文件：先把文字交给 AI，由它决定马上回复还是等（传完会作为下一条单独发来）
+          const k = m.videoPending ? '视频' : '文件';
+          text += '\n[随后还有一个' + k + '「' + vidName(pendName) + '」正在上传，传完会单独发来。回答这条如果需要看' + k + '，就只简短说一句在等' + k + '；不需要就直接回复]';
+        }
+        if (m.file) {
+          // 文件：原文件已在 data/uploads/；只告诉 AI 路径和大小，要不要读由它按用户的话决定
+          const file = videoFile(UPLOADS, m.file.id);
+          if (!file) return send({ t: 'error', message: '文件找不到了（超过 7 天会清掉），请重新发' });
+          const kb = fs.statSync(file).size / 1024;
+          text = '[文件「' + vidName(m.file.name) + '」 ' + (kb >= 1024 ? (kb / 1024).toFixed(1) + 'MB' : kb >= 1 ? kb.toFixed(1) + 'KB' : Math.round(kb * 1024) + 'B') + '，原文件：' + file +
+            '（已收到）。用户的话需要看内容时再读这个文件；不需要就不用处理，简短确认收到即可]' + (text ? '\n' + text : '');
+          log('file', path.basename(file), kb.toFixed(1) + 'KB');
         }
         if (!text && !images.length) return;
         const acp = runner instanceof DsRunner || runner instanceof OpRunner;
