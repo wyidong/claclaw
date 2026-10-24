@@ -539,8 +539,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
   #mtabs button.on{color:var(--accent)}
   #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}   /* 宿主那格显示宿主名，太长截断 */
-  #mtabs .tlogo{display:grid;place-items:center;width:24px;height:24px;filter:grayscale(1);opacity:.55;transition:filter .15s,opacity .15s}
-  #mtabs .tlogo svg,#mtabs .tlogo img{display:block;width:22px;height:22px;object-fit:contain}
+  /* 放 logo 时去掉「会话」两个字（文字的主题色和 logo 的颜色不搭），logo 放大占满图标 + 文字的位置，按钮高度不变 */
+  #mtabs button.logo>span:not(.tlogo){display:none}
+  #mtabs .tlogo{display:grid;place-items:center;width:42px;height:42px;filter:grayscale(1);opacity:.55;transition:filter .15s,opacity .15s}
+  #mtabs .tlogo svg,#mtabs .tlogo img{display:block;width:34px;height:34px;object-fit:contain}
   #mtabs .tlogo img.tile{border-radius:22.5%}
   #mtabs button.on .tlogo{filter:none;opacity:1}   /* 选中这一栏：图标原色；没选中：灰色，和其它栏的灰色图标一致 */
   #mtabs .ti{display:block;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -2942,7 +2944,7 @@ function syncChatsTab(){
   var old=tb.querySelector('.ti,.tlogo'),n;
   if(k){n=document.createElement('span');n.className='tlogo';n.innerHTML=clawIcon(k)}else n=chatsIcon;
   if(old!==n)old.replaceWith(n);
-  tb.dataset.k=k;tb.setAttribute('aria-label',(k?CLAW_NAMES[k]+' ':'')+'会话');
+  tb.dataset.k=k;tb.classList.toggle('logo',!!k);tb.setAttribute('aria-label',(k?CLAW_NAMES[k]+' ':'')+'会话');
 }
 function showClawSel(){
   syncChatsTab();
