@@ -181,7 +181,7 @@ async function callRelay(base, sub, { token, body, ms, extra = {} }) {
   if (token) headers.authorization = 'Bearer ' + token;
   let r;
   try { r = await mod.relayRequest(addr, { method: body ? 'POST' : 'GET', headers, body: body || undefined, timeout: ms }); }
-  catch (e) { throw Object.assign(new Error('连不上对方（中继）：' + (e.code || e.message)), { connect: /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN/.test(String(e.code || e.message)) }); }
+  catch (e) { throw Object.assign(new Error('连不上对方（中继）：' + (e.code || e.message)), { connect: /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN|ETIMEDOUT/.test(String(e.code || e.message)) }); }
   const ok = r.status >= 200 && r.status < 300;
   let j; try { j = r.json(); } catch { j = { ok, reply: r.text() }; }
   if (!j || typeof j !== 'object') j = { ok, reply: String(j ?? '') };
@@ -326,8 +326,12 @@ async function probeOne(p, addr) {
   if (hit && Date.now() - hit.at < 60e3) return hit.res;
   const t0 = Date.now();
   let res;
-  try { const j = await callPeer(addr, '/sessions', { token: p.theirToken, ms: 15000 }); res = j.ok ? { ok: true, ms: Date.now() - t0 } : { ok: false, error: j.error || 'HTTP ' + j.status }; }
+  // 外面再套一层硬超时：中继端口被丢包时底层可能迟迟不报错，协同页会一直「检查中…」
+  let t;
+  const cap = new Promise((_, bad) => { t = setTimeout(() => bad(new Error('中继 20 秒没响应')), 20000); });
+  try { const j = await Promise.race([callPeer(addr, '/sessions', { token: p.theirToken, ms: 15000 }), cap]); res = j.ok ? { ok: true, ms: Date.now() - t0 } : { ok: false, error: j.error || 'HTTP ' + j.status }; }
   catch (e) { res = { ok: false, error: e.message }; }
+  finally { clearTimeout(t); }
   relayProbe.set(p.id + ' ' + addr, { at: Date.now(), res });
   return res;
 }
