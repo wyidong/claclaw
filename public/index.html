@@ -1216,7 +1216,7 @@ feed.addEventListener('scroll',function(){stick=feed.scrollHeight-feed.scrollTop
 if(window.ResizeObserver)new ResizeObserver(function(){if(stick)feed.scrollTop=feed.scrollHeight}).observe(feed);
 
 // 视频消息：服务器在文字前加了「[视频 … 原文件：…]」并附了截帧；聊天区只显示第一帧 + ▶ 时长，说明文字不显示
-var VIDEO_NOTE=/^\[视频[^\]]*原文件：[^\]]*\]\n?/;
+var VIDEO_NOTE=/^\[视频[^\]]*原文件：[^\]]*\]\n?/,VIDEO_PENDING=/\n?\[随后还有一个视频[^\]]*\]$/;
 function videoTile(src,label,isVideoEl){
   var w=document.createElement('div');w.className='uvid';
   var m=document.createElement(isVideoEl?'video':'img');
@@ -1228,6 +1228,7 @@ function videoTile(src,label,isVideoEl){
 }
 function addUser(t,images,vid){
   var e=document.createElement('div');e.className='msg user';
+  if(t)t=t.replace(VIDEO_PENDING,'');
   var vm=t&&VIDEO_NOTE.exec(t);
   if(vm){
     var dm=/([\d.]+) 秒/.exec(vm[0]);
@@ -1506,17 +1507,32 @@ function addVideo(f){
   if(attachments.some(function(a){return a.video})){addSys('一次只能发一个视频');return}
   attachments.push({url:URL.createObjectURL(f),data:true,video:{name:f.name||'',file:f,id:''}});renderAtts();   // 点了发送才上传；选错了点 × 就行
 }
-// 发送时上传原文件（进度显示在聊天区那条消息上），传完再发消息
-function uploadVideo(ob){
-  var v=ob.video,x=new XMLHttpRequest();
-  var lab=function(t){if(ob.el&&ob.el.vbadge)ob.el.vbadge.textContent=t};
+// 带视频的消息：文字立刻发（附一句「视频随后到」，AI 自己决定先回还是等视频）；视频在后台上传，传完单独作为下一条发过去
+var videoJob=null;
+function startVideoJob(v,sid){
+  var job={v:v,sid:sid,el:addUser('',[],{url:v.url,label:'上传 0%'})};job.el.classList.add('pending');videoJob=job;
+  var x=new XMLHttpRequest(),lab=function(t){if(job.el&&job.el.vbadge)job.el.vbadge.textContent=t};
   x.open('POST','/api/upload/video');x.setRequestHeader('content-type',v.file.type||'video/quicktime');
   x.upload.onprogress=function(e){if(e.lengthComputable)lab('上传 '+Math.floor(e.loaded*100/e.total)+'%')};
-  var fail=function(msg){lab('上传失败');addSys('视频上传失败'+(msg?'：'+msg:'')+'，已放回输入框，可以重发');if(outbox===ob)outboxRestore()};
+  var fail=function(msg){
+    if(videoJob===job)videoJob=null;
+    if(job.el&&job.el.isConnected)job.el.remove();
+    addSys('视频上传失败'+(msg?'：'+msg:'')+'，已放回输入框，可以重发');
+    if(session&&session.id===sid&&!attachments.some(function(a){return a.video})){attachments.push({url:v.url,data:true,video:{name:v.name,file:v.file,id:''}});renderAtts()}
+  };
   x.onload=function(){var j={};try{j=JSON.parse(x.responseText)}catch(_){}
-    if(x.status===200&&j.id){v.id=j.id;lab('服务器处理中…');if(outbox===ob)trySend()}else fail(j.error)};
+    if(x.status===200&&j.id){v.id=j.id;lab('等待发送…');job.ready=true;sendVideoJob()}else fail(j.error)};
   x.onerror=function(){fail('网络')};
-  lab('上传 0%');x.send(v.file);
+  x.send(v.file);
+}
+// 视频传好了、前一条文字也送到了：把视频作为下一条发出去（AI 正忙就作为插话排队）
+function sendVideoJob(){
+  var job=videoJob;if(!job||!job.ready||outbox)return;
+  videoJob=null;
+  if(!session||session.id!==job.sid){if(job.el&&job.el.isConnected)job.el.remove();addSys('视频没发出去（已经换了会话），可以重新选择发送');return}
+  if(job.el&&job.el.vbadge)job.el.vbadge.textContent='服务器处理中…';
+  outbox={text:'',images:[],video:{id:job.v.id,name:job.v.name,url:job.v.url},sid:job.sid,el:job.el};
+  trySend();
 }
 // 长边压到 2000px 内转 JPEG；小于 1.5MB 的 PNG（截图）和 GIF 保持原样，免得文字糊或动图变静态
 function compressImage(f){
@@ -1807,7 +1823,7 @@ function onEvent(m){
     if(outbox){
       var lastUser=m.history.filter(function(it){return it.kind==='user'}).pop();
       if(outbox.sid!==m.id)outboxRestore();                       // 换了会话：不往别的会话发，放回输入框
-      else if(lastUser&&(lastUser.text===outbox.text||(outbox.video&&outbox.video.id&&String(lastUser.text||'').indexOf(outbox.video.id)>=0)))outboxDone();  // 其实已经送到了
+      else if(lastUser&&(String(lastUser.text||'').replace(VIDEO_PENDING,'')===outbox.text||(outbox.video&&outbox.video.id&&String(lastUser.text||'').indexOf(outbox.video.id)>=0)))outboxDone();  // 其实已经送到了
       else if(m.busy)outboxRestore();                              // 会话正忙：放回输入框，等它忙完再发
       else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');outboxShow();trySend()}
     }
@@ -1837,6 +1853,7 @@ function onEvent(m){
       if(outbox.el&&outbox.el.isConnected)outbox.el.remove();if(outbox.video.url)URL.revokeObjectURL(outbox.video.url);outboxDone();
       var uv=addUser(m.text,m.images);if(m.queued&&uv)uv.classList.add('queued');stamp(uv,Date.now());think(true);break;
     }
+    if(outbox&&outbox.videoPending&&String(m.text||'').replace(VIDEO_PENDING,'')===outbox.text)m={t:m.t,text:outbox.text,images:m.images,queued:m.queued};   // 文字后面服务器加了「视频随后到」
     if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');if(m.queued)outbox.el.classList.add('queued');stamp(outbox.el,Date.now());outboxDone();think(true);break}
     if(outbox&&m.text===outbox.text)outboxDone();
     var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');stamp(ue,Date.now());think(true);
@@ -2012,8 +2029,11 @@ function run(text){
   attachments=[];renderAtts();   // 视频的预览地址留着：聊天区那条消息还要用
   ta.value='';ta.style.height='auto';
   busy=true;setDock('busy');
-  outbox={text:text,images:images,video:video,sid:session.id};outboxShow();
-  if(video&&!video.id)uploadVideo(outbox);else trySend();
+  if(video&&video.id){outbox={text:text,images:images,video:video,sid:session.id};outboxShow();trySend()}   // 视频早就传过（放回输入框后重发）
+  else{
+    if(text||images.length){outbox={text:text,images:images,videoPending:video?(video.name||'视频'):'',sid:session.id};outboxShow();trySend()}
+    if(video)startVideoJob(video,session.id);
+  }
   ttsUnlock();ttsHush=false;
 }
 // 待确认的消息：发出去后要等服务器回显（'user' 事件）才算送达。
@@ -2025,10 +2045,10 @@ function trySend(){
   clearTimeout(outboxTimer);
   if(outbox.video&&!outbox.video.id)return;   // 视频还在上传：传完会再调
   if(!ws||ws.readyState!==1){banner('连接已断开，恢复后会自动发送刚才那条消息');return}
-  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images,video:outbox.video?{id:outbox.video.id,name:outbox.video.name}:undefined}));
+  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images,video:outbox.video?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined}));
   outboxTimer=setTimeout(function(){if(outbox)reconnectNow()},8000);
 }
-function outboxDone(){outbox=null;clearTimeout(outboxTimer)}
+function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideoJob,0)}
 // 丢掉疑似已死的连接，立即重连（不等浏览器慢慢发现断线）
 function reconnectNow(){
   var old=ws;ws=null;

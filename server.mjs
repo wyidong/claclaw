@@ -2499,6 +2499,10 @@ wss.on('connection', (ws, req) => {
           images.push(...v.frames.map(f => ({ media_type: f.media_type, data: f.data })).slice(0, Math.max(0, MAX_IMAGES - images.length)));
           log('video', path.basename(file), (v.dur || 0).toFixed(1) + 's', v.frames.length + ' frames');
         }
+        if (typeof m.videoPending === 'string' && m.videoPending && text) {
+          // 这条文字带着一个还在上传的视频：先把文字交给 AI，由它决定马上回复还是等视频（视频传完会作为下一条单独发来）
+          text += '\n[随后还有一个视频「' + m.videoPending.replace(/[\r\n\]]/g, ' ').slice(0, 80) + '」正在上传，传完会单独发来。回答这条如果需要看视频，就只简短说一句在等视频；不需要就直接回复]';
+        }
         if (!text && !images.length) return;
         const acp = runner instanceof DsRunner || runner instanceof OpRunner;
         const sent = runner.send(text, images);
