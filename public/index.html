@@ -2806,8 +2806,11 @@ $('#sNew').addEventListener('click',function(){
     ref=(session&&/^op:/.test(session.id))?session:(lastList||[]).find(function(x){return /^op:/.test(x.id)&&x.cwd});
     newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:'opencode'}:{id:'',cwd:'~',claw:'opencode'});return;
   }
-  if(!ref||!ref.cwd){alert('先打开一个会话，新会话会默认建在它的目录里');return}
-  newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});
+  if(ref&&ref.cwd){newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});return}
+  // 一个会话都没有（新装的宿主）：第一个会话建在主目录；有会话之后照旧参照已有会话的目录
+  var firstOrAlert=function(arr){if(Array.isArray(arr)&&!arr.length)newSibling({id:'',cwd:'~'});else alert('先打开一个会话，新会话会默认建在它的目录里')};
+  if(Array.isArray(lastList)&&clawSel!=='openclaw'){firstOrAlert(lastList);return}
+  fetch('/api/sessions').then(function(r){return r.json()}).then(function(arr){if(Array.isArray(arr))lastList=arr;firstOrAlert(arr)}).catch(function(){firstOrAlert(null)});
 });
 function openSheet(silent){
   var list=$('#sList');
@@ -3959,7 +3962,7 @@ $('#newForm').addEventListener('submit',function(e){
   var dir=$('#newDir').value.trim(),orig=(newFrom.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   var msg={t:'session.new',from:newFrom.id,title:$('#newName').value};
   if(newFrom.claw)msg.claw=newFrom.claw;
-  if(dir&&dir!==orig)msg.cwd=dir;   // 改了目录才带上；服务器会检查目录是否存在
+  if(dir&&(dir!==orig||!newFrom.id))msg.cwd=dir;   // 改了目录（或没有参照会话）才带上；服务器会检查目录是否存在
   if(newPick.model)msg.model=newPick.model;
   if(newPick.effort)msg.effort=newPick.effort;
   closeNew();closeSheet();
