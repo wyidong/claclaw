@@ -73,6 +73,25 @@ export async function videoFrames(file, maxFrames = VIDEO_FRAMES) {
   return { dur, frames, error: frames.length ? '' : '截帧失败' };
 }
 
+// 时长（不截帧，很快）
+export async function videoDuration(file) {
+  const ffprobe = bin('ffprobe');
+  if (!ffprobe) return 0;
+  try { return parseFloat(String(await run(ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file])).trim()) || 0; } catch { return 0; }
+}
+// 聊天区显示用的缩略图：截一帧、长边 480，存在视频旁边（只给网页看，不给 AI）
+export async function videoThumb(file) {
+  const out = file + '.jpg';
+  if (fs.existsSync(out)) return out;
+  const ffmpeg = bin('ffmpeg');
+  if (!ffmpeg) return null;
+  const scale = "scale='if(gt(iw,ih),min(480,iw),-2)':'if(gt(iw,ih),-2,min(480,ih))'";
+  for (const t of ['0.5', '0']) {
+    try { await run(ffmpeg, ['-v', 'error', '-y', '-ss', t, '-i', file, '-frames:v', '1', '-vf', scale, '-q:v', '5', out]); if (fs.existsSync(out)) return out; } catch {}
+  }
+  return null;
+}
+
 // 传上来的视频留 7 天
 export function cleanup(dir) {
   let names = [];

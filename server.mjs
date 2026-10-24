@@ -28,7 +28,8 @@ import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeC
 import { readBody } from './httpbody.mjs';
 import { peerRisk, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
-import { saveVideo, videoFile, videoFrames, uploadsDir } from './video.mjs';
+import { saveVideo, videoFile, videoDuration, videoThumb, uploadsDir } from './video.mjs';
+const vidName = n => String(n || '视频').replace(/[\r\n\]「」]/g, ' ').slice(0, 80);
 const UPLOADS = uploadsDir(DATA);
 
 // 监听地址：默认 127.0.0.1 + 本机的 Tailscale IPv4；绝不绑 0.0.0.0。
@@ -117,7 +118,7 @@ function originalMode(file) {
 }
 const OUT_MAX = 4000;
 // 发图：前端会先压缩到长边 2000px 以内；这里再兜底限制张数和单张大小（base64 字符数）
-const MAX_IMAGES = 20;   // 手机上最多 5 张图 + 一个视频截的 12 帧
+const MAX_IMAGES = 5;
 const MAX_IMAGE_B64 = 7 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 // 历史记录里的图片总量上限，超过的只显示占位，免得打开会话时传几十 MB
@@ -1933,6 +1934,13 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(html.replace('__PAGE_VERSION__', ver));
     }
+    if (url.pathname === '/api/upload/thumb') {
+      const f = videoFile(UPLOADS, url.searchParams.get('id'));
+      const t = f && await videoThumb(f);
+      if (!t) return sendJson(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=604800' });
+      return fs.createReadStream(t).pipe(res);
+    }
     if (url.pathname === '/api/upload/video' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       try { const v = await saveVideo(req, UPLOADS); log('video uploaded', v.id, (v.bytes / 1048576).toFixed(1) + 'MB'); return sendJson(res, 200, { id: v.id, bytes: v.bytes }); }
@@ -2491,17 +2499,17 @@ wss.on('connection', (ws, req) => {
           // 视频：原文件已经传到 data/uploads/；这里截帧当图片，并把原文件路径告诉 AI
           const file = videoFile(UPLOADS, m.video.id);
           if (!file) return send({ t: 'error', message: '视频找不到了（超过 7 天会清掉），请重新发' });
-          const v = await videoFrames(file);
-          const name = String(m.video.name || '').replace(/[\r\n\]]/g, ' ').slice(0, 80);
-          const note = '[视频' + (name ? ' ' + name : '') + (v.dur ? ' ' + v.dur.toFixed(1) + ' 秒' : '') + '，原文件：' + file +
-            (v.frames.length ? '；按时间顺序截了 ' + v.frames.length + ' 帧（下面的图片），时间点：' + v.frames.map(f => f.t.toFixed(1) + 's').join('、') + '；要看更细的画面或声音，可以用 ffmpeg 处理原文件' : '；' + v.error) + ']';
+          // 默认不截帧（省时间、省 token）：只告诉 AI 文件在哪、多长，要不要看画面由它按用户的话决定
+          const dur = await videoDuration(file);
+          const name = vidName(m.video.name);
+          const note = '[视频「' + name + '」' + (dur ? ' ' + dur.toFixed(1) + ' 秒' : '') + '，原文件：' + file +
+            '（已收到，没有截帧）。用户的话需要看画面时，再用 ffmpeg 从原文件截帧（例如每秒一帧存成图片）后读图；不需要就不用处理，简短确认收到即可]';
           text = note + (text ? '\n' + text : '');
-          images.push(...v.frames.map(f => ({ media_type: f.media_type, data: f.data })).slice(0, Math.max(0, MAX_IMAGES - images.length)));
-          log('video', path.basename(file), (v.dur || 0).toFixed(1) + 's', v.frames.length + ' frames');
+          log('video', path.basename(file), dur.toFixed(1) + 's');
         }
         if (typeof m.videoPending === 'string' && m.videoPending && text) {
           // 这条文字带着一个还在上传的视频：先把文字交给 AI，由它决定马上回复还是等视频（视频传完会作为下一条单独发来）
-          text += '\n[随后还有一个视频「' + m.videoPending.replace(/[\r\n\]]/g, ' ').slice(0, 80) + '」正在上传，传完会单独发来。回答这条如果需要看视频，就只简短说一句在等视频；不需要就直接回复]';
+          text += '\n[随后还有一个视频「' + vidName(m.videoPending) + '」正在上传，传完会单独发来。回答这条如果需要看视频，就只简短说一句在等视频；不需要就直接回复]';
         }
         if (!text && !images.length) return;
         const acp = runner instanceof DsRunner || runner instanceof OpRunner;
