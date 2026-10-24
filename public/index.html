@@ -2727,7 +2727,7 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
   var t=b.dataset.tab;
   if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
   mTab(t);
-  if(t==='chats'&&clawSel&&!$('#sList .s-row'))openSheet();   // 一打开停在 Claw 页、还没加载过会话：点「会话」时再加载
+  if(t==='chats'&&(!clawSel||!$('#sList .s-row')))openSheet();   // 一打开停在 Claw 页、还没加载过会话：点「会话」时再加载；还没选 Claw 就立刻显示「先选 Claw」（不取数据）
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){railTab(false)});
