@@ -66,7 +66,8 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;background:var(--surface)}
 #sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
-#sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:bottom;margin:0 6px;line-height:1.4;border-radius:2px;background:var(--code-bg);box-shadow:0 0 0 1px var(--code-bg),-6px 0 0 1px var(--code-bg),6px 0 0 1px var(--code-bg)}   /* 底色用阴影往两边延伸：padding 会把被裁掉的字露出来 */
+#sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
+#sid .hid:active{color:var(--accent)}
 #sessBtn .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
 #sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn .sid{flex:none;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
@@ -464,6 +465,21 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #backBtn.unr::after{content:'';position:absolute;top:9px;right:3px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
   #sessBtn>svg{display:none}
   #sessBtn.unr::after{display:none}
+  /* 聊天页顶栏（手机）：两行，往状态栏下面的空白里贴——
+     第一行  ‹  ● 名字  ID          （返回键、绿点都和名字对齐）
+     第二行       模型 · 推理强度 · 权限 ›   （和名字左边对齐，点开会话设置）
+     目录、分支不放：从列表进来的，聊天区「已恢复会话」那行也有 */
+  header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
+  #backBtn{align-self:stretch;height:auto;place-items:start center;padding:3px 0 0}   /* 点击范围占满两行，箭头对齐第一行 */
+  #hdCard{flex-direction:column;align-items:stretch;gap:0;min-height:0}
+  #hdCard #sessBtn,#sessBtn{min-height:28px;gap:8px}
+  #sessBtn .nm{font-size:17px;line-height:28px}
+  #sessBtn .where{display:none}
+  #cfgBtn{align-self:flex-start;flex-direction:row;align-items:baseline;gap:0;max-width:100%;min-height:24px;margin:-2px 0 0 16px;padding:0 16px 2px 0;background-size:7px 12px;background-position:right 55%}
+  #cfgBtn .c1{font-size:13px;line-height:22px}
+  #cfgBtn .c1:not(:empty)::after{content:'·';margin:0 6px;font-weight:400}
+  #cfgBtn .c2{font-size:13px;line-height:22px}
+  #cfgBtn>span{flex:0 1 auto;min-width:0}
   #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
   #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
   /* 列表页：搜索栏是固定的顶栏，只有下面的列表滚动。
@@ -1811,8 +1827,7 @@ function onEvent(m){
     break;
   case 'models': case 'model':
     applyModel(m);
-    if(m.changed==='model')addSys('模型：'+curModelLabel()+(m.pick==='default'?'（默认）':'')+'，下一条消息开始生效');
-    else if(m.changed==='effort')addSys('推理强度：'+effortLabel(m.effort)+'（'+((EFFORTS.find(function(e){return e.key===m.effort})||{}).note||'')+'），下一条消息开始生效');
+    if(m.changed)cfgNote();
     break;
   case 'session.renamed':
     if(session){session.title=m.title;setHeader()}
@@ -1982,7 +1997,18 @@ function setMode(key,announce){
   var tag=$('#modeTag');tag.textContent=session?m.key:'';tag.dataset.m=dm;
   if(String(cfgBusy).indexOf('mode:')===0)cfgBusy=null;
   renderCfg();
-  if(announce)addSys('模式：'+m.label+'。'+m.note);
+  if(announce)cfgNote(m.note);
+}
+// 设置变化记一行「已切换为 模型 · 推理强度 · 权限」；连续改（中间没有别的消息）只更新这一行
+function cfgNote(extra){
+  if(typeof cfg==='undefined')return;
+  var ml=MODES.find(function(x){return x.key===mode})||MODES[0];
+  var parts=[];if(claudeSess()&&(cfg.models||cfg.model)){parts.push(curModelLabel()+(cfg.pick==='default'?'（默认）':''));if(cfg.effort)parts.push('推理强度 '+effortLabel(cfg.effort))}
+  parts.push('权限 '+ml.label);
+  var t='已切换为 '+parts.join(' · ')+(extra?'。'+extra:'');
+  var l=feed.lastElementChild;if(l===thinkEl&&l)l=l.previousElementSibling;
+  if(l&&l.dataset&&l.dataset.cfg){l.textContent=t;return}
+  addSys(t);var n=feed.lastElementChild;if(n===thinkEl)n=n.previousElementSibling;if(n)n.dataset.cfg='1';
 }
 // ---------- 会话设置：模型 / 推理强度 / 权限（标题栏右边的按钮 + 面板）----------
 // 模型列表由服务器从 Claude Code 实时取（这个账号能用哪些就列哪些），只有 Claude 会话有
@@ -3023,6 +3049,7 @@ function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.fold
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 // 电脑上会话列表常驻，点标题栏不用做什么（留给拖选复制）；手机上点标题栏回会话列表，刚选了字就不跳
+$('#sid').addEventListener('click',function(e){var h=e.target.closest('.hid');if(!h||!session)return;e.stopPropagation();copyText(session.id)});
 $('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)return;if(String(getSelection()||'').trim())return;goList()});
 // ---------- 手机：列表页 ⇄ 聊天页 ----------
 var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
