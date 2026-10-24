@@ -305,7 +305,18 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #vplayer video{max-width:100%;max-height:100%}
 #vplayer button{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-size:22px;line-height:36px;padding:0}
 .uvid{cursor:pointer}
-.dlcard{display:flex;flex-direction:column;gap:2px;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none}
+#fview{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg)}
+#fview.on{display:flex}
+.fv-h{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;border-bottom:1px solid var(--line)}
+.fv-n{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fv-share{border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);padding:6px 10px;font-size:14px}
+.fv-x{width:36px;height:36px;border:0;border-radius:50%;background:var(--line);color:var(--ink);font-size:22px;line-height:36px;padding:0}
+.fv-b{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+.fv-b pre{margin:0;padding:12px;white-space:pre-wrap;word-break:break-word;font-size:14px}
+.fv-b img{display:block;max-width:100%;margin:0 auto}
+.fv-b iframe{width:100%;height:100%;border:0}
+.fv-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.dlcard{display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;cursor:pointer;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none}
 .dl-n{font-size:14px;word-break:break-all}
 .dl-m{font-size:12px;color:var(--muted)}
 .ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:1px solid var(--line);color:var(--ink)}
@@ -918,6 +929,7 @@ select.pe-in{text-align-last:right}
   </nav>
 
   <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""></div>
+  <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-n"></span><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
   <div id="vplayer" role="dialog" aria-label="播放视频"><video controls playsinline></video><button type="button" aria-label="关闭">×</button></div>
 
   <div id="newDlg" aria-hidden="true">
@@ -1335,11 +1347,40 @@ document.getElementById('vplayer').querySelector('button').addEventListener('cli
 feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
 // 文件：本机有就直接打开（看不了的类型浏览器会给下载 / 分享），没有再从电脑取
 function openFile(id,name){
-  vidStore('readonly',function(st){return st.get(id)}).then(function(rec){
-    if(rec&&rec.blob){var u=URL.createObjectURL(rec.blob);window.open(u,'_blank');setTimeout(function(){URL.revokeObjectURL(u)},60000)}
-    else window.open('/api/upload/file?id='+encodeURIComponent(id)+'&name='+encodeURIComponent(name||''),'_blank');
-  }).catch(function(){window.open('/api/upload/file?id='+encodeURIComponent(id)+'&name='+encodeURIComponent(name||''),'_blank')});
+  var fromServer=function(){
+    showFile(null,name,'加载中…');
+    fetch('/api/upload/file?id='+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error(r.status===404?'电脑上也没有了（只留 7 天）':'HTTP '+r.status);return r.blob()})
+      .then(function(b){vidSave(id,b,name,'file');showFile(b,name)}).catch(function(e){showFile(null,name,'打不开：'+e.message)});
+  };
+  if(!window.indexedDB)return fromServer();
+  vidStore('readonly',function(st){return st.get(id)}).then(function(rec){if(rec&&rec.blob)showFile(rec.blob,name);else fromServer()}).catch(fromServer);
 }
+// 在 claclaw 页面里看文件（文本、图片、PDF 直接显示，其他只给「分享 / 保存」）；不跳页面，关掉就回聊天
+var fvUrl='',fvBlob=null,fvName='';
+function showFile(blob,name,msg){
+  var v=$('#fview'),b=v.querySelector('.fv-b');
+  if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}
+  fvBlob=blob;fvName=name||'文件';v.querySelector('.fv-n').textContent=fvName;v.querySelector('.fv-share').hidden=!blob;
+  b.innerHTML='';v.classList.add('on');
+  if(!blob){var e0=document.createElement('div');e0.className='fv-empty';e0.textContent=msg||'';b.appendChild(e0);return}
+  var ext=(/\.([a-z0-9]+)$/i.exec(fvName)||[])[1]||'',t=(blob.type||'').toLowerCase();
+  if(/^text\/|json|xml|javascript/.test(t)||/^(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env)$/i.test(ext)){
+    if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「分享 / 保存」用别的 App 打开';b.appendChild(e1);return}
+    blob.text().then(function(tx){var pre=document.createElement('pre');pre.textContent=tx;b.appendChild(pre)});
+  }else if(/^image\//.test(t)||/^(png|jpe?g|gif|webp|heic)$/i.test(ext)){
+    fvUrl=URL.createObjectURL(blob);var im=document.createElement('img');im.src=fvUrl;b.appendChild(im);
+  }else if(t==='application/pdf'||/^pdf$/i.test(ext)){
+    fvUrl=URL.createObjectURL(blob.type?blob:new Blob([blob],{type:'application/pdf'}));var fr=document.createElement('iframe');fr.src=fvUrl;b.appendChild(fr);
+  }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「分享 / 保存」存到「文件」或用别的 App 打开';b.appendChild(e2)}
+}
+$('#fview .fv-x').addEventListener('click',function(){$('#fview').classList.remove('on');$('#fview .fv-b').innerHTML='';if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}fvBlob=null});
+$('#fview .fv-share').addEventListener('click',function(){
+  if(!fvBlob)return;
+  var f;try{f=new File([fvBlob],fvName,{type:fvBlob.type||'application/octet-stream'})}catch(_){f=null}
+  if(f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(){});return}
+  // 不支持分享文件（http 打开时）：退回下载
+  var u=URL.createObjectURL(fvBlob),a=document.createElement('a');a.href=u;a.download=fvName;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000);
+});
 // 发过的图片：原图也存在本机（按发出去的压缩图算个指纹对应），聊天记录里点开看原图
 function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
@@ -1551,10 +1592,10 @@ function newCard(it){
 // AI 用 send_file 发回来的文件：工具结果里带 [claclaw-file:id|名字|大小]，在卡片后面放一张下载卡片
 var SENT_FILE=/\[claclaw-file:([vf][0-9a-f]{16}\.[a-z0-9]{1,8})\|([^|\]]*)\|(\d+)\]/;
 function dlCard(id,name,size){
-  var a=document.createElement('a');a.className='dlcard';a.href='/api/upload/file?id='+encodeURIComponent(id)+'&name='+encodeURIComponent(name)+'&dl=1';
-  a.setAttribute('download',name);a.target='_blank';a.rel='noopener';
+  var a=document.createElement('button');a.type='button';a.className='dlcard';   // 不用链接：主屏幕 App 里点链接会被系统预览整页换掉、回不来
+  a.addEventListener('click',function(){openFile(id,name)});
   var n=document.createElement('span');n.className='dl-n';n.textContent='📄 '+name;a.appendChild(n);
-  var m=document.createElement('span');m.className='dl-m';m.textContent=fmtSize(+size)+' · 点击下载';a.appendChild(m);
+  var m=document.createElement('span');m.className='dl-m';m.textContent=fmtSize(+size)+' · 点开查看 / 保存';a.appendChild(m);
   return a;
 }
 function finishCard(c,output,isError){
