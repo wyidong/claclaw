@@ -68,7 +68,11 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
 #sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
 #sid .hid:active{color:var(--accent)}
-#sessBtn .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
+/* 名字前面是这个会话所属 Claw 的图标（Claude 螃蟹、DeepSeek 鲸鱼……）；断线 / 会话关闭时变灰，干活时一闪一闪。还不知道是哪个 Claw 时退回小圆点 */
+#sessBtn .dot{flex:none;display:grid;place-items:center;width:20px;height:20px;transition:filter .2s,opacity .2s}
+#sessBtn .dot svg,#sessBtn .dot img{display:block;width:20px;height:20px;object-fit:contain}
+#sessBtn .dot img.tile{border-radius:22.5%}
+#sessBtn .dot:empty{width:8px;height:8px;border-radius:50%;background:var(--allow)}
 #sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn .sid{flex:none;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
 #sessBtn svg{flex:none;color:var(--muted)}
@@ -440,7 +444,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item .m{flex-wrap:wrap}
 .s-empty{padding:16px 4px;color:var(--muted);font-size:14px}
 .plan{margin:0;padding:10px 12px;white-space:pre-wrap;font-size:14px;max-height:40vh;overflow-y:auto}
-#sessBtn .dot.off{background:var(--muted)}
+#sessBtn .dot.off{filter:grayscale(1);opacity:.45}
+#sessBtn .dot.off:empty{background:var(--muted);filter:none;opacity:1}
 /* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
 #workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
 #workBar[hidden]{display:none}
@@ -472,7 +477,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
      会话名、ID 嵌在 #sessBtn 里（电脑端是一行）：手机上把外层拆掉（display:contents），直接排进 #hdCard 的网格 */
   header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
   #backBtn{align-self:stretch;height:auto;place-items:center;padding:0}   /* 返回键独占左边一栏（占满两行），箭头在这一栏里上下左右居中 */
-  #hdCard{display:grid;grid-template-columns:8px minmax(0,1fr) auto;gap:0 8px;align-items:center;min-height:0}
+  #hdCard{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:0 8px;align-items:center;min-height:0}
   #hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
   #sessBtn .dot{grid-column:1;grid-row:1}
   #sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
@@ -1713,6 +1718,7 @@ function onEvent(m){
     else{feed.innerHTML='';cards={};permQueue=[];aiEl=null}
     feedOwner=m.id;feedSig=hsig;feedDirty=false;histArmed=false;lastTop=0;histLoading=false;   // 刚打开不算「滑到顶」，要先离开顶部
     session.dir=(m.cwdShort||'').split('/').pop()||'';
+    $('#sessBtn .dot').innerHTML=clawIcon(/^ds:/.test(m.id)?'deepseek':/^op:/.test(m.id)?'opencode':/^oc:/.test(m.id)?'openclaw':'claude');
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
