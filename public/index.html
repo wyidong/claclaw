@@ -350,6 +350,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.waiting .s-item{border-color:var(--warn)!important}
 .s-row.waiting .s-item .when{color:var(--warn)}
 #sList .s-grp.unread .gn::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
+/* 目录里有会话正在干活：目录名前绿点闪烁（优先于红点；干完了还有没看的就变回红点） */
+#sList .s-grp.working .gn::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:var(--allow);vertical-align:middle;animation:pulse 1.2s infinite}
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
 #setPane .set-sec{margin:0 0 20px}
 /* 设置：一组一张圆角卡片，每行左边名称 + 灰色说明，右边开关或「当前值 ›」，行间细线（参考常见 App 的设置页） */
@@ -549,6 +551,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #mtabs .ti .f{fill:currentColor;fill-opacity:0;transition:fill-opacity .15s}
   #mtabs button.on .ti .f{fill-opacity:.22}
   #mtabs button.dot::after{content:'';position:absolute;top:3px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:#F23C3C}
+  #mtabs button.logo.dot::after{top:4px;left:calc(50% + 11px);box-shadow:0 0 0 2px var(--surface)}   /* 大 logo：红点挂在右上角 */
+  /* 这个 Claw 有任意会话在干活：「会话」图标跟着轻闪，和列表里目录的绿点呼应 */
+  #mtabs button.busy .tlogo,#mtabs button.busy .ti{animation:wpulse 1.8s ease-in-out infinite}
   /* 「设置」页：只显示设置；「会话」页：只显示列表 */
   #app.m-list #setPane{display:none;margin-top:0;padding-top:0;border-top:0}
   #app.m-list.set-on #setPane{display:block}
@@ -3246,6 +3251,17 @@ function renderActivity(){
     r.classList.toggle('working',!!a);r.classList.toggle('waiting',/确认/.test(a));
     w.textContent=a||it.dataset.when||'';
   });
+  syncWorkMarks();
+}
+// 干活的标记往上呼应：目录（组标题）里有会话在干活 → 目录绿点闪烁；当前 Claw 有任意会话在干活 → 底部「会话」图标轻闪
+function syncWorkMarks(){
+  document.querySelectorAll('#sList .s-gbox').forEach(function(box){
+    var h=box.previousElementSibling;   // 「最近活跃」不是目录，不亮
+    if(h&&!h.classList.contains('recent'))h.classList.toggle('working',!!box.querySelector('.s-row.working'));
+  });
+  var cc=curClaw()||'claude';
+  var busyAny=Object.keys(activity).some(function(id){return activity[id]&&clawOf(id)===cc})||!!document.querySelector('#sList .s-row.working');
+  var tb=$('#mtabs [data-tab="chats"]');if(tb)tb.classList.toggle('busy',busyAny);
 }
 function clawOf(id){return /^oc:/.test(id)?'openclaw':/^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':'claude'}
 function renderUnread(){
