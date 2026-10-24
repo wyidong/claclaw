@@ -28,7 +28,7 @@ import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeC
 import { readBody } from './httpbody.mjs';
 import { peerRisk, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
-import { saveVideo, videoFile, videoDuration, videoThumb, uploadsDir } from './video.mjs';
+import { saveVideo, videoFile, videoDuration, videoThumb, serveVideo, uploadsDir } from './video.mjs';
 const vidName = n => String(n || '视频').replace(/[\r\n\]「」]/g, ' ').slice(0, 80);
 const UPLOADS = uploadsDir(DATA);
 
@@ -1933,6 +1933,11 @@ const handler = async (req, res) => {
         ' · ' + pad(mt.getMonth() + 1) + '-' + pad(mt.getDate()) + ' ' + pad(mt.getHours()) + ':' + pad(mt.getMinutes());
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(html.replace('__PAGE_VERSION__', ver));
+    }
+    if (url.pathname === '/api/upload/file') {
+      const f = videoFile(UPLOADS, url.searchParams.get('id'));
+      if (!f) return sendJson(res, 404, { error: 'not found' });
+      return serveVideo(req, res, f);
     }
     if (url.pathname === '/api/upload/thumb') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));

@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 
-export const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
 export const VIDEO_FRAMES = 12;
 const KEEP_DAYS = 7;
 const EXT = { 'video/quicktime': 'mov', 'video/mp4': 'mp4', 'video/x-m4v': 'm4v', 'video/webm': 'webm', 'video/3gpp': '3gp' };
@@ -71,6 +71,20 @@ export async function videoFrames(file, maxFrames = VIDEO_FRAMES) {
     } catch {}
   }
   return { dur, frames, error: frames.length ? '' : '截帧失败' };
+}
+
+// 播放原文件（手机本地没存时用）：支持 Range，iPhone 播视频必须
+const MIME = { mov: 'video/quicktime', mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', '3gp': 'video/3gpp' };
+export function serveVideo(req, res, file) {
+  const size = fs.statSync(file).size, type = MIME[path.extname(file).slice(1)] || 'application/octet-stream';
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
+  const head = { 'content-type': type, 'accept-ranges': 'bytes', 'cache-control': 'private, max-age=604800' };
+  if (!m || (m[1] === '' && m[2] === '')) { res.writeHead(200, { ...head, 'content-length': size }); return fs.createReadStream(file).pipe(res); }
+  let start = m[1] === '' ? size - Number(m[2]) : Number(m[1]), end = m[1] !== '' && m[2] !== '' ? Number(m[2]) : size - 1;
+  start = Math.max(0, start); end = Math.min(size - 1, end);
+  if (start > end) { res.writeHead(416, { 'content-range': 'bytes */' + size }); return res.end(); }
+  res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+  fs.createReadStream(file, { start, end }).pipe(res);
 }
 
 // 时长（不截帧，很快）
