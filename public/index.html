@@ -63,7 +63,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 @media (min-width:800px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 
 /* 标题栏：平的，不加底边框（白底坐在浅灰的聊天区上，边界自然就有）；左边两行「名字 ID / 目录 · 分支」，右边两行「模型 · 推理强度 / 权限」 */
-header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;background:var(--surface)}
+header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;border-bottom:1px solid var(--line);background:var(--surface)}
 #sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:default}
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
 #sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
