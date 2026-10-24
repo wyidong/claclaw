@@ -2814,6 +2814,7 @@ $('#sNew').addEventListener('click',function(){
 });
 function openSheet(silent){
   var list=$('#sList');
+  $('#sTop').style.display=!DESKTOP.matches&&!clawSel?'none':'';   // 手机还没选 Claw：没有可搜、可新建的会话，搜索框和 ⊕ 一起藏起来
   if(!DESKTOP.matches&&!clawSel){   // 手机：还没选 Claw，会话列表不加载任何会话
     list.innerHTML='<div class="s-empty claw-need">还没选择 Claw。<br>先选一个，会话列表才会显示对应的会话。<br><button type="button" class="claw-go">去选择</button></div>';
     list.querySelector('.claw-go').addEventListener('click',function(){mTab('claw')});
