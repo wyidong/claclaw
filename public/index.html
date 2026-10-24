@@ -539,6 +539,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
   #mtabs button.on{color:var(--accent)}
   #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}   /* 宿主那格显示宿主名，太长截断 */
+  #mtabs .tlogo{display:grid;place-items:center;width:24px;height:24px;filter:grayscale(1);opacity:.55;transition:filter .15s,opacity .15s}
+  #mtabs .tlogo svg,#mtabs .tlogo img{display:block;width:22px;height:22px;object-fit:contain}
+  #mtabs .tlogo img.tile{border-radius:22.5%}
+  #mtabs button.on .tlogo{filter:none;opacity:1}   /* 选中这一栏：图标原色；没选中：灰色，和其它栏的灰色图标一致 */
   #mtabs .ti{display:block;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   #mtabs .ti .f{fill:currentColor;fill-opacity:0;transition:fill-opacity .15s}
   #mtabs button.on .ti .f{fill-opacity:.22}
@@ -2930,7 +2934,18 @@ function renderRailClaws(){
   $('#rclawMore').setAttribute('aria-expanded',String($('#rclaws').classList.contains('open')));
 }
 function curClaw(){return clawSel||(DESKTOP.matches?'claude':null)}   // 电脑端没选过就是 Claude（没装 Claude 时 loadClaws 会换成第一个能用的）
+// 底部菜单「会话」的图标：换成当前选中 Claw 的图标，一眼看出是哪个 Claw 的会话列表；没选过时用原来的气泡图标
+var chatsIcon=document.querySelector('#mtabs [data-tab="chats"] .ti');
+function syncChatsTab(){
+  var tb=document.querySelector('#mtabs [data-tab="chats"]');if(!tb)return;
+  var k=curClaw()||'';if(tb.dataset.k===k&&tb.dataset.k!==undefined)return;
+  var old=tb.querySelector('.ti,.tlogo'),n;
+  if(k){n=document.createElement('span');n.className='tlogo';n.innerHTML=clawIcon(k)}else n=chatsIcon;
+  if(old!==n)old.replaceWith(n);
+  tb.dataset.k=k;tb.setAttribute('aria-label',(k?CLAW_NAMES[k]+' ':'')+'会话');
+}
 function showClawSel(){
+  syncChatsTab();
   document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('on',b.dataset.claw===curClaw())});
   $('#rclaws').classList.remove('open');renderRailClaws();
   document.querySelectorAll('.claw-card').forEach(function(x){
