@@ -26,6 +26,7 @@ setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启�
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody } from './httpbody.mjs';
+import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 import { saveVideo, videoFile, videoDuration, videoThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
@@ -1968,6 +1969,29 @@ const handler = async (req, res) => {
       if (url.searchParams.get('dl') === '1') { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
       if (/\.(html?|svg|xhtml|xml)$/i.test(f)) { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
       return serveVideo(req, res, f, nm);
+    }
+    // 聊天里点文件路径：本机网页（127.0.0.1 直连）用电脑上的 App 打开；别的设备返回文件信息，再用 /api/fs/read 读回去预览
+    if ((url.pathname === '/api/fs/open' || url.pathname === '/api/fs/read') && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+      let body = {};
+      try { body = JSON.parse(await readBody(req, 8192)); } catch {}
+      if (url.pathname === '/api/fs/read') {
+        const abs = String(body.path || '');
+        let st = null; try { st = path.isAbsolute(abs) && fs.statSync(abs); } catch {}
+        if (!st || !st.isFile()) return sendJson(res, 404, { error: '电脑上没有这个文件' });
+        if (st.size > READ_MAX) return sendJson(res, 413, { error: '文件太大，超过 50MB' });
+        res.writeHead(200, { 'content-type': previewType(abs, st.size), 'content-length': st.size, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+        return fs.createReadStream(abs).on('error', () => res.destroy()).pipe(res);
+      }
+      const hit = findUserPath(body.path, String(body.cwd || ''), HOME);
+      if (!hit) return sendJson(res, 404, { error: '电脑上没有这个文件' });
+      const name = path.basename(hit.abs);
+      if (isLocalReq(req) && process.platform === 'darwin') {
+        try { const how = await openOnMac(hit.abs, hit.st); log('fs open', how, name); return sendJson(res, 200, { opened: how, name }); }
+        catch (e) { return sendJson(res, 500, { error: '打不开：' + e.message }); }
+      }
+      return sendJson(res, 200, { name, path: hit.abs, size: hit.st.size, dir: hit.st.isDirectory() });
     }
     if (url.pathname === '/api/upload/thumb') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));

@@ -154,6 +154,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .cp{position:absolute;top:5px;right:6px;display:flex;align-items:center;justify-content:center;width:30px;height:28px;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:0;border-radius:7px}
 .cp svg,.ic svg{pointer-events:none;flex:none}
 .md :not(pre)>code{cursor:copy}
+.md :not(pre)>code.fp{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--muted)}
 .ic{display:inline-flex;align-items:center;justify-content:center;vertical-align:-3px;width:22px;height:20px;margin:0 1px 0 3px;padding:0;border:0;border-radius:5px;background:none;color:var(--muted)}
 .ic:active,.cp:active{background:var(--code-bg)}
 .md blockquote{position:relative;padding-right:40px}
@@ -1159,6 +1160,18 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 var COPY_ICON='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 // 紧跟在要复制的东西后面的小图标：复制它前面那个元素（链接复制网址，代码复制文字）
 var COPY_BTN='<button class="ic" type="button" aria-label="复制">'+COPY_ICON+'</button>';
+// 行内代码是不是文件路径：/ ~/ ./ ../ 开头，或带目录且有扩展名，或单个文件名带常见扩展名（排除域名、版本号、斜杠命令）
+var FILE_EXT=/\.(md|markdown|txt|log|json|jsonl|ya?ml|toml|ini|conf|cfg|env|plist|xml|html?|css|scss|less|m?js|cjs|tsx?|jsx|vue|svelte|py|rb|go|rs|java|kt|swift|c|h|cc|cpp|hpp|m|mm|cs|php|sh|bash|zsh|fish|sql|csv|tsv|png|jpe?g|gif|webp|heic|svg|pdf|docx?|xlsx?|pptx?|key|pages|numbers|zip|gz|tgz|zstd?|tar|mp4|mov|mp3|wav|m4a|lock|patch|diff)$/i;
+function isPathLike(c){
+  c=String(c||'').replace(/&amp;/g,'&').trim();
+  if(!c||c.length>300||/\s/.test(c)||/^[a-z][a-z0-9+.-]*:\/\//i.test(c)||/^-/.test(c))return false;
+  c=c.replace(/#L\d+(?:-L?\d+)?$/i,'').replace(/(?::\d+){1,2}$/,'');
+  if(/^\/[a-z][\w:-]*$/i.test(c))return false;   // /model 这类斜杠命令
+  if(/^(\/|~\/|\.\.?\/)/.test(c))return true;
+  var last=c.split('/').pop();
+  if(c.indexOf('/')>=0)return /[^.\/]\.[a-z][a-z0-9]{0,7}$/i.test(last);
+  return /^[^.]/.test(last)&&FILE_EXT.test(last);
+}
 function mdInline(s){
   var keep=[];
   var put=function(h){keep.push(h);return '\u0000'+(keep.length-1)+'\u0000'};
@@ -1166,7 +1179,8 @@ function mdInline(s){
   if(/^\s*\/[a-z][\w:-]*(\s+[^`\s][^`]*)?$/i.test(s)&&s.trim().length<=160)return '<code>'+esc(s.trim())+'</code>'+COPY_BTN;
   s=esc(s);
   // 像 ID、命令、路径的行内代码后面跟一个复制图标（太短或纯单词的只是强调，不加）
-  s=s.replace(/`([^`\n]+)`/g,function(_,c){return put('<code>'+c+'</code>'+(c.trim().length>=6&&/[0-9\/._:@=-]/.test(c)?COPY_BTN:''))});
+  // 像文件路径的（class fp）：点代码打开文件，复制交给后面的图标
+  s=s.replace(/`([^`\n]+)`/g,function(_,c){var fp=isPathLike(c);return put('<code'+(fp?' class="fp"':'')+'>'+c+'</code>'+(fp||c.trim().length>=6&&/[0-9\/._:@=-]/.test(c)?COPY_BTN:''))});
   // 图片 ![说明](地址)：只认 http(s) 和本站路径（/icons/... 这类，不认 // 开头的）
   // 图片 ![说明](地址)：只自动加载本站（/ 开头）的；外链的渲染成普通链接、显示地址，点了才打开
   // （AI 回复里的图片可能带着会话数据，自动加载等于把它送出去）
@@ -1372,6 +1386,20 @@ function openFile(id,name){
   if(!window.indexedDB)return fromServer();
   vidStore('readonly',function(st){return st.get(id)}).then(function(rec){if(rec&&rec.blob)showFile(rec.blob,name);else fromServer()}).catch(fromServer);
 }
+// 点聊天里的文件路径：电脑上直接开的（本机网页）由服务器用默认 App 打开；别的设备把文件读回来，在页面里预览
+function postJson(u,body){return fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})}
+function httpErr(r){return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status))},function(){throw new Error('HTTP '+r.status)})}
+function openPath(p){
+  postJson('/api/fs/open',{path:p,cwd:(session&&session.cwd)||''}).then(function(r){return r.ok?r.json():httpErr(r)}).then(function(j){
+    if(j.opened){toast(j.opened==='reveal'?'已在访达里选中（这类文件打开会运行，没直接打开）':'已在电脑上打开');return}
+    if(j.dir){toast('这是文件夹，手机上看不了');return}
+    if(j.size>50*1048576){toast('文件太大（'+fmtSize(j.size)+'），只能在电脑上打开');return}
+    showFile(null,j.name,'加载中…');
+    postJson('/api/fs/read',{path:j.path}).then(function(r){return r.ok?r.blob():httpErr(r)})
+      .then(function(b){if($('#fview').classList.contains('on')&&fvName===j.name&&!fvBlob)showFile(b,j.name)})
+      .catch(function(e){if($('#fview').classList.contains('on')&&fvName===j.name&&!fvBlob)showFile(null,j.name,'打不开：'+e.message)});
+  }).catch(function(e){toast(e.message)});
+}
 // 在 claclaw 页面里看文件（文本、图片、PDF 直接显示，其他只给「分享 / 保存」）；不跳页面，关掉就回聊天
 var fvUrl='',fvBlob=null,fvName='';
 function showFile(blob,name,msg){
@@ -1506,8 +1534,11 @@ feed.addEventListener('click',function(e){
   // 点一下代码块也能复制整块（手机上不用对准右上角的小按钮）；拖选文字时不算
   var pb=t.closest&&t.closest('.md .cb pre');
   if(pb&&!String(getSelection()||'').trim()){copyText(pb.textContent);return}
-  // 点一下行内代码（`xxx`）也能复制
-  if(t.tagName==='CODE'&&!(t.parentNode&&t.parentNode.tagName==='PRE')&&t.closest('.md')){copyText(t.textContent);return}
+  // 点一下行内代码（`xxx`）：文件路径就打开文件，其他的复制
+  if(t.tagName==='CODE'&&!(t.parentNode&&t.parentNode.tagName==='PRE')&&t.closest('.md')){
+    if(t.classList.contains('fp')&&!String(getSelection()||'').trim()){openPath(t.textContent);return}
+    copyText(t.textContent);return
+  }
 });
 function addAi(t){var e=document.createElement('div');e.className='msg ai md';e.innerHTML=md(t);feed.appendChild(e);scrollDown()}
 // 别的会话发来的消息：灰色引用卡片，和自己发的气泡区分开
