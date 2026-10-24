@@ -330,6 +330,13 @@ const modelName = (cfg) => {
 export const COMMANDS = [
   { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
   { name: 'effort', description: '思考强度：off / low / high / max', hint: '<强度>', builtin: true },
+  { name: 'compact', description: '压缩以上对话（需要 dsh web / 终端；ACP 不支持）', builtin: true },
+  { name: 'goal', description: '设置或查看长期任务目标（需要 dsh web / 终端）', hint: '[<objective>|clear|pause|resume]', builtin: true },
+  { name: 'feedback', description: '给当前会话留下反馈（需要 dsh web / 终端）', hint: '<text>', builtin: true },
+  { name: 'cost', description: '本次会话累计 token 和估算费用', builtin: true },
+  { name: 'status', description: '当前模型、思考强度和估算费用', builtin: true },
+  { name: 'stop', description: '停止当前正在跑的回合', builtin: true },
+  { name: 'help', description: '列出可用命令', builtin: true },
 ];
 
 // ---------- 打开的 DeepSeek 会话：接口和 Claude 的 Runner 对齐 ----------
@@ -468,7 +475,48 @@ export class DsRunner {
     this.emit({ t: 'perm.done', requestId, toolUseID: p.req.toolUseID, decision });
   }
 
+  // 不需要 ACP 的本地命令：不会打断当前回合（busy 时用 sys 条显示）
+  localCommand(name) {
+    const u = dsUsage(this.id);
+    const cny = u ? (u.costCny <= 0 ? '0' : u.costCny < 0.01 ? u.costCny.toFixed(4) : u.costCny.toFixed(2)) : '0';
+    const n = v => (Number(v) || 0).toLocaleString('en-US');
+    if (name === 'cost') {
+      if (!u) return '还没有读到 dsh 的 usage；先发一条消息。';
+      return '本次会话估算：≈¥' + cny +
+        '\n未命中输入 ' + n(u.tokens.uncachedInputTokens) + ' · 缓存命中 ' + n(u.tokens.cacheReadTokens) +
+        ' · 输出 ' + n(u.tokens.outputTokens) + ' · 缓存写入 ' + n(u.tokens.cacheWriteTokens) +
+        '\n' + u.messages + ' 次请求' + (u.model ? ' · ' + u.model : '') +
+        '\n按公开价估算，不是 DeepSeek 账单。';
+    }
+    if (name === 'status') {
+      const eff = this.config?.find(o => o.id === 'reasoning_effort');
+      return '模型：' + (this.model || u?.model || '未知') +
+        '\n思考强度：' + (eff?.currentValue || '未知') +
+        '\n累计估算：≈¥' + cny;
+    }
+    if (name === 'help') {
+      return '可用命令：\n' + COMMANDS.map(c => '`/' + c.name + (c.hint ? ' ' + c.hint : '') + '` ' + c.description).join('\n') +
+        '\n\ndsh 原生的 /compact、/goal、/feedback 走 dsh host，当前 ACP 连接接不到；需要到 dsh web 或终端执行。';
+    }
+    if (name === 'compact' || name === 'goal' || name === 'feedback') {
+      return 'dsh 的 /' + name + ' 走 dsh host，当前 ACP 连接接不到；请到 dsh web 或终端执行。';
+    }
+    return '';
+  }
+
   send(text, images = []) {
+    if (/^\/stop(?:\s|$)/.test(text)) {
+      if (this.busy) { this.interrupt(); return true; }
+      this.finish({ reason: 'command', text: '当前没有在跑的回合' });
+      return true;
+    }
+    const local = text.match(/^\/(cost|status|help|compact|goal|feedback)(?:\s+(.*))?$/);
+    if (local) {
+      const out = this.localCommand(local[1]);
+      if (this.busy) this.emit({ t: 'sys', text: out });
+      else this.finish({ reason: 'command', text: out });
+      return true;
+    }
     if (this.busy) {
       // ACP 不支持插话：先排队。命令不排队（等这一轮结束再发），最多排 10 条
       if (/^\/(model|effort)\b/.test(text) || this.queue.length >= 10) return false;
