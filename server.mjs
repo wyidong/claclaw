@@ -115,7 +115,7 @@ function originalMode(file) {
 }
 const OUT_MAX = 4000;
 // 发图：前端会先压缩到长边 2000px 以内；这里再兜底限制张数和单张大小（base64 字符数）
-const MAX_IMAGES = 5;
+const MAX_IMAGES = 20;   // 手机上最多 5 张图 + 一个视频截的 12 帧
 const MAX_IMAGE_B64 = 7 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 // 历史记录里的图片总量上限，超过的只显示占位，免得打开会话时传几十 MB
