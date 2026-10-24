@@ -465,20 +465,22 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #backBtn.unr::after{content:'';position:absolute;top:9px;right:3px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
   #sessBtn>svg{display:none}
   #sessBtn.unr::after{display:none}
-  /* 聊天页顶栏（手机）：两行，往状态栏下面的空白里贴——
-     第一行  ‹  ● 名字  ID          （返回键、绿点都和名字对齐）
-     第二行       模型 · 推理强度 · 权限 ›   （和名字左边对齐，点开会话设置）
-     目录、分支不放：从列表进来的，聊天区「已恢复会话」那行也有 */
+  /* 聊天页顶栏（手机）：两行，往状态栏下面的空白里贴，左右两栏撑满——
+     第一行  ‹  ● 名字 ················ ID        （返回键、绿点和名字对齐；点 ID 复制）
+     第二行       模型 · 推理强度 ······ 权限 ›    （整行点开会话设置）
+     右栏 ID 和权限上下对齐；目录、分支不放：从列表进来的，聊天区「已恢复会话」那行也有 */
   header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
   #backBtn{align-self:stretch;height:auto;place-items:start center;padding:3px 0 0}   /* 点击范围占满两行，箭头对齐第一行 */
   #hdCard{flex-direction:column;align-items:stretch;gap:0;min-height:0}
   #hdCard #sessBtn,#sessBtn{min-height:28px;gap:8px}
+  #sessBtn .r1{width:100%}
   #sessBtn .nm{font-size:17px;line-height:28px}
+  #sid{margin-left:auto;padding:0 15px 0 12px}   /* 右边留出箭头的宽度：ID 和下面的权限文字右边对齐 */
+  #sid .hid{margin-left:0}
   #sessBtn .where{display:none}
-  #cfgBtn{align-self:flex-start;flex-direction:row;align-items:baseline;gap:0;max-width:100%;min-height:24px;margin:-2px 0 0 16px;padding:0 16px 2px 0;background-size:7px 12px;background-position:right 55%}
+  #cfgBtn{align-self:stretch;flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px;max-width:none;min-height:24px;margin:-2px 0 0 16px;padding:0 15px 2px 0;background-size:7px 12px;background-position:right 55%}
   #cfgBtn .c1{font-size:13px;line-height:22px}
-  #cfgBtn .c1:not(:empty)::after{content:'·';margin:0 6px;font-weight:400}
-  #cfgBtn .c2{font-size:13px;line-height:22px}
+  #cfgBtn .c2{margin-left:auto;font-size:13px;line-height:22px}
   #cfgBtn>span{flex:0 1 auto;min-width:0}
   #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
   #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
