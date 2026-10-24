@@ -482,11 +482,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
 #workBar[hidden]{display:none}
 /* 干活时：这个会话所属 Claw 的图标一闪一闪（代替原来的绿点和「XXX 正在工作」） */
-#workBar .wlogo{flex:none;display:grid;place-items:center;width:18px;height:18px;animation:pulse 1.2s infinite}
+#workBar .wlogo{flex:none;display:grid;place-items:center;width:18px;height:18px;animation:wpulse 1.8s ease-in-out infinite}
+@keyframes wpulse{0%,100%{opacity:1}50%{opacity:.6}}   /* 轻一点：看得出在闪就行 */
 #workBar .wlogo svg,#workBar .wlogo img{display:block;width:18px;height:18px;object-fit:contain}
 #workBar .wlogo img.tile{border-radius:22.5%}
 #workBar.quiet{color:var(--warn)}
-#workBar.quiet .wlogo{animation-duration:2.4s}
+#workBar.quiet .wlogo{animation-duration:3.6s}
 #bannerT.link{cursor:pointer;text-decoration:underline}
 
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
