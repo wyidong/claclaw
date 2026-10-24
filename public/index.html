@@ -167,7 +167,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .sys{align-self:center;max-width:92%;text-align:center;color:var(--muted);font-size:13px;line-height:1.45}
 .think{align-self:flex-start;display:flex;align-items:center;gap:5px;padding:6px 0}
 .think .tt{margin-left:6px;font-size:13px;color:var(--muted)}
-#sessBtn .dot.busy{animation:pulse 1s infinite}
+#sessBtn .dot:empty.busy{animation:pulse 1s infinite}   /* 图标不闪：干活的闪烁在底部工作条上 */
 .think i{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.5;animation:blink 1.1s infinite}
 .think i:nth-child(2){animation-delay:.18s}.think i:nth-child(3){animation-delay:.36s}
 @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
@@ -481,9 +481,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 /* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
 #workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
 #workBar[hidden]{display:none}
-#workBar .wdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite}
+/* 干活时：这个会话所属 Claw 的图标一闪一闪（代替原来的绿点和「XXX 正在工作」） */
+#workBar .wlogo{flex:none;display:grid;place-items:center;width:18px;height:18px;animation:pulse 1.2s infinite}
+#workBar .wlogo svg,#workBar .wlogo img{display:block;width:18px;height:18px;object-fit:contain}
+#workBar .wlogo img.tile{border-radius:22.5%}
 #workBar.quiet{color:var(--warn)}
-#workBar.quiet .wdot{background:var(--warn)}
+#workBar.quiet .wlogo{animation-duration:2.4s}
 #bannerT.link{cursor:pointer;text-decoration:underline}
 
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
@@ -887,7 +890,7 @@ select.pe-in{text-align-last:right}
 
   <main id="feed" aria-live="polite"></main>
   <!-- 工作状态：在聊天区底部、输入框外面（输入框是用户自己的地方） -->
-  <div id="workBar" hidden><span class="wdot"></span><span id="workT"></span></div>
+  <div id="workBar" hidden><span class="wlogo" id="workLogo"></span><span id="workT"></span></div>
 
   <div id="dock" data-state="idle">
     <div id="perm">
@@ -1537,7 +1540,9 @@ function tickWork(){
   if(!busy){bar.hidden=true;return}
   var quiet=lastEvt?Math.floor((Date.now()-lastEvt)/1000):0,stuck=quiet>=90;
   bar.hidden=false;bar.classList.toggle('quiet',stuck);
-  $('#workT').textContent=clawName(session&&session.id)+' 正在工作 · '+workLabel+(sec?' · 已 '+fmtSec(sec):'')+
+  var lg=$('#workLogo'),ck=clawKeyOf(session&&session.id);
+  if(lg.dataset.k!==ck){lg.innerHTML=clawIcon(ck);lg.dataset.k=ck;lg.title=clawName(session&&session.id)+' 正在工作'}
+  $('#workT').textContent=workLabel+(sec?' · 已 '+fmtSec(sec):'')+
     (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':'');
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
@@ -1962,7 +1967,7 @@ function onEvent(m){
     else{feed.innerHTML='';cards={};permQueue=[];aiEl=null}
     feedOwner=m.id;feedSig=hsig;feedDirty=false;histArmed=false;lastTop=0;histLoading=false;   // 刚打开不算「滑到顶」，要先离开顶部
     session.dir=(m.cwdShort||'').split('/').pop()||'';
-    $('#sessBtn .dot').innerHTML=clawIcon(/^ds:/.test(m.id)?'deepseek':/^op:/.test(m.id)?'opencode':/^oc:/.test(m.id)?'openclaw':'claude');
+    $('#sessBtn .dot').innerHTML=clawIcon(clawKeyOf(m.id));
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
@@ -2790,6 +2795,7 @@ function peerAddHtml(c){
 var peerPoolClaw='',peerPoolQ='';
 var CLAW_ORDER=['claude','deepseek','opencode','openclaw'];
 // Claw 的图标：和左边栏用同一份（左边栏的按钮里就是图标）
+function clawKeyOf(id){id=id||'';return /^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':/^oc:/.test(id)?'openclaw':'claude'}
 function clawIcon(k){var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:esc(CLAW_NAMES[k])}
 function clawSegBtn(k,n,on){return '<button type="button" data-act="pool-claw" data-claw="'+k+'" title="'+esc(CLAW_NAMES[k])+'" aria-label="'+esc(CLAW_NAMES[k])+'"'+(on?' class="on"':'')+'>'+clawIcon(k)+(n?'<i>'+n+'</i>':'')+'</button>'}
 function poolInfo(id){return (peerList||[]).find(function(x){return x.id===id})||((peerCfg&&peerCfg.poolInfo)||[]).find(function(x){return x.id===id&&x.title})}
