@@ -64,7 +64,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 
 /* 标题栏：平的，不加底边框（白底坐在浅灰的聊天区上，边界自然就有）；左边两行「名字 ID / 目录 · 分支」，右边两行「模型 · 推理强度 / 权限」 */
 header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;background:var(--surface)}
-#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
+#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:default}
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
 #sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
 #sid .hid:active{color:var(--accent)}
@@ -835,7 +835,7 @@ select.pe-in{text-align-last:right}
     <button id="backBtn" type="button" aria-label="返回会话列表"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <div id="hdCard">
     <!-- 不用 <button>：按钮里的字不能用鼠标选中复制。会话名、ID、目录、分支都可以直接拖选 -->
-    <div id="sessBtn" role="button" tabindex="0" aria-label="切换会话">
+    <div id="sessBtn">
       <span class="dot"></span>
       <span class="st">
         <span class="r1"><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span></span>
@@ -3054,7 +3054,7 @@ function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidd
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 // 电脑上会话列表常驻，点标题栏不用做什么（留给拖选复制）；手机上点标题栏回会话列表，刚选了字就不跳
 $('#sid').addEventListener('click',function(e){var h=e.target.closest('.hid');if(!h||!session)return;e.stopPropagation();copyText(session.id)});
-$('#sessBtn').addEventListener('click',function(){if(DESKTOP.matches)return;if(String(getSelection()||'').trim())return;goList()});
+// 手机：只有左上角返回键回会话列表（以前点标题栏任意地方都会回去，容易误触）
 // ---------- 手机：列表页 ⇄ 聊天页 ----------
 var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
 // 手机上以主屏幕 App 打开、或嵌在 clarelay 外壳里：一打开先到 Claw 页（只要一个很轻的请求），不先拉会话列表——
