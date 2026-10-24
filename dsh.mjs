@@ -348,6 +348,7 @@ export function dsShutdown() { try { proc?.stdin.end(); } catch {} }
 // POST /api/commands/execute 执行 /compact。该接口会自己 resume 目标会话，所以调用前
 // 必须先把 claclaw 的 ACP 会话关掉，让 session.lock 真正释放。
 const COMPACT_TIMEOUT = 10 * 60 * 1000;
+const USAGE_EVERY = 150 * 1000;   // 长回合里推累计费用的间隔
 const WEB_START_TIMEOUT = 45 * 1000;
 const WEB_STOP_TIMEOUT = 2 * 1000;
 const WEB_URL_RE = /dsh web:\s+(http:\/\/[^\s]+?\/\?token=[A-Za-z0-9_-]+)/;
@@ -578,7 +579,7 @@ async function waitClosing(sid) {
 }
 
 export class DsRunner {
-  constructor(id, { log, onActivity, onTurnDone, onAsk, onCompacted, compact, info }) {
+  constructor(id, { log, onActivity, onTurnDone, onAsk, onCompacted, compact, info, usageEvery }) {
     this.id = id; this.sid = sidOf(id);
     this.log = log; this.onActivity = onActivity; this.onTurnDone = onTurnDone; this.onAsk = onAsk;
     this.onCompacted = onCompacted;
@@ -593,6 +594,7 @@ export class DsRunner {
     this.suggestion = null; this.commands = COMMANDS;
     this.closed = false; this.attached = false; this.config = null;
     this.compacting = false;
+    this.usageEvery = usageEvery || USAGE_EVERY; this.usageTimer = null; this.usageKey = '';
     this.msgId = null; this.textOpen = false;
     this.queue = [];          // 回复中又发来的消息：这一轮结束（或被中断）后合成一条发出
   }
@@ -643,9 +645,25 @@ export class DsRunner {
   setBusy(on) {
     if (this.busy === on) return;
     this.busy = on; if (on) this.busySince = Date.now();
+    if (on) this.startUsageTimer(); else this.stopUsageTimer();
     this.emit({ t: 'busy', on });
     this.onActivity?.(this.id, on ? '思考中' : null);
   }
+  // 累计费用（标题栏 ID 后面那个 ≈¥）：每轮结束推一次；长回合里每 2.5 分钟再推一次（dsh 每一步都把 usage 写进日志）
+  pushUsage() {
+    const u = dsUsage(this.id);
+    if (!u) return;
+    const k = u.messages + ':' + u.costCny;
+    if (k === this.usageKey) return;   // 没变就不推
+    this.usageKey = k;
+    this.emit({ t: 'usage', usage: u });
+  }
+  startUsageTimer() {
+    if (this.usageTimer) return;
+    this.usageTimer = setInterval(() => { if (!this.busy || this.closed) this.stopUsageTimer(); else this.pushUsage(); }, this.usageEvery);
+    this.usageTimer.unref?.();
+  }
+  stopUsageTimer() { clearInterval(this.usageTimer); this.usageTimer = null; }
   closeText() { if (this.textOpen) { this.textOpen = false; this.emit({ t: 'ai.end' }); } this.msgId = null; }
 
   handle(u) {
@@ -804,8 +822,8 @@ export class DsRunner {
     const ok = !error && (reason === 'end_turn' || reason === 'command');
     const subtype = error ? 'error' : reason === 'cancelled' ? 'aborted' : ok ? 'success' : reason;
     if (error) this.emit({ t: 'error', message: error });
-    const usage = dsUsage(this.id);
-    if (usage) this.emit({ t: 'usage', usage });
+    this.stopUsageTimer();
+    this.pushUsage();
     this.busy = false;
     this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
     this.onActivity?.(this.id, null);
@@ -916,6 +934,7 @@ export class DsRunner {
   dispose() {
     if (this.closed) return;
     this.closed = true;
+    this.stopUsageTimer();
     dsRunners.delete(this.id);
     if (this.attached) {
       this.attached = false;

@@ -71,6 +71,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
 #sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
 #sid .hid:active{color:var(--accent)}
+#sid .fee{margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
 /* 名字前面是这个会话所属 Claw 的图标（Claude 螃蟹、DeepSeek 鲸鱼……）；断线 / 会话关闭时变灰，干活时一闪一闪。还不知道是哪个 Claw 时退回小圆点 */
 #sessBtn .dot{flex:none;display:grid;place-items:center;width:20px;height:20px;transition:filter .2s,opacity .2s}
 #sessBtn .dot svg,#sessBtn .dot img{display:block;width:20px;height:20px;object-fit:contain}
@@ -1581,6 +1582,14 @@ function dsFeeText(u){
   if(c<=0)return '≈¥0';
   return '≈¥'+(c<0.01?c.toFixed(4):c.toFixed(2));
 }
+// 标题栏 ID 后面的累计费用：DeepSeek 会话才有；每轮结束、长回合里每 2.5 分钟由服务器推 usage 更新
+function renderFee(){
+  var sid=$('#sid'),el=sid.querySelector('.fee');
+  var t=(session&&/^ds:/.test(session.id)&&session.usage)?dsFeeText(session.usage):'';
+  if(!t){if(el)el.remove();return}
+  if(!el){el=document.createElement('span');el.className='fee';sid.appendChild(el)}
+  el.textContent=t+' billing';el.title=dsFeeTitle(session.usage);
+}
 function dsFeeTitle(u){
   var t=u.tokens||{};
   return 'DeepSeek 估算：缓存命中 '+(t.cacheReadTokens||0)+' · 未命中 '+(t.uncachedInputTokens||0)+
@@ -1596,10 +1605,7 @@ function tickWork(){
   bar.hidden=false;bar.classList.toggle('quiet',stuck);
   var lg=$('#workLogo'),ck=clawKeyOf(session&&session.id);
   if(lg.dataset.k!==ck){lg.innerHTML=clawIcon(ck);lg.dataset.k=ck;lg.title=clawName(session&&session.id)+' 正在工作'}
-  var dsFt=(session&&/^ds:/.test(session.id)&&session.usage)?dsFeeText(session.usage):'';
-  var dsFee=dsFt?' · '+dsFt:'';
-  bar.title=dsFee?dsFeeTitle(session.usage):'';
-  $('#workT').textContent=workLabel+(sec?' · 已 '+fmtSec(sec):'')+dsFee+
+  $('#workT').textContent=workLabel+(sec?' · 已 '+fmtSec(sec):'')+
     (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':'');
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
@@ -2130,8 +2136,8 @@ function onEvent(m){
   case 'busy':
     setBusy(!!m.on);
     break;
-  case 'usage':   // DeepSeek：本轮结束后的累计 token / 估算费用
-    if(session&&m.usage){session.usage=m.usage;tickWork()}
+  case 'usage':   // DeepSeek：累计 token / 估算费用（每轮结束；长回合里每 2.5 分钟）
+    if(session&&m.usage){session.usage=m.usage;renderFee()}
     break;
   case 'session.meta':   // 会话信息变了（OpenClaw 换了模型）：更新标题栏
     if(session&&m.cwdShort){session.cwdShort=m.cwdShort;session.dir=m.cwdShort.split('/').pop()||'';setHeader()}
@@ -2206,6 +2212,7 @@ function setHeader(){
   var full=/^[0-9a-f]{8}-/i.test(session.id);   // Claude 的 UUID：放完整 ID、只露出前 8 位；其它的直接放短 ID
   var idEl=document.createElement('span');idEl.className='hid';idEl.title=session.id;idEl.textContent=full?session.id:shortId(session.id);
   sid.appendChild(idEl);
+  renderFee();
   // 第二行：目录（~/ 开头的完整路径）· 分支；名字本身就是目录名时只放分支。放不下从左边截，鼠标停留看完整的
   var name=t||dir||'会话',place=session.cwdShort||dir,parts=[];
   if(place&&place!==name)parts.push(place);

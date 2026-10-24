@@ -40,7 +40,7 @@ if (HAS_ZSTD) {
 }
 
 process.env.DSH_HOME = DSH;
-const { dsUsage } = await import('../dsh.mjs');
+const { dsUsage, DsRunner } = await import('../dsh.mjs');
 
 test('累计四个 provider 桶，并按消息时间和模型估算 CNY', { skip: !HAS_ZSTD }, () => {
   const u = dsUsage('ds:' + SID);
@@ -67,6 +67,20 @@ test('压缩调用的 usage 也算进费用', { skip: !HAS_ZSTD }, () => {
   const u = dsUsage('ds:' + CMP);
   assert.equal(u.messages, 1);
   assert.equal(u.costCny, 1);   // Flash 空闲未命中 1 元 / 百万
+});
+
+test('长回合里定时推累计费用：没变化不重复推，回合结束就停', { skip: !HAS_ZSTD }, async () => {
+  const r = new DsRunner('ds:' + SID, { log: () => {}, usageEvery: 20 });
+  const ev = [];
+  r.subscribe({ readyState: 1, send: s => ev.push(JSON.parse(s)) });
+  r.setBusy(true);
+  await new Promise(res => setTimeout(res, 90));
+  const pushed = ev.filter(e => e.t === 'usage');
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].usage.costCny, 15.06);
+  r.setBusy(false);
+  assert.equal(r.usageTimer, null);
+  r.dispose();
 });
 
 test('不存在的会话返回 null', { skip: !HAS_ZSTD }, () => {
