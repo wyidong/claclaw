@@ -10,6 +10,15 @@ const HAS_ZSTD = typeof zlib.zstdCompressSync === 'function';
 const DSH = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-dsh-usage-'));
 const SID = '22222222-3333-4444-8555-666666666666';
 const DIR = path.join(DSH, 'sessions', '--tmp-usage--', SID);
+// 父会话 + 两层子代理（子代理的日志在别的组里也要找得到）
+const PARENT = '33333333-4444-4555-8666-777777777777', SUB = '44444444-5555-4666-8777-888888888888', SUB2 = '55555555-6666-4777-8888-999999999999';
+const SAT = Date.parse('2026-10-24T02:00:00Z');   // 周六 10:00 北京时间：空闲
+const msg = (seq, model, usage) => ({ type: 'assistant/message', seq, time: SAT, data: { message: { source: { model } }, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, ...usage } } });
+function writeSession(group, sid, recs) {
+  const d = path.join(DSH, 'sessions', group, sid);
+  fs.mkdirSync(d, { recursive: true });
+  fs.writeFileSync(path.join(d, 'session.v4.jsonl.zstd'), zlib.zstdCompressSync(Buffer.from(recs.map(r => JSON.stringify(r)).join('\n') + '\n')));
+}
 
 if (HAS_ZSTD) {
   fs.mkdirSync(DIR, { recursive: true });
@@ -21,6 +30,10 @@ if (HAS_ZSTD) {
     { type: 'assistant/message', seq: 1, time: Date.parse('2026-10-22T16:00:00Z'), data: { message: { source: { model: 'deepseek-v4-flash' } }, usage: { inputTokens: 1e6, outputTokens: 1e6, cacheReadTokens: 1e6, cacheWriteTokens: 0 } } },
   ];
   fs.writeFileSync(path.join(DIR, 'session.v4.jsonl.zstd'), zlib.zstdCompressSync(Buffer.from(recs.map(r => JSON.stringify(r)).join('\n') + '\n')));
+  const head = (id, parent) => ({ type: 'session', version: 4, id, createdAt: SAT, cwd: '/tmp/p', isSeeded: false, ...(parent ? { origin: 'subagent', parentSession: parent, delegationDepth: 1 } : { delegationDepth: 0 }) });
+  writeSession('--tmp-p--', PARENT, [head(PARENT), msg(0, 'deepseek-v4-pro', { inputTokens: 1e6 })]);              // Pro 空闲未命中 4.5
+  writeSession('--tmp-p--', SUB, [head(SUB, PARENT), msg(0, 'deepseek-flash', { outputTokens: 1e6 })]);           // Flash 空闲输出 4
+  writeSession('--tmp-q--', SUB2, [head(SUB2, SUB), msg(0, 'deepseek-flash', { cacheReadTokens: 1e6 })]);         // Flash 空闲命中 0.02
 }
 
 process.env.DSH_HOME = DSH;
@@ -35,6 +48,16 @@ test('累计四个 provider 桶，并按消息时间和模型估算 CNY', { skip
   assert.equal(u.messages, 2);
   assert.equal(u.model, 'deepseek-v4-flash');
   assert.equal(u.costCny, 15.06);   // 高峰 10.04 + 空闲 5.02
+});
+
+test('子代理（多层）的用量算进父会话，模型仍显示父会话的', { skip: !HAS_ZSTD }, () => {
+  const u = dsUsage('ds:' + PARENT);
+  assert.equal(u.messages, 3);
+  assert.equal(u.subagents, 2);
+  assert.equal(u.model, 'deepseek-v4-pro');
+  assert.equal(u.costCny, 8.52);
+  assert.equal(dsUsage('ds:' + SUB).costCny, 4.02);   // 子代理自己只算自己和下层
+  assert.equal(dsUsage('ds:' + SID).subagents, 0);
 });
 
 test('不存在的会话返回 null', { skip: !HAS_ZSTD }, () => {

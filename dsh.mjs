@@ -150,15 +150,9 @@ function dsRate(model, ms) {
   const k = dsPeak(ms);
   return { hit: p.hit[k], miss: p.miss[k], out: p.out[k] };
 }
-// 本次会话累计：四个 provider 上报的桶 + 按每条消息当时模型/时段估的费用（CNY）
-export function dsUsage(id) {
-  if (!isDs(id)) return null;
-  const f = fileOf(sidOf(id));
-  if (!f) return null;
-  const recs = readRecords(f) || [];
-  const s = summarize(recs);
-  const tokens = { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
-  let cost = 0, messages = 0, model = s.model || '';
+// 一个会话文件里的 usage 累加到 acc；返回这个会话最后用的模型
+function addUsage(recs, acc) {
+  let model = summarize(recs).model || '';
   for (const r of recs) {
     if (r.type !== 'assistant/message' || !r.data?.usage) continue;
     const u = r.data.usage;
@@ -168,16 +162,45 @@ export function dsUsage(id) {
     const output = Number(u.outputTokens || 0) || 0;
     const hit = Number(u.cacheReadTokens || 0) || 0;
     const write = Number(u.cacheWriteTokens || 0) || 0;
-    tokens.uncachedInputTokens += input;
-    tokens.outputTokens += output;
-    tokens.cacheReadTokens += hit;
-    tokens.cacheWriteTokens += write;
+    acc.tokens.uncachedInputTokens += input;
+    acc.tokens.outputTokens += output;
+    acc.tokens.cacheReadTokens += hit;
+    acc.tokens.cacheWriteTokens += write;
     const price = dsRate(model, tms(r.time));
     // 缓存写入按未命中输入价；账号折扣/赠金/节假日不在估算里
-    cost += ((input + write) * price.miss + hit * price.hit + output * price.out) / 1e6;
-    messages++;
+    acc.cost += ((input + write) * price.miss + hit * price.hit + output * price.out) / 1e6;
+    acc.messages++;
   }
-  return { model, messages, tokens, costCny: Math.round(cost * 10000) / 10000 };
+  return model;
+}
+// 本次会话累计：四个 provider 上报的桶 + 按每条消息当时模型/时段估的费用（CNY）。
+// 子代理是单独的会话文件（header.parentSession 指向父会话，可能多层），一起算进来
+export function dsUsage(id) {
+  if (!isDs(id)) return null;
+  const sid = sidOf(id);
+  if (sid.includes('/') || sid.includes('..')) return null;
+  const files = scan();
+  const f = files.get(sid);
+  if (!f) return null;
+  const kids = new Map();   // 父会话 id → 子会话文件
+  for (const [s, file] of files) {
+    if (s === sid) continue;
+    const head = (readRecords(file) || [])[0];
+    const p = head?.type === 'session' ? head.parentSession : '';
+    if (p) { if (!kids.has(p)) kids.set(p, []); kids.get(p).push([s, file]); }
+  }
+  const acc = { tokens: { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }, cost: 0, messages: 0 };
+  const model = addUsage(readRecords(f) || [], acc);
+  const seen = new Set([sid]), todo = [...(kids.get(sid) || [])];
+  let subagents = 0;
+  while (todo.length) {
+    const [s, file] = todo.shift();
+    if (seen.has(s)) continue;
+    seen.add(s); subagents++;
+    addUsage(readRecords(file) || [], acc);
+    todo.push(...(kids.get(s) || []));
+  }
+  return { model, messages: acc.messages, subagents, tokens: acc.tokens, costCny: Math.round(acc.cost * 10000) / 10000 };
 }
 function toItems(recs) {
   const items = [], toolIdx = new Map();
@@ -330,9 +353,7 @@ const modelName = (cfg) => {
 export const COMMANDS = [
   { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
   { name: 'effort', description: '思考强度：off / low / high / max', hint: '<强度>', builtin: true },
-  { name: 'compact', description: '压缩以上对话（需要 dsh web / 终端；ACP 不支持）', builtin: true },
-  { name: 'goal', description: '设置或查看长期任务目标（需要 dsh web / 终端）', hint: '[<objective>|clear|pause|resume]', builtin: true },
-  { name: 'feedback', description: '给当前会话留下反馈（需要 dsh web / 终端）', hint: '<text>', builtin: true },
+  // dsh 原生的 /compact /goal /feedback 走 dsh host，ACP 接不到：不放进菜单，只在 send() 里拦下并说明
   { name: 'cost', description: '本次会话累计 token 和估算费用', builtin: true },
   { name: 'status', description: '当前模型、思考强度和估算费用', builtin: true },
   { name: 'stop', description: '停止当前正在跑的回合', builtin: true },
@@ -485,7 +506,7 @@ export class DsRunner {
       return '本次会话估算：≈¥' + cny +
         '\n未命中输入 ' + n(u.tokens.uncachedInputTokens) + ' · 缓存命中 ' + n(u.tokens.cacheReadTokens) +
         ' · 输出 ' + n(u.tokens.outputTokens) + ' · 缓存写入 ' + n(u.tokens.cacheWriteTokens) +
-        '\n' + u.messages + ' 次请求' + (u.model ? ' · ' + u.model : '') +
+        '\n' + u.messages + ' 次请求' + (u.subagents ? '（含 ' + u.subagents + ' 个子代理）' : '') + (u.model ? ' · ' + u.model : '') +
         '\n按公开价估算，不是 DeepSeek 账单。';
     }
     if (name === 'status') {
@@ -503,18 +524,30 @@ export class DsRunner {
     }
     return '';
   }
+  // 本地命令的答复要等 server 推完 user 回显（它在 send() 返回后才推）再发：
+  // 同步发的话，别的设备上答复排在问题前面，过程播报也会在 turn.done 之后又“开始一轮”
+  localReply(fn) {
+    setImmediate(() => {
+      if (this.closed) return;
+      const out = fn();
+      if (!out) return;
+      if (this.busy) this.emit({ t: 'sys', text: out.replace(/`/g, '') });   // 回合进行中：不结束这一轮，sys 条里不渲染 markdown
+      else this.finish({ reason: 'command', text: out });
+    });
+  }
 
   send(text, images = []) {
     if (/^\/stop(?:\s|$)/.test(text)) {
-      if (this.busy) { this.interrupt(); return true; }
-      this.finish({ reason: 'command', text: '当前没有在跑的回合' });
+      this.localReply(() => {
+        if (!this.busy) return '当前没有在跑的回合';
+        this.interrupt();
+        return '';
+      });
       return true;
     }
-    const local = text.match(/^\/(cost|status|help|compact|goal|feedback)(?:\s+(.*))?$/);
+    const local = text.match(/^\/(cost|status|help|compact|goal|feedback)(?:\s+([\s\S]*))?$/);
     if (local) {
-      const out = this.localCommand(local[1]);
-      if (this.busy) this.emit({ t: 'sys', text: out });
-      else this.finish({ reason: 'command', text: out });
+      this.localReply(() => this.localCommand(local[1]));
       return true;
     }
     if (this.busy) {
