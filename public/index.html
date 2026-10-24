@@ -719,7 +719,10 @@ select.pe-in{text-align-last:right}
   .claw-st{flex:none;font-size:12.5px;color:var(--muted)}
   .claw-st:empty{display:none}   /* 选中靠边框表示；只有「即将支持」这类说明才显示 */
   .claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
-  .claw-card.unread .claw-tx b::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 3px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
+  /* Claw 页卡片和底部「会话」logo 呼应：这个 Claw 有会话在干活 → logo 轻闪；有没看的 → logo 右上角红点（两者可以同时） */
+  .claw-icw{position:relative;flex:none;display:block}
+  .claw-card.busy .claw-ic{animation:wpulse 1.8s ease-in-out infinite}
+  .claw-card.unread .claw-icw::after{content:'';position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
 }
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
@@ -776,6 +779,7 @@ select.pe-in{text-align-last:right}
   #rclawMore svg{transition:transform .18s}
   #rclaws.open #rclawMore svg{transform:rotate(180deg)}
   #rail .rclaw{position:relative}
+  #rail .rclaw.busy svg,#rail .rclaw.busy img{animation:wpulse 1.8s ease-in-out infinite}   /* 别的 Claw 有会话在干活：左栏图标轻闪 */
   #rail .rclaw[hidden]{display:none}
   #rail .rclaw img,#rail .rclaw svg{width:26px;height:26px;object-fit:contain}
   #rail .rclaw img.tile{border-radius:22.5%}
@@ -3318,7 +3322,14 @@ function syncWorkMarks(){
   var cc=curClaw()||'claude';
   var busyAny=Object.keys(activity).some(function(id){return activity[id]&&clawOf(id)===cc})||!!document.querySelector('#sList .s-row.working');
   var tb=$('#mtabs [data-tab="chats"]');if(tb)tb.classList.toggle('busy',busyAny);
+  // 每个 Claw 是否有会话在干活：Claw 页卡片 logo 轻闪；底部「Claw」和电脑左栏图标替别的 Claw 闪
+  var byClaw={};Object.keys(activity).forEach(function(id){if(activity[id])byClaw[clawOf(id)]=true});if(busyAny)byClaw[cc]=true;
+  document.querySelectorAll('.claw-card').forEach(function(c){c.classList.toggle('busy',!!byClaw[c.dataset.claw])});
+  document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('busy',b.dataset.claw!==cc&&!!byClaw[b.dataset.claw])});
+  var ct=$('#mtabs [data-tab="claw"]');if(ct)ct.classList.toggle('busy',Object.keys(byClaw).some(function(k){return k!==cc}));
 }
+// Claw 页卡片的 logo 包一层，好在右上角挂红点
+document.querySelectorAll('.claw-card .claw-ic').forEach(function(ic){var w=document.createElement('span');w.className='claw-icw';ic.parentNode.insertBefore(w,ic);w.appendChild(ic)});
 function clawOf(id){return /^oc:/.test(id)?'openclaw':/^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':'claude'}
 function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false,byClaw={};
