@@ -4059,7 +4059,7 @@ syncSend();
 // 手机：不等连上就先切到该去的页面（列表 / Claw 页），免得先闪一下空的聊天页再跳
 if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
   var view0='';try{view0=sessionStorage.getItem('claclaw.view')||''}catch(_){}
-  if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||!clawSel)mTab('claw')}
+  if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||!clawSel)mTab('claw');else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
 }
 takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});
 })();
