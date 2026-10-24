@@ -71,11 +71,17 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .sid{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sessBtn svg{flex:none;color:var(--muted)}
 /* 会话模式：右上角下拉选择；标题后面显示模式的英文名（无边框，颜色跟模式走） */
-#modeWrap{flex:none;display:flex;align-items:center;gap:2px;font-size:14px;color:var(--muted);white-space:nowrap}
-/* 和设置页的选择一样：没有边框，灰色文字靠右，后面一个 › */
-#modeSel{min-height:44px;max-width:9em;padding:4px 18px 4px 4px;border:0;background:none;color:var(--muted);font:inherit;font-size:14.5px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;cursor:pointer;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
-#modeWrap .d-only{display:none!important}
+/* 会话设置按钮：标题栏右边，两行——上「模型 · 推理强度」、下权限模式（颜色跟模式走）；点开是底部面板 */
+#cfgBtn{flex:none;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:1px;max-width:44%;min-height:44px;padding:2px 18px 2px 6px;border:0;color:var(--muted);font:inherit;text-align:right;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center/8px 14px}
+#cfgBtn>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#cfgBtn .c1{font-size:12px;line-height:1.2;font-weight:600;color:var(--ink);opacity:.75}
+#cfgBtn .c1:empty{display:none}
+#cfgBtn .c2{font-size:14px;line-height:1.25}
+#cfgBtn[data-m="accept"] .c2{color:var(--warn)}
+#cfgBtn[data-m="plan"] .c2{color:var(--accent)}
+#cfgBtn[data-m="bypass"] .c2{color:var(--deny);font-weight:600}
+#cfgBtn:active{opacity:.6}
 /* 会话信息 + 模式选择装在一块圆角色块里（和设置页「主题」那一行一样：无边框、有底色），返回键在色块外 */
 #hdCard{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 6px 0 12px;border-radius:12px;background:var(--bg)}
 #hdCard #sessBtn{min-height:40px}
@@ -393,6 +399,39 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .dlg input{width:100%;box-sizing:border-box;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit}
 .dlg .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .dlg .err{min-height:1.4em;margin-top:10px;color:var(--deny);font-size:14px}
+.dlg .chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-height:34px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
+.chip[aria-checked="true"]{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600}
+/* 会话设置面板：手机从底部滑上来，电脑居中；三组：模型（卡片）、推理强度（分段）、权限（卡片） */
+#cfgDlg{position:fixed;inset:0;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);z-index:9}
+#cfgDlg.on{display:flex}
+.cfg-p{box-sizing:border-box;width:100%;max-width:520px;max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:20px 20px 0 0;padding:6px 16px calc(18px + env(safe-area-inset-bottom,0px));animation:cfgUp .2s ease-out}
+@keyframes cfgUp{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
+@media (min-width:600px){#cfgDlg{align-items:center}.cfg-p{border-radius:18px;padding-bottom:18px}.cfg-grab{display:none}}
+.cfg-grab{width:38px;height:5px;margin:4px auto 6px;border-radius:3px;background:var(--line)}
+.cfg-h{display:flex;align-items:center;justify-content:space-between;min-height:40px}
+.cfg-h b{font-size:17px}
+.cfg-h button{width:40px;height:40px;border:0;border-radius:50%;background:var(--bg);color:var(--muted);font-size:22px;line-height:1;cursor:pointer}
+.cfg-p h4{display:flex;align-items:baseline;gap:8px;margin:16px 2px 8px;font-size:13px;font-weight:600;color:var(--muted)}
+.cfg-p h4 span{font-weight:400;font-size:12.5px}
+.cfg-list{display:flex;flex-direction:column;gap:8px}
+.cfg-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
+.cfg-opt .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.cfg-opt .t{font-size:15.5px;font-weight:600}
+.cfg-opt .s{font-size:12.5px;line-height:1.4;color:var(--muted)}
+.cfg-opt .ck{flex:none;width:20px;height:20px;border:1.5px solid var(--line);border-radius:50%;box-sizing:border-box}
+.cfg-opt[aria-checked="true"]{border-color:var(--accent);background:var(--user-bg)}
+.cfg-opt[aria-checked="true"] .ck{border:6px solid var(--accent);background:var(--surface)}
+.cfg-opt .md{flex:none;width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.cfg-opt .md[data-m="accept"]{background:var(--warn)}
+.cfg-opt .md[data-m="plan"]{background:var(--accent)}
+.cfg-opt .md[data-m="bypass"]{background:var(--deny)}
+.cfg-opt.busy,.cfg-seg button.busy{opacity:.55;animation:cfgPulse 1s ease-in-out infinite alternate}
+@keyframes cfgPulse{to{opacity:.25}}
+.cfg-seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.cfg-seg button{min-height:40px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;font-size:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cfg-seg button[aria-checked="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.cfg-seg button:disabled{opacity:.3;cursor:default}
 .btn.del{background:var(--deny);color:#fff;border-color:var(--deny)}
 .btn.cancel{background:transparent;color:var(--ink);border-color:var(--line)}
 .s-item[data-busy="1"]{opacity:.55}
@@ -726,7 +765,7 @@ select.pe-in{text-align-last:right}
   #sessBtn{border:0;background:none;padding:0;min-height:56px;cursor:text}
   #sessBtn .nm{font-size:17px}
   #sessBtn>svg{display:none}
-  #modeSel{min-height:34px}
+  #cfgBtn{min-height:34px}
   header{gap:12px}
   #sessBtn .sid{flex:0 1 auto}
   #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
@@ -778,7 +817,7 @@ select.pe-in{text-align-last:right}
       <span class="dot"></span><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
     </div>
-    <label id="modeWrap" data-m="default"><span class="d-only">会话模式：</span><select id="modeSel" aria-label="会话模式"></select></label>
+    <button type="button" id="cfgBtn" data-m="default" aria-label="模型、推理强度、权限"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span></button>
     </div>
   </header>
 
@@ -835,12 +874,26 @@ select.pe-in{text-align-last:right}
       <p class="newIn">在 <input id="newDir" class="plainIn" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="目录"> 新建</p>
       <label for="newName">名字（可以留空）</label>
       <input id="newName" autocomplete="off">
+      <div id="newPick" hidden>
+        <label>模型</label><div class="chips" id="newModels" role="radiogroup" aria-label="模型"></div>
+        <label>推理强度</label><div class="chips" id="newEfforts" role="radiogroup" aria-label="推理强度"></div>
+      </div>
       <div class="row">
         <button type="button" class="btn cancel" id="newNo">取消</button>
         <button type="submit" class="btn allow" id="newGo">新建</button>
       </div>
       <div class="err" id="newErr" role="alert"></div>
     </form>
+  </div>
+
+  <div id="cfgDlg" aria-hidden="true">
+    <div class="cfg-p" role="dialog" aria-label="会话设置">
+      <div class="cfg-grab"></div>
+      <div class="cfg-h"><b>会话设置</b><button type="button" id="cfgX" aria-label="关闭">×</button></div>
+      <section id="cfgModelSec" hidden><h4>模型</h4><div class="cfg-list" id="cfgModels" role="radiogroup" aria-label="模型"></div></section>
+      <section id="cfgEffortSec" hidden><h4>推理强度<span id="cfgEffortNote"></span></h4><div class="cfg-seg" id="cfgEfforts" role="radiogroup" aria-label="推理强度"></div></section>
+      <section><h4>权限</h4><div class="cfg-list" id="cfgModes" role="radiogroup" aria-label="权限"></div></section>
+    </div>
   </div>
 
   <div id="delDlg" aria-hidden="true">
@@ -1637,7 +1690,8 @@ function onEvent(m){
     setHeader();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
-    $('#modeWrap').style.display=/^(oc|ds):/.test(m.id)?'none':'';   // OpenClaw 没有权限模式
+    $('#cfgBtn').style.display=/^(oc|ds):/.test(m.id)?'none':'';   // OpenClaw / DeepSeek 没有权限模式
+    cfg={models:null,model:null,effort:null,pick:'default'};cfgBusy=null;applyModel(m);
     setMode(m.mode,false);
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
@@ -1749,6 +1803,11 @@ function onEvent(m){
     if(m.modes)sessionModes=m.modes;   // 换了进程（比如切到跳过确认）：能切的模式也变了
     setMode(m.mode,true);
     break;
+  case 'models': case 'model':
+    applyModel(m);
+    if(m.changed==='model')addSys('模型：'+curModelLabel()+(m.pick==='default'?'（默认）':'')+'，下一条消息开始生效');
+    else if(m.changed==='effort')addSys('推理强度：'+effortLabel(m.effort)+'（'+((EFFORTS.find(function(e){return e.key===m.effort})||{}).note||'')+'），下一条消息开始生效');
+    break;
   case 'session.renamed':
     if(session){session.title=m.title;setHeader()}
     break;
@@ -1781,6 +1840,7 @@ function onEvent(m){
     break;
   case 'error':
     openFailed();clearOpening();
+    if(cfgBusy){cfgBusy=null;renderCfg()}
     if(outbox){outboxRestore();if(!m.busy)setBusy(false)}   // 会话还在忙（只是这条没收下）：别把它显示成空闲
     notice('⚠ '+m.message);
     break;
@@ -1903,30 +1963,113 @@ ta.addEventListener('keydown',function(e){
   }
 });
 
+function dmOf(k){return k==='acceptEdits'?'accept':k==='bypassPermissions'?'bypass':k}
 function setMode(key,announce){
   var m=MODES.find(function(x){return x.key===key})||MODES[0];
   mode=m.key;
-  var dm=m.key==='acceptEdits'?'accept':m.key==='bypassPermissions'?'bypass':m.key;
-  // 下拉框：只列这个会话能切换的模式（继承来的特殊模式也在里面）
-  var want=sessionModes.indexOf(m.key)<0?sessionModes.concat(m.key):sessionModes;
-  // Claude 会话随时可以切到「跳过确认」（服务端会在这一轮结束后重启这个会话的进程）
-  if(session&&!/^(ds|op|oc):/.test(session.id)&&want.indexOf('bypassPermissions')<0)want=want.concat('bypassPermissions');
-  var sel=$('#modeSel');
-  if(sel.dataset.opts!==want.join(',')){
-    sel.innerHTML='';
-    want.forEach(function(k){var x=MODES.find(function(y){return y.key===k});if(!x)return;var o=document.createElement('option');o.value=k;o.textContent=x.label;sel.appendChild(o)});
-    sel.dataset.opts=want.join(',');
-  }
-  sel.value=m.key;$('#modeWrap').dataset.m=dm;
+  var dm=dmOf(m.key);
+  $('#cfgMode').textContent=m.label;$('#cfgBtn').dataset.m=dm;
   var tag=$('#modeTag');tag.textContent=session?m.key:'';tag.dataset.m=dm;
+  if(String(cfgBusy).indexOf('mode:')===0)cfgBusy=null;
+  renderCfg();
   if(announce)addSys('模式：'+m.label+'。'+m.note);
 }
-$('#modeSel').addEventListener('change',function(e){
-  var next=e.target.value;
-  e.target.value=mode;   // 等服务器确认后再真正切过去（setMode 会更新显示）
-  if(next==='bypassPermissions'&&sessionModes.indexOf(next)<0&&!confirm('切到「跳过确认」：这个会话以后运行命令、改文件都不再询问。\n要重启这个会话的进程（聊天内容不变），确定吗？'))return;
-  if(session)wsSend({t:'mode.set',mode:next});else setMode(next,true);
-});
+// ---------- 会话设置：模型 / 推理强度 / 权限（标题栏右边的按钮 + 面板）----------
+// 模型列表由服务器从 Claude Code 实时取（这个账号能用哪些就列哪些），只有 Claude 会话有
+var cfg={models:null,model:null,effort:null,pick:'default'},cfgBusy=null,cfgBusyT=null,lastModels=null;   // lastModels：新建对话框用（在列表页时没有打开的会话）
+var EFFORTS=[
+ {key:'low',label:'低',note:'最快、最省用量'},
+ {key:'medium',label:'中',note:'速度和质量均衡'},
+ {key:'high',label:'高',note:'想得更仔细'},
+ {key:'xhigh',label:'超高',note:'复杂编码、长任务推荐'},
+ {key:'max',label:'最高',note:'最深入，也最耗用量'}
+];
+var MODEL_ZH={opus:'日常复杂任务的首选',fable:'能力最强，适合最难、最长的任务',sonnet:'效率高，适合常规任务',haiku:'最快，适合简单问答',mythos:'能力最强'};
+function modelShort(id){
+  if(!id)return '';
+  var x=String(id).match(/(fable|opus|sonnet|haiku|mythos)-(\d+)(?:-(\d{1,2}))?(?!\d)/i);
+  if(x)return x[1].charAt(0).toUpperCase()+x[1].slice(1).toLowerCase()+' '+x[2]+(x[3]?'.'+x[3]:'');
+  var r=(cfg.models||[]).find(function(m){return m.value===id});
+  if(r&&r.resolved&&r.resolved!==id)return modelShort(r.resolved);
+  return String(id).charAt(0).toUpperCase()+String(id).slice(1);
+}
+function claudeSess(){return !!(session&&!/^(ds|op|oc):/.test(session.id))}
+function curModelRow(){var ms=cfg.models||[];return ms.find(function(m){return m.value===cfg.pick})||ms.find(function(m){return m.value==='default'})||null}
+function curModelLabel(){if(cfg.model)return modelShort(cfg.model);var r=curModelRow();return r?modelShort(r.resolved||r.value):''}
+function effortLabel(k){var e=EFFORTS.find(function(x){return x.key===k});return e?e.label:''}
+function renderCfgBtn(){
+  $('#cfgModel').textContent=claudeSess()&&(cfg.models||cfg.model)?curModelLabel()+(cfg.effort?' · '+effortLabel(cfg.effort):''):'';
+}
+function modeList(){   // 这个会话能切换的权限模式（继承来的特殊模式也在里面）；Claude 会话随时可以切到「跳过确认」（服务端会重启进程）
+  var want=sessionModes.indexOf(mode)<0?sessionModes.concat(mode):sessionModes.slice();
+  if(claudeSess()&&want.indexOf('bypassPermissions')<0)want.push('bypassPermissions');
+  return want;
+}
+function cfgOpt(t,sub,checked,lead){
+  var b=document.createElement('button');b.type='button';b.className='cfg-opt';b.setAttribute('role','radio');b.setAttribute('aria-checked',checked?'true':'false');
+  b.innerHTML=(lead||'')+'<span class="tx"><span class="t"></span><span class="s"></span></span><span class="ck"></span>';
+  b.querySelector('.t').textContent=t;
+  if(sub)b.querySelector('.s').textContent=sub;else b.querySelector('.s').remove();
+  return b;
+}
+function cfgSend(key,msg){
+  if(cfgBusy)return;
+  cfgBusy=key;wsSend(msg);renderCfg();
+  clearTimeout(cfgBusyT);cfgBusyT=setTimeout(function(){if(cfgBusy===key){cfgBusy=null;renderCfg();toast('没有回应，请再试一次')}},10000);
+}
+function renderCfg(){
+  var dlg=$('#cfgDlg');if(!dlg||!dlg.classList.contains('on'))return;
+  var ms=claudeSess()&&cfg.models&&cfg.models.length?cfg.models:null;
+  $('#cfgModelSec').hidden=!ms;$('#cfgEffortSec').hidden=!ms;
+  if(ms){
+    var box=$('#cfgModels');box.innerHTML='';
+    ms.forEach(function(m){
+      var fam=(String(m.resolved||m.value).match(/fable|opus|sonnet|haiku|mythos/i)||[''])[0].toLowerCase();
+      var isDef=m.value==='default';
+      var b=cfgOpt(isDef?'默认（'+modelShort(m.resolved||'')+'）':modelShort(m.resolved||m.value)||m.name,isDef?'跟随 Claude Code 的默认模型':MODEL_ZH[fam]||m.desc,m.value===cfg.pick);
+      if(cfgBusy==='model:'+m.value)b.classList.add('busy');
+      b.addEventListener('click',function(){if(m.value!==cfg.pick)cfgSend('model:'+m.value,{t:'model.set',model:m.value})});
+      box.appendChild(b);
+    });
+    var row=curModelRow(),sup=row&&row.efforts&&row.efforts.length?row.efforts:EFFORTS.map(function(e){return e.key});
+    var seg=$('#cfgEfforts');seg.innerHTML='';
+    EFFORTS.forEach(function(e){
+      var b=document.createElement('button');b.type='button';b.setAttribute('role','radio');b.textContent=e.label;
+      b.setAttribute('aria-checked',cfg.effort===e.key?'true':'false');b.disabled=sup.indexOf(e.key)<0;
+      if(cfgBusy==='effort:'+e.key)b.classList.add('busy');
+      b.addEventListener('click',function(){if(cfg.effort!==e.key)cfgSend('effort:'+e.key,{t:'effort.set',effort:e.key})});
+      seg.appendChild(b);
+    });
+    var cur=EFFORTS.find(function(e){return e.key===cfg.effort});
+    $('#cfgEffortNote').textContent=cur?cur.note:'没指定：用模型自己的默认强度';
+  }
+  var mb=$('#cfgModes');mb.innerHTML='';
+  modeList().forEach(function(k){
+    var x=MODES.find(function(y){return y.key===k});if(!x)return;
+    var b=cfgOpt(x.label,x.note,k===mode,'<span class="md" data-m="'+dmOf(k)+'"></span>');
+    if(cfgBusy==='mode:'+k)b.classList.add('busy');
+    b.addEventListener('click',function(){
+      if(k===mode||cfgBusy)return;
+      if(k==='bypassPermissions'&&sessionModes.indexOf(k)<0&&!confirm('切到「跳过确认」：这个会话以后运行命令、改文件都不再询问。\n要重启这个会话的进程（聊天内容不变），确定吗？'))return;
+      if(session)cfgSend('mode:'+k,{t:'mode.set',mode:k});else setMode(k,true);
+    });
+    mb.appendChild(b);
+  });
+}
+function openCfg(){var d=$('#cfgDlg');d.classList.add('on');d.setAttribute('aria-hidden','false');renderCfg()}
+function closeCfg(){var d=$('#cfgDlg');d.classList.remove('on');d.setAttribute('aria-hidden','true')}
+$('#cfgBtn').addEventListener('click',openCfg);
+$('#cfgX').addEventListener('click',closeCfg);
+$('#cfgDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeCfg()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#cfgDlg').classList.contains('on'))closeCfg()});
+function applyModel(m){
+  if(m.models)cfg.models=lastModels=m.models;
+  if('model' in m)cfg.model=m.model||null;
+  if('effort' in m)cfg.effort=m.effort||null;
+  if(m.pick)cfg.pick=m.pick;
+  if(/^(model|effort):/.test(String(cfgBusy)))cfgBusy=null;
+  renderCfgBtn();renderCfg();
+}
 setMode(mode,false);
 
 // ---------- 会话列表 ----------
@@ -3709,7 +3852,16 @@ document.addEventListener('visibilitychange',function(){wsSend({t:'visible',on:!
 
 // ---------- 新建同目录会话 ----------
 
-var newDlg=$('#newDlg'),newFrom=null;
+var newDlg=$('#newDlg'),newFrom=null,newPick={model:null,effort:null};
+function pickChips(box,items,cur,onPick){
+  box.innerHTML='';
+  items.forEach(function(it){
+    var b=document.createElement('button');b.type='button';b.className='chip';b.setAttribute('role','radio');b.textContent=it.label;
+    b.setAttribute('aria-checked',it.value===cur?'true':'false');
+    b.addEventListener('click',function(){onPick(it.value);pickChips(box,items,it.value,onPick)});
+    box.appendChild(b);
+  });
+}
 function newSibling(s){
   if(/^oc:/.test(s.id||''))s={id:s.id,cwd:'',claw:'openclaw'};
   newFrom=s;
@@ -3718,6 +3870,16 @@ function newSibling(s){
   var d=$('#newDir');d.value=(s.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   d.style.width=Math.max(8,d.value.length+1)+'ch';
   $('#newName').value='';$('#newErr').textContent='';
+  // Claude 会话：可以选模型 / 推理强度；默认「沿用」= 用参照会话的
+  var isClaude=!/^(ds|op|oc):/.test(s.id||'')&&(!s.claw||s.claw==='claude');
+  var ms=isClaude?(cfg.models&&cfg.models.length?cfg.models:lastModels):null;
+  newPick={model:null,effort:null};$('#newPick').hidden=!ms;
+  if(ms){
+    var same=session&&session.id===s.id;
+    var keepM=same?'沿用（'+curModelLabel()+'）':'沿用原会话',keepE=same&&cfg.effort?'沿用（'+effortLabel(cfg.effort)+'）':'沿用原会话';
+    pickChips($('#newModels'),[{value:null,label:keepM}].concat(ms.map(function(m){return {value:m.value,label:m.value==='default'?'默认':modelShort(m.resolved||m.value)}})),null,function(v){newPick.model=v});
+    pickChips($('#newEfforts'),[{value:null,label:keepE}].concat(EFFORTS.map(function(e){return {value:e.key,label:e.label}})),null,function(v){newPick.effort=v});
+  }
   newDlg.classList.add('on');newDlg.setAttribute('aria-hidden','false');
   $('#newName').focus();
 }
@@ -3731,6 +3893,8 @@ $('#newForm').addEventListener('submit',function(e){
   var msg={t:'session.new',from:newFrom.id,title:$('#newName').value};
   if(newFrom.claw)msg.claw=newFrom.claw;
   if(dir&&dir!==orig)msg.cwd=dir;   // 改了目录才带上；服务器会检查目录是否存在
+  if(newPick.model)msg.model=newPick.model;
+  if(newPick.effort)msg.effort=newPick.effort;
   closeNew();closeSheet();
   wsSend(msg);
 });

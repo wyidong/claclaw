@@ -81,6 +81,7 @@ const HOME = os.homedir();
 // 网页上可切换的基本模式；原会话用的是别的模式（比如 bypassPermissions）时，
 // 网页继承它，并把它加进这个会话可切换的列表里 —— 只对该会话有效，不会凭空给出 bypass
 const MODES = ['default', 'acceptEdits', 'plan'];
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const ALL_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions', 'dontAsk', 'auto'];
 
 // 原会话在原处（VS Code / 终端）最后一次用的权限模式：从会话记录末尾往前找 user 记录的 permissionMode，
@@ -1027,6 +1028,13 @@ class Runner {
     this.closeTimer = null;
     this.closed = false;
     this.textOpen = false;
+    // 模型 / 推理强度：网页上选过的（存在 web-sessions 里）优先，新建时可以指定
+    const saved = webSessions()[this.id] || {};
+    this.wantModel = opts.model || saved.model || null;
+    this.wantEffort = EFFORTS.includes(opts.effort) ? opts.effort : EFFORTS.includes(saved.effort) ? saved.effort : null;
+    this.model = this.wantModel;   // init 到了换成实际在用的
+    this.effort = this.wantEffort;
+    this.models = null;
     this.start();
   }
 
@@ -1046,6 +1054,8 @@ class Runner {
         ...(this.isNew ? { sessionId: this.id, ...(this.info.customTitle ? { title: this.info.customTitle } : {}) } : { resume: this.id }),
         cwd: this.cwd,
         permissionMode: this.mode,
+        ...(this.wantModel ? { model: this.wantModel } : {}),
+        ...(this.wantEffort ? { effort: this.wantEffort } : {}),
         // 只有继承来的模式就是 bypass 时才放开（SDK 要求显式同意才能进 bypass）
         allowDangerouslySkipPermissions: this.allowedModes.includes('bypassPermissions'),
         includePartialMessages: true,
@@ -1062,6 +1072,7 @@ class Runner {
     });
     // init 要等第一条消息才来，命令列表不能等它：一打开就取（init 到了再按「仅终端可用」过滤一遍）
     this.loadCommands();
+    this.loadModels();
     this.pump().catch(e => {
       log('runner error', this.id.slice(0, 8), e?.message);
       this.emit({ t: 'error', message: '会话进程出错：' + (e?.message || e) });
@@ -1136,7 +1147,10 @@ class Runner {
         if (m.subtype === 'init') {
           this.mode = m.permissionMode || this.mode;
           this.childPid = (liveRegistry().get(this.id) || []).find(r => r.entrypoint === 'sdk-ts' && isOurChild(r.pid))?.pid;
-          log('init', this.id.slice(0, 8), 'mode', this.mode, 'model', m.model);
+          log('init', this.id.slice(0, 8), 'mode', this.mode, 'model', m.model, 'effort', m.effort);
+          if (m.model) this.model = m.model;
+          if (m.effort !== undefined) this.effort = m.effort || this.effort;
+          this.emit({ t: 'model', ...this.modelInfo(), models: undefined });
           this.terminalOnly = new Set(m.terminal_slash_commands || []);
           this.loadCommands();
         } else if (m.subtype === 'peer_message_hold') {
@@ -1178,6 +1192,48 @@ class Runner {
   }
 
   // 当前会话可用的斜杠命令（内置 + skill + 插件 + MCP），去掉只能在终端里用的
+  // 这个账号能用的模型（含每个模型支持的推理强度）：打开就取，网页的设置面板用
+  async loadModels() {
+    try {
+      const list = await this.q.supportedModels();
+      this.models = list.map(m => ({ value: m.value, resolved: m.resolvedModel || '', name: m.displayName || m.value, desc: m.description || '', efforts: m.supportedEffortLevels || [] }));
+      this.emit({ t: 'models', ...this.modelInfo() });
+    } catch (e) {
+      log('supportedModels failed', e?.message);
+    }
+  }
+  modelInfo() { return { models: this.models, model: this.model, effort: this.effort, pick: this.wantModel || 'default' }; }
+
+  async setModel(value) {
+    const row = (this.models || []).find(m => m.value === value);
+    if (!row) return this.emit({ t: 'error', message: '没有这个模型：' + value });
+    try {
+      await this.q.setModel(value === 'default' ? undefined : value);
+      this.model = value === 'default' ? (row.resolved || value) : value;
+      this.wantModel = value === 'default' ? null : value;
+      // 当前推理强度这个模型不支持：降到它支持的最高一档
+      if (this.effort && row.efforts.length && !row.efforts.includes(this.effort)) await this.setEffort(row.efforts[row.efforts.length - 1], true);
+      rememberPick(this.id, { model: value === 'default' ? null : value });
+      log('model', this.id.slice(0, 8), '→', value);
+      this.emit({ t: 'model', ...this.modelInfo(), models: undefined, changed: 'model' });
+    } catch (e) {
+      this.emit({ t: 'error', message: '切换模型失败：' + e?.message });
+    }
+  }
+
+  async setEffort(level, quiet) {
+    if (!EFFORTS.includes(level)) return;
+    try {
+      await this.q.applyFlagSettings({ effortLevel: level });
+      this.effort = level;
+      rememberPick(this.id, { effort: level });
+      log('effort', this.id.slice(0, 8), '→', level);
+      if (!quiet) this.emit({ t: 'model', ...this.modelInfo(), models: undefined, changed: 'effort' });
+    } catch (e) {
+      this.emit({ t: 'error', message: '切换推理强度失败：' + e?.message });
+    }
+  }
+
   async loadCommands() {
     try {
       const list = await this.q.supportedCommands();
@@ -1493,7 +1549,19 @@ function webSessions() {
 const webSessionIds = () => new Set(Object.keys(webSessions()));
 function rememberWebSession(id, mode, force) {
   const all = webSessions();
-  all[id] = force ? { mode, force: true } : { mode };
+  const { model, effort } = all[id] || {};   // 选过的模型 / 推理强度跟着留下
+  all[id] = { mode, ...(force ? { force: true } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+  saveWebSessions(all);
+}
+// 记下网页上给这个会话选的模型 / 推理强度（null = 删掉，回到默认）
+function rememberPick(id, patch) {
+  const all = webSessions();
+  const e = { ...(all[id] || {}) };
+  for (const [k, v] of Object.entries(patch)) { if (v) e[k] = v; else delete e[k]; }
+  all[id] = e;
+  saveWebSessions(all);
+}
+function saveWebSessions(all) {
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
   const tmp = WEB_SESSIONS + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(all, null, 2), { mode: 0o600 });
@@ -1505,7 +1573,7 @@ function switchToBypass(old) {
   const subs = [...old.subs];
   old.subs.clear();   // 先摘掉订阅：dispose 发的 session.closed 不要让网页以为会话关了
   old.dispose('mode');
-  const r = new Runner(old.info, 'bypassPermissions', [...MODES, 'bypassPermissions']);
+  const r = new Runner(old.info, 'bypassPermissions', [...MODES, 'bypassPermissions'], { model: old.wantModel, effort: old.effort });
   runners.set(old.id, r);
   for (const w of subs) r.subscribe(w);
   r.emit({ t: 'mode', mode: 'bypassPermissions', modes: r.allowedModes });
@@ -2270,7 +2338,13 @@ wss.on('connection', (ws, req) => {
         const allowed = MODES.includes(inherited) ? MODES : [...MODES, inherited];
         const info = { sessionId: id, cwd, summary: title || '新会话', customTitle: title || undefined };
         runner?.unsubscribe(ws);
-        runner = new Runner(info, inherited, allowed, { isNew: true });
+        // 模型 / 推理强度：新建对话框里选的优先，否则沿用参照会话的
+        const fr = from && runners.get(from.sessionId), fw = (from && webSessions()[from.sessionId]) || {};
+        const refModel = fr ? fr.wantModel : fw.model, refEffort = fr ? fr.effort : fw.effort;
+        const pickModel = typeof m.model === 'string' && /^[\w.\[\]-]{1,80}$/.test(m.model) ? (m.model === 'default' ? null : m.model) : refModel || null;
+        const pickEffort = EFFORTS.includes(m.effort) ? m.effort : (EFFORTS.includes(refEffort) ? refEffort : null);
+        runner = new Runner(info, inherited, allowed, { isNew: true, model: pickModel, effort: pickEffort });
+        if (pickModel || pickEffort) rememberPick(id, { model: pickModel, effort: pickEffort });
         runners.set(id, runner);
         rememberWebSession(id, inherited);
         runner.subscribe(ws);
@@ -2394,6 +2468,7 @@ wss.on('connection', (ws, req) => {
           pending: [...runner.pending.values()].map(p => p.req),
           suggestion: runner.busy ? null : runner.suggestion || null,
           commands: runner.commands || null,
+          ...runner.modelInfo(),
         });
       } else if (!runner) {
         send({ t: 'error', message: '还没有打开会话' });
@@ -2414,6 +2489,10 @@ wss.on('connection', (ws, req) => {
         runner.replyPermission(m.requestId, m.decision, m.answers);
       } else if (m.t === 'interrupt') {
         await runner.interrupt();
+      } else if (m.t === 'model.set' && runner instanceof Runner) {
+        await runner.setModel(String(m.model || ''));
+      } else if (m.t === 'effort.set' && runner instanceof Runner) {
+        await runner.setEffort(String(m.effort || ''));
       } else if (m.t === 'mode.set') {
         if (m.mode === 'bypassPermissions' && runner instanceof Runner && !runner.allowedModes.includes('bypassPermissions')) {
           // 「跳过确认」要在进程启动时就允许：这一轮结束后重启这个会话的进程，并记住（以后再打开也是跳过确认）
