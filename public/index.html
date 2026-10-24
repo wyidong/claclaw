@@ -4056,6 +4056,11 @@ if(window.visualViewport){
 $('#sessBtn .dot').classList.add('off');
 syncSend();
 // 启动时先看是不是点通知启动的，再连服务器（这样第一屏就直接是那个会话，不先落在列表）
+// 手机：不等连上就先切到该去的页面（列表 / Claw 页），免得先闪一下空的聊天页再跳
+if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
+  var view0='';try{view0=sessionStorage.getItem('claclaw.view')||''}catch(_){}
+  if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||!clawSel)mTab('claw')}
+}
 takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});
 })();
 </script>
