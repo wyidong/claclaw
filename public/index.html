@@ -1053,6 +1053,8 @@ select.pe-in{text-align-last:right}
             <select id="setVidKeep"><option value="30">1 个月</option><option value="60">2 个月</option><option value="180">6 个月</option><option value="365">1 年</option></select></label>
           <label class="set-item"><span class="lb">空间上限<small>超过后先删最早的</small></span>
             <select id="setVidCap"><option value="512">500MB</option><option value="1024">1GB</option><option value="2048">2GB</option><option value="5120">5GB</option></select></label>
+          <label class="set-item"><span class="lb">电脑上保留<small>原文件存在电脑上，换设备打开聊天记录也能取回；超过就删（所有设备共用）</small></span>
+            <select id="setUpKeep"><option value="7">7 天</option><option value="30">1 个月</option><option value="60">2 个月</option><option value="180">6 个月</option><option value="365">1 年</option></select></label>
         </div>
       </div>
       <div class="set-sec">
@@ -1340,7 +1342,7 @@ function playVideo(id){
   vidStore('readonly',function(st){return st.get(id)}).then(function(rec){
     if(rec&&rec.blob)go(URL.createObjectURL(rec.blob),true);else go('/api/upload/file?id='+encodeURIComponent(id),false);
   }).catch(function(){go('/api/upload/file?id='+encodeURIComponent(id),false)});
-  v.onerror=function(){if(!v.dataset.local&&pl.classList.contains('on')){closeVideo();addSys('这个视频本机和电脑上都没有了（电脑上只留 7 天）')}};
+  v.onerror=function(){if(!v.dataset.local&&pl.classList.contains('on')){closeVideo();addSys('这个视频本机和电脑上都没有了（超过了保留时间）')}};
 }
 function closeVideo(){var pl=$('#vplayer'),v=pl.querySelector('video');pl.classList.remove('on');try{v.pause()}catch(_){}if(v.dataset.local)URL.revokeObjectURL(v.dataset.local);v.removeAttribute('src');v.load()}
 document.getElementById('vplayer').querySelector('button').addEventListener('click',closeVideo);
@@ -1349,7 +1351,7 @@ feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.close
 function openFile(id,name){
   var fromServer=function(){
     showFile(null,name,'加载中…');
-    fetch('/api/upload/file?id='+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error(r.status===404?'电脑上也没有了（只留 7 天）':'HTTP '+r.status);return r.blob()})
+    fetch('/api/upload/file?id='+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error(r.status===404?'电脑上也没有了（超过了保留时间）':'HTTP '+r.status);return r.blob()})
       .then(function(b){vidSave(id,b,name,'file');showFile(b,name)}).catch(function(e){showFile(null,name,'打不开：'+e.message)});
   };
   if(!window.indexedDB)return fromServer();
@@ -4123,15 +4125,16 @@ $('#soundSel').addEventListener('change',function(e){
 function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
 // 会话相关设置：空闲关闭时间、接管等待时间（存在服务器，所有设备共用）
 function showSessSet(j){
+  if(j.uploadKeepDays){var uk=$('#setUpKeep'),uv=String(j.uploadKeepDays);if(![].some.call(uk.options,function(o){return o.value===uv})){var o2=document.createElement('option');o2.value=uv;o2.textContent=uv+' 天';uk.appendChild(o2)}uk.value=uv}
   [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
     var sel=$(x[0]),v=String(x[1]);
     if(![].some.call(sel.options,function(o){return o.value===v})){var o=document.createElement('option');o.value=v;o.textContent=v+' 分钟';sel.appendChild(o)}
     sel.value=v;
   });
 }
-['#setIdle','#setTake'].forEach(function(id){
+['#setIdle','#setTake','#setUpKeep'].forEach(function(id){
   $(id).addEventListener('change',function(){
-    var body={};body[id==='#setIdle'?'idleCloseMin':'takeoverMin']=Number(this.value);
+    var body={};body[id==='#setIdle'?'idleCloseMin':id==='#setUpKeep'?'uploadKeepDays':'takeoverMin']=Number(this.value);
     fetch('/api/settings/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
       .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
   });

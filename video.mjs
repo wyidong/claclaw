@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 
 export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
 export const VIDEO_FRAMES = 12;
-const KEEP_DAYS = 7;
+export const KEEP_DAYS_DEFAULT = 60;
 const EXT = { 'video/quicktime': 'mov', 'video/mp4': 'mp4', 'video/x-m4v': 'm4v', 'video/webm': 'webm', 'video/3gpp': '3gp' };
 const ID_RE = /^(v[0-9a-f]{16}\.(mov|mp4|m4v|webm|3gp)|f[0-9a-f]{16}\.[a-z0-9]{1,8})$/;   // v = 视频，f = 其他文件
 
@@ -26,7 +26,7 @@ export function uploadsDir(data) { return path.join(data, 'uploads'); }
 
 // 存上传的视频：边收边写，超过上限就断开删掉
 // doc = 任意文件：扩展名取自文件名（只留字母数字），没有就用 bin
-export function saveVideo(req, dir, { doc = false, name = '' } = {}) {
+export function saveVideo(req, dir, { doc = false, name = '', keepDays = KEEP_DAYS_DEFAULT } = {}) {
   return new Promise((resolve, reject) => {
     const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
     const ext = doc ? ((/\.([a-z0-9]{1,8})$/i.exec(String(name || '')) || [])[1] || 'bin').toLowerCase() : EXT[type];
@@ -34,7 +34,7 @@ export function saveVideo(req, dir, { doc = false, name = '' } = {}) {
     const len = Number(req.headers['content-length'] || 0);
     if (len > MAX_VIDEO_BYTES) return reject(Object.assign(new Error((doc ? '文件' : '视频') + '太大（上限 ' + (MAX_VIDEO_BYTES >> 20) + 'MB）'), { code: 413 }));
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    cleanup(dir);
+    cleanup(dir, keepDays);
     const id = (doc ? 'f' : 'v') + crypto.randomBytes(8).toString('hex') + '.' + ext, file = path.join(dir, id);
     const out = fs.createWriteStream(file, { mode: 0o600 });
     let bytes = 0, failed = false;
@@ -110,10 +110,10 @@ export async function videoThumb(file) {
   return null;
 }
 
-// 传上来的视频留 7 天
-export function cleanup(dir) {
+// 电脑上的附件（上传的、AI 发回的）按设置保留天数，默认 2 个月
+export function cleanup(dir, keepDays = KEEP_DAYS_DEFAULT) {
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return; }
-  const cut = Date.now() - KEEP_DAYS * 86400e3;
+  const cut = Date.now() - keepDays * 86400e3;
   for (const n of names) { const p = path.join(dir, n); try { if (fs.statSync(p).mtimeMs < cut) fs.rmSync(p, { force: true }); } catch {} }
 }

@@ -28,7 +28,9 @@ import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeC
 import { readBody } from './httpbody.mjs';
 import { peerRisk, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
-import { saveVideo, videoFile, videoDuration, videoThumb, serveVideo, uploadsDir } from './video.mjs';
+import { saveVideo, videoFile, videoDuration, videoThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
+const uploadKeepDays = () => { const d = Math.round(Number(settings().uploadKeepDays)); return d >= 1 && d <= 3650 ? d : KEEP_DAYS_DEFAULT; };
+setTimeout(() => { try { cleanUploads(uploadsDir(DATA), uploadKeepDays()); } catch {} }, 15000);   // 启动后清一次过期附件
 const vidName = n => String(n || '视频').replace(/[\r\n\]「」]/g, ' ').slice(0, 80);
 const UPLOADS = uploadsDir(DATA);
 
@@ -540,7 +542,7 @@ function claclawMcp(sessionId) {
             const id = 'f' + crypto.randomBytes(8).toString('hex') + '.' + ext;
             fs.copyFileSync(src, path.join(UPLOADS, id));
             log('send_file', sessionId.slice(0, 8), id, st.size);
-            return { content: [{ type: 'text', text: '已发给用户（聊天区显示下载卡片，电脑上保留 7 天）：[claclaw-file:' + id + '|' + nm + '|' + st.size + ']' }] };
+            return { content: [{ type: 'text', text: '已发给用户（聊天区显示下载卡片）：[claclaw-file:' + id + '|' + nm + '|' + st.size + ']' }] };
           } catch (e) {
             return { content: [{ type: 'text', text: '发送失败：' + e.message }], isError: true };
           }
@@ -1978,7 +1980,7 @@ const handler = async (req, res) => {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const doc = url.pathname === '/api/upload/doc';
       let fname = ''; try { fname = decodeURIComponent(String(req.headers['x-file-name'] || '')); } catch {}
-      try { const v = await saveVideo(req, UPLOADS, { doc, name: fname }); log('video uploaded', v.id, (v.bytes / 1048576).toFixed(1) + 'MB'); return sendJson(res, 200, { id: v.id, bytes: v.bytes }); }
+      try { const v = await saveVideo(req, UPLOADS, { doc, name: fname, keepDays: uploadKeepDays() }); log('video uploaded', v.id, (v.bytes / 1048576).toFixed(1) + 'MB'); return sendJson(res, 200, { id: v.id, bytes: v.bytes }); }
       catch (e) { return sendJson(res, e.code || 400, { error: e.message }); }
     }
     if (url.pathname === '/api/push/key') return sendJson(res, 200, { publicKey: push.publicKey(), devices: push.subscriptionCount(), httpsUrl: getHttpsUrl() });
@@ -2001,10 +2003,12 @@ const handler = async (req, res) => {
         const patch = {};
         if (body.idleCloseMin != null) patch.idleCloseMin = Math.min(1440, Math.max(1, Math.round(Number(body.idleCloseMin) || 10)));
         if (body.takeoverMin != null) patch.takeoverMin = Math.min(1440, Math.max(0, Math.round(Number(body.takeoverMin) || 0)));
+        if (body.uploadKeepDays != null) patch.uploadKeepDays = Math.min(3650, Math.max(1, Math.round(Number(body.uploadKeepDays) || KEEP_DAYS_DEFAULT)));
         saveSettings(patch);
+        if (patch.uploadKeepDays) cleanUploads(UPLOADS, patch.uploadKeepDays);
         log('session settings', JSON.stringify(patch));
       }
-      return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin() });
+      return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin(), uploadKeepDays: uploadKeepDays() });
     }
     // 技能：列表（每个技能在各安装位置的状态）、安装、卸载
     if (url.pathname === '/api/skills' || url.pathname.startsWith('/api/skills/')) {
@@ -2533,7 +2537,7 @@ wss.on('connection', (ws, req) => {
         if (m.video) {
           // 视频：原文件已经传到 data/uploads/；这里截帧当图片，并把原文件路径告诉 AI
           const file = videoFile(UPLOADS, m.video.id);
-          if (!file) return send({ t: 'error', message: '视频找不到了（超过 7 天会清掉），请重新发' });
+          if (!file) return send({ t: 'error', message: '视频找不到了（超过保留时间会清掉），请重新发' });
           // 默认不截帧（省时间、省 token）：只告诉 AI 文件在哪、多长，要不要看画面由它按用户的话决定
           const dur = await videoDuration(file);
           const name = vidName(m.video.name);
@@ -2551,7 +2555,7 @@ wss.on('connection', (ws, req) => {
         if (m.file) {
           // 文件：原文件已在 data/uploads/；只告诉 AI 路径和大小，要不要读由它按用户的话决定
           const file = videoFile(UPLOADS, m.file.id);
-          if (!file) return send({ t: 'error', message: '文件找不到了（超过 7 天会清掉），请重新发' });
+          if (!file) return send({ t: 'error', message: '文件找不到了（超过保留时间会清掉），请重新发' });
           const kb = fs.statSync(file).size / 1024;
           text = '[文件「' + vidName(m.file.name) + '」 ' + (kb >= 1024 ? (kb / 1024).toFixed(1) + 'MB' : kb >= 1 ? kb.toFixed(1) + 'KB' : Math.round(kb * 1024) + 'B') + '，原文件：' + file +
             '（已收到）。用户的话需要看内容时再读这个文件；不需要就不用处理，简短确认收到即可]' + (text ? '\n' + text : '');
