@@ -546,7 +546,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #mtabs .tlogo{display:grid;place-items:center;width:42px;height:42px;filter:grayscale(1);opacity:.55;transition:filter .15s,opacity .15s}
   #mtabs .tlogo svg,#mtabs .tlogo img{display:block;width:34px;height:34px;object-fit:contain}
   #mtabs .tlogo img.tile{border-radius:22.5%}
-  #mtabs button.on .tlogo{filter:none;opacity:1}   /* 选中这一栏：图标原色；没选中：灰色，和其它栏的灰色图标一致 */
+  #mtabs button.on .tlogo,#mtabs button.busy .tlogo,#mtabs button.dot .tlogo{filter:none;opacity:1}   /* 在干活或有没看的：在别的栏也保持原色，提醒更显眼 */   /* 选中这一栏：图标原色；没选中：灰色，和其它栏的灰色图标一致 */
   #mtabs .ti{display:block;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   #mtabs .ti .f{fill:currentColor;fill-opacity:0;transition:fill-opacity .15s}
   #mtabs button.on .ti .f{fill-opacity:.22}
