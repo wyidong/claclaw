@@ -523,6 +523,30 @@ function claclawMcp(sessionId) {
         },
         { alwaysLoad: true },
       ),
+      tool(
+        'send_file',
+        '把电脑上的一个文件发给用户：在 claclaw 网页的聊天区显示成下载卡片，用户点一下就能下载 / 打开。' +
+        '用户要你「把文件发我 / 处理完回给我 / 给我下载」时，先把结果写成文件，再用这个工具发出（不要只在回复里贴路径）。单个文件最大 50MB。',
+        { path: z.string().describe('文件的完整路径（或相对当前目录的路径）'), name: z.string().optional().describe('给用户看的文件名，不填就用原文件名') },
+        async ({ path: p, name }) => {
+          try {
+            const src = path.resolve(runners.get(sessionId)?.cwd || HOME, String(p || '').replace(/^~(?=\/|$)/, HOME));
+            const st = fs.statSync(src);
+            if (!st.isFile()) throw new Error('不是文件：' + src);
+            if (st.size > 50 * 1024 * 1024) throw new Error('文件太大（上限 50MB）');
+            const nm = String(name || path.basename(src)).replace(/[\r\n|\]]/g, ' ').slice(0, 120);
+            const ext = ((/\.([a-z0-9]{1,8})$/i.exec(nm) || /\.([a-z0-9]{1,8})$/i.exec(src) || [])[1] || 'bin').toLowerCase();
+            fs.mkdirSync(UPLOADS, { recursive: true, mode: 0o700 });
+            const id = 'f' + crypto.randomBytes(8).toString('hex') + '.' + ext;
+            fs.copyFileSync(src, path.join(UPLOADS, id));
+            log('send_file', sessionId.slice(0, 8), id, st.size);
+            return { content: [{ type: 'text', text: '已发给用户（聊天区显示下载卡片，电脑上保留 7 天）：[claclaw-file:' + id + '|' + nm + '|' + st.size + ']' }] };
+          } catch (e) {
+            return { content: [{ type: 'text', text: '发送失败：' + e.message }], isError: true };
+          }
+        },
+        { alwaysLoad: true },
+      ),
       // claclaw 协同：只有加入协同的会话能用（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
@@ -1939,6 +1963,7 @@ const handler = async (req, res) => {
       if (!f) return sendJson(res, 404, { error: 'not found' });
       // 文件按附件名显示；网页类型（html/svg）一律当下载，免得在 claclaw 的源下执行
       const nm = url.searchParams.get('name') || '';
+      if (url.searchParams.get('dl') === '1') { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
       if (/\.(html?|svg|xhtml|xml)$/i.test(f)) { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
       return serveVideo(req, res, f, nm);
     }

@@ -305,7 +305,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #vplayer video{max-width:100%;max-height:100%}
 #vplayer button{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-size:22px;line-height:36px;padding:0}
 .uvid{cursor:pointer}
-.ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:1px solid var(--line);color:var(--fg)}
+.dlcard{display:flex;flex-direction:column;gap:2px;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none}
+.dl-n{font-size:14px;word-break:break-all}
+.dl-m{font-size:12px;color:var(--muted)}
+.ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:1px solid var(--line);color:var(--ink)}
 .ufile-n{font-size:14px;word-break:break-all}
 .att-file{width:auto;max-width:160px;padding:6px 26px 6px 8px;display:flex;align-items:center}
 .att-fn{font-size:12px;line-height:16px;max-height:48px;overflow:hidden;word-break:break-all}
@@ -1545,7 +1548,18 @@ function newCard(it){
   cards[it.id]=c;
   return c;
 }
+// AI 用 send_file 发回来的文件：工具结果里带 [claclaw-file:id|名字|大小]，在卡片后面放一张下载卡片
+var SENT_FILE=/\[claclaw-file:([vf][0-9a-f]{16}\.[a-z0-9]{1,8})\|([^|\]]*)\|(\d+)\]/;
+function dlCard(id,name,size){
+  var a=document.createElement('a');a.className='dlcard';a.href='/api/upload/file?id='+encodeURIComponent(id)+'&name='+encodeURIComponent(name)+'&dl=1';
+  a.setAttribute('download',name);a.target='_blank';a.rel='noopener';
+  var n=document.createElement('span');n.className='dl-n';n.textContent='📄 '+name;a.appendChild(n);
+  var m=document.createElement('span');m.className='dl-m';m.textContent=fmtSize(+size)+' · 点击下载';a.appendChild(m);
+  return a;
+}
 function finishCard(c,output,isError){
+  var sf=!isError&&output&&SENT_FILE.exec(output);
+  if(sf){c.el.after(dlCard(sf[1],sf[2],sf[3]));scrollDown()}
   if(output&&output.trim())c.add(outNode(output));
   c.status(isError?'no':'ok',isError?'出错':(c.stat||'完成'));
   c.collapse();
