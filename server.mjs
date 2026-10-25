@@ -1146,11 +1146,12 @@ class Runner {
         const e = m.event;
         if (e.type === 'message_start' && e.message?.id) (this.streamed ||= new Set()).add(e.message.id);
         if (e.type === 'content_block_start' && e.content_block?.type === 'text') {
-          this.textOpen = true; this.emit({ t: 'ai.start' });
+          this.textOpen = true; this.liveText = ''; this.emit({ t: 'ai.start' });
         } else if (e.type === 'content_block_delta' && e.delta?.type === 'text_delta' && this.textOpen) {
+          this.liveText += e.delta.text;   // 断线重连时把正在输出的这段整段补给网页
           this.emit({ t: 'ai.delta', text: e.delta.text });
         } else if (e.type === 'content_block_stop' && this.textOpen) {
-          this.textOpen = false; this.emit({ t: 'ai.end' });
+          this.textOpen = false; this.liveText = ''; this.emit({ t: 'ai.end' });
         }
       } else if (m.type === 'assistant') {
         // /context 这类本地命令的输出是一条整段的 assistant 消息，没有流式片段，要整段发
@@ -2563,6 +2564,7 @@ wss.on('connection', (ws, req) => {
           pending: [...runner.pending.values()].map(p => p.req),
           suggestion: runner.busy ? null : runner.suggestion || null,
           commands: runner.commands || null,
+          liveText: runner.textOpen ? runner.liveText || '' : null,
           ...runner.modelInfo(),
         });
       } else if (!runner) {
