@@ -59,6 +59,7 @@ body{position:fixed;inset:0;width:100%}
 html{background:var(--surface)}
 body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
+body.leaving #app{opacity:0;transition:opacity .25s}
 button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -324,6 +325,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .sfmedia audio{display:block;width:100%;height:40px}
 .sfvideo video{display:block;width:100%;max-height:320px;border-radius:10px;background:#000}
 .sf-save{cursor:pointer}
+.sfmedia.playing audio{outline:2px solid var(--accent,#2F6F4F);outline-offset:2px;border-radius:20px}
+.sf-next{display:block;margin-top:6px;padding:6px 12px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sfimg figcaption{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dlcard{display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;cursor:pointer;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none}
 .dl-n{font-size:14px;word-break:break-all}
@@ -914,7 +917,7 @@ select.pe-in{text-align-last:right}
     </div>
   </header>
 
-  <div id="banner" role="note"><span id="bannerT">正在连接…</span><button type="button" id="bannerX" aria-label="关闭提示">×</button></div>
+  <div id="banner" role="note" hidden><span id="bannerT">正在连接…</span><button type="button" id="bannerX" aria-label="关闭提示">×</button></div>
 
   <main id="feed" aria-live="polite"></main>
   <!-- 工作状态：在聊天区底部、输入框外面（输入框是用户自己的地方） -->
@@ -1632,7 +1635,10 @@ function tickWork(){
     (stuck?' · '+fmtSec(quiet)+' 没有新动静，可能卡住了，可以点「停止」':'');
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
-var connectedOnce=false,updateReady=false;
+var connectedOnce=false,updateReady=false,bootAt=Date.now();
+// 打开 / 刷新后先不提示「正在连接」：多数时候一两秒就连上了，提示条一闪反而像出了问题；3 秒还没连上才提示
+setTimeout(function(){if(!connectedOnce&&$('#banner').hidden)banner('正在连接…')},3000);
+function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<3000)return;banner(t)}
 var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[1])||'';
 function checkVersion(){
   fetch('/',{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){
@@ -1712,10 +1718,43 @@ function mediaCard(id,name,size){
   if(isV){m.controls=true;m.playsInline=true;m.setAttribute('playsinline','');m.preload='metadata';m.src=src;m.addEventListener('loadedmetadata',function(){scrollDown()})}
   m.addEventListener('click',function(e){e.stopPropagation()});
   m.addEventListener('error',function(){if(f.isConnected)f.replaceWith(dlCard(id,name,size))});
-  var cap=document.createElement('figcaption');cap.className='sf-save';cap.textContent=(isV?'🎬 ':'🎵 ')+name+' · '+fmtSize(+size)+' · 点这里保存';
+  if(!isV)audioChain(f,m);
+  var cap=document.createElement('figcaption');cap.className='sf-save';cap.dataset.name=name;cap.textContent=(isV?'🎬 ':'🎵 ')+name+' · '+fmtSize(+size)+' · 点这里保存';
   cap.addEventListener('click',function(){openFile(id,name)});
   f.appendChild(m);f.appendChild(cap);
   return f;
+}
+// 联播：AI 连着发来的几首音频（中间只隔着工具卡片）算一组，播完一首自动接下一首。
+// iOS Safari 上自动接下一首（换了一个 <audio>）可能被拦（NotAllowedError，尤其锁屏 / 切到后台时），被拦就在播完那首下面放「▶ 下一首」按钮，点一下接着播
+function nextAudioCard(f){
+  for(var el=f.nextElementSibling;el;el=el.nextElementSibling){
+    if(el.classList.contains('sfmedia'))return el.classList.contains('sfvideo')?null:el;
+    if(!el.classList.contains('tool'))return null;   // 中间夹了文字或别的：不算同一组
+  }
+  return null;
+}
+function playCard(f){
+  var au=f&&f.querySelector('audio');if(!au)return Promise.reject(new Error('no audio'));
+  try{au.currentTime=0}catch(_){}
+  var p=au.play();return p&&p.then?p:Promise.resolve();
+}
+function audioChain(f,au){
+  au.addEventListener('play',function(){   // 同一时间只放一首
+    feed.querySelectorAll('.sfmedia audio').forEach(function(o){if(o!==au&&!o.paused)o.pause()});
+    var nb=feed.querySelectorAll('.sf-next');nb.forEach(function(b){b.remove()});
+    feed.querySelectorAll('.sfmedia.playing').forEach(function(x){x.classList.remove('playing')});f.classList.add('playing');
+  });
+  au.addEventListener('pause',function(){if(au.ended||au.paused)f.classList.remove('playing')});
+  au.addEventListener('ended',function(){
+    var nx=nextAudioCard(f);if(!nx)return;
+    playCard(nx).catch(function(){   // 被拦：放一个按钮，用户点（手势）再播
+      if(f.querySelector('.sf-next'))return;
+      var b=document.createElement('button');b.type='button';b.className='sf-next';
+      b.textContent='▶ 下一首：'+((nx.querySelector('figcaption')||{}).dataset||{}).name;
+      b.addEventListener('click',function(e){e.stopPropagation();b.remove();playCard(nx).catch(function(){})});
+      f.appendChild(b);
+    });
+  });
 }
 function finishCard(c,output,isError){
   var sf=!isError&&output&&SENT_FILE.exec(output);
@@ -2298,10 +2337,10 @@ function connect(){
     // 连不上可能是登录过期：先问一下，401 就回登录页
     fetch('/api/sessions',{method:'HEAD'}).then(function(r){
       if(r.status===401){location.replace('/login');return}
-      banner('连接已断开，正在重连…');
+      connBanner('连接已断开，正在重连…');
       setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)));
     }).catch(function(){
-      banner('连接已断开，正在重连…');
+      connBanner('连接已断开，正在重连…');
       setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)));
     });
   };
@@ -3116,7 +3155,7 @@ $('#setReload').addEventListener('click',function(){
   var ic=$('#setReload .rl-ic');if(ic.classList.contains('spin'))return;
   ic.classList.add('spin');
   try{sessionStorage.setItem('claclaw.reloadTo','set')}catch(_){}
-  setTimeout(function(){$('#railReload').click()},1150);
+  setTimeout(function(){$('#railReload').click()},700);
 });
 var reloadToSet=false;try{reloadToSet=sessionStorage.getItem('claclaw.reloadTo')==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
 if(reloadToSet&&DESKTOP.matches){reloadToSet=false;railTab(true)}
@@ -3124,7 +3163,7 @@ if(reloadToSet&&DESKTOP.matches){reloadToSet=false;railTab(true)}
 $('#railReload').addEventListener('click',function(){
   // 各会话没发的字都存起来（图片存不了）
   try{var all={};for(var k in drafts)if(drafts[k].text)all[k]=drafts[k].text;if(ta.value)all[draftOwner||'']=ta.value;if(Object.keys(all).length)sessionStorage.setItem('claclaw.drafts',JSON.stringify(all))}catch(_){}
-  location.reload();
+  document.body.classList.add('leaving');setTimeout(function(){location.reload()},250);   // 先淡出再刷新，不生硬
 });
 try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionStorage.removeItem('claclaw.drafts');
   if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
