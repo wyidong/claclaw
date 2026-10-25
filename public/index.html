@@ -22,9 +22,9 @@
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
-(function(){var h=document.documentElement,emb=window.parent!==window;if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},2000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
+(function(){var h=document.documentElement,emb=window.parent!==window;if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},20000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
 </script>
-<style>html.boot #app{visibility:hidden}</style>
+<style>html.boot #app{filter:blur(3px);opacity:.7}</style>
 <style>
 :root{
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
@@ -62,8 +62,8 @@ html{background:var(--surface)}
 body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
 body.leaving #app{opacity:.4;filter:blur(2px);transition:opacity .2s,filter .2s}
-html.fog #app{filter:blur(1.5px);opacity:.85}
-#app{transition:filter .3s}
+html.fog #app{filter:blur(3px);opacity:.7}
+#app{transition:filter .4s,opacity .4s}
 button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -1641,8 +1641,8 @@ function tickWork(){
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
 var connectedOnce=false,updateReady=false,bootAt=Date.now();
 // 打开 / 刷新后先不提示「正在连接」：多数时候一两秒就连上了，提示条一闪反而像出了问题；3 秒还没连上才提示
-setTimeout(function(){if(!connectedOnce&&$('#banner').hidden)banner('正在连接…')},3000);
-function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<3000)return;banner(t)}
+setTimeout(function(){if(!connectedOnce&&$('#banner').hidden)banner('正在连接…')},10000);   // 连接中由雾表示；10 秒还没连上才出提示条
+function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<10000)return;banner(t)}
 var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[1])||'';
 function checkVersion(){
   fetch('/',{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){
