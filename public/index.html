@@ -890,7 +890,19 @@ select.pe-in{text-align-last:right}
 </style>
 </head>
 <body>
-<div id="app">
+<div id="app"><script>
+// 手机：画出第一屏之前就选好要显示的页（和主脚本里的判断一致），刷新 / 更新客户端时不再先闪一下「选择会话」聊天页
+(function(){try{
+  if(window.matchMedia('(min-width:1000px)').matches)return;
+  var app=document.getElementById('app'),ss=sessionStorage,ls=localStorage,q=new URLSearchParams(location.search);
+  if(q.get('s')||q.get('view')==='peer')return;
+  var claw=ls.getItem('claclaw.claw'),sess=ls.getItem('claclaw.session'),view=ss.getItem('claclaw.view')||'';
+  var onClaw=window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+  if(ss.getItem('claclaw.reloadTo')==='set')app.className='m-list set-on';
+  else if(onClaw||!/^(claude|openclaw|deepseek|opencode)$/.test(claw||''))app.className='m-list claw-on';
+  else if(view!=='chat'||!sess)app.className='m-list';
+}catch(e){}})();
+</script>
   <!-- 电脑端最左边的图标栏（像微信 / Teams）；手机上隐藏 -->
   <nav id="rail" aria-label="导航">
     <img class="logo" src="/icons/icon-192.png?v=4" alt="Claclaw">
