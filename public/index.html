@@ -2387,7 +2387,7 @@ function trySend(){
   if(outbox.video&&!outbox.video.id)return;   // 视频还在上传：传完会再调
   if(!ws||ws.readyState!==1){banner('连接已断开，恢复后会自动发送刚才那条消息');return}
   ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images,video:outbox.video&&outbox.video.kind!=='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,file:outbox.video&&outbox.video.kind==='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined,filePending:outbox.filePending||undefined}));
-  outboxTimer=setTimeout(function(){if(outbox)reconnectNow()},8000);
+  outboxTimer=setTimeout(function(){if(outbox&&Date.now()-lastEvt>8000)reconnectNow()},8000);   // 8 秒没回显、期间也没收到任何消息才判定连接已死
 }
 function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideoJob,0)}
 // 丢掉疑似已死的连接，立即重连（不等浏览器慢慢发现断线）
@@ -3602,7 +3602,7 @@ function openFromNotice(id){
   pendingOpen=id;
   if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);$('#where').textContent='';goChat()}
   if(ws&&ws.readyState===1)wsSend({t:'session.open',id:id,mode:mode});else reconnectNow();
-  setTimeout(function(){if(pendingOpen===id)reconnectNow()},3000);   // 3 秒没打开：连接多半是死的，重连（连上后会自动打开）
+  setTimeout(function(){if(pendingOpen===id&&Date.now()-lastEvt>3000)reconnectNow()},3000);   // 3 秒没打开、也没收到任何消息：连接多半是死的，重连（经中继打开大会话可能就是慢，还在收消息就别断）
 }
 // ---------- 进过的会话：画好的聊天内容留在内存里，再进来直接放回去（最多 8 个）----------
 var feedCache={},feedSig=null,feedDirty=false;

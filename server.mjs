@@ -2301,6 +2301,7 @@ function onUpgrade(req, socket, head) {
 
 wss.on('connection', (ws, req) => {
   log('ws connected from', realIp(req));
+  const wsAt = Date.now(), wsIp = realIp(req);
   ws.visible = true; // 页面会在切到后台 / 回到前台时告诉我们
   let runner = null;
   const send = o => ws.readyState === 1 && ws.send(JSON.stringify(o));
@@ -2639,7 +2640,7 @@ wss.on('connection', (ws, req) => {
   ws.on('pong', () => { ws.isAlive = true; });
   ws.on('error', () => { try { ws.terminate(); } catch {} });
 
-  ws.on('close', () => runner?.unsubscribe(ws));
+  ws.on('close', (code, reason) => { runner?.unsubscribe(ws); log('ws closed', wsIp, 'code ' + code, Math.round((Date.now() - wsAt) / 1000) + 's', String(reason || '').slice(0, 60)); });   // 排查「总是断开重连」：谁断的、连了多久
 });
 
 // 每 30 秒 ping 一轮；连续两轮没有 pong 的连接直接 terminate
