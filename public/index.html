@@ -2648,7 +2648,8 @@ function loadHost(){
       hRow('内存',fmtBytes(mem.used)+' / '+fmtBytes(mem.total),'',mem.used/mem.total)+
       (dk?hRow('磁盘',fmtBytes(dk.total-dk.free)+' / '+fmtBytes(dk.total),'剩余 '+fmtBytes(dk.free),(dk.total-dk.free)/dk.total):'')+
       (b?hRow('电池',b.percent+'%',(b.ac?'接着电源':'用电池')+(b.state&&b.state!=='AC attached'?' · '+({charging:'充电中',discharging:'放电中',charged:'已充满','finishing charge':'即将充满'}[b.state]||b.state):''),b.percent/100,true):''));
-    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip))}).join('')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、'))
+    var cr=x.net.clarelay;
+    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+(cr?hRow('clarelay',esc(cr.url.replace(/^https:\/\//,'')),cr.status==='revoked'?'已撤销':cr.status!=='active'?'等管理员批准':cr.online?'在线':'离线'+(cr.error?'：'+cr.error:'')):'')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip))}).join('')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、'))
       +'<div class="h-row h-link" data-act="peer"><span class="k">claclaw 协同</span><span class="v">'+(peerSt?(peerSt.enabled?(peerSt.listening?'已开启 · '+peerSt.sessions.length+' 个会话'+(peerSt.peers&&peerSt.peers.length?' · 已配对 '+peerSt.peers.length:'')+(peerSt.pending&&peerSt.pending.length?' · 有配对申请':''):'已开启 · 未在监听'):'未开启'):'')+'</span><span class="chev" aria-hidden="true"></span></div>');
     var k=x.claclaw;
     h+=hSec('claclaw',

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { request as httpsRequest } from 'node:https';
 
 const run = (cmd, args, ms = 4000) => new Promise(ok => {
   execFile(cmd, args, { timeout: ms, env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin', '/opt/homebrew/bin'].join(':') } },
@@ -76,14 +77,39 @@ function addrs() {
   return out;
 }
 
+// clarelay 设备网：只转发 https、没有虚拟 IP。本机网址由客户端状态文件里的 label + domain (+ port) 拼成
+// （只读这几项，文件里的密钥不碰）；在不在线从外面实际访问一次自己的网址：
+// 不在线时中继直接断开连接，在线时本机门卫解开 HTTPS 回 404——收到任何 HTTP 响应就算在线。结果缓存 60 秒。
+const CLARELAY_STATE = process.env.CLACLAW_CLARELAY_STATE || path.join(os.homedir(), '.clarelay-device.json');
+const crl = { at: 0, p: null };
+function probeUrl(url, ms = 6000) {
+  return new Promise(ok => {
+    let done = false; const fin = v => { if (!done) { done = true; clearTimeout(t); ok(v); } };
+    const req = httpsRequest(url + '/_clarelay/ping', { method: 'GET', headers: { accept: 'application/json' } }, res => { res.resume(); fin({ online: true }); });
+    const t = setTimeout(() => { req.destroy(); fin({ online: false, error: '超时' }); }, ms);
+    req.on('error', e => fin({ online: false, error: /ECONNRESET|socket hang up|disconnected before secure TLS/i.test(e.message) ? '中继没连上这台电脑' : e.code === 'ENOTFOUND' ? '域名解析不到' : e.message }));
+    req.end();
+  });
+}
+export function clarelayInfo() {
+  let st;
+  try { st = JSON.parse(fs.readFileSync(CLARELAY_STATE, 'utf8')); } catch { return Promise.resolve(null); }
+  if (!st?.label || !st?.domain) return Promise.resolve(null);
+  const url = 'https://' + st.label + '.' + st.domain + (st.port && st.port !== 443 ? ':' + st.port : '');
+  const status = st.revoked ? 'revoked' : st.status || 'pending';
+  if (status !== 'active') return Promise.resolve({ url, status, online: false });
+  if (!crl.p || Date.now() - crl.at > 60_000 || crl.url !== url) { crl.at = Date.now(); crl.url = url; crl.p = probeUrl(url); }
+  return crl.p.then(r => ({ url, status, ...r }));
+}
+
 export async function hostInfo({ root, port, hosts, https, startedAt, sessions, claws }) {
-  const [s, mem, batt] = await Promise.all([slowInfo(root), memUsed(), battery()]);
+  const [s, mem, batt, clarelay] = await Promise.all([slowInfo(root), memUsed(), battery(), clarelayInfo()]);
   const cpus = os.cpus();
   return {
     computer: { name: s.name, os: s.os, model: s.model, cpu: (cpus[0]?.model || '').replace(/\((R|TM)\)/g, '').replace(/\s+CPU\s+@\s+/, ' · ').replace(/\s+/g, ' ').trim(), cores: cpus.length, uptime: os.uptime() * 1000 },
     load: { avg: os.loadavg(), cores: cpus.length },
     mem, disk: disk(), battery: batt,
-    net: { addrs: addrs().sort((x, y) => (x.kind === 'Tailscale' ? -1 : 0) - (y.kind === 'Tailscale' ? -1 : 0)), port, listen: hosts, https },
+    net: { addrs: addrs().sort((x, y) => (x.kind === 'Tailscale' ? -1 : 0) - (y.kind === 'Tailscale' ? -1 : 0)), port, listen: hosts, https, clarelay },
     claclaw: { commit: s.commit, commitAt: s.commitAt, node: process.version, startedAt, sessions },
     claws: [
       { id: 'claude', name: 'Claude Code', version: s.claude, ...claws.claude },
