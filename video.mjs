@@ -77,7 +77,8 @@ export async function videoFrames(file, maxFrames = VIDEO_FRAMES) {
 // 播放原文件（手机本地没存时用）：支持 Range，iPhone 播视频必须
 const MIME = { mov: 'video/quicktime', mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', '3gp': 'video/3gpp',
   pdf: 'application/pdf', txt: 'text/plain; charset=utf-8', log: 'text/plain; charset=utf-8', md: 'text/plain; charset=utf-8', json: 'application/json', csv: 'text/csv; charset=utf-8',
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', zip: 'application/zip' };
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', zip: 'application/zip',
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', ogg: 'audio/ogg', oga: 'audio/ogg', aac: 'audio/aac', opus: 'audio/ogg', flac: 'audio/flac' };
 export function serveVideo(req, res, file, name = '') {
   const size = fs.statSync(file).size, type = MIME[path.extname(file).slice(1)] || 'application/octet-stream';
   const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
