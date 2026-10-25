@@ -584,7 +584,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 6px;background:var(--surface)}
   #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 14px)}
   #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600}
-  #setBack{position:absolute;left:-8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:40px;height:44px;border:0;background:none;color:var(--ink)}
+  #setBack{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
 }
 #mtabs{display:none}
 #setTop{display:none}
@@ -601,8 +601,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .pg-hd{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600;color:var(--ink)}
 .pg-t{max-width:calc(100% - 96px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #hostPane .pg-hd{margin-top:-17px}
-#hostPane .pe-back{left:-20px}   /* 宿主页有内边距：箭头位置对齐设置页 */
-.pe-back{position:absolute;left:-8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:40px;height:44px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
+#hostPane .pe-back{left:-12px}   /* 宿主页有内边距：箭头位置对齐设置页 */
+.pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
 .pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
