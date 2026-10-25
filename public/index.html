@@ -590,14 +590,19 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #setTop{display:none}
 #clawPane{display:none}
 #hostPane{display:none}
-#hostPane:has(.pe-back) #hostBack{display:none}   /* 协同子页面有自己的「‹ 宿主」 */
+#hostPane:has(#hostBody .pg-hd) #hostHd{display:none}   /* 协同、技能子页面有自己的标题栏 */
 /* 选择宿主：卡片（手机和电脑共用，手机上更大） */
 .hs-h{margin:16px 6px 8px;font-size:12.5px;color:var(--muted)}
 /* 宿主页的分组卡片（手机和电脑共用） */
 .h-link{cursor:pointer}
 .h-link:active{background:var(--surface)}
 .h-link .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-left:2px}
-.pe-back{display:inline-flex;align-items:center;gap:4px;margin:0 0 10px;padding:4px 6px;border:0;background:none;color:var(--accent);font:inherit;font-size:14px;cursor:pointer}
+/* 所有子页面的返回：和会话页、设置页同一个样式（左边一个箭头，标题居中） */
+.pg-hd{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600;color:var(--ink)}
+.pg-t{max-width:calc(100% - 96px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hostPane .pg-hd{margin-top:-17px}
+#hostPane .pe-back{left:-20px}   /* 宿主页有内边距：箭头位置对齐设置页 */
+.pe-back{position:absolute;left:-8px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:40px;height:44px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
 .pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
@@ -1047,7 +1052,7 @@ select.pe-in{text-align-last:right}
         </button>
       </div>
       <!-- 宿主：跑 claclaw 的这台电脑的状态（打开时每 5 秒刷新） -->
-      <div id="hostPane"><button type="button" class="pe-back" id="hostBack">‹ 设置</button><div class="claw-h" id="hostTitle">宿主</div><div id="hostBody"><div class="h-empty">加载中…</div></div></div>
+      <div id="hostPane"><div class="pg-hd" id="hostHd"><button type="button" class="pe-back" id="hostBack" aria-label="返回设置"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div class="pg-t" id="hostTitle">宿主</div></div><div id="hostBody"><div class="h-empty">加载中…</div></div></div>
       <!-- 选择宿主：像选 Claw 一样，点哪台，会话、Claw、设置里的「宿主」就都是那台电脑的 -->
       <div id="setPane">
       <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
@@ -2675,9 +2680,11 @@ function skillPost(op,name,target){
     if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
   }).catch(function(e){toast(e.message)});
 }
+var BACK_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+function pgHd(attrs,label,title){return '<div class="pg-hd"><button type="button" class="pe-back" '+attrs+' aria-label="'+label+'">'+BACK_SVG+'</button><div class="pg-t">'+esc(title||'')+'</div></div>'}
 function renderSkills(){
   if(hostView!=='skills')return;
-  var h='<button type="button" class="pe-back" data-act="peer-back">‹ 宿主</button>';
+  var h=pgHd('data-act="peer-back"','返回宿主','技能');
   if(skillMsg.err)h+='<div class="pe-err">'+esc(skillMsg.err)+'</div>';
   if(!skillsSt)h+='<div class="h-empty">加载中…</div>';
   else h+=skillsSt.map(function(s){
@@ -3071,8 +3078,7 @@ function renderPeer(){
   if(peerSub.indexOf('p:')===0){p=(c.peers||[]).find(function(x){return 'p:'+x.id===peerSub});if(!p)peerSub=''}   // 对方已经撤销：回主页
   if(peerSub==='add'&&!c.local)peerSub='';
   var titles={add:'添加对方',pool:'协同会话',net:'本机与网络'};
-  var h=peerSub?'<button type="button" class="pe-back" data-act="peer-sub" data-sub="">‹ 协同</button>':'<button type="button" class="pe-back" data-act="peer-back">‹ 宿主</button>';
-  if(titles[peerSub])h+='<div class="claw-h">'+titles[peerSub]+'</div>';
+  var h=peerSub?pgHd('data-act="peer-sub" data-sub=""','返回协同',titles[peerSub]||(p?p.name:'协同')):pgHd('data-act="peer-back"','返回宿主','claclaw 协同');
   h+='<div id="peMsg"></div>';
   h+=p?peerDetailHtml(c,p):peerSub==='add'?peerAddHtml(c):peerSub==='pool'?peerPoolHtml(c):peerSub==='net'?peerNetHtml(c):peerMainHtml(c);
   $('#hostBody').innerHTML=h;paintPeerMsg();
