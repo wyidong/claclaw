@@ -22,9 +22,9 @@
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
-(function(){var h=document.documentElement,emb=window.parent!==window;if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},20000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
+(function(){var h=document.documentElement,emb=window.parent!==window;if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},10000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
 </script>
-<style>html.boot #app{filter:blur(3px);opacity:.7}</style>
+<style>html.boot #app{filter:blur(8px);opacity:.45}</style>
 <style>
 :root{
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
@@ -61,9 +61,10 @@ body{position:fixed;inset:0;width:100%}
 html{background:var(--surface)}
 body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
-body.leaving #app{opacity:.4;filter:blur(2px);transition:opacity .2s,filter .2s}
-html.fog #app{filter:blur(3px);opacity:.7}
-#app{transition:filter .4s,opacity .4s}
+/* 雾感（和 clarelay 外壳同一套数值）：加载中 / 刷新前蒙雾，界面仍看得见 */
+body.leaving #app{opacity:.45;filter:blur(8px);pointer-events:none}
+html.fog #app{filter:blur(8px);opacity:.45;pointer-events:none}
+#app{transition:filter .35s,opacity .35s}
 button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -2177,7 +2178,9 @@ function onEvent(m){
       else if(m.busy)outboxRestore();                              // 会话正忙：放回输入框，等它忙完再发
       else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');outboxShow();trySend()}
     }
-    if(merged){stick=wasStick;if(stick)scrollDown();else feed.scrollTop=keepTop}else scrollDown(true);   // 重连：在看上面的内容就停在原处
+    if(merged){stick=wasStick;if(stick)scrollDown();else feed.scrollTop=keepTop}else scrollDown(true);
+    try{var sp0=JSON.parse(sessionStorage.getItem('claclaw.scroll')||'null');sessionStorage.removeItem('claclaw.scroll');   // 「更新客户端」前在看的位置：刷新后回到那里
+      if(sp0&&sp0.id===m.id&&!sp0.stick)setTimeout(function(){stick=false;feed.scrollTop=sp0.top},50)}catch(_){}   // 重连：在看上面的内容就停在原处
     break;
   case 'session.busy':
     openFailed();clearOpening();
@@ -3186,7 +3189,7 @@ $('#setReload').addEventListener('click',function(){
   var ic=$('#setReload .rl-ic');if(ic.classList.contains('spin'))return;
   ic.classList.add('spin');
   try{sessionStorage.setItem('claclaw.reloadTo','set')}catch(_){}
-  setTimeout(function(){$('#railReload').click()},700);
+  setTimeout(function(){$('#railReload').click()},150);
 });
 var reloadToSet=false;try{reloadToSet=sessionStorage.getItem('claclaw.reloadTo')==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
 if(reloadToSet&&DESKTOP.matches){reloadToSet=false;railTab(true)}
@@ -3194,7 +3197,7 @@ if(reloadToSet&&DESKTOP.matches){reloadToSet=false;railTab(true)}
 $('#railReload').addEventListener('click',function(){
   // 各会话没发的字都存起来（图片存不了）
   try{var all={};for(var k in drafts)if(drafts[k].text)all[k]=drafts[k].text;if(ta.value)all[draftOwner||'']=ta.value;if(Object.keys(all).length)sessionStorage.setItem('claclaw.drafts',JSON.stringify(all))}catch(_){}
-  document.body.classList.add('leaving');setTimeout(function(){location.reload()},250);   // 先淡出再刷新，不生硬
+  document.body.classList.add('leaving');try{if(session&&!mList)sessionStorage.setItem('claclaw.scroll',JSON.stringify({id:session.id,top:feed.scrollTop,stick:stick}))}catch(_){}setTimeout(function(){location.reload()},350);   // 先起雾再刷新；记下正在看的位置   // 先淡出再刷新，不生硬
 });
 try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionStorage.removeItem('claclaw.drafts');
   if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
