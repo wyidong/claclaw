@@ -2503,7 +2503,7 @@ function connect(){
     retry=0;banner(null);
     if(!connectedOnce){document.documentElement.classList.remove('fog');try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'connected'},'*')}catch(_){}}   // 只在首次连上时
     if(connectedOnce)checkVersion();connectedOnce=true;
-    wsSend({t:'visible',on:!document.hidden});
+    wsSend({t:'visible',on:pageVisible()});
     if(wantPeer){wantPeer=false;history.replaceState(null,'','/');if(!DESKTOP.matches){goList();openPeerView();return}openPeerView()}
     var fromUrl=new URLSearchParams(location.search).get('s');
     if(fromUrl||location.search)history.replaceState(null,'','/');
@@ -3936,10 +3936,12 @@ function applyTheme(t){
   postTheme();
 }
 // 嵌在 clarelay 外壳里：告诉外壳正在看哪个会话（外壳据此不推这个会话的通知）；回列表、切到后台时为 null
-var lastViewing;
+var lastViewing,shellHidden=false;
+// 外壳把这个 iframe 藏起来（回主页、切到别的电脑）时 document.hidden 不会变，要靠外壳的 visible 消息；藏起来就不算「正在看」，照常推送
+function pageVisible(){return !document.hidden&&!shellHidden}
 function postViewing(){
   if(window.parent===window)return;
-  var t=session&&session.id&&!document.hidden&&(DESKTOP.matches||!mList)?session.id:null;
+  var t=session&&session.id&&pageVisible()&&(DESKTOP.matches||!mList)?session.id:null;
   if(t===lastViewing)return;lastViewing=t;
   try{window.parent.postMessage({clarelay:1,type:'viewing',target:t},'*')}catch(e){}
 }
@@ -3947,6 +3949,7 @@ document.addEventListener('visibilitychange',postViewing);
 window.addEventListener('message',function(e){
   var m=e.data;if(window.parent===window||e.source!==window.parent||!m||m.clarelay!==1)return;
   if(m.type==='embedded'){lastViewing=undefined;postViewing()}
+  if(m.type==='visible'){var h=m.on===false;if(h!==shellHidden){shellHidden=h;wsSend({t:'visible',on:pageVisible()});postViewing()}}
   if(m.type==='open'&&typeof m.target==='string'&&m.target){if(m.target==='view:peer')openPeerView();else openFromNotice(m.target)}   // 点了外壳的通知
 });
 // 嵌在 clarelay 外壳里：告诉外壳当前顶部颜色，外壳把状态栏区和它的顶栏染成同色
@@ -4664,7 +4667,7 @@ pushBtn.addEventListener('click',function(){
   }).catch(function(e){alert('开启通知失败：'+e.message);syncPushBtn()});
 });
 // 页面在前台还是后台：在前台看着这个会话时不推送
-document.addEventListener('visibilitychange',function(){wsSend({t:'visible',on:!document.hidden})});
+document.addEventListener('visibilitychange',function(){wsSend({t:'visible',on:pageVisible()})});
 
 // ---------- 新建同目录会话 ----------
 
