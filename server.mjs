@@ -14,6 +14,7 @@ import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
+import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured } from './devnotify.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
@@ -32,6 +33,9 @@ const PEER_ROOTS = sensitiveRoots(DATA);
 import { saveVideo, videoFile, videoDuration, videoThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
 const uploadKeepDays = () => { const d = Math.round(Number(settings().uploadKeepDays)); return d >= 1 && d <= 3650 ? d : KEEP_DAYS_DEFAULT; };
 setTimeout(() => { try { cleanUploads(uploadsDir(DATA), uploadKeepDays()); } catch {} }, 15000);   // 启动后清一次过期附件
+// 推送走哪：auto = clarelay 设备在线就交给它（推到外壳），不在线 claclaw 自己推；clarelay = 只走它；self = 只自己推；both = 都推
+const PUSH_VIA = ['auto', 'clarelay', 'self', 'both'];
+const pushVia = () => PUSH_VIA.includes(settings().pushVia) ? settings().pushVia : 'auto';
 const vidName = n => String(n || '视频').replace(/[\r\n\]「」]/g, ' ').slice(0, 80);
 const UPLOADS = uploadsDir(DATA);
 
@@ -930,8 +934,7 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
   if (!r.watched()) {
     localSound();
     const badge = markUnread(id);
-    push.sendAll({ title: (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge }, log)
-      .then(n => log('peer msg push →', n)).catch(() => {});
+    alertOut(id, 'peer', (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), { title: (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge });
   }
   return new Promise(resolve => {
     let reply = '', cur = '', done = false;
@@ -1004,8 +1007,8 @@ async function peerHandler(req, res) {
       // 开着的网页也提醒一下（App 在前台时 iPhone 不弹推送横幅）
       { const msg = JSON.stringify({ t: 'peer.pair', name, ip, code: p.code }); for (const w of wss.clients) if (w.readyState === 1) w.send(msg); }
       localSound();
-      push.sendAll({ title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/?view=peer' }, log)
-        .then(n => log('peer pair push sent →', n)).catch(e => log('peer pair push failed', e.message));
+      alertOut('view:peer', 'ask', 'claclaw 协同', { title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/?view=peer' }, '有人申请配对');
+      setTimeout(() => devRead('view:peer'), PAIR_TTL).unref?.();   // 配对码过期后外壳那条提醒也撤掉
       return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要两位数配对码，然后调用 pair/confirm' });
     }
     if (route === '/pair/confirm') {
@@ -1529,8 +1532,7 @@ class Runner {
     const title = this.info.customTitle || this.title || path.basename(this.cwd || '') || '会话';
     localSound();
     const badge = markUnread(this.id);
-    push.sendAll({ title, body, tag, url: '/?s=' + this.id, badge }, log)
-      .then(n => n && log('push sent', this.id.slice(0, 8), body, '→', n));
+    alertOut(this.id, /^perm-/.test(tag) ? 'ask' : body === '这一轮出错结束了' ? 'error' : 'reply', title, { title, body, tag, url: '/?s=' + this.id, badge });
   }
   unsubscribe(ws) { this.subs.delete(ws); this.maybeScheduleClose(); }
 
@@ -1608,15 +1610,15 @@ function snippet(text, fallback) {
 function ocTurnDone(r, ok, text) {
   if (r.watched()) return;
   localSound();
-  const badge = markUnread(r.id);
-  push.sendAll({ title: r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : 'OpenClaw'), body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+  const badge = markUnread(r.id), title = r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : 'OpenClaw');
+  alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge });
 }
 // DeepSeek / OpenCode 会话要你确认操作：没人看着就推送
 function dsAsk(r, body) {
   if (r.watched()) return;
   localSound();
-  const badge = markUnread(r.id);
-  push.sendAll({ title: r.title || (isOp(r.id) ? 'OpenCode' : 'DeepSeek'), body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, log).catch(() => {});
+  const badge = markUnread(r.id), title = r.title || (isOp(r.id) ? 'OpenCode' : 'DeepSeek');
+  alertOut(r.id, 'ask', title, { title, body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge });
 }
 // DS 压缩完：给还开着的页面重发一份 session.opened，让历史按压缩后的记录重画。
 // 压缩后总条数会变少，前端不能按旧序号续画，所以带 compacted 标记强制整页刷新。
@@ -1690,7 +1692,24 @@ function saveUnread(u) {
   for (const c of wss.clients) if (c.readyState === 1) c.send(msg);
 }
 function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveUnread(u); return unreadTotal(u); }
-function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); }
+function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); devRead(id); }
+// 提醒发出去：报给 clarelay（推到外壳、算角标），按设置决定自己的 Web Push 要不要发。
+// snippet 给 clarelay 的另算（配对码之类不该出本机的用 safeSnippet 替掉）；clarelay 自己再截成前 N 个字
+function alertOut(target, kind, title, payload, safeSnippet) {
+  const via = pushVia(), dev = devConfigured() && via !== 'self';
+  if (dev) devNotify({ target, kind, title: (devStatus().name ? devStatus().name + ' · ' : '') + title, snippet: safeSnippet ?? payload.body, unread: target.startsWith('view:') ? 1 : unreadMap()[target] || 0 });
+  if (via === 'self' || via === 'both' || !dev || (via === 'auto' && !devStatus().online))
+    push.sendAll(payload, log).then(n => n && log('push sent', target.slice(0, 8), payload.body, '→', n)).catch(() => {});
+}
+startDevNotify({ log, onOnline: async () => {
+  const u = unreadMap(), name = devStatus().name;
+  const items = Object.entries(u).filter(([, n]) => n > 0).map(([id, n]) => {
+    const r = runnerOf(id);
+    return { target: id, kind: 'reply', title: (name ? name + ' · ' : '') + (r?.info?.customTitle || r?.title || '会话'), snippet: '', unread: n };
+  });
+  const j = await devSync(items);
+  log('clarelay sync', items.length, j?.ok ? 'ok' : 'fail');
+} });
 
 // ---------- 在 claclaw 里的最近活动 ----------
 // 网页里打开、发消息、一轮结束都算「在 claclaw 活跃」；会话列表的「最近活跃」只看这个（不看终端 / VS Code）
@@ -2199,12 +2218,13 @@ const handler = async (req, res) => {
         const patch = {};
         if (body.idleCloseMin != null) patch.idleCloseMin = Math.min(1440, Math.max(1, Math.round(Number(body.idleCloseMin) || 10)));
         if (body.takeoverMin != null) patch.takeoverMin = Math.min(1440, Math.max(0, Math.round(Number(body.takeoverMin) || 0)));
+        if (PUSH_VIA.includes(body.pushVia)) patch.pushVia = body.pushVia;
         if (body.uploadKeepDays != null) patch.uploadKeepDays = Math.min(3650, Math.max(1, Math.round(Number(body.uploadKeepDays) || KEEP_DAYS_DEFAULT)));
         saveSettings(patch);
         if (patch.uploadKeepDays) cleanUploads(UPLOADS, patch.uploadKeepDays);
         log('session settings', JSON.stringify(patch));
       }
-      return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin(), uploadKeepDays: uploadKeepDays() });
+      return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin(), uploadKeepDays: uploadKeepDays(), pushVia: pushVia(), clarelayPush: devConfigured() ? devStatus() : null });
     }
     // 技能：列表（每个技能在各安装位置的状态）、安装、卸载
     if (url.pathname === '/api/skills' || url.pathname.startsWith('/api/skills/')) {

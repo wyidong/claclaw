@@ -22,7 +22,7 @@
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
-(function(){var h=document.documentElement,emb=window.parent!==window;if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},10000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
+(function(){var h=document.documentElement,emb=window.parent!==window;if(emb)h.classList.add('emb');if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},10000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
 </script>
 <style>html.boot #app{filter:blur(8px);opacity:.45}</style>
 <style>
@@ -180,6 +180,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md blockquote>.cp{top:0;right:2px}
 #toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
 #toast.on{opacity:1}
+html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important}   /* 嵌在 clarelay 外壳里：通知由外壳收，不在这里订阅 */
 .peer .from{font-size:12px;color:var(--muted);margin-bottom:3px}
 .peer .body{word-break:break-word}
 .peer code{font-family:var(--mono);font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
@@ -1209,6 +1210,8 @@ select.pe-in{text-align-last:right}
           <button type="button" class="set-item" id="pushBtn" hidden><span class="lb">推送通知<small id="pushSub">回复完了、要你确认时提醒</small></span><span class="sw" aria-hidden="true"></span></button>
           <button type="button" class="set-item" id="pushLocal" hidden><span class="lb">本机测试通知<small>不经推送服务，检查这台设备能不能弹出</small></span><span class="chev" aria-hidden="true"></span></button>
         </div>
+          <label class="set-item" id="pushViaRow" hidden><span class="lb">推送走哪<small id="pushViaSub">clarelay 外壳（主屏幕 App）收通知、算角标</small></span>
+            <select id="setPushVia"><option value="auto">自动</option><option value="clarelay">只走 clarelay</option><option value="self">只用 claclaw 自己</option><option value="both">都推</option></select></label>
         <div class="set-note" id="pushTip" hidden></div>
       </div>
       <div class="set-sec">
@@ -2260,7 +2263,7 @@ function onEvent(m){
     feedOwner=m.id;feedSig=hsig;feedDirty=false;histArmed=false;lastTop=0;histLoading=false;   // 刚打开不算「滑到顶」，要先离开顶部
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     $('#sessBtn .dot').innerHTML=clawIcon(clawKeyOf(m.id));
-    setHeader();
+    setHeader();postViewing();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan'];
     $('#cfgBtn').style.display=/^(oc|ds):/.test(m.id)?'none':'';   // OpenClaw / DeepSeek 没有权限模式
@@ -3776,7 +3779,7 @@ function goList(toClaw){
   if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：刷新后回到设置页
   if(toClaw){syncPushBtn();return}   // 停在 Claw 页：会话列表等选了 Claw 再加载
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
-  renderUnread();renderActivity();
+  renderUnread();renderActivity();postViewing();
 }
 // 手机：进入会话、内容加载完的那一刻在后台刷新一次列表并重新排序（列表被聊天页挡着看不到）；
 // 服务器此时已把这次打开记为活跃，返回列表时当前会话就在「最近活跃」第一位。列表页里顺序完全不动
@@ -3932,6 +3935,20 @@ function applyTheme(t){
   });
   postTheme();
 }
+// 嵌在 clarelay 外壳里：告诉外壳正在看哪个会话（外壳据此不推这个会话的通知）；回列表、切到后台时为 null
+var lastViewing;
+function postViewing(){
+  if(window.parent===window)return;
+  var t=session&&session.id&&!document.hidden&&(DESKTOP.matches||!mList)?session.id:null;
+  if(t===lastViewing)return;lastViewing=t;
+  try{window.parent.postMessage({clarelay:1,type:'viewing',target:t},'*')}catch(e){}
+}
+document.addEventListener('visibilitychange',postViewing);
+window.addEventListener('message',function(e){
+  var m=e.data;if(window.parent===window||e.source!==window.parent||!m||m.clarelay!==1)return;
+  if(m.type==='embedded'){lastViewing=undefined;postViewing()}
+  if(m.type==='open'&&typeof m.target==='string'&&m.target){if(m.target==='view:peer')openPeerView();else openFromNotice(m.target)}   // 点了外壳的通知
+});
 // 嵌在 clarelay 外壳里：告诉外壳当前顶部颜色，外壳把状态栏区和它的顶栏染成同色
 function postTheme(){
   if(window.parent===window)return;
@@ -4593,6 +4610,8 @@ $('#soundSel').addEventListener('change',function(e){
 function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
 // 会话相关设置：空闲关闭时间、接管等待时间（存在服务器，所有设备共用）
 function showSessSet(j){
+  var cp=j.clarelayPush,pv=$('#pushViaRow');pv.hidden=!cp;
+  if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='clarelay '+(cp.online?'在线':'不在线')+'；自动 = 在线时只走 clarelay（推到外壳 App），不在线时 claclaw 自己推'}
   if(j.uploadKeepDays){var uk=$('#setUpKeep'),uv=String(j.uploadKeepDays);if(![].some.call(uk.options,function(o){return o.value===uv})){var o2=document.createElement('option');o2.value=uv;o2.textContent=uv+' 天';uk.appendChild(o2)}uk.value=uv}
   [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
     var sel=$(x[0]),v=String(x[1]);
@@ -4600,6 +4619,10 @@ function showSessSet(j){
     sel.value=v;
   });
 }
+$('#setPushVia').addEventListener('change',function(){
+  fetch('/api/settings/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pushVia:this.value})})
+    .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
+});
 ['#setIdle','#setTake','#setUpKeep'].forEach(function(id){
   $(id).addEventListener('change',function(){
     var body={};body[id==='#setIdle'?'idleCloseMin':id==='#setUpKeep'?'uploadKeepDays':'takeoverMin']=Number(this.value);
