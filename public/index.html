@@ -2444,7 +2444,7 @@ $('#ctxBtn').addEventListener('click',function(){
   });
 })();
 function setHeader(){
-  if(typeof ttsMuteShow==='function')ttsMuteShow();
+  if(typeof ttsMuteShow==='function'){ttsMuteShow();try{if(tts)ttsShowStop()}catch(_){}}
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   $('#nm').textContent=t||dir||'会话';
@@ -3867,7 +3867,7 @@ var ttsMuted={};
 try{(JSON.parse(localStorage.getItem('claclaw.ttsMuted')||'[]')||[]).forEach(function(id){ttsMuted[id]=1})}catch(_){}
 function ttsSessMuted(){return !!(session&&ttsMuted[session.id])}
 var MUTE_IC={on:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
-  off:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>'};
+  off:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M3.5 3.5l17 17"/></svg>'};
 function ttsMuteShow(){
   var b=document.getElementById('ttsMute');if(!b||!tts)return;
   b.hidden=!(tts.on&&session);if(b.hidden)return;
@@ -4320,7 +4320,7 @@ function ttsShowStop(){
   if(b.dataset.st!==st){b.dataset.st=st;b.innerHTML=TTS_IC[st];b.setAttribute('aria-label',st==='go'?'继续朗读':st==='stop'?'停止朗读':'朗读最后一条回复');b.title=b.getAttribute('aria-label')}
   b.classList.toggle('go',st==='go');b.classList.toggle('on',st==='stop');
   var inChat=!!session&&!(mList&&!DESKTOP.matches)&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on');
-  b.hidden=!(st!=='say'||(tts.on&&inChat&&!!feed.querySelector('.msg.ai')));   // 喇叭只在开了「自动朗读回复」时出现
+  b.hidden=!(st!=='say'||(tts.on&&inChat&&!ttsSessMuted()&&!!feed.querySelector('.msg.ai')));   // 这个会话关了播报就不显示   // 喇叭只在开了「自动朗读回复」时出现
 }
 // 最后一条回复的文字：从页面上取，代码块、表格换成简短说明
 function ttsLastReply(){
@@ -4364,7 +4364,7 @@ $('#ttsMute').addEventListener('click',function(){
   if(ttsMuted[session.id])delete ttsMuted[session.id];
   else{ttsMuted[session.id]=1;if(ttsSpeaking())ttsStop();if(narration&&narration.onUserStop)narration.onUserStop()}
   try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
-  ttsMuteShow();
+  ttsMuteShow();ttsShowStop();
 });
 $('#setTts').addEventListener('click',function(){
   if(!ttsOk())return;
