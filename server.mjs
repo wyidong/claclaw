@@ -1710,9 +1710,11 @@ function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[i
 // 提醒发出去：报给 clarelay（推到外壳、算角标），按设置决定自己的 Web Push 要不要发。
 // snippet 给 clarelay 的另算（配对码之类不该出本机的用 safeSnippet 替掉）；clarelay 自己再截成前 N 个字
 function alertOut(target, kind, title, payload, safeSnippet) {
-  const via = pushVia(), dev = devConfigured() && via !== 'self';
+  // auto：clarelay 在线、且它的推送总开关没关，才交给它；总开关关了 = 不代收代转，全由 claclaw 自己推
+  const via = pushVia(), st = devStatus(), useDev = via === 'clarelay' || via === 'both' || (via === 'auto' && st.online && st.push !== false);
+  const dev = devConfigured() && via !== 'self' && useDev;
   if (dev) devNotify({ target, kind, title: (devStatus().name ? devStatus().name + ' · ' : '') + title, snippet: safeSnippet ?? payload.body, unread: target.startsWith('view:') ? 1 : unreadMap()[target] || 0 });
-  if (via === 'self' || via === 'both' || !dev || (via === 'auto' && !devStatus().online))
+  if (via === 'self' || via === 'both' || !dev || (via === 'auto' && !st.online))
     push.sendAll(payload, log).then(n => n && log('push sent', target.slice(0, 8), payload.body, '→', n)).catch(() => {});
 }
 startDevNotify({ log, onOnline: async () => {

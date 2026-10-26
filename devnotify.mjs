@@ -39,7 +39,7 @@ async function poll() {
   const was = status.online;
   try {
     const j = await call('GET', '/status');
-    status = j ? { ok: true, online: !!j.online, status: j.status, name: j.name || '', shellUrl: j.shellUrl || '', url: j.url || '' } : { ok: false, online: false };
+    status = j ? { ok: true, online: !!j.online, push: typeof j.push === 'boolean' ? j.push : null, status: j.status, name: j.name || '', shellUrl: j.shellUrl || '', url: j.url || '' } : { ok: false, online: false };
   } catch (e) { status = { ok: false, online: false, error: e.message }; }
   if (status.online && !was) { log('clarelay 推送接口在线', status.name || ''); try { await onOnline(); } catch (e) { log('clarelay sync failed', e.message); } }
   else if (was && !status.online) log('clarelay 推送接口离线');
