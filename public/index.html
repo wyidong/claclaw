@@ -301,7 +301,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
    左上角「+」加图片、右上角发送/停止，都是浮在输入框上的纯符号 */
 #composer{position:relative}
 #taWrap{position:relative}
-#ta{display:block;width:100%;resize:none;min-height:44px;max-height:132px;padding:11px 48px 11px 36px;border:0;border-radius:0;background:transparent;color:var(--ink);font:inherit;line-height:1.4;box-sizing:border-box;caret-color:var(--accent)}
+#ta{display:block;width:100%;resize:none;overflow-y:hidden;scrollbar-width:thin;min-height:44px;max-height:132px;padding:11px 48px 11px 36px;border:0;border-radius:0;background:transparent;color:var(--ink);font:inherit;line-height:1.4;box-sizing:border-box;caret-color:var(--accent)}
 #ta:focus,#ta:focus-visible{outline:none}
 #ta::placeholder{color:var(--muted);opacity:.65}
 #taWrap.sug #ta{}
@@ -1908,7 +1908,7 @@ function syncSuggestion(){
 function acceptSuggestion(){
   if(!suggestion)return;
   ta.value=suggestion;suggestion=null;
-  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';
+  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden';
   syncSuggestion();syncSend();ta.focus();
   ta.setSelectionRange(ta.value.length,ta.value.length);
 }
@@ -2538,7 +2538,7 @@ function run(text){
   var images=[],video=null;
   attachments.forEach(function(a){if(a.video)video={kind:a.video.kind||'video',id:a.video.id,name:a.video.name,file:a.video.file,url:a.url,size:a.video.size};else{images.push({media_type:a.media_type,data:a.data});if(a.orig)vidSave('img:'+imgKey(a.data),a.orig,a.orig.name,'image');URL.revokeObjectURL(a.url)}});
   attachments=[];renderAtts();   // 视频的预览地址留着：聊天区那条消息还要用
-  ta.value='';ta.style.height='auto';
+  ta.value='';ta.style.height='auto';ta.style.overflowY='hidden';
   busy=true;setDock('busy');
   if(video&&video.id){outbox={text:text,images:images,video:video,sid:session.id};outboxShow();trySend()}   // 视频早就传过（放回输入框后重发）
   else{
@@ -2587,7 +2587,7 @@ function stop(){wsSend({t:'interrupt'})}
 sendBtn.addEventListener('click',function(){if(sendBtn.classList.contains('sugfill')){acceptSuggestion();return}run(ta.value)});
 $('#stopBtn').addEventListener('click',stop);
 ta.addEventListener('input',function(){
-  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';syncSend();
+  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden';syncSend();
   if(ta.value)suggestion=null; // 开始自己打字就作废
   syncSuggestion();
   cmdSel=0;syncCmdMenu();
