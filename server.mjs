@@ -439,8 +439,55 @@ function ctxFromFile(info) {
 }
 function ctxTokens(u) { return u ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) : 0; }
 
+// 压缩过的会话：SDK 只顺着最后一次压缩之后的那条链往回找，压缩前的聊天就看不到了。
+// 网页上要一直看到完整的聊天，所以按每个压缩分界把文件切开，分段让 SDK 各取一条链再接起来；
+// 压缩生成的那条摘要（isCompactSummary）不当用户消息显示，换成一行「已压缩」
+const chainCache = new Map();   // sessionId → { key, pre }：最后一次压缩之前的部分不会再变，缓存起来
+async function sessionChain(sessionId, cwd) {
+  const opt = cwd ? { dir: cwd } : undefined;
+  let raw = '';
+  try { raw = fs.readFileSync(jsonlPathOf({ sessionId, cwd }), 'utf8'); } catch {}
+  const B = '"subtype":"compact_boundary"';
+  const lastB = raw.lastIndexOf(B);
+  if (lastB < 0) return getSessionMessages(sessionId, opt);
+  const cut = raw.lastIndexOf('\n', lastB) + 1;   // 最后一个压缩分界那一行的开头
+  const parse = text => {
+    const entries = [], cuts = [], hide = new Set();
+    for (const l of text.split('\n')) {
+      if (!l) continue;
+      let e; try { e = JSON.parse(l); } catch { continue; }
+      if (e.type === 'system' && e.subtype === 'compact_boundary') cuts.push({ at: entries.length, meta: e.compactMetadata || {} });
+      if (e.isCompactSummary && e.uuid) hide.add(e.uuid);
+      entries.push(e);
+    }
+    return { entries, cuts, hide };
+  };
+  const seen = new Set(), out = [];
+  const add = (list, hide) => { for (const m of list) if (!seen.has(m.uuid)) { seen.add(m.uuid); if (!hide.has(m.uuid)) out.push(m); } };
+  let hit = chainCache.get(sessionId);
+  if (!hit || hit.key !== cut) {
+    const { entries, cuts, hide } = parse(raw.slice(0, cut));
+    const pre = [];
+    const segs = cuts.map(c => c.at).concat(entries.length);
+    for (let i = 0; i < segs.length; i++) {
+      const part = entries.slice(0, segs[i]);
+      let list = [];
+      try { list = await getSessionMessages(sessionId, { ...opt, sessionStore: { load: async () => part, append: async () => {} } }); } catch {}
+      pre.push(...list.filter(m => !hide.has(m.uuid)));
+      pre.push({ type: 'compact', uuid: '', meta: i < cuts.length ? cuts[i].meta : (parse(raw.slice(cut, raw.indexOf('\n', cut))).entries[0]?.compactMetadata || {}) });
+    }
+    hit = { key: cut, pre };
+    chainCache.set(sessionId, hit);
+    if (chainCache.size > 20) chainCache.delete(chainCache.keys().next().value);
+  }
+  for (const m of hit.pre) { if (m.uuid) { if (seen.has(m.uuid)) continue; seen.add(m.uuid); } out.push(m); }
+  add(await getSessionMessages(sessionId, opt), parse(raw.slice(cut)).hide);
+  return out;
+}
+
 async function loadHistory(sessionId, cwd) {
-  const msgs = await getSessionMessages(sessionId, cwd ? { dir: cwd } : undefined);
+  const msgs = await sessionChain(sessionId, cwd);
+  const kTok = n => (n >= 1000 ? Math.round(n / 1000) + 'k' : String(n ?? '?'));
   const items = [];
   const toolIdx = new Map();
   const { lineOf, queued, timeOf } = queuedPrompts(sessionId, cwd);
@@ -454,6 +501,11 @@ async function loadHistory(sessionId, cwd) {
     const at = lineOf.get(m.uuid);
     if (at != null) while (qi < queued.length && queued[qi].i < at) pushQueued(queued[qi++]);
     if (m.parent_tool_use_id) continue; // 子 Agent 内部的消息不展开
+    if (m.type === 'compact') {
+      const c = m.meta;
+      items.push({ kind: 'sys', text: (c.trigger === 'auto' ? '已自动压缩会话历史' : '已压缩会话历史') + (c.preTokens ? '（' + kTok(c.preTokens) + (c.postTokens != null ? ' → ' + kTok(c.postTokens) : '') + ' tokens）' : '') });
+      continue;
+    }
     const content = m.message?.content;
     const n0 = items.length;
     if (m.type === 'user') {
@@ -877,13 +929,31 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
       }
     } };
     const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); resolve([code, obj]); };
-    const timer = setTimeout(() => end(504, { ok: false, error: '10 分钟内没等到回复', partial: (cur || reply).trim() }), 10 * 60 * 1000);
+    const timer = setTimeout(() => end(504, { ok: false, error: '30 分钟内没等到回复', partial: (cur || reply).trim() }), 30 * 60 * 1000);   // 对方早已拿到 202，这里只是兜底
     r.subscribe(sub);
     // 对方发来的、或本机会话在处理对方消息时转过来的：这一轮有风险的操作要用户确认
     if (r instanceof Runner && (!local || runners.get(fromId)?.peerTurn)) r.peerTurn = { from: from || '对方', allowed: new Set() };
     r.send(msg);
     r.emit({ t: 'user', text: msg, images: [] });
   });
+}
+const PEER_ACCEPT_MS = 60 * 1000;
+// 先回过 202 的消息处理完了：把回复主动发到对方的会话（from_session），开头写「回复 <编号>」；发不出去隔一阵再试
+async function peerReplyLater(peerId, info, toSession, id, code, obj) {
+  const body = obj.ok ? (obj.reply || '（这一轮没有文字回复）') : '处理失败：' + (obj.error || 'HTTP ' + code) + (obj.partial ? '\n已写的部分：\n' + obj.partial : '');
+  const text = ('回复 ' + id + '\n' + body).slice(0, 4000);
+  for (const wait of [0, 60e3, 5 * 60e3, 15 * 60e3]) {
+    if (wait) await new Promise(r => setTimeout(r, wait));
+    const c = loadPeer(), p = c.peers.find(x => x.id === peerId);
+    if (!c.enabled || !p?.inbox || !p.theirToken) { log('peer reply-later', id.slice(0, 12), '放弃：对方已不可联系'); return; }
+    const r = runnerOf(info.sessionId);
+    const from = (r?.info?.customTitle || r?.info?.summary || r?.title || '会话') + ' · ' + myName(c);
+    try {
+      const j = await peerCall(c, p, '', { body: { msg_id: 'reply-' + id, reply_to: id, from, from_session: peerShortId(info.sessionId), text, session: toSession || undefined } });
+      log('peer reply-later', id.slice(0, 12), '→', p.name, j.ok ? (j.status === 202 || j.accepted ? 'accepted' : 'ok') : 'fail ' + (j.error || ''), '｜', peerRoute.get(p.id)?.trail || '');
+      if (j.ok || j.status === 400 || j.status === 404) return;
+    } catch (e) { log('peer reply-later', id.slice(0, 12), '→', p.name, 'error', e.message, '｜', e.trail || ''); }
+  }
 }
 const peerBusy = new Set();
 const peerSeen = new Map();   // 对方 id:msg_id → { at, result }：去重
@@ -961,8 +1031,8 @@ async function peerHandler(req, res) {
     if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST 发消息' });
     let body = ''; try { body = await readBody(req, 64 * 1024); } catch { return out(413, { ok: false, error: '消息太长' }); }
     let text = body, from = '', want = '';
-    let msgId = '';
-    try { const j = JSON.parse(body); text = j.text; from = String(j.from || '').replace(/\s+/g, ' ').slice(0, 60); want = String(j.session || ''); msgId = String(j.msg_id || '').slice(0, 100); } catch {}
+    let msgId = '', fromSession = '';
+    try { const j = JSON.parse(body); text = j.text; from = String(j.from || '').replace(/\s+/g, ' ').slice(0, 60); want = String(j.session || ''); msgId = String(j.msg_id || '').slice(0, 100); fromSession = String(j.from_session || '').replace(/[^\w-]/g, '').slice(0, 64); } catch {}
     // 去重：同一个对方、同一个 msg_id 30 分钟内再来，直接给上次的结果（还在处理就等同一个结果），不再投递
     const dupKey = msgId && peer.id + ':' + msgId;
     for (const [k, v] of peerSeen) if (Date.now() - v.at > 30 * 60e3) peerSeen.delete(k);
@@ -977,8 +1047,19 @@ async function peerHandler(req, res) {
     log('peer in', peer.name, ip, '→', info.sessionId.slice(0, 8), text.length + ' chars');
     const result = peerDeliver(info, text, peer.name + (from && from !== peer.name ? ' · ' + from : ''), peer.id);
     if (dupKey) peerSeen.set(dupKey, { at: Date.now(), result });
+    // 60 秒内没回完：先回 202「已收到」+ 编号，连接放掉（经中继的连接等久了会被线路挂断，回复会丢），回完再主动发到对方的会话
+    const id = msgId || crypto.randomUUID();
+    let first; try { first = await Promise.race([result, new Promise(r => setTimeout(() => r(null), PEER_ACCEPT_MS))]); } catch (e) { peerBusy.delete(info.sessionId); throw e; }
+    if (!first) {
+      const acc = { ok: true, accepted: true, status: 202, id, note: '处理时间较长，回复稍后单独发来，开头写「回复 ' + id + '」' };
+      if (dupKey) peerSeen.set(dupKey, { at: Date.now(), result: Promise.resolve([202, acc]) });
+      out(202, acc);
+      log('peer accepted', peer.name, '→', info.sessionId.slice(0, 8), id.slice(0, 12));
+      result.then(([code, obj]) => peerReplyLater(peer.id, info, fromSession, id, code, obj), e => peerReplyLater(peer.id, info, fromSession, id, 500, { ok: false, error: e.message })).finally(() => peerBusy.delete(info.sessionId));
+      return;
+    }
     try {
-      const [code, obj] = await result;
+      const [code, obj] = first;
       if (dupKey && !(code < 300 || code === 504)) peerSeen.delete(dupKey);   // 没送达（忙、出错）的不记：同一个编号重发要能再投递
       out(code, obj);
     } finally { peerBusy.delete(info.sessionId); }
