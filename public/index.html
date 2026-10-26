@@ -3930,7 +3930,16 @@ function applyTheme(t){
   document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){
     var dark=/dark/.test(m.media);m.content=t==='light'?'#FFFFFF':t==='dark'?'#161B21':(dark?'#161B21':'#FFFFFF');
   });
+  postTheme();
 }
+// 嵌在 clarelay 外壳里：告诉外壳当前顶部颜色，外壳把状态栏区和它的顶栏染成同色
+function postTheme(){
+  if(window.parent===window)return;
+  var t=document.documentElement.getAttribute('data-theme');
+  var dark=t?t==='dark':!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+  try{window.parent.postMessage({clarelay:1,type:'theme',top:dark?'#161B21':'#FFFFFF',scheme:dark?'dark':'light'},'*')}catch(e){}
+}
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if(!document.documentElement.getAttribute('data-theme'))postTheme()})}catch(e){}
 // ---------- 自动朗读回复（浏览器自带的语音合成，不联网、不花钱） ----------
 // 只念正在看的会话里新来的文字回复（历史不念）；代码、表格、链接这些不适合听的换成简短说明。
 // iPhone 要求第一次发声必须由点击触发：打开开关、点发送时顺手「解锁」一下。开着时让屏幕常亮（锁屏后网页不能发声）。
