@@ -3773,10 +3773,10 @@ $('#sList').addEventListener('click',function(e){
 document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest('#sList'))swClose(swOpen)},{passive:true});
 // ---------- 手机：左右滑 ----------
 // 右滑：有返回键的页面（会话、设置、宿主子页……）就返回；到了第一层（有底部菜单）就按菜单顺序切：右滑 = 前一个，左滑 = 后一个。
-// 只在独立打开时（主屏幕 App / 浏览器）；嵌在 clarelay 外壳里先不接管，以后和外壳商量。
+// 嵌在 clarelay 外壳里也启用（外壳自己没有滑动手势，不冲突）。
 // 让路：输入框、能横向滚动的内容（代码块、表格）、看图 / 弹窗、会话行左滑（编辑 / 删除）
 (function(){
-  if(!TOUCH||window.parent!==window)return;
+  if(!TOUCH)return;
   var g=null;
   function hScroll(el){for(;el&&el!==document.body;el=el.parentElement){if(el.scrollWidth>el.clientWidth+2){var o=getComputedStyle(el).overflowX;if(o==='auto'||o==='scroll')return true}}return false}
   function shown(el){if(!el||!el.offsetParent)return false;var r=el.getBoundingClientRect();return r.width>0&&r.height>0}
