@@ -347,18 +347,22 @@ export async function peerCall(c, p, sub, opts) {
   const lanFirst = !(lanDownUntil.get(p.id) > Date.now());
   const tries = [...new Set(lanFirst ? [...lan, ...relays] : [...relays, ...lan])];
   let err;
+  const trail = [];   // 这次依次试了哪几条路、各自结果（写进日志排查走了局域网还是中继）
+  const hostOf = u => { try { return new URL(u).host; } catch { return '?'; } };
   for (const url of tries) {
     const viaRelay = isRelayAddr(url), t0 = Date.now();
     try {
       const j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c) }, connectMs: viaRelay ? 0 : 3000 });
-      peerRoute.set(p.id, { via: viaRelay ? 'relay' : 'lan', at: Date.now(), ms: Date.now() - t0 });
+      trail.push((viaRelay ? '中继 ' : '局域网 ') + hostOf(url) + ' ok ' + (Date.now() - t0) + 'ms');
+      peerRoute.set(p.id, { via: viaRelay ? 'relay' : 'lan', at: Date.now(), ms: Date.now() - t0, trail: trail.join(' → ') });
       if (viaRelay) { if (lan.length) lanDownUntil.set(p.id, Date.now() + 5 * 60e3); }
       else {
         lanDownUntil.delete(p.id);
         if (url !== lan[0] && lan.includes(url) && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; savePeer(c); }   // 局域网里换了能用的那个当首选
       }
       return j;
-    } catch (e) { err = e; if (!e.connect) break; }   // 已经送到对方了：不换地址重发
+    } catch (e) { trail.push((viaRelay ? '中继 ' : '局域网 ') + hostOf(url) + ' 失败(' + (e.code || e.message || '').toString().slice(0, 40) + ') ' + (Date.now() - t0) + 'ms'); err = e; if (!e.connect) break; }   // 已经送到对方了：不换地址重发
   }
-  throw err || new Error('没有对方的地址');
+  if (err) err.trail = trail.join(' → ');
+  throw err || Object.assign(new Error('没有对方的地址'), { trail: '没有地址' });
 }

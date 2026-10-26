@@ -418,6 +418,27 @@ function queuedPrompts(sessionId, cwd) {
   return { lineOf, queued, timeOf };
 }
 
+// 当前上下文大小（tokens）：会话文件里最后一次 API 调用的输入量（输入 + 缓存读 + 缓存写）。
+// 只读文件末尾 4MB；先碰到压缩记录就用压缩后的大小（没记就算不知道）。子 Agent 的不算。
+function ctxFromFile(info) {
+  let fd;
+  try {
+    const f = jsonlPathOf(info);
+    fd = fs.openSync(f, 'r');
+    const size = fs.fstatSync(fd).size, len = Math.min(size, 4 << 20), buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, size - len);
+    const lines = buf.toString('utf8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (l.includes('"compact_boundary"')) { const p = l.match(/"postTokens":(\d+)/); return p ? +p[1] : null; }
+      if (!l.includes('"type":"assistant"') || !l.includes('"usage"') || l.includes('"isSidechain":true')) continue;
+      try { const n = ctxTokens(JSON.parse(l).message?.usage); if (n) return n; } catch {}
+    }
+  } catch {} finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
+  return null;
+}
+function ctxTokens(u) { return u ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) : 0; }
+
 async function loadHistory(sessionId, cwd) {
   const msgs = await getSessionMessages(sessionId, cwd ? { dir: cwd } : undefined);
   const items = [];
@@ -735,12 +756,12 @@ async function peerSendCore({ fromId, to, session, text }) {
     // msg_id：这条消息的编号，对方据此去重（同一个编号收到两次只投递一次）；from_session：对方要事后回复时找哪个会话
     const msgId = crypto.randomUUID();
     const j = await peerCall(c, p, '', { body: { msg_id: msgId, from, from_session: peerShortId(fromId), text: text.slice(0, 4000), session: session || undefined } });
-    log('peer send', peerShortId(fromId), '→', p.name, j.ok ? (j.accepted || j.status === 202 ? 'accepted' : 'ok') : 'fail');
+    log('peer send', peerShortId(fromId), '→', p.name, j.ok ? (j.accepted || j.status === 202 ? 'accepted' : 'ok') : 'fail', '｜', peerRoute.get(p.id)?.trail || '');
     markLast(fromId, p.id);
     // 202 / accepted：对方收到了，但这一轮没等到回复——回复会由对方另发一条消息，开头写「回复 <编号>」。别重发
     if (j.ok && (j.status === 202 || j.accepted)) return { ok: true, accepted: true, peer: p.name, id: j.id || msgId, reply: '对方已收到（编号 ' + (j.id || msgId) + '），回复稍后会单独发来，开头写「回复 ' + (j.id || msgId) + '」。不用重发。' + (j.note ? '（' + j.note + '）' : '') };
     return j.ok ? { ok: true, peer: p.name, reply: j.reply || '（对方这一轮没有文字回复）' } : { ok: false, peer: p.name, error: j.error || '未知', code: j.code, resets: j.resets };
-  } catch (e) { return { ok: false, error: e.message }; }
+  } catch (e) { log('peer send', peerShortId(fromId), '→', p.name, 'error', e.message, '｜', e.trail || ''); return { ok: false, error: e.message }; }
 }
 // 本机命令发的消息可能要等很久（对方最多 10 分钟）：命令先等一阵，没等到就给个任务号，之后凭任务号取
 const localJobs = new Map();   // job → { promise, at }
@@ -1154,6 +1175,8 @@ class Runner {
           this.textOpen = false; this.liveText = ''; this.emit({ t: 'ai.end' });
         }
       } else if (m.type === 'assistant') {
+        const ctx = ctxTokens(m.message?.usage);   // 上下文大小：标题栏的压缩提示用
+        if (ctx && ctx !== this.ctx) { this.ctx = ctx; this.emit({ t: 'ctx', tokens: ctx }); }
         // /context 这类本地命令的输出是一条整段的 assistant 消息，没有流式片段，要整段发
         if (!this.streamed?.has(m.message?.id)) {
           const text = (m.message?.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
@@ -1193,6 +1216,7 @@ class Runner {
           this.emit({ t: 'cmd.out', text: String(m.content || '') });
         } else if (m.subtype === 'compact_boundary') {
           const c = m.compact_metadata || {};
+          this.ctx = c.post_tokens ?? null; this.emit({ t: 'ctx', tokens: this.ctx, compacted: true });
           const k = n => (n >= 1000 ? Math.round(n / 1000) + 'k' : String(n ?? '?'));
           this.emit({ t: 'sys', text: (c.trigger === 'auto' ? '已自动压缩会话历史' : '已压缩会话历史') + '（' + k(c.pre_tokens) + (c.post_tokens != null ? ' → ' + k(c.post_tokens) : '') + ' tokens）' });
         } else if (m.subtype === 'commands_changed') {
@@ -2553,6 +2577,7 @@ wss.on('connection', (ws, req) => {
         }
         runner = runners.get(m.id);
         runners.set(m.id, runner);
+        if (runner.ctx === undefined) runner.ctx = ctxFromFile(info);
         runner.subscribe(ws);
         touchWeb(m.id);
         if (ws.visible !== false) clearUnread(m.id);
@@ -2566,6 +2591,7 @@ wss.on('connection', (ws, req) => {
           suggestion: runner.busy ? null : runner.suggestion || null,
           commands: runner.commands || null,
           liveText: runner.textOpen ? runner.liveText || '' : null,
+          ctx: runner.ctx ?? null,
           ...runner.modelInfo(),
         });
       } else if (!runner) {
