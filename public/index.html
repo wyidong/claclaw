@@ -101,9 +101,10 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #cfgGo::after{content:'';position:absolute;inset:-10px -6px}
 #cfgGo:active{opacity:.5}
 /* 标题栏功能按钮：和浮动朗读键一样大的圆圈，底透明；底边和第二行对齐、往上伸进第一行（第一行没有可点的，透明底不挡字） */
-.hd-ic{flex:none;display:grid;place-items:center;width:42px;height:42px;margin-top:-20px;padding:0;border:1px solid currentColor;border-radius:50%;background:transparent;color:color-mix(in srgb,var(--muted) 60%,var(--line));font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 字、图标和边框同一个灰（原来的边框色太浅、看不见字，加深一点） */
+.hd-ic{flex:none;display:grid;place-items:center;width:42px;height:42px;margin-top:-20px;padding:0;border:1px solid transparent;border-radius:50%;background:color-mix(in srgb,var(--muted) 12%,transparent);color:color-mix(in srgb,var(--muted) 60%,var(--line));font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s}   /* 平时淡淡的底色、没有边框；暂时不能点（压缩中、刚点过）才出现边框，颜色和字一样 */
+.hd-ic.lock,.hd-ctx.busy{border-color:currentColor}
 .hd-ic[hidden]{display:none}
-.hd-ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .hd-ic:active{opacity:.5}
 .hd-ctx{font-size:12.5px;font-weight:700;letter-spacing:-.2px}
 .hd-ctx.busy{font-size:11px;font-weight:600;cursor:default}
@@ -1728,8 +1729,12 @@ setInterval(function(){if(!document.hidden&&!updateReady)checkVersion()},300000)
 function banner(t){if(t){$('#bannerT').textContent=t;$('#banner').hidden=false}else{$('#banner').hidden=true}}
 
 // 工具卡片放进聊天区最后的那一组；最后一个不是工具组（中间夹了文字、消息、发回的文件）就新开一组
+// 同一轮（两条用户消息之间）的工具调用都进同一个组，中间夹着的回复文字照常显示在组下面
 function toolGroup(){
-  var l=feed.lastElementChild;if(l&&l.classList.contains('tgroup'))return l;
+  for(var l=feed.lastElementChild;l;l=l.previousElementSibling){
+    if(l.classList.contains('tgroup'))return l;
+    if(l.classList.contains('user')||l.classList.contains('peer'))break;
+  }
   var g=document.createElement('div');g.className='tgroup one';
   g.innerHTML='<button type="button" class="tg-h"><span class="st"></span><span class="tg-n"></span><span class="tg-s"></span></button><div class="tg-l"></div>';
   g.querySelector('.tg-h').addEventListener('click',function(){g.classList.toggle('open')});
@@ -3765,13 +3770,15 @@ function renderHistory(items,base){
 // 接不上（OpenClaw 序号不固定、断太久新内容超过一页、聊天区是空的）返回 -1，照旧整页重画
 function resumeTail(m){
   if(/^oc:/.test(m.id))return -1;
-  var hs=feed.querySelectorAll('[data-h]'),last=hs[hs.length-1];if(!last)return -1;
+  var hs=feed.querySelectorAll('[data-h]'),tail=hs[hs.length-1],last=tail;if(!last)return -1;
+  for(var i=0;i<hs.length;i++)if(Number(hs[i].dataset.h)>Number(last.dataset.h))last=hs[i];   // 工具组在前、组后面还有文字：序号最大的不一定排在最后
   var idx=Number(last.dataset.h),start=m.historyStart||0,end=start+m.history.length-1;
   if(!(idx>=0)||idx<start||idx>end)return -1;
   var redo=last.classList.contains('tool')&&last.dataset.k==='run';   // 断线时还在跑的工具卡片：按服务器的重画（可能已经跑完）
   if(idx===end&&!redo)return m.history.length;   // 断线期间没有新的记录：什么都不动（正在输出的那段由 liveText 补齐）
   // 有新记录：去掉实时画的部分（含工作中指示、发送中的消息），从新记录接着画
-  for(var n=last;n&&n!==feed;n=n.parentElement)while(n.nextSibling)n.nextSibling.remove();   // 它在工具组里：组里它后面的、组后面的都去掉
+  for(var n=tail;n&&n!==feed;n=n.parentElement)while(n.nextSibling)n.nextSibling.remove();   // 它在工具组里：组里它后面的、组后面的都去掉
+  feed.querySelectorAll('.tg-l>.tool:not([data-h])').forEach(function(t){var g=t.closest('.tgroup');t.remove();tgUpdate(g)});   // 实时画进前面组里的工具卡片也去掉
   thinkEl=null;if(outbox)outbox.el=null;
   if(redo){var g0=last.closest('.tgroup');last.remove();tgUpdate(g0);return idx-start}
   return idx-start+1;
@@ -3866,8 +3873,8 @@ function ttsModeAllows(pri){
 var ttsMuted={};
 try{(JSON.parse(localStorage.getItem('claclaw.ttsMuted')||'[]')||[]).forEach(function(id){ttsMuted[id]=1})}catch(_){}
 function ttsSessMuted(){return !!(session&&ttsMuted[session.id])}
-var MUTE_IC={on:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
-  off:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M3.5 3.5l17 17"/></svg>'};
+var MUTE_IC={on:'<svg viewBox="0 0 24 24"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>',
+  off:'<svg viewBox="0 0 24 24"><path transform="translate(4.5 0)" d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M4 4l16 16"/></svg>'};
 function ttsMuteShow(){
   var b=document.getElementById('ttsMute');if(!b||!tts)return;
   b.hidden=!(tts.on&&session);if(b.hidden)return;
@@ -4360,7 +4367,8 @@ function ttsSync(){
   ttsMuteShow();
 }
 $('#ttsMute').addEventListener('click',function(){
-  if(!session)return;
+  if(!session||this.classList.contains('lock'))return;
+  var me=this;me.classList.add('lock');setTimeout(function(){me.classList.remove('lock')},400);   // 防连击：边框闪一下就消失
   if(ttsMuted[session.id])delete ttsMuted[session.id];
   else{ttsMuted[session.id]=1;if(ttsSpeaking())ttsStop();if(narration&&narration.onUserStop)narration.onUserStop()}
   try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
