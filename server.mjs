@@ -1694,7 +1694,7 @@ const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeo
 async function recentList() {
   const safe = p => withTimeout(Promise.resolve().then(p), 8000).catch(() => []);
   const [cl, ds, op, oc] = await Promise.all([
-    safe(() => sessionList()),
+    safe(() => sessionList(100000)),
     safe(() => dsSessionList({ busy: id => !!dsRunners.get(id)?.busy })),
     safe(() => opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() })),
     safe(async () => (await ocGatewayUp(log)) ? ocSessionList(log) : []),
@@ -1767,10 +1767,10 @@ function inheritedMode(info) {
   return ALL_MODES.includes(m) ? m : 'default';
 }
 
-async function sessionList() {
+async function sessionList(limit = 80) {   // 各 Claw 列表默认 80 个；「最近」要全部
   const ours = webSessionIds();
   const [normal, all, live] = [
-    await listSessions({ includeProgrammatic: false, limit: 80 }),
+    await listSessions({ includeProgrammatic: false, limit }),
     ours.size ? await listSessions({ includeProgrammatic: true, limit: 500 }) : [],
     liveRegistry(),
   ];
