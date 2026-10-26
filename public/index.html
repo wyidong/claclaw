@@ -789,8 +789,9 @@ select.pe-in{text-align-last:right}
 /* 手机会话卡片：没有常驻按钮，像微信一样左滑露出「编辑 / 删除」 */
 .s-ren span,.s-del span{display:none}
 /* 「最近」：像微信聊天列表——左边 Claw 图标当头像，右上角时间，下面一行最后一条消息；行间细线，不画卡片框 */
-#sList .s-row.wx{margin-top:0;border:0;border-radius:0;background:transparent;overflow:visible}
-#sList .s-row.wx .s-item{display:flex;align-items:center;gap:12px;min-height:0;margin:0;padding:0 12px;border:0;border-radius:10px;background:transparent}
+#sList{--lpad:12px}   /* 列表左右留白；「最近」的行用负边距铺满到两边 */
+#sList .s-row.wx{margin:0 calc(var(--lpad) * -1);border:0;border-radius:0;background:transparent;overflow:visible}
+#sList .s-row.wx .s-item{display:flex;align-items:center;gap:12px;min-height:0;margin:0;padding:0 calc(var(--lpad) + 6px);border:0;border-radius:0;background:transparent}
 #sList .s-row.wx .wx-av{position:relative;flex:none;display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:var(--surface);border:.5px solid var(--line)}
 #sList .s-row.wx .wx-av svg,#sList .s-row.wx .wx-av img{display:block;width:30px;height:30px;object-fit:contain}
 #sList .s-row.wx .wx-av img.tile{border-radius:22.5%}
@@ -866,6 +867,7 @@ select.pe-in{text-align-last:right}
   /* 会话列表栏 */
   #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:relative;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
   .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:0 10px 16px;overflow-y:auto}
+  #sList{--lpad:10px}
   .sheet-p>h2:first-child{display:none}
   #sTop{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:2;margin:0 -10px 4px;padding:14px 12px 10px;background:var(--surface)}
   #sSearch{flex:1;min-width:0;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
