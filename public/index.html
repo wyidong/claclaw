@@ -172,6 +172,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .peer .body{word-break:break-word}
 .peer code{font-family:var(--mono);font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
 .peer .md pre{background:var(--surface)}
+.sys-dir{align-self:flex-start!important;text-align:left!important}
 .sys{align-self:center;max-width:92%;text-align:center;color:var(--muted);font-size:13px;line-height:1.45;white-space:pre-line}
 .think{align-self:flex-start;display:flex;align-items:center;gap:5px;padding:6px 0}
 .think .tt{margin-left:6px;font-size:13px;color:var(--muted)}
@@ -2173,7 +2174,7 @@ function onEvent(m){
     renderHistory(m.history,m.historyStart||0);
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
     if(m.compacted)addSys('会话已压缩，历史已重新加载');
-    else addSys((m.isNew?'已新建会话 ':'已恢复会话 ')+shortId(m.id)+'　'+(m.cwdShort||'')+(m.branch?' · 分支 '+m.branch:''));
+    else if(m.cwdShort){addSys('会话目录 '+m.cwdShort+(m.branch?' · 分支 '+m.branch:''));feed.lastElementChild.classList.add('sys-dir')}   // 会话 ID 标题栏有，这里只给目录，靠左
     }
     localStorage.setItem(hk('session'),m.id);
     refreshList();goChat();bgRefreshList();
