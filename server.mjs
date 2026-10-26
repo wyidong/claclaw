@@ -1702,7 +1702,7 @@ async function recentList() {
   const out = [];
   for (const [claw, arr] of [['claude', cl], ['deepseek', ds], ['opencode', op], ['openclaw', oc]]) {
     for (const x of Array.isArray(arr) ? arr : []) {
-      const at = Math.max(x.lastModified || 0, x.webActive || 0, webActive[x.id] || 0);
+      const at = x.lastModified || 0;   // 只按会话里最后一条消息的时间排（像微信）；点开、切换不算
       if (at <= recentCleared) continue;
       const it = { ...x, claw: x.claw || claw, at };
       if (claw === 'claude' && !it.lastPrompt && !it.unsent) it.lastPrompt = lastPromptOf(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || undefined;

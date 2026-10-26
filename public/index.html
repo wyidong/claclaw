@@ -803,6 +803,7 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .cwd{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-row.wx.unread .s-item .t::before{display:none}
 #sList .s-row.wx.unread .wx-av::after{content:'';position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
+@media (hover:hover){#sList .s-row.wx .s-item:hover{background:color-mix(in srgb,var(--muted) 13%,transparent)}#sList .s-row.wx .s-item:hover .wx-b{border-bottom-color:transparent}}   /* 鼠标划过：浅灰底 */
 #sList .s-row.wx .s-item[aria-current="true"],#sList .s-row.wx.opening .s-item{background:var(--user-bg)!important}
 #sList .s-row.wx .s-item[aria-current="true"] .wx-b,#sList .s-row.wx.opening .wx-b{border-bottom-color:transparent}
 @media (max-width:999px){
@@ -3405,6 +3406,7 @@ function rowOpen(s,row,b,bz){
   if(bz){if(confirmTakeover(s.title,bz))wsSend({t:'session.open',id:s.id,mode:mode,takeover:true});return}
   if(opening===s.id&&Date.now()-openingAt<4000)return;   // 正在打开：重复点不再发请求
   opening=s.id;openingAt=Date.now();row.classList.add('opening');
+  document.querySelectorAll('#sList .s-item[aria-current]').forEach(function(x){x.removeAttribute('aria-current')});b.setAttribute('aria-current','true');   // 选中色马上换到点的这一行（顺序不动）
   var w=b.querySelector('.when');if(w)w.textContent='打开中…';
   if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
     $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#where').textContent='';$('#modeTag').textContent='';
