@@ -255,6 +255,28 @@ function lastPromptOf(file) {
   lastPromptCache.set(file, { key, text });
   return text;
 }
+// 会话最后一条真正的消息（用户 / AI / 工具结果）的时间。不能用文件修改时间：Claude Code 进程退出、重启时会往文件末尾补
+// cost-state、last-prompt 这类记录，文件时间变了但没有新消息（重启 claclaw 后一批会话会被顶到「最近」最上面）
+const lastMsgCache = new Map();
+function lastMsgAt(file) {
+  let st; try { st = fs.statSync(file); } catch { return 0; }
+  const key = st.size + ':' + st.mtimeMs, c = lastMsgCache.get(file);
+  if (c && c.key === key) return c.at;
+  let at = 0;
+  try {
+    const n = Math.min(st.size, 512 * 1024), buf = Buffer.alloc(n), fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, n, st.size - n); } finally { fs.closeSync(fd); }
+    const lines = buf.toString('utf8').split('\n');
+    for (let i = lines.length - 1; i >= 0 && !at; i--) {
+      const l = lines[i];
+      if (!l.startsWith('{') || !(l.includes('"type":"user"') || l.includes('"type":"assistant"'))) continue;
+      try { const e = JSON.parse(l); if ((e.type === 'user' || e.type === 'assistant') && e.timestamp) at = Date.parse(e.timestamp) || 0; } catch {}
+    }
+  } catch {}
+  lastMsgCache.set(file, { key, at });
+  if (lastMsgCache.size > 3000) lastMsgCache.delete(lastMsgCache.keys().next().value);
+  return at;
+}
 function jsonlPathOf(info) {
   // ~/.claude/projects/<cwd 中非字母数字换成 -> /<id>.jsonl
   return path.join(HOME, '.claude', 'projects', String(info.cwd || '').replace(/[^A-Za-z0-9]/g, '-'), info.sessionId + '.jsonl');
@@ -1702,7 +1724,8 @@ async function recentList() {
   const out = [];
   for (const [claw, arr] of [['claude', cl], ['deepseek', ds], ['opencode', op], ['openclaw', oc]]) {
     for (const x of Array.isArray(arr) ? arr : []) {
-      const at = x.lastModified || 0;   // 只按会话里最后一条消息的时间排（像微信）；点开、切换不算
+      // 只按会话里最后一条消息的时间排（像微信）；点开、切换、重启不算
+      const at = claw === 'claude' && !x.unsent ? (lastMsgAt(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || x.lastModified || 0) : (x.lastModified || 0);
       if (at <= recentCleared) continue;
       const it = { ...x, claw: x.claw || claw, at };
       if (claw === 'claude' && !it.lastPrompt && !it.unsent) it.lastPrompt = lastPromptOf(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || undefined;

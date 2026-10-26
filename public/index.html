@@ -803,7 +803,9 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .m{display:block;margin:0;font-size:13.5px;color:var(--muted)}
 #sList .s-row.wx .cwd{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-row.wx.unread .s-item .t::before{display:none}
-#sList .s-row.wx.unread .wx-av::after{content:'';position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
+#sList .s-row.wx .wx-bd{display:none;position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--surface);color:#fff;font-size:11px;font-weight:600;line-height:18px;text-align:center}
+#sList .s-row.wx.unread .wx-bd{display:block}
+#sList .s-row.wx .wx-bd.num{top:-7px;right:-8px;width:auto;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px}   /* 1 条只亮红点；多于 1 条显示条数（像微信） */
 @media (hover:hover){#sList .s-row.wx .s-item:hover{background:color-mix(in srgb,var(--muted) 13%,transparent)}#sList .s-row.wx .s-item:hover .wx-b{border-bottom-color:transparent}}   /* 鼠标划过：浅灰底 */
 #sList .s-row.wx .s-item[aria-current="true"],#sList .s-row.wx.opening .s-item{background:var(--user-bg)!important}
 #sList .s-row.wx .s-item[aria-current="true"] .wx-b,#sList .s-row.wx.opening .wx-b{border-bottom-color:transparent}
@@ -3447,7 +3449,7 @@ function loadRecent(){
       var bz=s.busyElsewhere;if(bz&&!bz.canTakeover)b.dataset.busy='1';
       b.innerHTML='<span class="wx-av"></span><span class="wx-b"><span class="wx-top"><span class="t"></span><span class="when"></span></span><span class="m"><span class="cwd"></span></span></span>';
       var k=s.claw||clawOf(s.id);
-      b.querySelector('.wx-av').innerHTML=clawIcon(k);b.querySelector('.wx-av').dataset.claw=k;
+      b.querySelector('.wx-av').innerHTML=clawIcon(k)+'<span class="wx-bd"></span>';b.querySelector('.wx-av').dataset.claw=k;
       b.querySelector('.t').textContent=s.title;
       var dir=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'';
       var c=b.querySelector('.cwd');c.textContent=s.lastPrompt||s.branch||dir;c.title=(s.cwd||'')+(s.branch?'\n'+(s.claw&&s.claw!=='claude'?'模型：':'分支：')+s.branch:'');
@@ -3655,6 +3657,7 @@ function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false,byClaw={};
   ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id){other=true;byClaw[clawOf(id)]=true}});
   document.querySelectorAll('#sList .s-row').forEach(function(r){r.classList.toggle('unread',!!unread[r.dataset.id])});
+  document.querySelectorAll('#sList .s-row.wx .wx-bd').forEach(function(bd){var n=unread[bd.closest('.s-row').dataset.id]||0;bd.textContent=n>1?(n>99?'99+':String(n)):'';bd.classList.toggle('num',n>1)});
   // 目录（组标题）：组里有未读的会话就亮红点，折叠着也看得到是哪个目录要处理
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
     var h=box.previousElementSibling;   // 「最近活跃」是特殊的组，不亮红点
