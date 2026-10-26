@@ -178,7 +178,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .ic:active,.cp:active{background:var(--code-bg)}
 .md blockquote{position:relative;padding-right:40px}
 .md blockquote>.cp{top:0;right:2px}
-#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
+#toast{position:fixed;left:50%;bottom:calc(90px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
 #toast.on{opacity:1}
 html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important}   /* 嵌在 clarelay 外壳里：通知由外壳收，不在这里订阅 */
 .peer .from{font-size:12px;color:var(--muted);margin-bottom:3px}
@@ -235,7 +235,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .diff .d{background:var(--del-bg)}
 .out{margin:0;padding:10px 12px;font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
 
-#dock{background:var(--surface);border-top:1px solid var(--line);padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 7px)}
+#dock{background:var(--surface);border-top:1px solid var(--line);padding:10px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 7px)}
 /* 软键盘弹起时底部横条被键盘盖住，不再留安全区 */
 body.kb #dock{padding-bottom:10px}
 #dock[data-state="perm"]{border-top:2px solid var(--warn)}
@@ -279,7 +279,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
    遮罩层不画到状态栏区域，保证那里永远是纯色，否则会看到一截灰色模糊 */
 #sheet{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:flex-end;background:rgba(0,0,0,.42);z-index:5}
 #sheet.on{display:flex}
-.sheet-p{width:100%;max-height:88%;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 12px calc(env(safe-area-inset-bottom,0px) + 16px)}
+.sheet-p{width:100%;max-height:88%;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 16px)}
 .sheet-p h2{margin:0 4px 4px;font-size:16px;font-weight:600}
 .sheet-p p{margin:0 4px 6px;font-size:13px;color:var(--muted)}
 .s-item{display:block;width:100%;min-height:56px;margin-top:8px;padding:10px 12px;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
@@ -498,7 +498,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 /* 会话设置面板：手机从底部滑上来，电脑居中；三组：模型（卡片）、推理强度（分段）、权限（卡片） */
 #cfgDlg{position:fixed;inset:0;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);z-index:9}
 #cfgDlg.on{display:flex}
-.cfg-p{box-sizing:border-box;width:100%;max-width:520px;max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:20px 20px 0 0;padding:6px 16px calc(18px + env(safe-area-inset-bottom,0px));animation:cfgUp .2s ease-out}
+.cfg-p{box-sizing:border-box;width:100%;max-width:520px;max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:20px 20px 0 0;padding:6px 16px calc(18px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));animation:cfgUp .2s ease-out}
 @keyframes cfgUp{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
 @media (min-width:600px){#cfgDlg{align-items:center}.cfg-p{border-radius:18px;padding-bottom:18px}.cfg-grab{display:none}}
 .cfg-grab{width:38px;height:5px;margin:4px auto 6px;border-radius:3px;background:var(--line)}
@@ -587,11 +587,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
      新版 iOS 会在「顶到状态栏的可滚动区域」上加一层渐变模糊，整页滚动时顶部会一直发虚 */
   #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
   #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--surface)}
-  #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + env(safe-area-inset-bottom,0px))}
+  #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   .sheet-p>h2:first-child{display:none}   /* 会话列表顶部不要「会话」标题，搜索栏直接在最上面 */
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
-    padding:4px max(6px,env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
+    padding:4px max(6px,env(safe-area-inset-right)) calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px))) max(6px,env(safe-area-inset-left))}
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
   #mtabs button.on{color:var(--accent)}
   #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}   /* 宿主那格显示宿主名，太长截断 */
@@ -617,7 +617,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #app.m-list.set-on #mtabs{display:none}
   #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
   #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 6px;background:var(--surface)}
-  #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 14px)}
+  #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:8px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
   #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600}
   #setBack{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
 }
@@ -752,10 +752,10 @@ select.pe-in{text-align-last:right}
 @media (max-width:999px){
   /* Claw 页：三张大卡片，选了哪个，会话页就显示哪一种的会话（现在只有 Claude） */
   #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
-  #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + env(safe-area-inset-bottom,0px))}
+  #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
-  #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + env(safe-area-inset-bottom,0px))}
+  #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
   .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
   .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
@@ -801,6 +801,7 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .wx-top{display:flex;align-items:baseline;gap:8px;min-width:0}
 #sList .s-row.wx .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:16px}
 #sList .s-row.wx .when{flex:none;font-size:12px;color:var(--muted)}
+#sList .s-row.wx.working .when{color:var(--allow);font-weight:600}#sList .s-row.wx.waiting .when{color:var(--warn)}   /* 在干活 / 等确认：和 Claw 列表一样上色 */
 #sList .s-row.wx .m{display:block;margin:0;font-size:13.5px;color:var(--muted)}
 #sList .s-row.wx .cwd{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-row.wx.unread .s-item .t::before{display:none}
@@ -1535,6 +1536,9 @@ function openPath(p){
 }
 // 在 claclaw 页面里看文件（文本、图片、PDF 直接显示，其他只给「分享 / 保存」）；不跳页面，关掉就回聊天
 var fvUrl='',fvBlob=null,fvName='';
+// 手机：系统分享面板（存到「文件」、用别的 App 打开）；电脑：直接下载到「下载」（Mac 上的分享面板对很多文件类型没反应）
+var fvTouch=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches),FV_ACT=fvTouch?'分享 / 保存':'保存';
+$('#fview .fv-share').textContent=FV_ACT;
 function showFile(blob,name,msg){
   var v=$('#fview'),b=v.querySelector('.fv-b');
   if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}
@@ -1543,21 +1547,21 @@ function showFile(blob,name,msg){
   if(!blob){var e0=document.createElement('div');e0.className='fv-empty';e0.textContent=msg||'';b.appendChild(e0);return}
   var ext=(/\.([a-z0-9]+)$/i.exec(fvName)||[])[1]||'',t=(blob.type||'').toLowerCase();
   if(/^text\/|json|xml|javascript/.test(t)||/^(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env)$/i.test(ext)){
-    if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「分享 / 保存」用别的 App 打开';b.appendChild(e1);return}
+    if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「'+FV_ACT+'」'+(fvTouch?'用别的 App 打开':'下载到电脑');b.appendChild(e1);return}
     blob.text().then(function(tx){var pre=document.createElement('pre');pre.textContent=tx;b.appendChild(pre)});
   }else if(/^image\//.test(t)||/^(png|jpe?g|gif|webp|heic)$/i.test(ext)){
     fvUrl=URL.createObjectURL(blob);var im=document.createElement('img');im.src=fvUrl;b.appendChild(im);
   }else if(t==='application/pdf'||/^pdf$/i.test(ext)){
     fvUrl=URL.createObjectURL(blob.type?blob:new Blob([blob],{type:'application/pdf'}));var fr=document.createElement('iframe');fr.src=fvUrl;b.appendChild(fr);
-  }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「分享 / 保存」存到「文件」或用别的 App 打开';b.appendChild(e2)}
+  }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「'+FV_ACT+'」'+(fvTouch?'存到「文件」或用别的 App 打开':'下载到电脑');b.appendChild(e2)}
 }
 $('#fview .fv-x').addEventListener('click',function(){$('#fview').classList.remove('on');$('#fview .fv-b').innerHTML='';if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}fvBlob=null});
 $('#fview .fv-share').addEventListener('click',function(){
   if(!fvBlob)return;
   var f;try{f=new File([fvBlob],fvName,{type:fvBlob.type||'application/octet-stream'})}catch(_){f=null}
-  if(f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(){});return}
-  // 不支持分享文件（http 打开时）：退回下载
-  var u=URL.createObjectURL(fvBlob),a=document.createElement('a');a.href=u;a.download=fvName;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000);
+  var blob=fvBlob,name=fvName,dl=function(){var u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000);if(!fvTouch)toast('已保存到「下载」')};
+  if(fvTouch&&f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(e){if(!e||e.name!=='AbortError')dl()});return}   // 分享失败（不是用户取消）也退回下载
+  dl();   // 电脑、或不支持分享文件（http 打开时）：下载
 });
 // 发过的图片：原图也存在本机（按发出去的压缩图算个指纹对应），聊天记录里点开看原图
 function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
@@ -3946,6 +3950,13 @@ function applyTheme(t){
   });
   postTheme();
 }
+// 嵌在 clarelay 外壳里：iframe 里 env(safe-area-inset-bottom) 可能量不到，外壳量好发过来（embedded / insets），底部留边取两者大的
+window.addEventListener('message',function(e){
+  var m=e.data;if(window.parent===window||e.source!==window.parent||!m||m.clarelay!==1)return;
+  var i=m.type==='insets'?m:m.type==='embedded'?m.insets:null;
+  if(i&&typeof i.bottom==='number')document.documentElement.style.setProperty('--sab',Math.max(0,Math.min(80,i.bottom))+'px');
+  if(m.type==='embedded')postTheme();   // 外壳准备好了再报一次颜色（开头那次可能早于外壳记下这个 iframe）
+});
 // 嵌在 clarelay 外壳里：告诉外壳正在看哪个会话（外壳据此不推这个会话的通知）；回列表、切到后台时为 null
 var lastViewing,shellHidden=false;
 // 外壳把这个 iframe 藏起来（回主页、切到别的电脑）时 document.hidden 不会变，要靠外壳的 visible 消息；藏起来就不算「正在看」，照常推送
