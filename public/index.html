@@ -788,6 +788,23 @@ select.pe-in{text-align-last:right}
 #setPane{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
 /* 手机会话卡片：没有常驻按钮，像微信一样左滑露出「编辑 / 删除」 */
 .s-ren span,.s-del span{display:none}
+/* 「最近」：像微信聊天列表——左边 Claw 图标当头像，右上角时间，下面一行最后一条消息；行间细线，不画卡片框 */
+#sList .s-row.wx{margin-top:0;border:0;border-radius:0;background:transparent;overflow:visible}
+#sList .s-row.wx .s-item{display:flex;align-items:center;gap:12px;min-height:0;margin:0;padding:0 12px;border:0;border-radius:10px;background:transparent}
+#sList .s-row.wx .wx-av{position:relative;flex:none;display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:var(--surface);border:.5px solid var(--line)}
+#sList .s-row.wx .wx-av svg,#sList .s-row.wx .wx-av img{display:block;width:30px;height:30px;object-fit:contain}
+#sList .s-row.wx .wx-av img.tile{border-radius:22.5%}
+#sList .s-row.wx .wx-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:13px 0;border-bottom:.5px solid var(--line)}
+#sList .s-row.wx:last-child .wx-b{border-bottom:0}
+#sList .s-row.wx .wx-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+#sList .s-row.wx .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:16px}
+#sList .s-row.wx .when{flex:none;font-size:12px;color:var(--muted)}
+#sList .s-row.wx .m{display:block;margin:0;font-size:13.5px;color:var(--muted)}
+#sList .s-row.wx .cwd{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-row.wx.unread .s-item .t::before{display:none}
+#sList .s-row.wx.unread .wx-av::after{content:'';position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
+#sList .s-row.wx .s-item[aria-current="true"],#sList .s-row.wx.opening .s-item{background:var(--user-bg)!important}
+#sList .s-row.wx .s-item[aria-current="true"] .wx-b,#sList .s-row.wx.opening .wx-b{border-bottom-color:transparent}
 @media (max-width:999px){
   /* 边框画在外层（不动）：滑动时只有里面的内容往左移，编辑 / 删除也在框里 */
   .s-row{overflow:hidden;border:.5px solid var(--line);border-radius:12px;background:var(--bg)}
@@ -1030,6 +1047,7 @@ select.pe-in{text-align-last:right}
   <nav id="mtabs" aria-label="底部菜单">
     <button type="button" data-tab="chats" class="on"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span>会话</span></button>
     <button type="button" data-tab="claw"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="3.5" y="13.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="13.5" width="7" height="7" rx="2"/></svg><span>Claw</span></button>
+    <button type="button" data-tab="recent"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle class="f" cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg><span>最近</span></button>
     <button type="button" data-tab="host"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>宿主</span></button>
     <button type="button" data-tab="set"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
   </nav>
@@ -1150,6 +1168,7 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <label class="set-item"><span class="lb">上下文压缩提示<small>Claude 会话的上下文超过这个大小，标题栏出现压缩按钮（单位 k，默认 128）</small></span>
             <span class="set-num"><input id="setCtxK" type="number" inputmode="numeric" min="8" max="2000" step="1" placeholder="128" aria-label="上下文压缩提示（k）">k</span></label>
+          <button type="button" class="set-item" id="setRecentClear"><span class="lb">清空最近<small>只清空「最近」列表，不删除任何会话；之后有新动静的会话会再出现。删除会话请到各 Claw 的会话列表里删</small></span></button>
         </div>
       </div>
       <div class="set-sec">
@@ -2396,7 +2415,10 @@ function onEvent(m){
     prependHistory(m);
     break;
   case 'unread':
-    unread=m.unread||{};renderUnread();
+    var unNew=m.unread||{},unUp=Object.keys(unNew).some(function(id){return (unNew[id]||0)>(unread[id]||0)});
+    unread=unNew;renderUnread();
+    // 「最近」像微信：有会话来了新回复就重新排，它跳到最上面（列表看得见时才取）
+    if(unUp&&listMode==='recent'&&(DESKTOP.matches||mList)){clearTimeout(recentTimer);recentTimer=setTimeout(function(){if(listMode==='recent')loadRecent()},800)}
     break;
   case 'peer':
     stamp(addPeer(m.from,m.text),Date.now());
@@ -2713,16 +2735,18 @@ function refreshList(){if(DESKTOP.matches)openSheet()}
 setInterval(function(){if(DESKTOP.matches&&!document.hidden)openSheet()},60000);
 DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.matches)openSheet();else closeSheet();syncSend()});
 // 图标栏：上面是会话，最下面是设置（退出登录在设置页里）
-function railTab(set){mTab(set?'set':'chats')}
+function railTab(set){mTab(set?'set':listMode==='recent'?'recent':'chats')}
 // 底部菜单：claw（选择哪种助手）/ chats（会话列表）/ set（设置，子页面）
 function mTab(t){
   var app=$('#app');
+  if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   if(t!=='host'){hostView='';peerWatch(false)}
   hostLive(t==='host');if(t==='claw')loadClaws();if(t==='set')loadSetData();
-  $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t!=='set'&&t!=='host');
+  $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t)});
   $('.sheet-p').scrollTop=0;
+  if(typeof showClawSel==='function')showClawSel();
 }
 // ---------- 宿主页 ----------
 var hostTimer=null;
@@ -3226,6 +3250,8 @@ function renderPeer(){
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
 var clawSel=null;try{clawSel=localStorage.getItem(hk('claw'))||localStorage.getItem('claclaw.claw')}catch(_){}   // 新切到的宿主：先沿用首连宿主选的 Claw
 if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek'&&clawSel!=='opencode')clawSel=null;
+// 会话列表显示什么：recent = 「最近」（所有 Claw 的会话按活跃时间排，像微信聊天列表）；claw = 选中 Claw 的会话（按目录分组）
+var listMode='recent';try{if(localStorage.getItem('claclaw.listMode')==='claw')listMode='claw'}catch(_){}
 // 左栏的 Claw：活跃的常显，其余收起来；全都活跃就没有「更多」
 function renderRailClaws(){
   var busy={},unr={},cc=curClaw();
@@ -3257,7 +3283,8 @@ function syncChatsTab(){
 }
 function showClawSel(){
   syncChatsTab();
-  document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('on',b.dataset.claw===curClaw())});
+  document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('on',listMode==='claw'&&b.dataset.claw===curClaw())});
+  var app0=$('#app');$('#railChats').classList.toggle('on',listMode==='recent'&&!app0.classList.contains('set-on')&&!app0.classList.contains('host-on'));
   $('#rclaws').classList.remove('open');renderRailClaws();
   document.querySelectorAll('.claw-card').forEach(function(x){
     var on=x.dataset.claw===clawSel;x.setAttribute('aria-current',String(on));
@@ -3305,10 +3332,18 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
   var t=b.dataset.tab;
   if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
   mTab(t);
-  if(t==='chats'&&(!clawSel||!$('#sList .s-row')))openSheet();   // 一打开停在 Claw 页、还没加载过会话：点「会话」时再加载；还没选 Claw 就立刻显示「先选 Claw」（不取数据）
+  if(t==='chats'&&(!clawSel||!$('#sList .s-row')))openSheet();
+  if(t==='recent'&&!$('#sList .s-row'))openSheet();   // 一打开停在 Claw 页、还没加载过会话：点「会话」时再加载；还没选 Claw 就立刻显示「先选 Claw」（不取数据）
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
-$('#railChats').addEventListener('click',function(){railTab(false)});
+$('#railChats').addEventListener('click',function(){var ch=listMode!=='recent';mTab('recent');if(ch)openSheet()});
+$('#setRecentClear').addEventListener('click',function(){
+  if(!confirm('清空「最近」列表？\n只清空列表，不会删除任何会话。'))return;
+  fetch('/api/recent/clear',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){
+    if(!j.ok){alert(j.error||'清空失败');return}
+    toast('已清空最近');if(listMode==='recent'){lastList=null;$('#sList').innerHTML='';if(DESKTOP.matches)openSheet()}
+  }).catch(function(e){alert('清空失败：'+e.message)});
+});
 // 设置里的「更新客户端」：图标转两圈再刷新，刷新后停在设置页
 $('#setReload').addEventListener('click',function(){
   var ic=$('#setReload .rl-ic');if(ic.classList.contains('spin'))return;
@@ -3363,8 +3398,68 @@ function liveLastPrompt(id,text){
     var c=r.querySelector('.cwd');if(c){c.textContent=text;c.classList.add('lp')}
   });
 }
+// 点会话行：打开（别处占着的先确认接管）
+function rowOpen(s,row,b,bz){
+  closeSheet();
+  if(bz&&!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
+  if(bz){if(confirmTakeover(s.title,bz))wsSend({t:'session.open',id:s.id,mode:mode,takeover:true});return}
+  if(opening===s.id&&Date.now()-openingAt<4000)return;   // 正在打开：重复点不再发请求
+  opening=s.id;openingAt=Date.now();row.classList.add('opening');
+  var w=b.querySelector('.when');if(w)w.textContent='打开中…';
+  if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
+    $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#where').textContent='';$('#modeTag').textContent='';
+    showFeedFor(s.id);goChat();
+  }
+  wsSend({t:'session.open',id:s.id,mode:mode});
+  // 8 秒没回应：连接多半已经悄悄断了（手机切后台后常见），重连并提示再点一次
+  setTimeout(function(){if(opening===s.id){openFailed();clearOpening();reconnectNow();toast('连接刚才断了，已重连，请再点一次')}},8000);
+}
+// 「最近」：所有 Claw 的会话按活跃时间倒序，一条一行（头像 = Claw 图标，像微信聊天列表），不分组、不限条数
+function wxTime(ms){
+  if(!ms)return '';
+  var d=new Date(ms),n=new Date(),day=function(x){return new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime()};
+  var diff=Math.round((day(n)-day(d))/86400e3),p=function(x){return (x<10?'0':'')+x};
+  if(diff<=0)return p(d.getHours())+':'+p(d.getMinutes());
+  if(diff===1)return '昨天';
+  if(diff<7)return '星期'+'日一二三四五六'[d.getDay()];
+  return (d.getFullYear()===n.getFullYear()?'':d.getFullYear()+'/')+(d.getMonth()+1)+'/'+d.getDate();
+}
+var recentTimer=null;
+function loadRecent(){
+  var list=$('#sList');
+  fetch('/api/recent').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(whenNotPressing).then(function(arr){
+    if(listMode!=='recent')return;
+    if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
+    lastList=arr;
+    var sp=mList?$('#sList'):$('.sheet-p'),keepTop=sp.scrollTop;
+    list.innerHTML='';
+    if(!arr.length){list.innerHTML='<div class="s-empty">「最近」是空的。<br>任意 Claw 里有新动静的会话会出现在这里</div>';return}
+    setTimeout(function(){sp.scrollTop=keepTop},0);
+    arr.forEach(function(s){
+      var row=document.createElement('div');row.className='s-row wx'+(s.peer?' collab':'');row.dataset.id=s.id;
+      if(unread[s.id]||s.unread)row.classList.add('unread');
+      var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
+      if(session&&s.id===session.id)b.setAttribute('aria-current','true');
+      var bz=s.busyElsewhere;if(bz&&!bz.canTakeover)b.dataset.busy='1';
+      b.innerHTML='<span class="wx-av"></span><span class="wx-b"><span class="wx-top"><span class="t"></span><span class="when"></span></span><span class="m"><span class="cwd"></span></span></span>';
+      var k=s.claw||clawOf(s.id);
+      b.querySelector('.wx-av').innerHTML=clawIcon(k);b.querySelector('.wx-av').dataset.claw=k;
+      b.querySelector('.t').textContent=s.title;
+      var dir=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'';
+      var c=b.querySelector('.cwd');c.textContent=s.lastPrompt||s.branch||dir;c.title=(s.cwd||'')+(s.branch?'\n'+(s.claw&&s.claw!=='claude'?'模型：':'分支：')+s.branch:'');
+      var whenTxt=s.unsent?'新建':wxTime(s.at||s.lastModified);
+      b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
+      if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';
+      b.title=CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管'):'');
+      b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
+      list.appendChild(row);
+    });
+    applySearch();renderUnread();renderActivity();
+  }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
+}
 function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
+  document.querySelectorAll('#sList>.s-row').forEach(function(r){r.hidden=!!q&&(r.textContent+' '+(r.dataset.id||'')).toLowerCase().indexOf(q)<0});
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
     var h=box.previousElementSibling,label=h.dataset.path||(h.querySelector('.gn')||{}).textContent||'',hit=0;
     box.querySelectorAll('.s-row').forEach(function(r){var ok=!q||(label+' '+r.textContent+' '+(r.dataset.id||'')).toLowerCase().indexOf(q)>=0;r.hidden=!ok;if(ok)hit++});
@@ -3392,8 +3487,10 @@ $('#sNew').addEventListener('click',function(){
 });
 function openSheet(silent){
   var list=$('#sList');
-  $('#sTop').style.display=!DESKTOP.matches&&!clawSel?'none':'';   // 手机还没选 Claw：没有可搜、可新建的会话，搜索框和 ⊕ 一起藏起来
-  if(!DESKTOP.matches&&!clawSel){   // 手机：还没选 Claw，会话列表不加载任何会话
+  var rec=listMode==='recent';
+  $('#sTop').style.display=!DESKTOP.matches&&!clawSel&&!rec?'none':'';
+  $('#sNew').hidden=rec;   // 「最近」里不新建：新建要先选 Claw   // 手机还没选 Claw：没有可搜、可新建的会话，搜索框和 ⊕ 一起藏起来
+  if(!rec&&!DESKTOP.matches&&!clawSel){   // 手机：还没选 Claw，会话列表不加载任何会话
     list.innerHTML='<div class="s-empty claw-need">还没选择 Claw。<br>先选一个，会话列表才会显示对应的会话。<br><button type="button" class="claw-go">去选择</button></div>';
     list.querySelector('.claw-go').addEventListener('click',function(){mTab('claw')});
     return;
@@ -3401,6 +3498,7 @@ function openSheet(silent){
   if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载中…</div>';
   if(!silent&&DESKTOP.matches){sheet.classList.add('on');sheet.setAttribute('aria-hidden','false')}   // 手机列表页本身就是列表，不用弹出面板
   syncPushBtn();
+  if(rec){loadRecent();return}
   var claw=clawSel;
   fetch('/api/sessions'+(clawSel==='openclaw'||clawSel==='deepseek'||clawSel==='opencode'?'?claw='+clawSel:'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
     if(claw!==clawSel)return;   // 加载途中换了 Claw
@@ -3422,25 +3520,13 @@ function openSheet(silent){
     order.forEach(function(g){g.items.sort(function(a,b){return (b.lastModified||0)-(a.lastModified||0)})});
     var fz=listFrozen&&!listResort?listFrozen:null;   // 正在用：已经显示的位置一个不动，新出现的只加在末尾
     var flat=[],cur=list;
-    // 最上面「最近活跃」：30 分钟内在 claclaw 里活跃过的会话（打开、发消息、回复完），按活跃时间最多 5 个；
-    // 和目录分组里的重复一份，方便直接点。终端 / VS Code 里的活动不算。没有就空着
-    var since=Date.now()-30*60e3;
-    var recent=arr.filter(function(s){return (s.webActive||0)>=since}).sort(function(a,b){return b.webActive-a.webActive}).slice(0,5);
     if(fz){
       keepOrder(order,fz.groups,function(g){return g.key});
       order.forEach(function(g){keepOrder(g.items,fz.items[g.key]||[],function(x){return x.id})});
-      // 最近活跃：上次显示的照旧留着（哪怕刚过 30 分钟），新的只在还有空位时加到末尾；不会挤掉、也不会插队
-      var byId={};arr.forEach(function(x){byId[x.id]=x});
-      var keep=fz.recent.map(function(id){return byId[id]}).filter(Boolean);
-      recent.forEach(function(x){if(keep.length<5&&keep.indexOf(x)<0)keep.push(x)});
-      recent=keep;
     }
-    listFrozen={groups:order.map(function(g){return g.key}),items:{},recent:recent.map(function(x){return x.id})};
+    listFrozen={groups:order.map(function(g){return g.key}),items:{}};
     order.forEach(function(g){listFrozen.items[g.key]=g.items.map(function(x){return x.id})});
     listResort=false;
-    var rg={key:'__recent',label:'最近活跃',items:recent,recent:true};
-    flat.push({grp:rg});recent.forEach(function(s){flat.push({s:s,recent:true})});
-    if(!recent.length)flat.push({empty:'30 分钟内没有在 claclaw 里活跃的会话'});
     order.forEach(function(g){flat.push({grp:g});g.items.forEach(function(s){flat.push(s)})});
     flat.forEach(function(s){
       var inRecent=false;
@@ -3498,21 +3584,7 @@ function openSheet(silent){
       // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
       if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';   // 具体在哪下面那行写着
       if(bz)b.querySelector('.bz').textContent=idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管');
-      b.addEventListener('click',function(){
-        closeSheet();
-        if(bz&&!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
-        if(bz){if(confirmTakeover(s.title,bz))wsSend({t:'session.open',id:s.id,mode:mode,takeover:true});return}
-        if(opening===s.id&&Date.now()-openingAt<4000)return;   // 正在打开：重复点不再发请求
-        opening=s.id;openingAt=Date.now();row.classList.add('opening');
-        var w=b.querySelector('.when');if(w)w.textContent='打开中…';
-        if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
-          $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#where').textContent='';$('#modeTag').textContent='';
-          showFeedFor(s.id);goChat();
-        }
-        wsSend({t:'session.open',id:s.id,mode:mode});
-        // 8 秒没回应：连接多半已经悄悄断了（手机切后台后常见），重连并提示再点一次
-        setTimeout(function(){if(opening===s.id){openFailed();clearOpening();reconnectNow();toast('连接刚才断了，已重连，请再点一次')}},8000);
-      });
+      b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
       // 改名：任何会话都行（只是往记录末尾追加一条标题）
       var rn=document.createElement('button');rn.type='button';rn.className='s-ren';rn.setAttribute('aria-label','改名');
       rn.innerHTML=ICON_PEN+'<span>编辑</span>';
@@ -3588,9 +3660,10 @@ function renderUnread(){
   var otherClaw=Object.keys(byClaw).some(function(c){return c!==clawSel});
   // 电脑左栏：当前 Claw 的未读亮在「会话」上，别的 Claw 的未读亮在它自己的图标上
   var cc=curClaw();renderRailClaws();
-  $('#railChats').classList.toggle('dot',DESKTOP.matches?!!byClaw[cc]:other);
-  document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('dot',b.dataset.claw!==cc&&!!byClaw[b.dataset.claw])});
+  $('#railChats').classList.toggle('dot',other);   // 「会话」= 最近：任何会话有未读都亮
+  document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('dot',(listMode!=='claw'||b.dataset.claw!==cc)&&!!byClaw[b.dataset.claw])});
   $('#mtabs [data-tab="chats"]').classList.toggle('dot',!!byClaw[clawSel]||(!clawSel&&other));
+  $('#mtabs [data-tab="recent"]').classList.toggle('dot',other);
   $('#mtabs [data-tab="claw"]').classList.toggle('dot',!!clawSel&&otherClaw);
   document.querySelectorAll('.claw-card').forEach(function(c){c.classList.toggle('unread',!!byClaw[c.dataset.claw])});
   $('#sessBtn').classList.toggle('unr',other);$('#backBtn').classList.toggle('unr',other);
@@ -3643,7 +3716,7 @@ function swClose(row,now){
 function swMax(row){return row.querySelector('.s-del')?144:72}
 $('#sList').addEventListener('touchstart',function(e){
   if(DESKTOP.matches||e.touches.length!==1)return;
-  var row=e.target.closest('.s-row');if(!row||e.target.closest('.s-ren,.s-del'))return;
+  var row=e.target.closest('.s-row');if(!row||row.classList.contains('wx')||e.target.closest('.s-ren,.s-del'))return;   // 「最近」里没有编辑 / 删除，不能滑
   if(swOpen&&swOpen!==row){swClose(swOpen);swSuppress=Date.now()}   // 点别的行：先收起已打开的那行
   var t=e.touches[0];
   sw={row:row,it:row.querySelector('.s-item'),x:t.clientX,y:t.clientY,t:Date.now(),base:row.classList.contains('open')?-swMax(row):0,lock:null,off:0};
@@ -3692,7 +3765,7 @@ function goList(toClaw){
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
-  if((!clawSel||toClaw)&&!$('#app').classList.contains('set-on'))mTab('claw');   // 首次使用：先选 Claw（正在设置页就留在设置页）
+  if((toClaw||(!clawSel&&listMode!=='recent'))&&!$('#app').classList.contains('set-on'))mTab('claw');   // 首次使用：先选 Claw（正在设置页就留在设置页）
   if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：刷新后回到设置页
   if(toClaw){syncPushBtn();return}   // 停在 Claw 页：会话列表等选了 Claw 再加载
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
@@ -3700,7 +3773,7 @@ function goList(toClaw){
 }
 // 手机：进入会话、内容加载完的那一刻在后台刷新一次列表并重新排序（列表被聊天页挡着看不到）；
 // 服务器此时已把这次打开记为活跃，返回列表时当前会话就在「最近活跃」第一位。列表页里顺序完全不动
-function bgRefreshList(){if(!DESKTOP.matches&&!mList&&clawSel){listResort=true;openSheet(true)}}
+function bgRefreshList(){if(!DESKTOP.matches&&!mList&&(clawSel||listMode==='recent')){listResort=true;openSheet(true)}}
 // 列表页里只在原位更新「几分钟前」
 function tickTimes(){
   document.querySelectorAll('#sList .s-item[data-lm]').forEach(function(it){
@@ -4693,7 +4766,7 @@ syncSend();
 if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
   var view0='';try{view0=sessionStorage.getItem('claclaw.view')||''}catch(_){}
   if(reloadToSet){reloadToSet=false;startOnClaw=false;mList=true;$('#app').classList.add('m-list');history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：直接回设置页，不经过别的页
-  else if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||!clawSel)mTab('claw');else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
+  else if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(listMode==='recent'){mTab('recent');openSheet()}else if(startOnClaw||!clawSel)mTab('claw');else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
 }
 document.documentElement.classList.remove('boot');
 takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});

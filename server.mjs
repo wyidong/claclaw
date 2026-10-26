@@ -1686,6 +1686,32 @@ function touchWeb(id) {
   }, 2000);
 }
 
+// 「最近」：所有 Claw 的会话按活跃时间排成一个列表（像微信聊天列表）。清空只是记下清空的时间，
+// 之后有新动静的会话才回到列表里；会话本身不删
+const RECENT_FILE = path.join(DATA, 'recent.json');
+let recentCleared = (() => { try { return Number(JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).clearedAt) || 0; } catch { return 0; } })();
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+async function recentList() {
+  const safe = p => withTimeout(Promise.resolve().then(p), 8000).catch(() => []);
+  const [cl, ds, op, oc] = await Promise.all([
+    safe(() => sessionList()),
+    safe(() => dsSessionList({ busy: id => !!dsRunners.get(id)?.busy })),
+    safe(() => opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() })),
+    safe(async () => (await ocGatewayUp(log)) ? ocSessionList(log) : []),
+  ]);
+  const out = [];
+  for (const [claw, arr] of [['claude', cl], ['deepseek', ds], ['opencode', op], ['openclaw', oc]]) {
+    for (const x of Array.isArray(arr) ? arr : []) {
+      const at = Math.max(x.lastModified || 0, x.webActive || 0, webActive[x.id] || 0);
+      if (at <= recentCleared) continue;
+      const it = { ...x, claw: x.claw || claw, at };
+      if (claw === 'claude' && !it.lastPrompt && !it.unsent) it.lastPrompt = lastPromptOf(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || undefined;
+      out.push(it);
+    }
+  }
+  return peerMark(out.sort((a, b) => b.at - a.at));
+}
+
 let lastSound = 0;
 function localSound(force = false) {
   if (!SOUND_OK || (!force && !settings().localSound)) return;
@@ -2197,6 +2223,15 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/sessions/delete' && req.method === 'POST') return handleDelete(req, res);
     if (url.pathname === '/api/sessions/rename' && req.method === 'POST') return handleRename(req, res);
+    if (url.pathname === '/api/recent' && req.method === 'GET') {
+      return sendJson(res, 200, await recentList(), { 'cache-control': 'no-store' });
+    }
+    if (url.pathname === '/api/recent/clear' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      recentCleared = Date.now();
+      try { writeJsonAtomic(RECENT_FILE, { clearedAt: recentCleared }); } catch (e) { return sendJson(res, 500, { error: e.message }); }
+      return sendJson(res, 200, { ok: true });
+    }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'openclaw') {
       try { return sendJson(res, 200, peerMark(await ocSessionList(log)), { 'cache-control': 'no-store' }); }
       catch (e) { return sendJson(res, 502, { error: e.message }); }
