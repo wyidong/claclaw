@@ -68,6 +68,9 @@ function rawCall(sock, method, params) {
 }
 export async function call(method, params, log) { return rawCall(await connect(log), method, params); }
 
+// 当前上下文大小：网关记的这个会话的 totalTokens（不是最新的就算不知道）
+const ocCtxOf = si => (si && si.totalTokensFresh !== false && Number(si.totalTokens)) || null;
+
 // ---------- 会话列表 ----------
 export async function ocSessionList(log) {
   const r = await call('sessions.list', { limit: 200 }, log);
@@ -153,6 +156,7 @@ export class OcRunner {
     this.nextOffset = h.nextOffset;
     this.title = h.sessionInfo?.displayName || h.sessionInfo?.label || (h.sessionInfo?.isMain ? '主会话' : this.key);
     this.model = [h.sessionInfo?.modelProvider, h.sessionInfo?.model].filter(Boolean).join('/');
+    this.ctx = ocCtxOf(h.sessionInfo);
     // 斜杠命令（/model、/status……）：网关自己的命令清单，取一次缓存起来
     this.commands = await ocCommands(this.log);
     const run = !!h.sessionInfo?.hasActiveRun;
@@ -225,10 +229,15 @@ export class OcRunner {
       const h = await call('chat.history', { sessionKey: this.key, limit: 1 }, this.log);
       const model = [h.sessionInfo?.modelProvider, h.sessionInfo?.model].filter(Boolean).join('/');
       if (model && model !== this.model) { this.model = model; this.emit({ t: 'session.meta', cwdShort: 'OpenClaw · ' + model }); }
+      // 上下文大小（标题栏的压缩提示）；刚发过 /compact 的这一轮算压缩
+      const c = ocCtxOf(h.sessionInfo), compacted = this.compactAsked;
+      this.compactAsked = false;
+      if (c !== this.ctx || compacted) { this.ctx = c; this.emit({ t: 'ctx', tokens: c, ...(compacted ? { compacted: true } : {}) }); }
     } catch {}
   }
 
   send(text, images = []) {
+    if (/^\/compact\s*$/.test(String(text))) this.compactAsked = true;
     const idem = crypto.randomUUID();
     this.myRuns.add(idem);
     this.setBusy(true);

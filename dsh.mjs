@@ -177,6 +177,22 @@ function addUsage(recs, acc) {
 }
 // 本次会话累计：四个 provider 上报的桶 + 按每条消息当时模型/时段估的费用（CNY）。
 // 子代理是单独的会话文件（header.parentSession 指向父会话，可能多层），一起算进来
+// 当前上下文大小：最后一次请求的输入量（未命中 + 缓存读 + 缓存写）。最近的是压缩记录时，用摘要的输出长度近似压缩后的大小
+export function dsCtx(id) {
+  if (!isDs(id)) return null;
+  const sid = sidOf(id);
+  if (sid.includes('/') || sid.includes('..')) return null;
+  const f = scan().get(sid);
+  const recs = f ? readRecords(f) || [] : [];
+  for (let i = recs.length - 1; i >= 0; i--) {
+    const r = recs[i], u = r.data?.usage;
+    if (r.type === 'compaction/summary') return Number(u?.outputTokens) || null;
+    if (r.type !== 'assistant/message' || !u) continue;
+    const n = (Number(u.inputTokens) || 0) + (Number(u.cacheReadTokens) || 0) + (Number(u.cacheWriteTokens) || 0);
+    if (n) return n;
+  }
+  return null;
+}
 export function dsUsage(id) {
   if (!isDs(id)) return null;
   const sid = sidOf(id);
@@ -650,6 +666,13 @@ export class DsRunner {
     this.onActivity?.(this.id, on ? '思考中' : null);
   }
   // 累计费用（标题栏 ID 后面那个 ≈¥）：每轮结束推一次；长回合里每 2.5 分钟再推一次（dsh 每一步都把 usage 写进日志）
+  // 上下文大小（标题栏的压缩提示）：每轮结束推一次；compacted = 这一轮是压缩
+  pushCtx(compacted) {
+    const c = dsCtx(this.id);
+    if (c === this.ctx && !compacted) return;
+    this.ctx = c;
+    this.emit({ t: 'ctx', tokens: c, ...(compacted ? { compacted: true } : {}) });
+  }
   pushUsage() {
     const u = dsUsage(this.id);
     if (!u) return;
@@ -824,6 +847,8 @@ export class DsRunner {
     if (error) this.emit({ t: 'error', message: error });
     this.stopUsageTimer();
     this.pushUsage();
+    this.pushCtx(reason === 'command' && this.justCompacted);
+    this.justCompacted = false;
     this.busy = false;
     this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
     this.onActivity?.(this.id, null);
@@ -910,6 +935,7 @@ export class DsRunner {
       const reattach = wasAttached && this.subs.size > 0;
       if (reattach) await this.attachWithRetry();
       this.compacting = false;
+      this.justCompacted = true;
       this.finish({ reason: 'command', text: '压缩完成：' + r.text + (reattach ? '' : '\n\n下次发消息会重新接上压缩后的会话。') });
       if (!this.busy) { try { this.onCompacted?.(this); } catch (e) { this.log?.('dsh compact refresh failed', e.message); } }
     } catch (e) {

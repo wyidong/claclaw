@@ -94,8 +94,20 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .where bdi{direction:ltr;unicode-bidi:isolate}
 /* 会话模式：右上角下拉选择；标题后面显示模式的英文名（无边框，颜色跟模式走） */
 /* 会话设置按钮：标题栏右边，两行——上「模型 · 推理强度」、下权限模式（颜色跟模式走）；点开是底部面板 */
-#cfgBtn{flex:none;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:1px;max-width:44%;min-height:44px;padding:2px 18px 2px 6px;border:0;color:var(--muted);font:inherit;text-align:right;cursor:pointer;-webkit-tap-highlight-color:transparent;
-  background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center/8px 14px}
+#hdAct{flex:none;display:flex;align-items:flex-end;gap:6px;min-width:0;max-width:60%}
+#cfgBtn{flex:0 1 auto;display:flex;align-items:center;align-self:center;min-width:0;color:var(--muted);text-align:right;cursor:default}
+/* 只有 › 能点：图标小，点击范围往四周透明扩大 */
+#cfgGo{position:relative;flex:none;display:grid;place-items:center;width:22px;height:22px;margin:0 -6px 0 2px;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}
+#cfgGo::after{content:'';position:absolute;inset:-10px -6px}
+#cfgGo:active{opacity:.5}
+/* 标题栏功能按钮：和浮动朗读键一样大的圆圈，底透明；底边和第二行对齐、往上伸进第一行（第一行没有可点的，透明底不挡字） */
+.hd-ic{flex:none;display:grid;place-items:center;width:42px;height:42px;margin-top:-20px;padding:0;border:1px solid currentColor;border-radius:50%;background:transparent;color:color-mix(in srgb,var(--muted) 60%,var(--line));font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 字、图标和边框同一个灰（原来的边框色太浅、看不见字，加深一点） */
+.hd-ic[hidden]{display:none}
+.hd-ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hd-ic:active{opacity:.5}
+.hd-ctx{font-size:12.5px;font-weight:700;letter-spacing:-.2px}
+.hd-ctx.busy{font-size:11px;font-weight:600;cursor:default}
+.hd-ctx.done{cursor:default}
 #cfgBtn>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #cfgBtn .c1{font-size:12px;line-height:1.2;font-weight:600;color:var(--ink);opacity:.75}
 #cfgBtn .c1:empty{display:none}
@@ -103,7 +115,6 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #cfgBtn[data-m="accept"] .c2{color:var(--warn)}
 #cfgBtn[data-m="plan"] .c2{color:var(--accent)}
 #cfgBtn[data-m="bypass"] .c2{color:var(--deny);font-weight:600}
-#cfgBtn:active{opacity:.6}
 #hdCard{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px}
 #sessBtn .mtag{display:none}   /* 权限模式右边按钮已经显示，这里不再重复 */
 .cpid{cursor:copy;border-radius:4px}
@@ -197,6 +208,24 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .tt{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ts{flex:none;font-size:13px;color:var(--muted)}
 .tool-b{display:none;border-top:1px solid var(--line)}
+/* 连续的工具调用合成一组：外面只显示条数统计（完成 / 出错 / 运行中），点开列出全部；只有一个时就是普通卡片 */
+.tgroup{display:flex;flex-direction:column}
+.tg-h{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tg-h .st{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
+.tgroup[data-k="run"] .tg-h .st{background:var(--accent);animation:pulse 1s infinite}
+.tgroup[data-k="wait"] .tg-h{border-color:var(--warn)}
+.tgroup[data-k="wait"] .tg-h .st{background:var(--warn)}
+.tgroup[data-k="no"] .tg-h .st{background:var(--deny)}
+.tg-h .tg-n{font-weight:600}
+.tg-h .tg-s{flex:1;min-width:0;color:var(--muted);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tg-h .tg-s .no{color:var(--deny)}
+.tg-h .tg-s .wait{color:var(--warn)}
+.tg-h::after{content:'';flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-bottom:1.6px solid var(--muted);transform:rotate(45deg);margin:-4px 4px 0 0;transition:transform .15s}
+.tgroup.open .tg-h::after{transform:rotate(-135deg);margin-top:4px}
+.tg-l{display:none;flex-direction:column;gap:10px;margin-top:10px}
+.tgroup.open .tg-l{display:flex}
+.tgroup.one .tg-h{display:none}
+.tgroup.one .tg-l{display:flex;margin-top:0}
 .tool.open .tool-b{display:block}
 .diff{font-family:var(--mono);font-size:12.5px;line-height:1.55;overflow-x:auto;padding:4px 0}
 .diff div{padding:0 12px;white-space:pre;min-width:max-content}
@@ -265,7 +294,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
-@media (prefers-reduced-motion:reduce){.think i,.tool[data-k="run"] .st{animation:none}}
+@media (prefers-reduced-motion:reduce){.think i,.tool[data-k="run"] .st,.tgroup[data-k="run"] .tg-h .st{animation:none}}
 #dock{position:relative}
 /* 底部输入区：分割线以下没有任何边框和底色块，靠光标和淡色提示表明这里能输入；
    左上角「+」加图片、右上角发送/停止，都是浮在输入框上的纯符号 */
@@ -388,10 +417,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #setPane .lb small{font-size:12.5px;color:var(--muted)}
 #setPane .set-item select{flex:none;max-width:45%;border:0;background:none;color:var(--muted);font:inherit;font-size:14.5px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;padding:4px 18px 4px 4px;cursor:pointer;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
+#setPane .set-num{flex:none;display:flex;align-items:center;gap:2px;color:var(--muted);font-size:14.5px}
+#setPane .set-num input{width:64px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:15px;text-align:right;padding:4px 6px}
 #setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
 /* 开关 */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
-   没在念：喇叭，点了念最后一条回复；在念：方块（外圈呼吸），点了停；被 iPhone 拦住：绿色播放键 */
+   没在念：播放三角，点了念最后一条回复；在念：方块（外圈呼吸），点了停；被 iPhone 拦住：绿色播放键 */
 #ttsStop{position:fixed;right:14px;bottom:calc(var(--dockTop,96px) + 10px);z-index:30;width:42px;height:42px;padding:0;border:.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:pointer;opacity:.92}
 #ttsStop svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #ttsStop.on{color:var(--accent)}
@@ -536,14 +567,14 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
      会话名、ID 嵌在 #sessBtn 里（电脑端是一行）：手机上把外层拆掉（display:contents），直接排进 #hdCard 的网格 */
   header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
   #backBtn{align-self:stretch;height:auto;place-items:center;padding:0}   /* 返回键独占左边一栏（占满两行），箭头在这一栏里上下左右居中 */
-  #hdCard{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:0 8px;align-items:center;min-height:0}
+  #hdCard{display:grid;grid-template-columns:20px minmax(78px,1fr) auto;gap:0 8px;align-items:center;min-height:0}   /* ID 至少留够 8 位 */
   #hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
   #sessBtn .dot{grid-column:1;grid-row:1}
   #sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
   #sessBtn .where{display:none}
   #sid{grid-column:2;grid-row:2;align-self:stretch;display:flex;align-items:center;min-width:0;font-size:13px;line-height:22px}
   #sid .hid{margin-left:0;line-height:22px}
-  #cfgBtn{grid-column:3;grid-row:2;align-self:stretch;flex-direction:row;align-items:center;gap:0;max-width:none;min-height:22px;margin:0;padding:0 15px 0 0;background-size:7px 12px;background-position:right 55%}
+  #hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
   #cfgBtn .c1{font-size:13px;line-height:22px}
   #cfgBtn .c1:not(:empty)::after{content:'·';margin:0 6px;font-weight:400}
   #cfgBtn .c2{font-size:13px;line-height:22px}
@@ -871,14 +902,14 @@ select.pe-in{text-align-last:right}
   #sessBtn{border:0;background:none;padding:0;cursor:text}
   #sessBtn>svg{display:none}
   #sessBtn.unr::after{display:none}
-  #hdCard{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:0 8px;align-items:center;min-height:0}
+  #hdCard{display:grid;grid-template-columns:20px minmax(78px,1fr) auto;gap:0 8px;align-items:center;min-height:0}   /* ID 至少留够 8 位 */
   #hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
   #sessBtn .dot{grid-column:1;grid-row:1}
   #sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
   #sessBtn .where{display:none}
   #sid{grid-column:2;grid-row:2;align-self:stretch;display:flex;align-items:center;min-width:0;font-size:13px;line-height:22px}
   #sid .hid{margin-left:0;line-height:22px}
-  #cfgBtn{grid-column:3;grid-row:2;align-self:stretch;flex-direction:row;align-items:center;gap:0;max-width:none;min-height:22px;margin:0;padding:0 15px 0 0;background-size:7px 12px;background-position:right 55%}
+  #hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
   #cfgBtn .c1{font-size:13px;line-height:22px}
   #cfgBtn .c1:not(:empty)::after{content:'·';margin:0 6px;font-weight:400}
   #cfgBtn .c2{font-size:13px;line-height:22px}
@@ -948,7 +979,12 @@ select.pe-in{text-align-last:right}
       </span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
     </div>
-    <button type="button" id="cfgBtn" data-m="default" aria-label="模型、推理强度、权限"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span></button>
+    <!-- 第二行右边的功能区：以后更多按钮也放这里。模型 · 推理强度 · 权限 只是文字，只有 › 能点开会话设置 -->
+    <div id="hdAct">
+      <button type="button" id="ctxBtn" class="hd-ic hd-ctx" hidden></button>
+      <button type="button" id="ttsMute" class="hd-ic" hidden></button>
+      <div id="cfgBtn" data-m="default"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span><button type="button" id="cfgGo" aria-label="模型、推理强度、权限" title="模型、推理强度、权限"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg></button></div>
+    </div>
     </div>
   </header>
 
@@ -1106,6 +1142,13 @@ select.pe-in{text-align-last:right}
             <select id="setTtsVoice"></select></label>
           <div class="set-item tts-rate"><span class="lb">语速<small id="setTtsRateV">1.10 倍</small></span>
             <span class="rate-row"><span class="rate-end">慢</span><input type="range" id="setTtsRate" min="0.6" max="2" step="0.05" value="1.1" aria-label="语速"><span class="rate-end">快</span></span></div>
+        </div>
+      </div>
+      <div class="set-sec">
+        <div class="set-h">会话</div>
+        <div class="set-card">
+          <label class="set-item"><span class="lb">上下文压缩提示<small>Claude 会话的上下文超过这个大小，标题栏出现压缩按钮（单位 k，默认 128）</small></span>
+            <span class="set-num"><input id="setCtxK" type="number" inputmode="numeric" min="8" max="2000" step="1" placeholder="128" aria-label="上下文压缩提示（k）">k</span></label>
         </div>
       </div>
       <div class="set-sec">
@@ -1684,17 +1727,39 @@ function checkVersion(){
 setInterval(function(){if(!document.hidden&&!updateReady)checkVersion()},300000);
 function banner(t){if(t){$('#bannerT').textContent=t;$('#banner').hidden=false}else{$('#banner').hidden=true}}
 
+// 工具卡片放进聊天区最后的那一组；最后一个不是工具组（中间夹了文字、消息、发回的文件）就新开一组
+function toolGroup(){
+  var l=feed.lastElementChild;if(l&&l.classList.contains('tgroup'))return l;
+  var g=document.createElement('div');g.className='tgroup one';
+  g.innerHTML='<button type="button" class="tg-h"><span class="st"></span><span class="tg-n"></span><span class="tg-s"></span></button><div class="tg-l"></div>';
+  g.querySelector('.tg-h').addEventListener('click',function(){g.classList.toggle('open')});
+  feed.appendChild(g);return g;
+}
+// 组头：工具调用 N 次 · 完成 a · 出错 b · 运行中 c · 等确认 d（是 0 的不写）；圆点颜色：等确认 > 运行中 > 出错 > 完成
+function tgUpdate(g){
+  if(!g)return;
+  var ts=g.querySelectorAll('.tg-l>.tool'),c={ok:0,no:0,run:0,wait:0};
+  if(!ts.length){g.remove();return}
+  ts.forEach(function(t){var k=t.dataset.k;c[k in c?k:'run']++});
+  g.classList.toggle('one',ts.length<2);
+  g.dataset.k=c.wait?'wait':c.run?'run':c.no?'no':'ok';
+  g.querySelector('.tg-n').textContent='工具调用 '+ts.length+' 次';
+  var parts=[];
+  if(c.ok)parts.push('完成 '+c.ok);if(c.no)parts.push('<span class="no">出错 '+c.no+'</span>');
+  if(c.run)parts.push('运行中 '+c.run);if(c.wait)parts.push('<span class="wait">等确认 '+c.wait+'</span>');
+  g.querySelector('.tg-s').innerHTML=parts.join(' · ');
+}
 function toolCard(name,target){
   var el=document.createElement('div');el.className='tool';
   el.innerHTML='<button class="tool-h" type="button"><span class="st"></span><span class="tn"></span><span class="tt"></span><span class="ts"></span></button><div class="tool-b"></div>';
   el.querySelector('.tn').textContent=name;
   el.querySelector('.tt').textContent=target;
   el.querySelector('.tool-h').addEventListener('click',function(){el.classList.toggle('open')});
-  feed.appendChild(el);scrollDown();
+  var g=toolGroup();g.querySelector('.tg-l').appendChild(el);tgUpdate(g);scrollDown();
   var body=el.querySelector('.tool-b');
   return {
     el:el,
-    status:function(k,t){el.dataset.k=k;el.querySelector('.ts').textContent=t;scrollDown()},
+    status:function(k,t){el.dataset.k=k;el.querySelector('.ts').textContent=t;tgUpdate(el.closest('.tgroup'));scrollDown()},
     add:function(node){body.appendChild(node);scrollDown()},
     open:function(){el.classList.add('open');scrollDown()},
     collapse:function(){el.classList.remove('open')},
@@ -1764,7 +1829,7 @@ function mediaCard(id,name,size){
 function nextAudioCard(f){
   for(var el=f.nextElementSibling;el;el=el.nextElementSibling){
     if(el.classList.contains('sfmedia'))return el.classList.contains('sfvideo')?null:el;
-    if(!el.classList.contains('tool'))return null;   // 中间夹了文字或别的：不算同一组
+    if(!el.classList.contains('tool')&&!el.classList.contains('tgroup'))return null;   // 中间夹了文字或别的：不算同一组
   }
   return null;
 }
@@ -1793,7 +1858,7 @@ function audioChain(f,au){
 }
 function finishCard(c,output,isError){
   var sf=!isError&&output&&SENT_FILE.exec(output);
-  if(sf){c.el.after((/\.(png|jpe?g|gif|webp)$/i.test(sf[1])?imgCard:AUDIO_EXT.test(sf[1])||SENT_VIDEO.test(sf[1])?mediaCard:dlCard)(sf[1],sf[2],sf[3]));scrollDown()}
+  if(sf){(c.el.closest('.tgroup')||c.el).after((/\.(png|jpe?g|gif|webp)$/i.test(sf[1])?imgCard:AUDIO_EXT.test(sf[1])||SENT_VIDEO.test(sf[1])?mediaCard:dlCard)(sf[1],sf[2],sf[3]));scrollDown()}
   if(output&&output.trim())c.add(outNode(output));
   c.status(isError?'no':'ok',isError?'出错':(c.stat||'完成'));
   c.collapse();
@@ -2143,7 +2208,10 @@ function onEvent(m){
   case 'session.opened':
     var sameSess=!!(session&&session.id===m.id)&&!m.compacted,wasStick=stick;
     if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
-    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null};lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
+    var keepDone=m.compacted&&session&&session.id===m.id?(session.ctxAsk?(m.ctx||-1):session.ctxDone||0):0;   // DeepSeek 压缩完会整页重开：接着显示压缩结果
+    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null,ctx:m.ctx||null};
+    if(keepDone){session.ctxDone=keepDone;clearTimeout(ctxAskTimer)}
+    ctxShow();lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
     switchDraft(m.id);
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!m.compacted&&!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
     delete feedCache[m.id];
@@ -2270,6 +2338,9 @@ function onEvent(m){
   case 'busy':
     setBusy(!!m.on);
     break;
+  case 'ctx':   // 上下文大小变了（每次 API 调用、压缩完）
+    if(session){session.ctx=m.tokens||null;if(m.compacted){session.ctxDone=session.ctxAsk?(m.tokens||-1):0;session.ctxAsk=false;clearTimeout(ctxAskTimer)}else session.ctxDone=0;ctxShow()}
+    break;
   case 'usage':   // DeepSeek：累计 token / 估算费用（每轮结束；长回合里每 2.5 分钟）
     if(session&&m.usage){session.usage=m.usage;renderFee()}
     break;
@@ -2280,11 +2351,13 @@ function onEvent(m){
     think(true,m.text);break;
   case 'turn.done':
     ttsHush=false;
+    if(session&&session.ctxAsk){var askS=session;clearTimeout(ctxAskTimer);ctxAskTimer=setTimeout(function(){if(askS.ctxAsk){askS.ctxAsk=false;if(session===askS)ctxShow()}},5000)}   // 5 秒内没等到「压缩完」（取消、出错）：恢复成可以再点（OpenClaw 的结果在一轮结束后才到）
     refreshList();
     if(m.error)addSys('本轮结束：'+m.error);
     document.querySelectorAll('.tool[data-k="run"],.tool[data-k="wait"]').forEach(function(n){
       n.dataset.k='no';n.querySelector('.ts').textContent='已取消';n.classList.remove('open');
     });
+    document.querySelectorAll('.tgroup').forEach(tgUpdate);
     permQueue=[];
     setBusy(false);
     break;
@@ -2338,7 +2411,40 @@ function onEvent(m){
 // ---------- 连接 ----------
 
 // 顶部：会话名（加粗）在左，后面是会话 ID 和目录名；没起名字时用目录名当名字
+// 上下文压缩提示：超过设定值（设置里填，单位 k，默认 128）才出现「128k」圆钮，点了压缩；
+// 压缩完显示一次压缩后的大小（不知道大小就显示「已压缩」），下一次上下文更新时低于设定值就收起。所有 Claw 都有。
+var ctxAskTimer=null;
+function ctxLimitK(){var v=parseInt(localStorage.getItem('claclaw.ctxWarnK'),10);return v>=8?v:128}
+function ctxK(n){return Math.round(n/1000)+'k'}
+function ctxShow(){
+  var b=document.getElementById('ctxBtn');if(!b)return;
+  var c=session?session.ctx||0:0,st='',t='';
+  if(session&&session.ctxAsk){st='busy';t='压缩中'}
+  else if(session&&session.ctxDone){st='done';t=session.ctxDone>0?ctxK(session.ctxDone):'已压缩'}
+  else if(c&&c>=ctxLimitK()*1000){st='ask';t=ctxK(c)}
+  b.hidden=!st;if(!st)return;
+  b.textContent=t;b.classList.toggle('busy',st==='busy');b.classList.toggle('done',st==='done');
+  b.title=st==='ask'?'上下文 '+t+'，点一下压缩':st==='busy'?'正在压缩上下文':'已压缩到 '+t;b.setAttribute('aria-label',b.title);
+}
+$('#ctxBtn').addEventListener('click',function(){
+  if(!session||session.ctxAsk||session.ctxDone)return;
+  if(busy){addSys('正在回复，等这一轮结束再压缩');return}
+  if(!ws||ws.readyState!==1){banner('连接已断开，恢复后再压缩');return}
+  session.ctxAsk=true;ctxShow();
+  outbox={text:'/compact',images:[],videoPending:'',filePending:'',videoFile:null,sid:session.id};
+  busy=true;setDock('busy');outboxShow();trySend();
+});
+(function(){
+  var inp=$('#setCtxK');if(!inp)return;
+  var v=localStorage.getItem('claclaw.ctxWarnK');if(v)inp.value=v;
+  inp.addEventListener('change',function(){
+    var n=parseInt(inp.value,10);
+    try{if(n>=8){localStorage.setItem('claclaw.ctxWarnK',String(n));inp.value=String(n)}else{localStorage.removeItem('claclaw.ctxWarnK');inp.value=''}}catch(_){}
+    ctxShow();
+  });
+})();
 function setHeader(){
+  if(typeof ttsMuteShow==='function')ttsMuteShow();
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   $('#nm').textContent=t||dir||'会话';
@@ -2573,7 +2679,7 @@ function renderCfg(){
 }
 function openCfg(){var d=$('#cfgDlg');d.classList.add('on');d.setAttribute('aria-hidden','false');renderCfg()}
 function closeCfg(){var d=$('#cfgDlg');d.classList.remove('on');d.setAttribute('aria-hidden','true')}
-$('#cfgBtn').addEventListener('click',openCfg);
+$('#cfgGo').addEventListener('click',openCfg);
 $('#cfgX').addEventListener('click',closeCfg);
 $('#cfgDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeCfg()});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#cfgDlg').classList.contains('on'))closeCfg()});
@@ -3649,7 +3755,7 @@ function renderHistory(items,base){
     if(it.kind==='user'){var hu=addUser(it.text,it.images);if(it.waiting&&hu)hu.classList.add('queued');stamp(hu,it.at)}
     else if(it.kind==='ai'){addAi(it.text);stamp(feed.lastElementChild,it.at)}
     else if(it.kind==='peer')stamp(addPeer(it.from,it.text),it.at);
-    else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no')}
+    else if(it.kind==='tool'){var c=newCard(it);finishCard(c,it.output,it.status==='no');c.el.dataset.h=String(base+i);return}   // 工具卡片在组里：序号打在卡片自己身上
     else return;
     if(feed.lastElementChild)feed.lastElementChild.dataset.h=String(base+i);   // 绝对序号（非空字符串，也用来数缓存里留了几条）
   });
@@ -3664,9 +3770,9 @@ function resumeTail(m){
   var redo=last.classList.contains('tool')&&last.dataset.k==='run';   // 断线时还在跑的工具卡片：按服务器的重画（可能已经跑完）
   if(idx===end&&!redo)return m.history.length;   // 断线期间没有新的记录：什么都不动（正在输出的那段由 liveText 补齐）
   // 有新记录：去掉实时画的部分（含工作中指示、发送中的消息），从新记录接着画
-  while(last.nextSibling)last.nextSibling.remove();
+  for(var n=last;n&&n!==feed;n=n.parentElement)while(n.nextSibling)n.nextSibling.remove();   // 它在工具组里：组里它后面的、组后面的都去掉
   thinkEl=null;if(outbox)outbox.el=null;
-  if(redo){last.remove();return idx-start}
+  if(redo){var g0=last.closest('.tgroup');last.remove();tgUpdate(g0);return idx-start}
   return idx-start+1;
 }
 // 往上滑到顶：向服务器要更早的一页，接到最上面，画面位置不跳
@@ -3712,7 +3818,7 @@ function saveFeed(id){
   if(!id||!feed.firstChild||feedOwner!==id)return;
   if(thinkEl){thinkEl.remove();thinkEl=null}
   var need=Math.max(600,feed.clientHeight*1.5),acc=0,kept=0,n=feed.lastElementChild;
-  while(n&&acc<need){acc+=n.offsetHeight||0;if(n.dataset.h)kept++;n=n.previousElementSibling}
+  while(n&&acc<need){acc+=n.offsetHeight||0;if(n.dataset.h)kept++;kept+=n.querySelectorAll('[data-h]').length;n=n.previousElementSibling}   // 工具组里的卡片各算一条
   while(n){var p=n.previousElementSibling;n.remove();n=p}   // 一屏以外的都扔掉
   var f=document.createDocumentFragment();while(feed.firstChild)f.appendChild(feed.firstChild);
   delete feedCache[id];feedCache[id]={frag:f,cards:cards,kept:kept,sig:feedDirty?null:feedSig};   // 看的时候有新内容进来：回来时一定按服务器的重画
@@ -3751,9 +3857,22 @@ try{
 }catch(_){}
 // 档位：off 关 / reply 只念回复 / steps 关键节点+回复 / brief 只念关键节点
 function ttsModeAllows(pri){
-  if(!tts.on)return false;
+  if(!tts.on||ttsSessMuted())return false;
   if(pri===3)return tts.mode==='reply'||tts.mode==='steps';
   return tts.mode==='steps'||tts.mode==='brief';
+}
+// 单个会话不播报：全局朗读开着时，标题栏的喇叭可以关掉这个会话的自动播报（只影响自动念；点浮动的播放键照样能念）
+var ttsMuted={};
+try{(JSON.parse(localStorage.getItem('claclaw.ttsMuted')||'[]')||[]).forEach(function(id){ttsMuted[id]=1})}catch(_){}
+function ttsSessMuted(){return !!(session&&ttsMuted[session.id])}
+var MUTE_IC={on:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+  off:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>'};
+function ttsMuteShow(){
+  var b=document.getElementById('ttsMute');if(!b||!tts)return;
+  b.hidden=!(tts.on&&session);if(b.hidden)return;
+  var off=ttsSessMuted();if(b.dataset.st===(off?'off':'on'))return;
+  b.dataset.st=off?'off':'on';b.innerHTML=MUTE_IC[b.dataset.st];b.classList.toggle('off',off);
+  b.setAttribute('aria-label',off?'这个会话已关闭播报，点一下恢复':'这个会话正在播报，点一下关闭');b.title=b.getAttribute('aria-label');
 }
 function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
 // 声音：列出这台设备上的中文语音，好听的排前面（和 dsh-tts-reader 的经验一样：默认取第一个中文语音往往最难听）。
@@ -4177,12 +4296,12 @@ function ttsPreview(text){
   if(!ttsOk())return;var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u);
 }
 var TTS_IC={
-  say:'<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+  say:'<svg viewBox="0 0 24 24"><path d="M8.5 6v12l9.5-6z" fill="currentColor" stroke="none"/></svg>',
   stop:'<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/></svg>',
   go:'<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>'
 };
 function ttsSpeaking(){return srvBusy||srvQ.length>0||srvPlaying()||(ttsOk()&&(speechSynthesis.speaking||speechSynthesis.pending))}
-// 在聊天页、有可念的回复时出现：没在念→喇叭（点了念最后一条回复）；在念→喇叭带动画（点了停）；被拦住→绿色播放键（点了接着念）
+// 在聊天页、有可念的回复时出现：没在念→播放三角（点了念最后一条回复）；在念→方块带动画（点了停）；被拦住→绿色播放键（点了接着念）
 // 输入区多高，朗读按钮就浮在它上面多少（输入框变高、键盘弹出都跟着走）
 var dockTopPut=function(){};
 (function(){
@@ -4237,7 +4356,15 @@ function ttsSync(){
   $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；页面保持在前台，锁屏后停止':'关着：点一下打开朗读';
   var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
+  ttsMuteShow();
 }
+$('#ttsMute').addEventListener('click',function(){
+  if(!session)return;
+  if(ttsMuted[session.id])delete ttsMuted[session.id];
+  else{ttsMuted[session.id]=1;if(ttsSpeaking())ttsStop();if(narration&&narration.onUserStop)narration.onUserStop()}
+  try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
+  ttsMuteShow();
+});
 $('#setTts').addEventListener('click',function(){
   if(!ttsOk())return;
   if(tts.on)ttsModeSet('off');

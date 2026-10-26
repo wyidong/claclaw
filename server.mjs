@@ -18,9 +18,9 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
-import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage } from './dsh.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx } from './dsh.mjs';
 import * as skills from './skills.mjs';
-import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason } from './opencode.mjs';
+import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opCtx } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
@@ -1524,7 +1524,7 @@ function announceDsOpened(r) {
   const pg = historyPage(hist, hist.total, HISTORY_PAGE);
   const payload = {
     t: 'session.opened', sessionId: r.id, id: r.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
-    mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, compacted: true,
+    mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, compacted: true, ctx: (r.ctx = dsCtx(r.id)),
     history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
     pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(r.id),
     busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
@@ -2490,7 +2490,7 @@ wss.on('connection', (ws, req) => {
         log('open dsh', r.sid, hist.total, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
-          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands,
+          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = dsCtx(m.id)),
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
           pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(m.id),
@@ -2519,7 +2519,7 @@ wss.on('connection', (ws, req) => {
         log('open opencode', r.sid, hist.total, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'opencode',
-          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands,
+          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = opCtx(m.id)),
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
           pending: [...r.pending.values()].map(p => p.req), suggestion: null,
@@ -2538,7 +2538,7 @@ wss.on('connection', (ws, req) => {
         log('open openclaw', r.key, pg.items.length, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: 'OpenClaw', cwdShort: 'OpenClaw' + (r.model ? ' · ' + r.model : ''),
-          mode: 'default', modes: ['default'], busy: r.busy, claw: 'openclaw', commands: r.commands || [],
+          mode: 'default', modes: ['default'], busy: r.busy, claw: 'openclaw', commands: r.commands || [], ctx: r.ctx ?? null,
           history: pg.items, historyStart: total - pg.items.length, historyTotal: total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0, pending: [], suggestion: null,
         });

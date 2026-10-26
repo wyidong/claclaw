@@ -42,6 +42,23 @@ const parse = s => { try { return JSON.parse(s); } catch { return null; } };
 const modelOf = m => { const o = typeof m === 'string' ? parse(m) : m; return o?.id || o?.modelID || ''; };
 const oneLine = t => String(t || '').replace(/\s+/g, ' ').trim();
 
+// 当前上下文大小：最后一条回复的输入量（输入 + 缓存读写）；最后一条是压缩摘要时用摘要长度（≈压缩后的大小）
+export function opCtx(id) {
+  if (!isOp(id) || !validSid(sidOf(id))) return null;
+  try {
+    const rows = query(db => db.prepare('select data from message where session_id = ? order by time_created desc, id desc limit 30').all(sidOf(id))) || [];
+    for (const r of rows) {
+      const d = parse(r.data);
+      if (d?.role !== 'assistant') continue;
+      const t = d.tokens || {};
+      if (d.summary) return Number(t.output) || null;
+      const n = (Number(t.input) || 0) + (Number(t.cache?.read) || 0) + (Number(t.cache?.write) || 0);
+      if (n) return n;
+    }
+  } catch {}
+  return null;
+}
+
 // ---------- 会话列表 ----------
 const LIST_SQL = `select id, directory, title, time_created, time_updated, model from session
   where parent_id is null and time_archived is null order by time_updated desc limit 300`;
@@ -499,6 +516,7 @@ export class OpRunner {
   }
 
   send(text, images = []) {
+    if (!this.busy && /^\/compact\s*$/.test(String(text))) this.compactAsked = true;
     if (this.busy) {
       // ACP 不支持插话：先排队。命令不排队（等这一轮结束再发），最多排 10 条
       if (/^\/(model|effort|mode)\b/.test(text) || this.queue.length >= 10) return false;
@@ -536,6 +554,11 @@ export class OpRunner {
     const ok = !error && (reason === 'end_turn' || reason === 'command');
     const subtype = error ? 'error' : reason === 'cancelled' ? 'aborted' : ok ? 'success' : reason;
     if (error) this.emit({ t: 'error', message: error });
+    {   // 上下文大小（标题栏的压缩提示）：每轮结束看一次
+      const c = opCtx(this.id), compacted = this.compactAsked && !error;
+      this.compactAsked = false;
+      if (c !== this.ctx || compacted) { this.ctx = c; this.emit({ t: 'ctx', tokens: c, ...(compacted ? { compacted: true } : {}) }); }
+    }
     this.busy = false;
     this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
     this.onActivity?.(this.id, null);
