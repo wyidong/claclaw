@@ -1209,9 +1209,9 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <button type="button" class="set-item" id="pushBtn" hidden><span class="lb">推送通知<small id="pushSub">回复完了、要你确认时提醒</small></span><span class="sw" aria-hidden="true"></span></button>
           <button type="button" class="set-item" id="pushLocal" hidden><span class="lb">本机测试通知<small>不经推送服务，检查这台设备能不能弹出</small></span><span class="chev" aria-hidden="true"></span></button>
+          <label class="set-item" id="pushViaRow" hidden><span class="lb">推送App<small id="pushViaSub">推到哪个 App</small></span>
+            <select id="setPushVia"><option value="auto">自动</option><option value="clarelay">clarelay</option><option value="self">claclaw</option><option value="both">都推</option></select></label>
         </div>
-          <label class="set-item" id="pushViaRow" hidden><span class="lb">推送走哪<small id="pushViaSub">clarelay 外壳（主屏幕 App）收通知、算角标</small></span>
-            <select id="setPushVia"><option value="auto">自动</option><option value="clarelay">只走 clarelay</option><option value="self">只用 claclaw 自己</option><option value="both">都推</option></select></label>
         <div class="set-note" id="pushTip" hidden></div>
       </div>
       <div class="set-sec">
@@ -4621,7 +4621,7 @@ function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').t
 // 会话相关设置：空闲关闭时间、接管等待时间（存在服务器，所有设备共用）
 function showSessSet(j){
   var cp=j.clarelayPush,pv=$('#pushViaRow');pv.hidden=!cp;
-  if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='clarelay '+(cp.online?'在线':'不在线')+'；自动 = 在线时只走 clarelay（推到外壳 App），不在线时 claclaw 自己推'}
+  if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='自动：clarelay '+(cp.online?'在线':'不在线')+'，在线推到 clarelay，不在线 claclaw 自己推'}
   if(j.uploadKeepDays){var uk=$('#setUpKeep'),uv=String(j.uploadKeepDays);if(![].some.call(uk.options,function(o){return o.value===uv})){var o2=document.createElement('option');o2.value=uv;o2.textContent=uv+' 天';uk.appendChild(o2)}uk.value=uv}
   [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
     var sel=$(x[0]),v=String(x[1]);
