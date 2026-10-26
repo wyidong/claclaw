@@ -22,7 +22,7 @@
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
-(function(){var h=document.documentElement,emb=window.parent!==window;if(emb)h.classList.add('emb');if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},10000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
+(function(){var h=document.documentElement,emb=window.parent!==window;if(emb){h.classList.add('emb');window.__clq=[];window.addEventListener('message',function(e){if(window.__clq&&e.source===window.parent&&e.data&&e.data.clarelay===1)window.__clq.push(e)})}if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},10000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
 </script>
 <style>html.boot #app{filter:blur(8px);opacity:.45}</style>
 <style>
@@ -3959,7 +3959,9 @@ function postViewing(){
 document.addEventListener('visibilitychange',postViewing);
 window.addEventListener('message',function(e){
   var m=e.data;if(window.parent===window||e.source!==window.parent||!m||m.clarelay!==1)return;
+  if(window.__clq&&e.isTrusted)return;   // 还在攒启动前的消息：这条已进队列，等补处理时再来
   if(m.type==='embedded'){lastViewing=undefined;postViewing()}
+  if(m.type==='embedded'||m.type==='open')clog('shell '+m.type+(m.type==='open'?' '+(m.target||''):'')+(e.isTrusted?'':'（启动时补处理）'));
   if(m.type==='visible'){var h=m.on===false;if(h!==shellHidden){shellHidden=h;wsSend({t:'visible',on:pageVisible()});postViewing()}}
   if(m.type==='open'){   // 点了外壳的通知：打开那个会话；没给会话、或打不开（不存在、被占着……）就退到「最近」
     var tg=typeof m.target==='string'?m.target:'';
@@ -3967,6 +3969,8 @@ window.addEventListener('message',function(e){
     if(tg==='view:peer')openPeerView();else if(tg){shellOpen=tg;openFromNotice(tg)}else{clog('shell open → 最近（没给会话）');showRecent()}
   }
 });
+// 页面脚本还没跑完时外壳就发来的 embedded / open（ready 在页头就发了）：等启动的默认页面切换做完再按顺序补处理，免得被切回 Claw 页
+setTimeout(function(){var q=window.__clq||[];window.__clq=null;q.forEach(function(e){window.dispatchEvent(new MessageEvent('message',{data:e.data,origin:e.origin,source:e.source}))})},0);
 // 嵌在 clarelay 外壳里：告诉外壳当前顶部颜色，外壳把状态栏区和它的顶栏染成同色
 function postTheme(){
   if(window.parent===window)return;
