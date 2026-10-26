@@ -1743,7 +1743,7 @@ function tgUpdate(g){
   ts.forEach(function(t){var k=t.dataset.k;c[k in c?k:'run']++});
   g.classList.toggle('one',ts.length<2);
   g.dataset.k=c.wait?'wait':c.run?'run':c.no?'no':'ok';
-  g.querySelector('.tg-n').textContent='Tools using '+ts.length+' 次';
+  g.querySelector('.tg-n').textContent='Tools used '+ts.length+' 次';
   var parts=[];
   if(c.ok)parts.push('完成 '+c.ok);if(c.no)parts.push('<span class="no">出错 '+c.no+'</span>');
   if(c.run)parts.push('运行中 '+c.run);if(c.wait)parts.push('<span class="wait">等确认 '+c.wait+'</span>');
