@@ -3771,6 +3771,50 @@ $('#sList').addEventListener('click',function(e){
   if(e.target.closest('.s-ren,.s-del')){var r=e.target.closest('.s-row');setTimeout(function(){swClose(r,true)},50)}
 },true);
 document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest('#sList'))swClose(swOpen)},{passive:true});
+// ---------- 手机：左右滑 ----------
+// 右滑：有返回键的页面（会话、设置、宿主子页……）就返回；到了第一层（有底部菜单）就按菜单顺序切：右滑 = 前一个，左滑 = 后一个。
+// 只在独立打开时（主屏幕 App / 浏览器）；嵌在 clarelay 外壳里先不接管，以后和外壳商量。
+// 让路：输入框、能横向滚动的内容（代码块、表格）、看图 / 弹窗、会话行左滑（编辑 / 删除）
+(function(){
+  if(!TOUCH||window.parent!==window)return;
+  var g=null;
+  function hScroll(el){for(;el&&el!==document.body;el=el.parentElement){if(el.scrollWidth>el.clientWidth+2){var o=getComputedStyle(el).overflowX;if(o==='auto'||o==='scroll')return true}}return false}
+  function shown(el){if(!el||!el.offsetParent)return false;var r=el.getBoundingClientRect();return r.width>0&&r.height>0}
+  function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
+  function backBtn(){
+    if(!mList)return $('#backBtn');
+    var top=[].some.call(document.querySelectorAll('#mtabs button'),shown);   // 底部菜单露着 = 第一层：宿主页自带的「返回设置」不算，左右滑切菜单
+    var c=[].slice.call(document.querySelectorAll('#setBack,.pe-back')).filter(function(x){return shown(x)&&!(top&&x.id==='hostBack')});
+    return c.length?c[c.length-1]:null;
+  }
+  document.addEventListener('touchstart',function(e){
+    g=null;
+    if(DESKTOP.matches||e.touches.length!==1||overlayOn())return;
+    var t=e.target;if(t.closest('input,textarea,select,[contenteditable="true"],#mtabs')||hScroll(t))return;
+    var row=t.closest('#sList .s-row');
+    var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),row:row&&!row.classList.contains('wx')?row:null,rowOpen:!!(row&&row.classList.contains('open'))};
+  },{passive:true,capture:true});
+  document.addEventListener('touchmove',function(e){
+    if(!g)return;var p=e.touches[0],dx=p.clientX-g.x,dy=p.clientY-g.y;
+    if(!g.lock&&(Math.abs(dx)>10||Math.abs(dy)>10))g.lock=Math.abs(dx)>Math.abs(dy)*1.5?'h':'v';
+    if(g.lock==='v')g=null;else{g.dx=dx;g.dy=dy}
+  },{passive:true,capture:true});
+  document.addEventListener('touchend',function(){
+    var s0=g;g=null;if(!s0||s0.lock!=='h')return;
+    var dx=s0.dx||0,dt=Date.now()-s0.t;
+    if(Math.abs(dx)<70&&!(Math.abs(dx)>40&&dt<250))return;   // 滑得够远，或短而快
+    if(Math.abs(s0.dy||0)>Math.abs(dx)*0.6)return;
+    if(s0.row&&(dx<0||s0.rowOpen))return;   // 会话行：左滑是露出编辑 / 删除，已打开的右滑是收起
+    if(swOpen)return;
+    var b=backBtn();
+    if(b){if(dx>0)b.click();return}
+    if(!mList)return;
+    var tabs=[].slice.call(document.querySelectorAll('#mtabs button')).filter(shown);
+    var cur=tabs.findIndex(function(x){return x.classList.contains('on')});if(cur<0)return;
+    var nx=tabs[cur+(dx<0?1:-1)];if(nx)nx.click();
+  },{passive:true,capture:true});
+  document.addEventListener('touchcancel',function(){g=null},{passive:true,capture:true});
+})();
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
