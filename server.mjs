@@ -130,8 +130,6 @@ const OUT_MAX = 4000;
 const MAX_IMAGES = 5;
 const MAX_IMAGE_B64 = 7 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-// 历史记录里的图片总量上限，超过的只显示占位，免得打开会话时传几十 MB
-const HISTORY_IMAGE_BUDGET = 4 * 1024 * 1024;
 // 历史分页：打开时只发最后一页（约一屏），往上滑再按页要更早的；服务器最多保留最近 HISTORY_KEEP 条
 const HISTORY_PAGE = 30, HISTORY_MORE = 40, HISTORY_KEEP = 600;
 // 网页里的会话没人看、也没在跑多久后关掉进程（会话记录还在）；可在设置里改，默认 10 分钟
@@ -579,20 +577,31 @@ async function loadHistory(sessionId, cwd) {
   return { items: dedup.slice(-HISTORY_KEEP), total: dedup.length };
 }
 
+// 历史图片：内容 sha1 当编号（同一张图网址不变，浏览器缓存得住），内存里按总量留最近的；
+// k = 网页那边存原图用的 imgKey（同一算法），点开大图时用它找本机存的原图
+const himg = new Map(); let himgBytes = 0;
+const HIMG_MAX = 96 * 1024 * 1024;
+function imgKeyOf(b64) { let h = 2166136261; for (let i = 0; i < b64.length; i += 7) { h ^= b64.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36) + '.' + b64.length; }
+function himgUrl(src) {
+  const id = crypto.createHash('sha1').update(src.data).digest('hex').slice(0, 20);
+  if (himg.has(id)) { const v = himg.get(id); himg.delete(id); himg.set(id, v); }
+  else {
+    const buf = Buffer.from(src.data, 'base64');
+    himg.set(id, { type: IMAGE_TYPES.includes(src.media_type) ? src.media_type : 'application/octet-stream', buf }); himgBytes += buf.length;
+    for (const [k, v] of himg) { if (himgBytes <= HIMG_MAX) break; himg.delete(k); himgBytes -= v.buf.length; }
+  }
+  return '/api/himg?id=' + id + '&k=' + encodeURIComponent(imgKeyOf(src.data));
+}
 // 取一页：before 之前（绝对序号，不含）最多 count 条；图片按页从新到旧分预算，超出的给 null（前端显示占位）
 function historyPage(h, before, count) {
   const base = h.total - h.items.length;
   const end = Math.max(0, Math.min(h.items.length, before - base));
   const start = Math.max(0, end - count);
   const page = h.items.slice(start, end);
-  let budget = HISTORY_IMAGE_BUDGET;
+  // 图片不再整张塞进消息（截图一张几百 KB，打开会话要等它们传完）：换成网址，网页显示到时再取，浏览器还能缓存
   for (let i = page.length - 1; i >= 0; i--) {
     if (!page[i].images) continue;
-    page[i] = { ...page[i], images: page[i].images.map(src => {
-      if (budget < src.data.length) return null;
-      budget -= src.data.length;
-      return 'data:' + src.media_type + ';base64,' + src.data;
-    }) };
+    page[i] = { ...page[i], images: page[i].images.map(src => src && typeof src.data === 'string' ? himgUrl(src) : null) };
   }
   return { items: page, start: base + start, more: start > 0 };
 }
@@ -2188,6 +2197,12 @@ const handler = async (req, res) => {
         catch (e) { return sendJson(res, 500, { error: '打不开：' + e.message }); }
       }
       return sendJson(res, 200, { name, path: hit.abs, size: hit.st.size, dir: hit.st.isDirectory() });
+    }
+    if (url.pathname === '/api/himg') {
+      const v = himg.get(url.searchParams.get('id') || '');
+      if (!v) return sendJson(res, 404, { error: '图片已过期，重新打开会话' });
+      res.writeHead(200, { 'content-type': v.type, 'content-length': v.buf.length, 'cache-control': 'private, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' });
+      return res.end(v.buf);
     }
     if (url.pathname === '/api/upload/thumb') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));

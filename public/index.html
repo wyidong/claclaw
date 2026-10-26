@@ -1568,8 +1568,9 @@ function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.char
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
 function showImage(src){
   var im=lightbox.querySelector('img');im.onerror=null;im.src=src;lightbox.classList.add('on');
-  var m=/^data:image\/[\w.+-]+;base64,(.+)$/.exec(src||'');if(!m||!window.indexedDB)return;
-  vidStore('readonly',function(st){return st.get('img:'+imgKey(m[1]))}).then(function(rec){
+  var m=/^data:image\/[\w.+-]+;base64,(.+)$/.exec(src||''),hk2=/^\/api\/himg\?.*[?&]k=([^&]+)/.exec(src||'');   // 历史图片是网址，带着原图的 key
+  var key=m?imgKey(m[1]):hk2?decodeURIComponent(hk2[1]):'';if(!key||!window.indexedDB)return;
+  vidStore('readonly',function(st){return st.get('img:'+key)}).then(function(rec){
     if(!rec||!rec.blob||!lightbox.classList.contains('on')||im.src!==src)return;
     var u=URL.createObjectURL(rec.blob);im.onerror=function(){im.onerror=null;im.src=src};im.src=u;   // 原图打不开（比如 HEIC）就退回压缩图
   }).catch(function(){});
