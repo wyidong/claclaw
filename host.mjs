@@ -70,7 +70,8 @@ function addrs() {
     for (const a of list || []) {
       if (a.family !== 'IPv4' || a.internal) continue;
       // 只列有用的：Tailscale（手机就是走它连过来的）和本机网卡；虚拟机网桥、其它 VPN / 代理的虚拟网卡不列
-      if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address)) out.push({ ip: a.address, kind: 'Tailscale' });
+      // Tailscale 的地址是 100.64/10 里的单个 /32；别的 VPN 也可能用这一段（比如 100.96.1.86/28），按掩码分开
+      if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) && a.netmask === '255.255.255.255') out.push({ ip: a.address, kind: 'Tailscale' });
       else if (/^en\d/.test(ifn)) out.push({ ip: a.address, kind: '局域网' });
     }
   }
