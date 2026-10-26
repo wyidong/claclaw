@@ -315,6 +315,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #stopBtn{position:absolute;top:2px;right:42px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--deny)}
 #stopBtn[hidden]{display:none}
 #composer.busy #ta{padding-right:88px}
+#composer.nosend #send{display:none}
+#composer.nosend #ta{padding-right:12px}
+#composer.nosend #stopBtn{right:2px}
+#composer.nosend.busy #ta{padding-right:48px}
 #sugBtn{position:absolute;right:42px;top:2px;width:40px;height:40px;padding:0;border:0;background:none;color:var(--accent);display:grid;place-items:center;z-index:1}
 #cmdMenu{position:absolute;left:10px;right:10px;bottom:calc(100% + 6px);max-height:46vh;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.14);z-index:4;padding:4px}
 .cmd{display:block;width:100%;min-height:48px;padding:7px 10px;border:0;border-radius:9px;background:none;text-align:left}
@@ -594,7 +598,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
     padding:4px max(6px,env(safe-area-inset-right)) calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px))) max(6px,env(safe-area-inset-left))}
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
   #mtabs button.on{color:var(--accent)}
-  #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}   /* 宿主那格显示宿主名，太长截断 */
+  #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* 放 logo 时去掉「会话」两个字（文字的主题色和 logo 的颜色不搭），logo 放大占满图标 + 文字的位置，按钮高度不变 */
   #mtabs button.logo>span:not(.tlogo){display:none}
   #mtabs .tlogo{display:grid;place-items:center;width:42px;height:42px;filter:grayscale(1);opacity:.55;transition:filter .15s,opacity .15s}
@@ -1052,10 +1056,9 @@ select.pe-in{text-align-last:right}
 
   <!-- 手机底部菜单（只在列表页显示，进入聊天隐藏，像微信） -->
   <nav id="mtabs" aria-label="底部菜单">
+    <button type="button" data-tab="recent"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle class="f" cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg><span>最近</span></button>
     <button type="button" data-tab="chats" class="on"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span>会话</span></button>
     <button type="button" data-tab="claw"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="3.5" width="7" height="7" rx="2"/><rect class="f" x="3.5" y="13.5" width="7" height="7" rx="2"/><rect class="f" x="13.5" y="13.5" width="7" height="7" rx="2"/></svg><span>Claw</span></button>
-    <button type="button" data-tab="recent"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle class="f" cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg><span>最近</span></button>
-    <button type="button" data-tab="host"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect class="f" x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>宿主</span></button>
     <button type="button" data-tab="set"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
   </nav>
 
@@ -1175,6 +1178,7 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <label class="set-item"><span class="lb">上下文压缩提示<small>Claude 会话的上下文超过这个大小，标题栏出现压缩按钮（单位 k，默认 128）</small></span>
             <span class="set-num"><input id="setCtxK" type="number" inputmode="numeric" min="8" max="2000" step="1" placeholder="128" aria-label="上下文压缩提示（k）">k</span></label>
+          <button type="button" class="set-item" id="setEnterSend" hidden><span class="lb">键盘回车键发送<small>开着：回车键直接发送，输入框右边的发送键平时收起；换行用键盘的长按回车（看键盘支不支持）。关掉：回车换行，点发送键发</small></span><span class="sw" aria-hidden="true"></span></button>
           <button type="button" class="set-item" id="setRecentClear"><span class="lb">清空最近<small>只清空「最近」列表，不删除任何会话；之后有新动静的会话会再出现。删除会话请到各 Claw 的会话列表里删</small></span></button>
         </div>
       </div>
@@ -1241,6 +1245,9 @@ var hostName='';try{hostName=localStorage.getItem('claclaw.hostName')||''}catch(
 // 存在这台设备上的东西（上次的会话、选的 Claw）
 function hk(k){return 'claclaw.'+k}
 var DESKTOP=window.matchMedia('(min-width:1000px)');
+var COARSE=window.matchMedia('(pointer:coarse)'),shiftEnter=false;
+var enterSend=(function(){try{return localStorage.getItem('claclaw.enterSend')!=='0'}catch(_){return true}})();
+function kbSend(){return enterSend&&COARSE.matches}
 var feed=$('#feed'),dock=$('#dock'),ta=$('#ta'),sendBtn=$('#send'),taWrap=$('#taWrap'),sugBtn=$('#sugBtn');
 
 var ICON_SEND='<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 18V4.5M5 10.5l6-6 6 6"/></svg>';
@@ -2098,6 +2105,8 @@ function syncSend(){
   sendBtn.classList.toggle('sugfill',sugOn);if(sugOn){sendBtn.disabled=false;sendBtn.setAttribute('aria-label','填入建议')}
   var sb=$('#stopBtn');sb.hidden=!busy;sb.innerHTML=d?'停止':ICON_STOP;
   $('#composer').classList.toggle('busy',busy);
+  // 手机上回车键就是发送：键盘开着（输入框有焦点）时不要发送键；键盘收起时只在有东西可发（建议回复、双击回写）时出现
+  $('#composer').classList.toggle('nosend',kbSend()&&!d&&(document.activeElement===ta||(sendBtn.disabled&&!sugOn)));
 }
 function setBusy(b){
   if(b&&!busy){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
@@ -2616,10 +2625,21 @@ ta.addEventListener('keydown',function(e){
     if(e.key==='Escape'){cmdMenu.hidden=true;return}
   }
   if(e.key==='Tab'&&!e.shiftKey&&!ta.value&&suggestion){e.preventDefault();acceptSuggestion();return}
+  if(e.key==='Enter')shiftEnter=e.shiftKey;
   if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&window.matchMedia('(pointer:fine)').matches){
     e.preventDefault();run(ta.value);
   }
 });
+// 手机键盘的回车（enterkeyhint=send）：拦下换行改成发送。不在 keydown 里拦，
+// 这样键盘自己「长按回车换行」这类直接插入 \n 文字的方式（insertText）还能换行
+ta.addEventListener('beforeinput',function(e){
+  if(!kbSend()||e.isComposing||(e.inputType!=='insertLineBreak'&&e.inputType!=='insertParagraph'))return;
+  if(shiftEnter){shiftEnter=false;return}
+  e.preventDefault();
+  if(sendBtn.classList.contains('sugfill')){acceptSuggestion();return}
+  if(!sendBtn.disabled)run(ta.value);
+});
+ta.addEventListener('focus',syncSend);ta.addEventListener('blur',function(){setTimeout(syncSend,0)});
 
 function dmOf(k){return k==='acceptEdits'?'accept':k==='bypassPermissions'?'bypass':k}
 function setMode(key,announce){
@@ -2765,7 +2785,7 @@ function mTab(t){
   if(t!=='host'){hostView='';peerWatch(false)}
   hostLive(t==='host');if(t==='claw')loadClaws();if(t==='set')loadSetData();
   $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
-  document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t)});
+  document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
   $('.sheet-p').scrollTop=0;
   if(typeof showClawSel==='function')showClawSel();
 }
@@ -3783,8 +3803,7 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
   function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
   function backBtn(){
     if(!mList)return $('#backBtn');
-    var top=[].some.call(document.querySelectorAll('#mtabs button'),shown);   // 底部菜单露着 = 第一层：宿主页自带的「返回设置」不算，左右滑切菜单
-    var c=[].slice.call(document.querySelectorAll('#setBack,.pe-back')).filter(function(x){return shown(x)&&!(top&&x.id==='hostBack')});
+    var c=[].slice.call(document.querySelectorAll('#setBack,.pe-back')).filter(function(x){return shown(x)});
     return c.length?c[c.length-1]:null;
   }
   document.addEventListener('touchstart',function(e){
@@ -4558,6 +4577,13 @@ $('#ttsMute').addEventListener('click',function(){
   try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
   ttsMuteShow();ttsShowStop();
 });
+(function(){
+  var b=$('#setEnterSend');
+  var ui=function(){b.hidden=!COARSE.matches;b.dataset.on=enterSend?'1':'';ta.setAttribute('enterkeyhint',kbSend()?'send':'enter');syncSend()};
+  if(COARSE.addEventListener)COARSE.addEventListener('change',ui);
+  b.addEventListener('click',function(){enterSend=!enterSend;try{localStorage.setItem('claclaw.enterSend',enterSend?'1':'0')}catch(_){}ui();toast(enterSend?'回车键发送':'回车键换行')});
+  ui();
+})();
 $('#setTts').addEventListener('click',function(){
   if(!ttsOk())return;
   if(tts.on)ttsModeSet('off');
