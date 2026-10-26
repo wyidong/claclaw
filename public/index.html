@@ -2243,7 +2243,7 @@ function onEvent(m){
     var keepDone=m.compacted&&session&&session.id===m.id?(session.ctxAsk?(m.ctx||-1):session.ctxDone||0):0;   // DeepSeek 压缩完会整页重开：接着显示压缩结果
     session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null,ctx:m.ctx||null};
     if(keepDone){session.ctxDone=keepDone;clearTimeout(ctxAskTimer)}
-    ctxShow();lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;
+    ctxShow();lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;if(shellOpen===m.id)shellOpen=null;
     switchDraft(m.id);
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!m.compacted&&!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
     delete feedCache[m.id];
@@ -2296,6 +2296,7 @@ function onEvent(m){
       if(sp0&&sp0.id===m.id&&!sp0.stick)setTimeout(function(){stick=false;feed.scrollTop=sp0.top},50)}catch(_){}   // 重连：在看上面的内容就停在原处
     break;
   case 'session.busy':
+    if(m.canTakeover)shellOpen=null;   // 能接管的不退到「最近」，留着接管提示
     openFailed();clearOpening();
     if(m.canTakeover){
       if(confirmTakeover(m.name||shortId(m.id),m))wsSend({t:'session.open',id:m.id,mode:mode,takeover:true});
@@ -3804,8 +3805,11 @@ window.addEventListener('popstate',function(){
   else if(!mList)goList();                                     // 从聊天页返回会话列表
 });
 setInterval(function(){if(mList&&!document.hidden)tickTimes()},60000);   // 列表页每分钟只更新时间文字，不重排
+var shellOpen=null;
+function showRecent(){mTab('recent');if(!DESKTOP.matches)goList();openSheet()}
 function openFailed(){
-  var was=opening||pendingOpen;pendingOpen=null;   // 打不开（被别处占着、不存在……）：不要每次重连都再试
+  var was=opening||pendingOpen;pendingOpen=null;
+  if(shellOpen){shellOpen=null;if(!session||was===session.id)showRecent();return}   // 打不开（被别处占着、不存在……）：不要每次重连都再试
   if(was&&!session&&!DESKTOP.matches)goList();
 }
 function clearOpening(){opening=null;document.querySelectorAll('#sList .s-row.opening').forEach(function(r){r.classList.remove('opening')});renderActivity()}
@@ -3950,7 +3954,10 @@ window.addEventListener('message',function(e){
   var m=e.data;if(window.parent===window||e.source!==window.parent||!m||m.clarelay!==1)return;
   if(m.type==='embedded'){lastViewing=undefined;postViewing()}
   if(m.type==='visible'){var h=m.on===false;if(h!==shellHidden){shellHidden=h;wsSend({t:'visible',on:pageVisible()});postViewing()}}
-  if(m.type==='open'&&typeof m.target==='string'&&m.target){if(m.target==='view:peer')openPeerView();else openFromNotice(m.target)}   // 点了外壳的通知
+  if(m.type==='open'){   // 点了外壳的通知：打开那个会话；没给会话、或打不开（不存在、被占着……）就退到「最近」
+    var tg=typeof m.target==='string'?m.target:'';
+    if(tg==='view:peer')openPeerView();else if(tg){shellOpen=tg;openFromNotice(tg)}else showRecent();
+  }
 });
 // 嵌在 clarelay 外壳里：告诉外壳当前顶部颜色，外壳把状态栏区和它的顶栏染成同色
 function postTheme(){
