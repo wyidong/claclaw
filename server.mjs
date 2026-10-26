@@ -2512,6 +2512,7 @@ wss.on('connection', (ws, req) => {
     try {
       // 这个会话的进程被换过（比如切到「跳过确认」要重启进程）：改用新的那个
       if (runner?.closed && runners.get(runner.id) && !runners.get(runner.id).closed) runner = runners.get(runner.id);
+      if (m.t === 'clog') { log('client', wsIp, String(m.text || '').slice(0, 300)); return; }   // 网页排查日志（点通知打开会话等）
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
       if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }

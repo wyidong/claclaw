@@ -2243,7 +2243,7 @@ function onEvent(m){
     var keepDone=m.compacted&&session&&session.id===m.id?(session.ctxAsk?(m.ctx||-1):session.ctxDone||0):0;   // DeepSeek 压缩完会整页重开：接着显示压缩结果
     session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null,ctx:m.ctx||null};
     if(keepDone){session.ctxDone=keepDone;clearTimeout(ctxAskTimer)}
-    ctxShow();lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;if(shellOpen===m.id)shellOpen=null;
+    ctxShow();lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;if(shellOpen===m.id){clog('shell open 已打开 '+m.id.slice(0,8));shellOpen=null}
     switchDraft(m.id);
     var hsig=histSig(m.history,m.historyTotal),fc=feedCache[m.id],reuse=!m.compacted&&!!(fc&&fc.sig&&fc.sig===hsig&&(!fc.inDom||feedOwner===m.id));
     delete feedCache[m.id];
@@ -2296,7 +2296,7 @@ function onEvent(m){
       if(sp0&&sp0.id===m.id&&!sp0.stick)setTimeout(function(){stick=false;feed.scrollTop=sp0.top},50)}catch(_){}   // 重连：在看上面的内容就停在原处
     break;
   case 'session.busy':
-    if(m.canTakeover)shellOpen=null;   // 能接管的不退到「最近」，留着接管提示
+    if(shellOpen){clog('shell open 会话忙'+(m.canTakeover?'，可接管':''));shellOpen=null}   // 能接管的不退到「最近」，留着接管提示
     openFailed();clearOpening();
     if(m.canTakeover){
       if(confirmTakeover(m.name||shortId(m.id),m))wsSend({t:'session.open',id:m.id,mode:mode,takeover:true});
@@ -2436,6 +2436,10 @@ function onEvent(m){
     addSys(m.text);
     break;
   case 'error':
+    if(shellOpen){   // 外壳点通知要开的会话：只有服务器明确说找不到 / 目录没了才退到「最近」，别的错误不算
+      if(/找不到这个会话|会话不存在|会话目录已不存在/.test(m.message||'')){clog('shell open → 最近（'+m.message+'）');shellOpen=null;pendingOpen=null;showRecent()}
+      else clog('shell open 期间收到错误，继续等：'+(m.message||''));
+    }
     openFailed();clearOpening();
     if(cfgBusy){cfgBusy=null;renderCfg()}
     if(outbox){outboxRestore();if(!m.busy)setBusy(false)}   // 会话还在忙（只是这条没收下）：别把它显示成空闲
@@ -2498,9 +2502,12 @@ function setHeader(){
   w.title=(session.cwd||place||'')+(session.branch?'\n分支：'+session.branch:'');
 }
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
+// 排查日志写进电脑上的 claclaw.log；连接没好就先攒着，连上补发
+var clogQ=[];function clog(t){t=new Date().toTimeString().slice(0,8)+' '+t;if(ws&&ws.readyState===1)wsSend({t:'clog',text:t});else clogQ.push(t)}
 function connect(){
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
   ws.onopen=function(){
+    setTimeout(function(){var q=clogQ;clogQ=[];q.forEach(function(t){wsSend({t:'clog',text:t})})},0);
     retry=0;banner(null);
     if(!connectedOnce){document.documentElement.classList.remove('fog');try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'connected'},'*')}catch(_){}}   // 只在首次连上时
     if(connectedOnce)checkVersion();connectedOnce=true;
@@ -3809,7 +3816,7 @@ var shellOpen=null;
 function showRecent(){mTab('recent');if(!DESKTOP.matches)goList();openSheet()}
 function openFailed(){
   var was=opening||pendingOpen;pendingOpen=null;
-  if(shellOpen){shellOpen=null;if(!session||was===session.id)showRecent();return}   // 打不开（被别处占着、不存在……）：不要每次重连都再试
+   // 打不开（被别处占着、不存在……）：不要每次重连都再试
   if(was&&!session&&!DESKTOP.matches)goList();
 }
 function clearOpening(){opening=null;document.querySelectorAll('#sList .s-row.opening').forEach(function(r){r.classList.remove('opening')});renderActivity()}
@@ -3831,7 +3838,7 @@ document.addEventListener('visibilitychange',function(){
   takePendingOpen().then(function(id){if(id==='view:peer')openPeerView();else if(id)openFromNotice(id)});   // 从后台回来：消息可能丢了，以这条记录为准
 });
 function openFromNotice(id){
-  if(session&&session.id===id&&!mList)return;
+  if(session&&session.id===id&&!mList){if(shellOpen===id){clog('shell open 已在这个会话');shellOpen=null}return}
   pendingOpen=id;
   if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);$('#where').textContent='';goChat()}
   if(ws&&ws.readyState===1)wsSend({t:'session.open',id:id,mode:mode});else reconnectNow();
@@ -3956,7 +3963,8 @@ window.addEventListener('message',function(e){
   if(m.type==='visible'){var h=m.on===false;if(h!==shellHidden){shellHidden=h;wsSend({t:'visible',on:pageVisible()});postViewing()}}
   if(m.type==='open'){   // 点了外壳的通知：打开那个会话；没给会话、或打不开（不存在、被占着……）就退到「最近」
     var tg=typeof m.target==='string'?m.target:'';
-    if(tg==='view:peer')openPeerView();else if(tg){shellOpen=tg;openFromNotice(tg)}else showRecent();
+    clog('shell open '+(tg||'(空)')+' ws='+(ws?ws.readyState:'-')+' 当前='+(session?session.id.slice(0,8):'-')+(mList?' 列表':' 聊天'));
+    if(tg==='view:peer')openPeerView();else if(tg){shellOpen=tg;openFromNotice(tg)}else{clog('shell open → 最近（没给会话）');showRecent()}
   }
 });
 // 嵌在 clarelay 外壳里：告诉外壳当前顶部颜色，外壳把状态栏区和它的顶栏染成同色
