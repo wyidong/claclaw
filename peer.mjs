@@ -312,7 +312,10 @@ export const ourRelays = c => (Array.isArray(c.relays) && c.relays.length ? c.re
 // （中继重启后公开地址不变，短暂掉线不该影响对外公布的地址）；一个中继都没配就发 none。
 // 收到时：none = 对方没有中继，清空记的；有合格地址就按它替换；空值、没有合格地址一律忽略、保留原值
 export const RELAYS_HEADER = 'x-claclaw-relays';
-export const relaysHeaderValue = c => ourRelays(c).join(' ') || 'none';
+// 每个对方可以指定一台中继做主（relayFirst = 中继的 host:port）：告诉它我们的中继时排第一，我们找它时也先走它的这台
+const relayHost = u => { try { return new URL(u).host; } catch { return ''; } };
+export const preferRelay = (list, host) => host ? [...list.filter(u => relayHost(u) === host), ...list.filter(u => relayHost(u) !== host)] : list;
+export const relaysHeaderValue = (c, p) => preferRelay(ourRelays(c), p?.relayFirst).join(' ') || 'none';
 export const parseRelaysHeader = v => {
   const s = String(v ?? '').trim();
   if (s.toLowerCase() === 'none') return [];
@@ -343,7 +346,7 @@ export async function probeRelay(p) {   // 返回每个中继的结果（主 →
 export async function peerCall(c, p, sub, opts) {
   const lan = [p.inbox, p.inboxAlt].filter(u => u && !isRelayAddr(u));
   if (p.ip && lan[0]) { try { const u = new URL(lan[0]); if (u.hostname !== p.ip) { u.hostname = p.ip; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
-  const relays = peerRelays(p);   // 主中继 → 备用中继
+  const relays = preferRelay(peerRelays(p), p.relayFirst);   // 主中继 → 备用中继（对这个对方指定了主中继就先走它）
   const lanFirst = !(lanDownUntil.get(p.id) > Date.now());
   const tries = [...new Set(lanFirst ? [...lan, ...relays] : [...relays, ...lan])];
   let err;
@@ -352,7 +355,7 @@ export async function peerCall(c, p, sub, opts) {
   for (const url of tries) {
     const viaRelay = isRelayAddr(url), t0 = Date.now();
     try {
-      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c) }, connectMs: viaRelay ? 0 : 3000 });
+      const j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p) }, connectMs: viaRelay ? 0 : 3000 });
       trail.push((viaRelay ? '中继 ' : '局域网 ') + hostOf(url) + ' ok ' + (Date.now() - t0) + 'ms');
       peerRoute.set(p.id, { via: viaRelay ? 'relay' : 'lan', at: Date.now(), ms: Date.now() - t0, trail: trail.join(' → ') });
       if (viaRelay) { if (lan.length) lanDownUntil.set(p.id, Date.now() + 5 * 60e3); }

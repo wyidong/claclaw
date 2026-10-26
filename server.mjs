@@ -1111,7 +1111,7 @@ function peerPublic(c, local) {
     relayTunnelCmd: local && relayInvitesOf(c)[0] && clarelay ? clarelay.tunnelCommand(relayInvitesOf(c)[0], '<你本机收消息的服务地址>') : '',
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
-    peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relay: local ? relayOfPeer(p) : !!relayOfPeer(p), relays: local ? peerRelays(p) : peerRelays(p).length, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
+    peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relayFirst: p.relayFirst, relay: local ? relayOfPeer(p) : !!relayOfPeer(p), relays: local ? peerRelays(p) : peerRelays(p).length, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt, pairing: !!outPair.pairing } : null,
   };
 }
@@ -2333,6 +2333,11 @@ const handler = async (req, res) => {
         else if (Array.isArray(b.sessions)) p.allow = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);
         savePeer(c); log('peer allow', p.name, Array.isArray(p.allow) ? p.allow.length : 'all');
         return sendJson(res, 200, pub(c));
+      }
+      if (act === '/relay-first') {   // 给某个对方指定主中继（host:port，空 = 按我们的默认顺序）
+        const p = c.peers.find(x => x.id === b.id); if (!p) return sendJson(res, 404, { error: '没有这个对方' });
+        const h = String(b.host || '').trim(); if (h && !/^[\w.-]+:\d+$/.test(h)) return sendJson(res, 400, { error: '格式：host:port' });
+        if (h) p.relayFirst = h; else delete p.relayFirst; savePeer(c); log('peer relay-first', p.name, h || '默认'); return sendJson(res, 200, pub(c));
       }
       if (act === '/revoke') { c.peers = c.peers.filter(p => p.id !== b.id); savePeer(c); log('peer revoked', b.id); return sendJson(res, 200, pub(c)); }
       if (act === '/check') {
