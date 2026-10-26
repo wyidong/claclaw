@@ -35,6 +35,8 @@ const uploadKeepDays = () => { const d = Math.round(Number(settings().uploadKeep
 setTimeout(() => { try { cleanUploads(uploadsDir(DATA), uploadKeepDays()); } catch {} }, 15000);   // 启动后清一次过期附件
 // 推送走哪：auto = clarelay 设备在线就交给它（推到外壳），不在线 claclaw 自己推；clarelay = 只走它；self = 只自己推；both = 都推
 const PUSH_VIA = ['auto', 'clarelay', 'self', 'both'];
+// 先感受推送量：有人正看着这个会话也照推、照记未读（电脑不响提示音）；以后要减少推送把它改回 false
+const PUSH_ALWAYS = true;
 const pushVia = () => PUSH_VIA.includes(settings().pushVia) ? settings().pushVia : 'auto';
 const vidName = n => String(n || '视频').replace(/[\r\n\]「」]/g, ' ').slice(0, 80);
 const UPLOADS = uploadsDir(DATA);
@@ -931,8 +933,8 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
   const hint = '你的会话 ID：' + id + '；这一轮的回复会自动传回给' + (local ? '它' : '对方') + '，要主动找别的会话用 ' + how + '；';
   const msg = (local ? '【claclaw 本机 · 来自会话：' : '【claclaw 协同 · 来自对方：') + from + '（' + hint + '来信长的话先提炼要点再处理；回复言简意赅，只写结果或必要的问题）】\n' + text;
   // 协同消息到了：没人正看着这个会话就推一条通知（点开直接进这个会话）
-  if (!r.watched()) {
-    localSound();
+  if (PUSH_ALWAYS || !r.watched()) {
+    const w = r.watched(); if (!w) localSound();
     const badge = markUnread(id);
     alertOut(id, 'peer', (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), { title: (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge });
   }
@@ -1528,9 +1530,10 @@ class Runner {
   watched() { return [...this.subs].some(ws => ws.visible !== false); }
 
   notify(body, tag) {
-    if (this.watched()) return;
+    const w = this.watched();
+    if (w && !PUSH_ALWAYS) return;
     const title = this.info.customTitle || this.title || path.basename(this.cwd || '') || '会话';
-    localSound();
+    if (!w) localSound();
     const badge = markUnread(this.id);
     alertOut(this.id, /^perm-/.test(tag) ? 'ask' : body === '这一轮出错结束了' ? 'error' : 'reply', title, { title, body, tag, url: '/?s=' + this.id, badge });
   }
@@ -1608,15 +1611,17 @@ function snippet(text, fallback) {
   return t.length > 80 ? t.slice(0, 80) + '…' : t;
 }
 function ocTurnDone(r, ok, text) {
-  if (r.watched()) return;
-  localSound();
+  const w = r.watched();
+  if (w && !PUSH_ALWAYS) return;
+  if (!w) localSound();
   const badge = markUnread(r.id), title = r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : 'OpenClaw');
   alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge });
 }
 // DeepSeek / OpenCode 会话要你确认操作：没人看着就推送
 function dsAsk(r, body) {
-  if (r.watched()) return;
-  localSound();
+  const w = r.watched();
+  if (w && !PUSH_ALWAYS) return;
+  if (!w) localSound();
   const badge = markUnread(r.id), title = r.title || (isOp(r.id) ? 'OpenCode' : 'DeepSeek');
   alertOut(r.id, 'ask', title, { title, body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge });
 }
