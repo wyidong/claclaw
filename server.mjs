@@ -1487,7 +1487,10 @@ class Runner {
   async peerGuard(inp, toolUseID, o) {
     const pt = this.peerTurn;
     if (!pt || inp?.hook_event_name !== 'PreToolUse') return {};
-    const risk = peerRisk(inp.tool_name, inp.tool_input, this.cwd, PEER_ROOTS, PEER_OPTS);
+    // Bash 按命令实际在哪个目录跑来判断：hook 的 cwd 跟着会话里的 cd 走，而 cd 过之后 Claude Code 会把多余的
+    // 「cd 当前目录 &&」去掉——只看会话起始目录（this.cwd），`npm run restart` 就会被当成在仓库外跑。改 / 读文件的「项目目录」仍按会话目录算
+    const cwd = inp.tool_name === 'Bash' && inp.cwd ? inp.cwd : this.cwd;
+    const risk = peerRisk(inp.tool_name, inp.tool_input, cwd, PEER_ROOTS, PEER_OPTS);
     if (!risk) return {};
     if (pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
     // 规则只负责标出「有风险」；要不要打扰用户，交给小模型看需求 + 这一步来判断（peerjudge.mjs）。
@@ -1496,12 +1499,12 @@ class Runner {
     let why = '';
     if (risk.key !== 'read-sensitive') {
       const t0 = Date.now();
-      const j = await peerJudge({ need: pt.text, plan: this.lastSaid || '', tool: inp.tool_name, input: inp.tool_input, cwd: this.cwd, reason: risk.reason, destructive: des, env: CHILD_ENV });
+      const j = await peerJudge({ need: pt.text, plan: this.lastSaid || '', tool: inp.tool_name, input: inp.tool_input, cwd, reason: risk.reason, destructive: des, env: CHILD_ENV });
       log('peer-guard judge', j.allow ? 'allow' : 'ask', this.id.slice(0, 8), inp.tool_name, risk.reason, '·', j.why, (Date.now() - t0) + 'ms');
       if (j.allow) return {};
       why = j.why;
     }
-    log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason);
+    log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason, '@', cwd);
     const res = await this.askPermission(inp.tool_name, inp.tool_input, {
       toolUseID, signal: o?.signal, title: (des ? '⚠ ' : '') + '处理对方（' + pt.from + '）的消息时要' + risk.reason + '，允许吗？' + (why ? '（审查：' + why + '）' : ''),
       description: why ? '审查意见：' + why : '这一轮是协同消息触发的，有风险的操作要你确认', peerKey: risk.key,
