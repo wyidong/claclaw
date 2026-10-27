@@ -1933,14 +1933,16 @@ function syncSuggestion(){
   sugBtn.hidden=true;   // 不再单独放「↵ 填入」按钮：输入框空着时点灰色的发送键就是填入建议
   syncSend();
 }
-function acceptSuggestion(){
+// 手机上点按钮填入建议不唤起键盘：多数时候直接再点一次发送；要改再点输入框
+function acceptSuggestion(noKb){
   if(!suggestion)return;
   ta.value=suggestion;suggestion=null;
   ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden';
-  syncSuggestion();syncSend();ta.focus();
-  ta.setSelectionRange(ta.value.length,ta.value.length);
+  syncSuggestion();syncSend();
+  if(noKb===true&&COARSE.matches&&document.activeElement!==ta)return;
+  ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
 }
-sugBtn.addEventListener('click',acceptSuggestion);
+sugBtn.addEventListener('click',function(){acceptSuggestion(true)});
 
 // ---------- 发图片：选图 / 拍照 / 粘贴，先在手机上压缩再发 ----------
 
@@ -2626,7 +2628,7 @@ function outboxRestore(){
 }
 function stop(){wsSend({t:'interrupt'})}
 
-sendBtn.addEventListener('click',function(){if(sendBtn.classList.contains('sugfill')){acceptSuggestion();return}run(ta.value)});
+sendBtn.addEventListener('click',function(){if(sendBtn.classList.contains('sugfill')){acceptSuggestion(true);return}run(ta.value)});
 $('#stopBtn').addEventListener('click',stop);
 ta.addEventListener('input',function(){
   ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden';syncSend();
