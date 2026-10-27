@@ -69,6 +69,9 @@
 /* 宿主页、协同页：页头、分组标题、每行名称同样用紫 */
 :root[data-theme="ziwei"] .pg-hd,:root[data-theme="ziwei"] .h-h,:root[data-theme="ziwei"] .h-row .k{color:var(--zw-t)}
 :root[data-theme="ziwei"] .pe-back{color:var(--accent)}
+/* 手机设置页：标题栏下原来空出的 14px 露出淡紫底像多了一节——标题栏贴住内容、底下一条细线，留白挪进滚动区 */
+:root[data-theme="ziwei"] #app.m-list.set-on #setTop{margin-bottom:0;border-bottom:1px solid var(--line)}
+:root[data-theme="ziwei"] #app.m-list.set-on #setBody{padding-top:22px}
 :root[data-theme="ziwei"] #setTop button,:root[data-theme="ziwei"] #backBtn{color:var(--accent)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
