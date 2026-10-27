@@ -1497,7 +1497,9 @@ class Runner {
     if (risk.key !== 'read-sensitive' && !destructive(inp.tool_name, inp.tool_input) && !peerIntent(pt.text) && !peerInstructed(inp.tool_name, inp.tool_input, pt.text)) { log('peer-guard self', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
     log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason);
     const res = await this.askPermission(inp.tool_name, inp.tool_input, {
-      toolUseID, signal: o?.signal, title: '对方（' + pt.from + '）发来的请求要' + risk.reason + '，允许吗？',
+      toolUseID, signal: o?.signal, title: destructive(inp.tool_name, inp.tool_input)
+        ? '⚠ 处理对方（' + pt.from + '）的消息时要' + risk.reason + '：对方的需求一般用不着删改本地文件，确定允许？'
+        : '对方（' + pt.from + '）发来的请求要' + risk.reason + '，允许吗？',
       description: '这一轮是协同消息触发的，有风险的操作要你确认', peerKey: risk.key,
     });
     const ok = res.behavior === 'allow';
