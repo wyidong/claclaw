@@ -1,0 +1,43 @@
+<!-- claclaw logo 源图（自己画的龙头，可自由使用）。图标 png = 浅蓝→白渐变底 + 这张图占边长 50% 居中。 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 12 152 154">
+<defs>
+ <radialGradient id="face" cx=".5" cy=".42" r=".62"><stop offset="0" stop-color="#8EE05A"/><stop offset=".65" stop-color="#43B02A"/><stop offset="1" stop-color="#1F7A1F"/></radialGradient>
+ <linearGradient id="horn" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#A27A45"/><stop offset="1" stop-color="#E3C894"/></linearGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF27A"/><stop offset="1" stop-color="#E2B60E"/></linearGradient>
+ <radialGradient id="snout" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#F6CDB4"/><stop offset="1" stop-color="#D39575"/></radialGradient>
+ <radialGradient id="iris" cx=".45" cy=".4" r=".6"><stop offset="0" stop-color="#5BE0B0"/><stop offset="1" stop-color="#127A5A"/></radialGradient>
+ <g id="half">
+  <!-- 角 -->
+  <path d="M78,66 C72,46 66,32 52,18 C72,24 86,40 94,62 Z" fill="url(#horn)"/>
+  <!-- 侧面鬃毛 -->
+  <path d="M58,70 L36,58 L50,80 L28,82 L50,96 L30,108 L54,112 L40,128 L60,122 Z" fill="url(#gold)"/>
+  <!-- 胡须 -->
+  <path d="M74,124 C54,120 38,126 36,140 C34,154 52,160 58,148 C62,140 52,136 48,142" fill="none" stroke="url(#gold)" stroke-width="5.5" stroke-linecap="round"/>
+ </g>
+ <g id="front">
+  <!-- 眉毛 -->
+  <path d="M97,84 C86,77 72,76 62,82 L50,68 L62,72 L56,58 L70,68 L72,54 L80,68 C88,68 96,74 100,79 Z" fill="url(#gold)" stroke="#C99A0A" stroke-width=".8"/>
+  <!-- 眼睛 -->
+  <ellipse cx="79" cy="94" rx="13" ry="11.5" fill="#fff" stroke="#1F6A1F" stroke-width="1.5"/>
+  <circle cx="81" cy="94" r="7.5" fill="url(#iris)"/>
+  <circle cx="81" cy="94" r="3.8" fill="#111"/>
+  <circle cx="83.5" cy="91" r="1.8" fill="#fff"/>
+  <!-- 鼻孔 -->
+  <ellipse cx="88" cy="120" rx="6" ry="5" fill="#7A3B22"/><path d="M86,120 a2.4,2.4 0 1 1 4,0" fill="none" stroke="#C47A55" stroke-width="1.4"/>
+ </g>
+</defs>
+<use href="#half"/><use href="#half" transform="translate(200,0) scale(-1,1)"/>
+<!-- 头 -->
+<path d="M60,74 C60,54 140,54 140,74 L146,108 C148,142 128,162 100,162 C72,162 52,142 54,108 Z" fill="url(#face)"/>
+<!-- 头顶冠 -->
+<path d="M70,62 L76,46 L84,58 L92,40 L100,56 L108,40 L116,58 L124,46 L130,62 C112,54 88,54 70,62 Z" fill="url(#gold)"/>
+<!-- 额头鳞纹 -->
+<path d="M88,68 Q100,62 112,68 M90,76 Q100,70 110,76" fill="none" stroke="#2E8B2E" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+<!-- 嘴 -->
+<path d="M72,132 C80,128 120,128 128,132 C128,150 116,158 100,158 C84,158 72,150 72,132 Z" fill="#5A0F14"/>
+<path d="M88,150 C92,140 108,140 112,150 C108,156 92,156 88,150 Z" fill="#E0414F"/>
+<path d="M76,132 L80,142 L84,131 L88,140 L92,130 Z M124,132 L120,142 L116,131 L112,140 L108,130 Z M84,156 L88,149 L92,157 Z M116,156 L112,149 L108,157 Z" fill="#FFF8E8"/>
+<!-- 鼻子 -->
+<path d="M76,118 C76,104 124,104 124,118 C124,132 112,134 100,134 C88,134 76,132 76,118 Z" fill="url(#snout)"/>
+<use href="#front"/><use href="#front" transform="translate(200,0) scale(-1,1)"/>
+</svg>
