@@ -2185,10 +2185,12 @@ const handler = async (req, res) => {
     if (url.pathname === '/setup') return setUp ? go('/login') : page('login.html');
     if (url.pathname === '/login') return setUp ? page('login.html') : go('/setup');
     // 主屏幕图标：iOS 添加到主屏幕时不带 cookie 去取，必须免登录；只放行 icons/ 下已知的 png
+    // data/icons/ 下有同名图就优先用它：本机自己换的图标（来源不明的图片不进仓库）
     const icon = url.pathname.match(/^\/icons\/([a-z0-9-]+\.png)$/);
-    if (icon && fs.existsSync(path.join(ROOT, 'public', 'icons', icon[1]))) {
+    const iconFile = icon && [path.join(DATA, 'icons', icon[1]), path.join(ROOT, 'public', 'icons', icon[1])].find((f) => fs.existsSync(f));
+    if (iconFile) {
       res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
-      return fs.createReadStream(path.join(ROOT, 'public', 'icons', icon[1])).pipe(res);
+      return fs.createReadStream(iconFile).pipe(res);
     }
     // manifest 由浏览器不带 cookie 去取，必须免登录
     // Service Worker 脚本：浏览器更新它时不一定带 cookie，免登录（里面没有任何敏感内容）
