@@ -969,7 +969,7 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
   if (PUSH_ALWAYS || !r.watched()) {
     const w = r.watched(); if (!w) localSound();
     const badge = markUnread(id);
-    alertOut(id, 'peer', (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), { title: (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge });
+    alertOut(id, 'peer', (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), { title: (local ? '会话消息 · ' : '协同消息 · ') + (from || '对方'), body: snippet(text, '发来一条消息'), tag: 'peer-msg-' + id, url: '/?s=' + id, badge }, undefined, w);
   }
   return new Promise(resolve => {
     let reply = '', cur = '', done = false;
@@ -1570,7 +1570,7 @@ class Runner {
     const title = this.info.customTitle || this.title || path.basename(this.cwd || '') || '会话';
     if (!w) localSound();
     const badge = markUnread(this.id);
-    alertOut(this.id, /^perm-/.test(tag) ? 'ask' : body === '这一轮出错结束了' ? 'error' : 'reply', title, { title, body, tag, url: '/?s=' + this.id, badge });
+    alertOut(this.id, /^perm-/.test(tag) ? 'ask' : body === '这一轮出错结束了' ? 'error' : 'reply', title, { title, body, tag, url: '/?s=' + this.id, badge }, undefined, w);
   }
   unsubscribe(ws) { this.subs.delete(ws); this.maybeScheduleClose(); }
 
@@ -1650,7 +1650,7 @@ function ocTurnDone(r, ok, text) {
   if (w && !PUSH_ALWAYS) return;
   if (!w) localSound();
   const badge = markUnread(r.id), title = r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : 'OpenClaw');
-  alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge });
+  alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
 // DeepSeek / OpenCode 会话要你确认操作：没人看着就推送
 function dsAsk(r, body) {
@@ -1658,7 +1658,7 @@ function dsAsk(r, body) {
   if (w && !PUSH_ALWAYS) return;
   if (!w) localSound();
   const badge = markUnread(r.id), title = r.title || (isOp(r.id) ? 'OpenCode' : 'DeepSeek');
-  alertOut(r.id, 'ask', title, { title, body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge });
+  alertOut(r.id, 'ask', title, { title, body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
 // DS 压缩完：给还开着的页面重发一份 session.opened，让历史按压缩后的记录重画。
 // 压缩后总条数会变少，前端不能按旧序号续画，所以带 compacted 标记强制整页刷新。
@@ -1735,12 +1735,13 @@ function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveU
 function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); devRead(id); }
 // 提醒发出去：报给 clarelay（推到外壳、算角标），按设置决定自己的 Web Push 要不要发。
 // snippet 给 clarelay 的另算（配对码之类不该出本机的用 safeSnippet 替掉）；clarelay 自己再截成前 N 个字
-function alertOut(target, kind, title, payload, safeSnippet) {
+// watched：有页面正看着这个会话。clarelay 照报（正在看的过滤交给中继，它按外壳报的 viewing 比对）；claclaw 自己的 Web Push 不推
+function alertOut(target, kind, title, payload, safeSnippet, watched = false) {
   // auto：clarelay 在线、且它的推送总开关没关，才交给它；总开关关了 = 不代收代转，全由 claclaw 自己推
   const via = pushVia(), st = devStatus(), useDev = via === 'clarelay' || via === 'both' || (via === 'auto' && st.online && st.push !== false);
   const dev = devConfigured() && via !== 'self' && useDev;
   if (dev) devNotify({ target, kind, title: (devStatus().name ? devStatus().name + ' · ' : '') + title, snippet: safeSnippet ?? payload.body, unread: target.startsWith('view:') ? 1 : unreadMap()[target] || 0 });
-  if (via === 'self' || via === 'both' || !dev || (via === 'auto' && !st.online))
+  if (!watched && (via === 'self' || via === 'both' || !dev || (via === 'auto' && !st.online)))
     push.sendAll(payload, log).then(n => n && log('push sent', target.slice(0, 8), payload.body, '→', n)).catch(() => {});
 }
 startDevNotify({ log, onOnline: async () => {
