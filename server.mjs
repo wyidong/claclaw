@@ -2509,6 +2509,7 @@ function sameOrigin(req) {
 }
 
 const wss = new WebSocketServer({ noServer: true });
+let ttsOwner = null, ttsOwnerAt = 0;   // 正在朗读的页面
 function onUpgrade(req, socket, head) {
   if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
     log('ws rejected', req.headers.origin || '', realIp(req));
@@ -2548,6 +2549,13 @@ wss.on('connection', (ws, req) => {
       // 这个会话的进程被换过（比如切到「跳过确认」要重启进程）：改用新的那个
       if (runner?.closed && runners.get(runner.id) && !runners.get(runner.id).closed) runner = runners.get(runner.id);
       if (m.t === 'clog') { log('client', wsIp, String(m.text || '').slice(0, 300)); return; }   // 网页排查日志（点通知打开会话等）
+      if (m.t === 'tts') {   // 同一时间只让一个页面朗读：手动点的抢过来，自动念的让给正在念的那个
+        const now = Date.now(), busy = ttsOwner && ttsOwner !== ws && ttsOwner.readyState === 1 && now - ttsOwnerAt < 60000;
+        if (!m.on) { if (ttsOwner === ws) ttsOwner = null; return; }
+        if (busy && !m.manual) { send({ t: 'tts.off' }); return; }
+        if (ttsOwner !== ws) for (const c of wss.clients) if (c !== ws && c.readyState === 1) c.send('{"t":"tts.off"}');
+        ttsOwner = ws; ttsOwnerAt = now; return;
+      }
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
       if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }

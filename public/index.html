@@ -2353,6 +2353,9 @@ function onEvent(m){
   case 'queue.sent':   // 排队的消息发出去了（合成一条）
     feed.querySelectorAll('.msg.user.queued').forEach(function(e){e.classList.remove('queued')});
     break;
+  case 'tts.off':   // 别的页面在念：这边停下（同一时间只一个页面出声）
+    ttsStop();ttsHush=!!busy;
+    break;
   case 'peer.pair':   // 有人申请协同配对：页面顶部提醒，点了直接去协同页
     pairBanner(m);
     break;
@@ -4070,7 +4073,7 @@ window.addEventListener('message',function(e){
   if(window.__clq&&e.isTrusted)return;   // 还在攒启动前的消息：这条已进队列，等补处理时再来
   if(m.type==='embedded'){lastViewing=undefined;postViewing()}
   if(m.type==='embedded'||m.type==='open')clog('shell '+m.type+(m.type==='open'?' '+(m.target||''):'')+(e.isTrusted?'':'（启动时补处理）'));
-  if(m.type==='visible'){var h=m.on===false;if(h!==shellHidden){shellHidden=h;wsSend({t:'visible',on:pageVisible()});postViewing()}}
+  if(m.type==='visible'){var h=m.on===false;if(h!==shellHidden){shellHidden=h;if(h)ttsStop();wsSend({t:'visible',on:pageVisible()});postViewing()}}
   if(m.type==='open'){   // 点了外壳的通知：打开那个会话；没给会话、或打不开（不存在、被占着……）就退到「最近」
     var tg=typeof m.target==='string'?m.target:'';
     clog('shell open '+(tg||'(空)')+' ws='+(ws?ws.readyState:'-')+' 当前='+(session?session.id.slice(0,8):'-')+(mList?' 列表':' 聊天'));
@@ -4207,10 +4210,12 @@ function srvNext(){
     // 下一句提前装进另一个 <audio>，切换时不用再加载
     var nx=srvQ[1];if(nx)srvFetch(nx).then(function(){if(gen===srvGen&&nx.url){var b=srvEls[srvTurn];if(b!==srvCur){b.src=nx.url;b.load()}}}).catch(function(){});
     return a.play().then(function(){
-      srvQ.shift();var prev=it;setTimeout(function(){srvFree(prev)},60000);
+      if(gen!==srvGen){try{a.pause()}catch(_){}return}
+      srvQ.shift();var prev=it;setTimeout(function(){srvFree(prev)},60000);ttsClaim();
       if(Date.now()-srvLogAt>10000){srvLogAt=Date.now();ttsDbg('playing <audio>')}
       ttsShowStop();
     },function(e){
+      if(gen!==srvGen)return;   // 已经停了 / 被插队：旧的这次播放失败不要动新的状态
       srvCur=null;srvBusy=false;
       // iPhone 不让网页自己出声：这句留在队首，等点一下「继续」
       if(e&&e.name==='NotAllowedError'){srvBlocked=true;tts.srvUnlocked=false;ttsShowStop();ttsDbg('blocked: '+e.name);return}
@@ -4278,7 +4283,7 @@ function ttsStream(raw,end){
   var piece=raw.slice(ttsPos,cut);ttsPos=cut;ttsSay(piece);
 }
 function ttsSay(src,force){
-  if((!tts.on&&!force)||!ttsOk()||document.hidden)return;
+  if((!tts.on&&!force)||!ttsOk()||!pageVisible())return;   // 藏在 clarelay 后台的页面不念
   var t=ttsText(src);if(!t)return;
   // 太长的切成几段排队念（有些浏览器一段太长会念到一半停）
   var parts=t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t];
@@ -4286,7 +4291,7 @@ function ttsSay(src,force){
   parts.forEach(function(p){
     var u=new SpeechSynthesisUtterance(p);
     u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
-    u.onstart=ttsShowStop;u.onend=u.onerror=function(){setTimeout(ttsShowStop,50)};
+    u.onstart=function(){ttsClaim();ttsShowStop()};u.onend=u.onerror=function(){setTimeout(ttsShowStop,50)};
     speechSynthesis.speak(u);
   });
   ttsShowStop();
@@ -4535,7 +4540,7 @@ var narration=(function(){
 })();
 // 试听：不管自动朗读开没开，都用当前选的声音念一句
 function ttsPreview(text){
-  ttsStop();
+  ttsStop();ttsManual=true;
   var sv=ttsSrvVoice();if(sv){srvUnlock();srvSay([text],sv);return}
   if(!ttsOk())return;var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u);
 }
@@ -4558,6 +4563,7 @@ var dockTopPut=function(){};
 function ttsShowStop(){
   dockTopPut();
   var sp=ttsSpeaking();
+  if(!sp&&ttsClaimed){ttsClaimed=false;ttsManual=false;wsSend({t:'tts',on:0})}
   if(!(srvBusy||srvQ.length||srvPlaying()))srvKeepIdle();
   var b=$('#ttsStop'),st=srvBlocked?'go':sp?'stop':'say';
   if(b.dataset.st!==st){b.dataset.st=st;b.innerHTML=TTS_IC[st];b.setAttribute('aria-label',st==='go'?'继续朗读':st==='stop'?'停止朗读':'朗读最后一条回复');b.title=b.getAttribute('aria-label')}
@@ -4575,7 +4581,10 @@ function ttsLastReply(){
   c.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,blockquote').forEach(function(x){x.append('\n')});
   return c.textContent;
 }
-function ttsStop(){srvStop();if(ttsOk())speechSynthesis.cancel();ttsShowStop()}
+function ttsStop(){srvStop();if(ttsOk())speechSynthesis.cancel();ttsManual=false;ttsShowStop()}
+// 开始出声时告诉服务器：别的页面（另一个标签 / clarelay 里嵌的）停下；手动点的优先，自动念的让给正在念的
+var ttsManual=false,ttsClaimed=false;
+function ttsClaim(){ttsClaimed=true;wsSend({t:'tts',on:1,manual:ttsManual?1:0})}
 function ttsUnlock(){if(tts.on&&ttsSrvVoice())srvUnlock();if(!tts.on||!ttsOk()||tts.unlocked)return;tts.unlocked=true;var u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}
 function ttsWake(){
   if(!tts.on||document.hidden||!navigator.wakeLock||tts.lock)return;
@@ -4645,7 +4654,7 @@ $('#ttsStop').addEventListener('click',function(){
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice())srvUnlock(true);else ttsUnlock();
   ttsDbg('tap say');
-  ttsSay(ttsLastReply(),true);ttsShowStop();
+  ttsManual=true;ttsSay(ttsLastReply(),true);ttsShowStop();
 });
 setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
 // 朗读出问题时把手机这边的情况记到电脑的日志里（没声音时好查是哪一步）
