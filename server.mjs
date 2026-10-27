@@ -21,7 +21,7 @@ import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx } from './dsh.mjs';
 import * as skills from './skills.mjs';
-import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opCtx } from './opencode.mjs';
+import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opCtx, opTokSum } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
@@ -285,6 +285,37 @@ function lastPromptOf(file) {
 }
 // 会话最后一条真正的消息（用户 / AI / 工具结果）的时间。不能用文件修改时间：Claude Code 进程退出、重启时会往文件末尾补
 // cost-state、last-prompt 这类记录，文件时间变了但没有新消息（重启 claclaw 后一批会话会被顶到「最近」最上面）
+// 会话累计用量：所有 AI 回复的 usage 相加。↑ 输入 = input + 缓存写入 + 缓存读取（每次调用都把整个上下文送一遍，所以很大），↓ 输出 = output。
+// 同一条回复流式写好几行（message.id 相同），只算最后一行。会话文件只会追加：记住读到哪，下次只读新增部分
+const usageCache = new Map();
+function usageOf(file) {
+  let st; try { st = fs.statSync(file); } catch { return null; }
+  let c = usageCache.get(file);
+  if (!c || st.size < c.size) c = { size: 0, in: 0, out: 0, lastId: null, last: null, rest: '' };
+  if (st.size > c.size) {
+    const CH = 4 * 1024 * 1024; let pos = c.size, fd;
+    try {
+      fd = fs.openSync(file, 'r');
+      while (pos < st.size) {
+        const n = Math.min(CH, st.size - pos), buf = Buffer.alloc(n);
+        fs.readSync(fd, buf, 0, n, pos); pos += n;
+        const lines = (c.rest + buf.toString('utf8')).split('\n'); c.rest = lines.pop();
+        for (const l of lines) {
+          if (!l.includes('"usage"') || !l.includes('"type":"assistant"')) continue;
+          let e; try { e = JSON.parse(l); } catch { continue; }
+          const m = e.message, u = m && m.usage; if (e.type !== 'assistant' || !u) continue;
+          const i = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), o = u.output_tokens || 0;
+          if (m.id && m.id === c.lastId && c.last) { c.in -= c.last[0]; c.out -= c.last[1]; }
+          c.in += i; c.out += o; c.lastId = m.id || null; c.last = [i, o];
+        }
+      }
+    } catch { return null; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+    c.size = st.size;
+    if (c.rest.length > 1048576) c.rest = '';
+    usageCache.set(file, c);
+  }
+  return c.in || c.out ? { in: c.in, out: c.out } : null;
+}
 const lastMsgCache = new Map();
 function lastMsgAt(file) {
   let st; try { st = fs.statSync(file); } catch { return 0; }
@@ -2754,7 +2785,7 @@ wss.on('connection', (ws, req) => {
         log('open opencode', r.sid, hist.total, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'opencode',
-          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = opCtx(m.id)),
+          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = opCtx(m.id)), tokSum: opTokSum(m.id),
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
           pending: [...r.pending.values()].map(p => p.req), suggestion: null,
@@ -2819,7 +2850,7 @@ wss.on('connection', (ws, req) => {
         log('open', m.id.slice(0, 8), info.cwd, 'history ' + histMs + 'ms');
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
-          cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,
+          cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', tokSum: usageOf(jsonlPathOf(info)), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: runner.busy && runner.busySince ? Date.now() - runner.busySince : 0,
           pending: [...runner.pending.values()].map(p => p.req),

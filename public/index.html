@@ -2301,7 +2301,8 @@ function onEvent(m){
     renderHistory(m.history,m.historyStart||0);
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
     if(m.compacted)addSys('会话已压缩，历史已重新加载');
-    else if(m.cwdShort){addSys('会话目录 '+m.cwdShort+(m.branch?' · 分支 '+m.branch:''));feed.lastElementChild.classList.add('sys-dir')}   // 会话 ID 标题栏有，这里只给目录，靠左
+    else if(m.cwdShort){var tk=function(n){return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?Math.round(n/1000)+'k':String(n)};var ts=m.tokSum,dt=m.usage&&m.usage.tokens;if(!ts&&dt)ts={in:(dt.uncachedInputTokens||0)+(dt.cacheReadTokens||0)+(dt.cacheWriteTokens||0),out:dt.outputTokens||0};   // DeepSeek：用现成的累计用量（含子任务）
+    addSys((ts&&(ts.in||ts.out)?'↑'+tk(ts.in)+' ↓'+tk(ts.out)+' · ':'')+m.cwdShort+(m.branch?' · '+m.branch:''));feed.lastElementChild.classList.add('sys-dir')}   // 会话 ID 标题栏有，这里只给目录，靠左
     }
     localStorage.setItem(hk('session'),m.id);
     refreshList();goChat();bgRefreshList();

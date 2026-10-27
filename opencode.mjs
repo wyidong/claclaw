@@ -59,6 +59,17 @@ export function opCtx(id) {
   return null;
 }
 
+// 会话累计用量（「会话 ↑输入 ↓输出」）：所有回复相加；输入 = input + 缓存读写，输出 = output + 推理
+export function opTokSum(id) {
+  if (!isOp(id) || !validSid(sidOf(id))) return null;
+  try {
+    const r = query(db => db.prepare(`select sum(coalesce(json_extract(data,'$.tokens.input'),0) + coalesce(json_extract(data,'$.tokens.cache.read'),0) + coalesce(json_extract(data,'$.tokens.cache.write'),0)) i,
+      sum(coalesce(json_extract(data,'$.tokens.output'),0) + coalesce(json_extract(data,'$.tokens.reasoning'),0)) o
+      from message where session_id = ? and json_extract(data,'$.role') = 'assistant'`).get(sidOf(id)));
+    return r && (r.i || r.o) ? { in: Number(r.i) || 0, out: Number(r.o) || 0 } : null;
+  } catch { return null; }
+}
+
 // ---------- 会话列表 ----------
 const LIST_SQL = `select id, directory, title, time_created, time_updated, model from session
   where parent_id is null and time_archived is null order by time_updated desc limit 300`;
