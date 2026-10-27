@@ -413,44 +413,6 @@ function peerMessages(text) {
 
 // ---------- 历史消息 → 前端条目 ----------
 
-// 打开会话时的历史记录：大会话要把整个记录文件读一遍（100MB 级的要 0.7 秒），
-// 所以按「文件大小 + 修改时间」缓存，没变就直接用；列表刷新时顺手把最近几个会话预读好。
-// 缓存里带着完整的 base64 图片（发给网页的那一页有 4MB 预算，但缓存里是全量），
-// 最多 40 个会话的话内存能到上百 MB。所以除了条数上限，再加一个总字节上限，超了就从最旧的开始淘汰。
-const HISTORY_CACHE_MAX = 64 * 1024 * 1024;
-const historyCache = new Map();   // sessionId → { key, items, bytes }
-let historyCacheBytes = 0;
-// 估算一段历史的体积：图片按 base64 数据的长度算（内存里就占这么多）
-function historyBytes(items) {
-  let n = 0;
-  for (const it of items) {
-    n += 64;                                   // 这条记录本身的开销
-    if (it.text) n += it.text.length;
-    if (it.images) for (const im of it.images) n += (im?.data?.length || 0) + 64;
-  }
-  return n;
-}
-async function loadHistoryCached(sessionId, cwd) {
-  let key = null;
-  try { const st = fs.statSync(jsonlPathOf({ sessionId, cwd })); key = st.size + ':' + st.mtimeMs; } catch {}
-  const hit = historyCache.get(sessionId);
-  if (key && hit && hit.key === key) return hit.hist;
-  const hist = await loadHistory(sessionId, cwd);   // { items, total }
-  if (key) {
-    if (hit) { historyCache.delete(sessionId); historyCacheBytes -= hit.bytes || 0; }
-    const bytes = historyBytes(hist.items || []);
-    historyCache.set(sessionId, { key, hist, bytes });
-    historyCacheBytes += bytes;
-    while (historyCache.size > 40 || historyCacheBytes > HISTORY_CACHE_MAX) {
-      const first = historyCache.keys().next().value;
-      if (first === undefined) break;
-      const v = historyCache.get(first);
-      historyCache.delete(first);
-      historyCacheBytes -= v?.bytes || 0;
-    }
-  }
-  return hist;
-}
 let prewarming = false;
 async function prewarmHistory(list) {
   if (prewarming) return;
@@ -458,34 +420,6 @@ async function prewarmHistory(list) {
   try { for (const s of list.slice(0, 6)) if (s.cwd && !s.unsent) await loadHistoryCached(s.id, s.cwd); } catch {} finally { prewarming = false; }
 }
 
-// 干活中途插话（Claude 还在回复时又发的消息）：会话文件里记成 attachment「queued_command」，
-// SDK 的 getSessionMessages 不返回它们，所以自己从文件里找出来，按在文件里的位置插回历史
-function queuedPrompts(sessionId, cwd) {
-  let text = '';
-  try { text = fs.readFileSync(jsonlPathOf({ sessionId, cwd }), 'utf8'); } catch { return { lineOf: new Map(), queued: [], timeOf: new Map() }; }
-  const lineOf = new Map(), queued = [], timeOf = new Map();
-  let i = 0;
-  for (const line of text.split('\n')) {
-    const k = line.lastIndexOf('"uuid":"');
-    if (k >= 0) {
-      const id = line.slice(k + 8, line.indexOf('"', k + 8));
-      lineOf.set(id, i);
-      const ts = line.match(/"timestamp":"([^"]+)"/);   // 每条记录的时间：聊天里显示消息时间
-      if (ts) { const t = Date.parse(ts[1]); if (t) timeOf.set(id, t); }
-      // 插话被吸收进这一轮时，SDK 用 source_uuid 合成一条用户消息（文件里没有这个 uuid 的行）：时间取插话那一刻
-      const su = line.match(/"source_uuid":"([^"]+)"/);
-      if (su && ts && !timeOf.has(su[1])) { const t = Date.parse(ts[1]); if (t) timeOf.set(su[1], t); }
-    }
-    if (line.includes('"queued_command"')) {
-      try {
-        const o = JSON.parse(line), pr = o.attachment?.prompt;
-        if (o.attachment?.type === 'queued_command' && pr) queued.push({ i, text: typeof pr === 'string' ? pr : userText(pr), at: Date.parse(o.timestamp) || undefined });   // 带图片时是内容块数组
-      } catch {}
-    }
-    i++;
-  }
-  return { lineOf, queued, timeOf };
-}
 
 // 当前上下文大小（tokens）：会话文件里最后一次 API 调用的输入量（输入 + 缓存读 + 缓存写）。
 // 只读文件末尾 4MB；先碰到压缩记录就用压缩后的大小（没记就算不知道）。子 Agent 的不算。
@@ -508,58 +442,76 @@ function ctxFromFile(info) {
 }
 function ctxTokens(u) { return u ? (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) : 0; }
 
-// 压缩过的会话：SDK 只顺着最后一次压缩之后的那条链往回找，压缩前的聊天就看不到了。
-// 网页上要一直看到完整的聊天，所以按每个压缩分界把文件切开，分段让 SDK 各取一条链再接起来；
-// 压缩生成的那条摘要（isCompactSummary）不当用户消息显示，换成一行「已压缩」
-const chainCache = new Map();   // sessionId → { key, pre }：最后一次压缩之前的部分不会再变，缓存起来
-async function sessionChain(sessionId, cwd) {
-  const opt = cwd ? { dir: cwd } : undefined;
-  let raw = '';
-  try { raw = fs.readFileSync(jsonlPathOf({ sessionId, cwd }), 'utf8'); } catch {}
-  const B = '"subtype":"compact_boundary"';
-  const lastB = raw.lastIndexOf(B);
-  if (lastB < 0) return getSessionMessages(sessionId, opt);
-  const cut = raw.lastIndexOf('\n', lastB) + 1;   // 最后一个压缩分界那一行的开头
-  const parse = text => {
-    const entries = [], cuts = [], hide = new Set();
-    for (const l of text.split('\n')) {
-      if (!l) continue;
-      let e; try { e = JSON.parse(l); } catch { continue; }
-      if (e.type === 'system' && e.subtype === 'compact_boundary') cuts.push({ at: entries.length, meta: e.compactMetadata || {} });
-      if (e.isCompactSummary && e.uuid) hide.add(e.uuid);
-      entries.push(e);
-    }
-    return { entries, cuts, hide };
-  };
-  const seen = new Set(), out = [];
-  const add = (list, hide) => { for (const m of list) if (!seen.has(m.uuid)) { seen.add(m.uuid); if (!hide.has(m.uuid)) out.push(m); } };
-  let hit = chainCache.get(sessionId);
-  if (!hit || hit.key !== cut) {
-    const { entries, cuts, hide } = parse(raw.slice(0, cut));
-    const pre = [];
-    const segs = cuts.map(c => c.at).concat(entries.length);
-    for (let i = 0; i < segs.length; i++) {
-      const part = entries.slice(0, segs[i]);
-      let list = [];
-      try { list = await getSessionMessages(sessionId, { ...opt, sessionStore: { load: async () => part, append: async () => {} } }); } catch {}
-      pre.push(...list.filter(m => !hide.has(m.uuid)));
-      pre.push({ type: 'compact', uuid: '', meta: i < cuts.length ? cuts[i].meta : (parse(raw.slice(cut, raw.indexOf('\n', cut))).entries[0]?.compactMetadata || {}) });
-    }
-    hit = { key: cut, pre };
-    chainCache.set(sessionId, hit);
-    if (chainCache.size > 20) chainCache.delete(chainCache.keys().next().value);
+// ---------- 打开会话时的历史记录：按「轮」增量解析 ----------
+// 会话文件只会追加。每个会话记住「最后一轮从哪个字节开始」和它之前的聊天条目（最多 HISTORY_KEEP 条，图片带 base64）；
+// 再打开时只读、只解析最后一轮开头之后的部分：新增里又出现新的轮，前面的轮并进缓存，最后一轮每次重解析（一轮通常很小）。
+// 压缩分界也当轮的边界。文件大小 + 修改时间没变时连最后一轮都不用解析，直接给上次的结果。
+// 大会话（100MB 级）以前每次打开都要整个读一遍（2～8 秒），现在只有第一次。
+const HISTORY_CACHE_MAX = 64 * 1024 * 1024;
+const histInc = new Map();   // sessionId → { ino, headEnd, items, dropped, bytes, key, last }
+let histIncBytes = 0;
+// 估算一段历史的体积：图片按 base64 数据的长度算（内存里就占这么多）
+function historyBytes(items) {
+  let n = 0;
+  for (const it of items) {
+    n += 64;                                   // 这条记录本身的开销
+    if (it.text) n += it.text.length;
+    if (it.images) for (const im of it.images) n += (im?.data?.length || 0) + 64;
   }
-  for (const m of hit.pre) { if (m.uuid) { if (seen.has(m.uuid)) continue; seen.add(m.uuid); } out.push(m); }
-  add(await getSessionMessages(sessionId, opt), parse(raw.slice(cut)).hide);
-  return out;
+  return n;
 }
+// 超过总字节上限 / 会话数上限：从最久没用的开始淘汰，正在用的这个不淘汰
+function histIncEvict(keep) {
+  while (histInc.size > 40 || histIncBytes > HISTORY_CACHE_MAX) {
+    let victim = null;
+    for (const k of histInc.keys()) if (k !== keep) { victim = k; break; }
+    if (!victim) break;
+    histIncBytes -= histInc.get(victim).bytes; histInc.delete(victim);
+  }
+}
+// 读文件 [from, to) 这段，按行解析成记录；每条带起始字节位置和区段内的行号。末尾没换行的半行（可能还在写）不要
+function readEntries(file, from, to) {
+  const n = to - from; if (n <= 0) return [];
+  const buf = Buffer.alloc(n); let fd;
+  try { fd = fs.openSync(file, 'r'); fs.readSync(fd, buf, 0, n, from); } finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
+  const entries = []; let pos = 0, line = 0;
+  while (pos < n) {
+    const nl = buf.indexOf(10, pos); if (nl < 0) break;
+    if (nl > pos && buf[pos] === 123) { try { entries.push({ e: JSON.parse(buf.toString('utf8', pos, nl)), off: from + pos, line }); } catch {} }
+    line++; pos = nl + 1;
+  }
+  return entries;
+}
+// 一轮的开头：用户真正说的一句话（工具结果、系统注入、斜杠命令不算），或一次压缩分界
+const turnStart = e => (e.type === 'system' && e.subtype === 'compact_boundary') || (e.type === 'user' && !!userTextOf(e));
 
-async function loadHistory(sessionId, cwd) {
-  const msgs = await sessionChain(sessionId, cwd);
+// 一段记录 → 聊天条目。SDK 顺着 parentUuid 还原对话链（只给它这一段，不让它再读文件）；
+// 压缩分界切段、各取一条链再接起来，压缩摘要（isCompactSummary）换成一行「已压缩」；
+// 干活中途的插话（attachment queued_command，SDK 不返回）按在文件里的位置插回；每条带时间
+async function itemsOf(sessionId, cwd, entries) {
+  const opt = cwd ? { dir: cwd } : undefined;
   const kTok = n => (n >= 1000 ? Math.round(n / 1000) + 'k' : String(n ?? '?'));
-  const items = [];
-  const toolIdx = new Map();
-  const { lineOf, queued, timeOf } = queuedPrompts(sessionId, cwd);
+  const cuts = [], hide = new Set(), lineOf = new Map(), timeOf = new Map(), queued = [];
+  entries.forEach(({ e, line }, k) => {
+    if (e.type === 'system' && e.subtype === 'compact_boundary') cuts.push({ at: k, meta: e.compactMetadata || {} });
+    if (e.isCompactSummary && e.uuid) hide.add(e.uuid);
+    const t = e.timestamp ? Date.parse(e.timestamp) : 0;
+    if (e.uuid) { lineOf.set(e.uuid, line); if (t) timeOf.set(e.uuid, t); }
+    if (e.source_uuid && t && !timeOf.has(e.source_uuid)) timeOf.set(e.source_uuid, t);   // 插话被吸收进这一轮时，SDK 用 source_uuid 合成的那条：时间取插话那一刻
+    const pr = e.attachment?.prompt;
+    if (e.attachment?.type === 'queued_command' && pr) queued.push({ i: line, text: typeof pr === 'string' ? pr : userText(pr), at: t || undefined });
+  });
+  const msgs = [], seen = new Set(), segs = cuts.map(c => c.at).concat(entries.length);
+  for (let i = 0, from = 0; i < segs.length; from = segs[i], i++) {
+    const part = entries.slice(from, segs[i]).map(x => x.e);
+    if (part.length) {
+      let list = [];
+      try { list = await getSessionMessages(sessionId, { ...opt, sessionStore: { load: async () => part, append: async () => {} } }); } catch (e) { log('history chain', sessionId.slice(0, 8), e.message); }
+      for (const m of list) { if (m.uuid) { if (seen.has(m.uuid) || hide.has(m.uuid)) continue; seen.add(m.uuid); } msgs.push(m); }
+    }
+    if (i < cuts.length) msgs.push({ type: 'compact', uuid: '', meta: cuts[i].meta });
+  }
+  const items = [], toolIdx = new Map();
   const pushQueued = q => {
     const peers = peerMessages(q.text);
     if (peers.length) for (const p of peers) items.push({ kind: 'peer', from: p.from, text: p.text, at: q.at });
@@ -614,10 +566,54 @@ async function loadHistory(sessionId, cwd) {
     if (t) for (let k = n0; k < items.length; k++) if (items[k].kind !== 'tool') items[k].at = t;
   }
   while (qi < queued.length) pushQueued(queued[qi++]);
-  // 插话没赶上这一轮、变成下一轮的正式消息时，文件里两种记录都有：只留正式的那条
-  const dedup = items.filter((x, k) => !(x.queued && items.slice(Math.max(0, k - 8), k + 9).some(y => y !== x && !y.queued && y.kind === 'user' && y.text === x.text)));
-  dedup.forEach(x => { delete x.queued; });
-  return { items: dedup.slice(-HISTORY_KEEP), total: dedup.length };
+  return items;
+}
+
+// 插话没赶上这一轮、变成下一轮的正式消息时，文件里两种记录都有：只留正式的那条（前后 8 条里找）
+function dedupQueued(list) {
+  return list.filter((x, i) => !(x.queued && list.slice(Math.max(0, i - 8), i + 9).some(y => y !== x && !y.queued && y.kind === 'user' && y.text === x.text)));
+}
+// 把新解析出来的一段接到已有条目后面：接缝处也去一遍重
+const JOIN = 8;
+function joinItems(items, add) { return items.slice(0, Math.max(0, items.length - JOIN)).concat(dedupQueued(items.slice(-JOIN).concat(add))); }
+
+async function loadHistory(sessionId, cwd) {
+  const T0 = Date.now(), file = jsonlPathOf({ sessionId, cwd });
+  let st; try { st = fs.statSync(file); } catch { return { items: [], total: 0 }; }
+  let c = histInc.get(sessionId);
+  if (c && (c.ino !== st.ino || st.size < c.headEnd)) { histIncBytes -= c.bytes; histInc.delete(sessionId); c = null; }   // 文件换了 / 被截短：从头来
+  if (c) { histInc.delete(sessionId); histInc.set(sessionId, c); }   // 挪到最后：最近用过的最后淘汰
+  else { c = { ino: st.ino, headEnd: 0, items: [], dropped: 0, bytes: 0, key: '', last: null }; histInc.set(sessionId, c); }
+  const entries = readEntries(file, c.headEnd, st.size);
+  const T1 = Date.now();
+  let k = 0; entries.forEach((x, i) => { if (turnStart(x.e)) k = i; });   // 最后一轮从哪条开始
+  let added = 0;
+  if (k > 0) {   // 新增部分里有已经过去的轮：并进缓存
+    const head = await itemsOf(sessionId, cwd, entries.slice(0, k));
+    added = head.length;
+    c.items = joinItems(c.items, head); c.headEnd = entries[k].off;
+    if (c.items.length > HISTORY_KEEP) { const drop = c.items.length - HISTORY_KEEP; c.dropped += drop; c.items.splice(0, drop); }
+    histIncBytes -= c.bytes; c.bytes = historyBytes(c.items); histIncBytes += c.bytes;
+    histIncEvict(sessionId);
+  }
+  const T2 = Date.now();
+  const tail = await itemsOf(sessionId, cwd, entries.slice(k));
+  const all = joinItems(c.items, tail);
+  const out = all.slice(-HISTORY_KEEP).map(x => { if (!x.queued) return x; const y = { ...x }; delete y.queued; return y; });
+  const T3 = Date.now();
+  return { items: out, total: c.dropped + all.length, timing: 'read ' + (T1 - T0) + ' head ' + (T2 - T1) + '(' + added + ') tail ' + (T3 - T2) + '(' + tail.length + ') total ' + (T3 - T0) };
+}
+
+// 文件大小 + 修改时间没变：上次的结果直接用（连最后一轮都不用再解析）
+async function loadHistoryCached(sessionId, cwd) {
+  let key = null;
+  try { const st = fs.statSync(jsonlPathOf({ sessionId, cwd })); key = st.size + ':' + st.mtimeMs; } catch {}
+  const hit = histInc.get(sessionId);
+  if (key && hit && hit.key === key && hit.last) return hit.last;
+  const hist = await loadHistory(sessionId, cwd);
+  const c = histInc.get(sessionId);
+  if (c && key) { c.key = key; c.last = hist; }
+  return hist;
 }
 
 // 历史图片：内容 sha1 当编号（同一张图网址不变，浏览器缓存得住），内存里按总量留最近的；
@@ -2872,7 +2868,7 @@ wss.on('connection', (ws, req) => {
         runner.subscribe(ws);
         touchWeb(m.id);
         if (ws.visible !== false) clearUnread(m.id);
-        log('open', m.id.slice(0, 8), info.cwd, 'history ' + histMs + 'ms');
+        log('open', m.id.slice(0, 8), info.cwd, 'history ' + histMs + 'ms' + (histMs > 300 && hist.timing ? ' (' + hist.timing + ')' : ''));
         send({
           t: 'session.opened', id: m.id, title: info.customTitle || info.summary, cwd: info.cwd,
           cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', tokSum: usageOf(jsonlPathOf(info)), mode: runner.mode, modes: runner.allowedModes, busy: runner.busy,

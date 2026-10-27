@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import readline from 'node:readline';
 
-const TEXT_MAX = 3000, SNIP = 400, BRIEF = 110, FILES_MAX = 30;
+const TEXT_MAX = 3000, SNIP = 400, BRIEF = 110, FILES_MAX = 30, WAIT_MS = 30 * 60e3;
 const snip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const num = (v) => (v == null || v === '' ? null : Number(v) || 0);
 const HOME = os.homedir();
@@ -25,9 +25,11 @@ export function userTextOf(e) {
     for (const x of c) { if (x && x.type === 'text') t += (t ? ' ' : '') + (x.text || ''); else if (x && x.type === 'image') img = true; }
   }
   t = t.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
-  if (/^<(local-command|command-|bash-|task-notification)/.test(t) || /^\[Request interrupted/.test(t)) return '';
+  if (sysLike(t)) return '';
   return t || (img ? '[图片]' : '');
 }
+// 不是用户说的话：斜杠命令及其输出、后台任务通知、打断提示
+const sysLike = (t) => /^<(local-command|command-|bash-|task-notification)/.test(t) || /^\[(Request interrupted|SYSTEM NOTIFICATION)/.test(t);
 
 // 工具调用的一句话：Bash 给命令，读写文件给路径，子代理给任务，其它给第一个字符串参数
 export function toolBrief(name, input) {
@@ -52,6 +54,7 @@ export function toolKind(name) {
   if (/^(read|glob|grep)$/i.test(n)) return 'read';
   if (/^(write|edit|multiedit|notebookedit)$/i.test(n)) return 'write';
   if (/^(agent|task)$/i.test(n)) return 'agent';
+  if (/^askuserquestion$/i.test(n) || /^ask[_-]?user/i.test(n)) return 'ask';
   return 'other';
 }
 
@@ -63,11 +66,11 @@ function newStep(at, model) { return { at, model: model || '', inp: 0, cr: null,
 // 各轮算完后的汇总；轮的序号、每轮小计也在这里补
 function finish(turns, extra, cwd) {
   const toolsBy = new Map(); const models = new Set();
-  const S = { turns: turns.length, steps: 0, tools: 0, inp: 0, cr: 0, cw: 0, out: 0, think: 0, total: 0, crKnown: false, cwKnown: false, durMs: 0, longestMs: 0, longestTurn: 0, compactions: 0, subagents: 0, errors: 0, interrupted: 0, maxCtx: 0, ctxLast: null, reads: 0, writes: 0, cmds: 0, firstAt: null, lastAt: null };
+  const S = { turns: turns.length, steps: 0, tools: 0, inp: 0, cr: 0, cw: 0, out: 0, think: 0, total: 0, crKnown: false, cwKnown: false, durMs: 0, waitMs: 0, longestMs: 0, longestTurn: 0, compactions: 0, subagents: 0, errors: 0, interrupted: 0, maxCtx: 0, ctxLast: null, reads: 0, writes: 0, cmds: 0, firstAt: null, lastAt: null };
   turns.forEach((t, i) => {
     t.i = i + 1;
     t.nSteps = t.steps.length; t.nTools = 0; t.inp = 0; t.cr = 0; t.cw = 0; t.out = 0; t.think = 0; t.ctx = 0; t.crLast = null; t.errors = 0; t.subagents = 0;
-    const reads = new Set(), writes = new Set(); let cmds = 0;
+    const reads = new Set(), writes = new Set(); let cmds = 0, wait = 0;
     for (const s of t.steps) {
       s.ctx = s.inp + (s.cr || 0) + (s.cw || 0); s.total = s.ctx + s.out;
       t.inp += s.inp; t.out += s.out; t.think += s.think;
@@ -78,6 +81,7 @@ function finish(turns, extra, cwd) {
       for (const u of s.tools) {
         delete u.at; t.nTools++; toolsBy.set(u.name, (toolsBy.get(u.name) || 0) + 1); if (u.err) t.errors++;
         const k = toolKind(u.name); u.kind = k;
+        if (k === 'ask' || u.ms > WAIT_MS) { wait += u.ms; u.wait = true; }
         if ((k === 'read' || k === 'write') && u.brief) u.brief = relPath(u.brief, cwd);
         if (k === 'agent') t.subagents++; else if (k === 'cmd') cmds++; else if (k === 'read' && u.brief) reads.add(u.brief); else if (k === 'write' && u.brief) writes.add(u.brief);
       }
@@ -88,8 +92,8 @@ function finish(turns, extra, cwd) {
     const last = t.steps[t.steps.length - 1];
     t.reply = last ? last.text : ''; t.replyChars = last ? last.chars : 0;
     if (last) S.ctxLast = last.ctx;
-    t.durMs = Math.max(0, (t.endAt || t.at) - t.at);
-    S.steps += t.nSteps; S.tools += t.nTools; S.inp += t.inp; S.cr += t.cr; S.cw += t.cw; S.out += t.out; S.think += t.think; S.durMs += t.durMs;
+    t.waitMs = wait; t.durMs = Math.max(0, (t.endAt || t.at) - t.at - wait);
+    S.steps += t.nSteps; S.tools += t.nTools; S.inp += t.inp; S.cr += t.cr; S.cw += t.cw; S.out += t.out; S.think += t.think; S.durMs += t.durMs; S.waitMs += t.waitMs;
     S.errors += t.errors; S.subagents += t.subagents; S.reads += t.reads; S.writes += t.writes; S.cmds += t.cmds;
     if (t.interrupted) S.interrupted++; if (t.compact) S.compactions++;
     if (t.ctx > S.maxCtx) S.maxCtx = t.ctx;
@@ -178,8 +182,9 @@ function claudeLine(st, e) {
   if (t === 'attachment') {
     const a = e.attachment;
     if (a && a.type === 'queued_command' && a.prompt) {
-      const p = a.prompt, text = typeof p === 'string' ? p : Array.isArray(p) ? p.filter((x) => x && x.type === 'text').map((x) => x.text || '').join(' ') : '';
-      if (text.trim()) { const tr = startTurn(st, ts || st.lastTs, text, { queued: true }); if (Array.isArray(p)) tr.images = p.filter((x) => x && x.type === 'image').length; }
+      const p = a.prompt, raw = typeof p === 'string' ? p : Array.isArray(p) ? p.filter((x) => x && x.type === 'text').map((x) => x.text || '').join(' ') : '';
+      const text = raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+      if (text && !sysLike(text)) { const tr = startTurn(st, ts || st.lastTs, text, { queued: true }); if (Array.isArray(p)) tr.images = p.filter((x) => x && x.type === 'image').length; }
     }
     return;
   }

@@ -84,6 +84,25 @@ test('Claude：从文件读，坏行跳过；没有 cost-state 时账单为空',
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('等用户回答不算干活；后台任务通知不算一轮', () => {
+  const D = 2 * 86400e3;
+  const lines = [
+    user(0, '要不要删'),
+    asst(1000, 'm1', [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion', input: { questions: [] } }], U(1, 5, 0)),
+    user(D, [{ type: 'tool_result', tool_use_id: 'q1', content: '删' }], { toolUseResult: 'x' }),
+    asst(D + 3000, 'm2', [{ type: 'text', text: '删了' }], U(1, 5, 0)),
+    { type: 'attachment', timestamp: iso(D + 9000), attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>x</task-id>\n</task-notification>' } },
+    asst(D + 10000, 'm3', [{ type: 'text', text: '后台任务完成了' }], U(1, 5, 0)),
+  ];
+  const { summary, turns } = dissectClaudeLines(lines);
+  assert.equal(turns.length, 1, '任务通知不算用户的话');
+  assert.equal(turns[0].nSteps, 3);
+  assert.equal(turns[0].waitMs, D - 1000);
+  assert.equal(turns[0].durMs, D + 10000 - (D - 1000), '等用户回答的两天不算干活');
+  assert.equal(turns[0].steps[0].tools[0].wait, true);
+  assert.equal(summary.waitMs, D - 1000);
+});
+
 test('缓存桶没上报过就标 known=false（不补 0）', () => {
   const lines = [user(0, 'hi'), asst(1000, 'm1', [{ type: 'text', text: 'ok' }], { input_tokens: 10, output_tokens: 5 })];
   const { summary, turns } = dissectClaudeLines(lines);

@@ -401,6 +401,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-sec{margin:16px 0 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.3px}
 .ds-sec small{font-weight:400;margin-left:6px}
 .ds-beads{display:flex;flex-wrap:wrap;gap:5px 6px;align-items:center;margin:6px 0 4px}
+.ds-beads.one{height:42px;overflow:hidden;align-content:flex-end}   /* 收起：只露最后一行（最近的几轮），前面的行藏在上面 */
+.ds-tg{margin:0 2px 0 8px;padding:1px 8px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:11px;line-height:1.5;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .ds-bead{display:block;cursor:pointer;flex:none}
 .ds-bead.dim{opacity:.35}
 .ds-bead text{font-size:11px;font-weight:600;fill:#fff;text-anchor:middle;pointer-events:none}
@@ -1649,6 +1651,7 @@ var fvUrl='',fvBlob=null,fvName='';
 var fvTouch=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches),FV_ACT=fvTouch?'分享 / 保存':'保存';
 // ---------- 会话解剖：标题栏点会话名打开。会话（总消耗、四桶、每轮一颗球、每轮明细表，轮多了分页）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） ----------
 var dissEl=$('#diss'),dissFor='',dissData=null,dissTurn=0,dissPage=0,dissScroll=0,DS_PAGE=30;
+var dissBeadsOpen=(function(){try{return localStorage.getItem('claclaw.dissBeads')==='1'}catch(_){return false}})();   // 球默认收起只露最后一行
 function dsTk(n){n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?(n>=1e4?Math.round(n/1000):(n/1000).toFixed(1).replace(/\.0$/,''))+'k':String(n)}
 function dsNum(n){return Math.round(+n||0).toLocaleString('en-US')}
 function dsVal(n,known){return known===false?'--':dsTk(n)}   // 全程没上报过的桶：-- 不补 0
@@ -1671,7 +1674,7 @@ function openDissect(){
     return r.json().then(function(j){if(!r.ok)throw new Error((j&&j.error)||('HTTP '+r.status));return j});
   }).then(function(j){
     if(dissFor!==id||!dissEl.classList.contains('on'))return;
-    dissData=j;dsMarkHeavy(j);dissPage=Math.max(0,Math.ceil((j.turns||[]).length/DS_PAGE)-1);
+    dissData=j;dsMarkHeavy(j);dissPage=0;   // 第一页 = 最新的几轮
     showSession(false);
   }).catch(function(e){if(dissFor!==id)return;b.innerHTML='<div class="ds-empty"></div>';b.firstChild.textContent=e.message});
 }
@@ -1685,7 +1688,7 @@ function dsMarkHeavy(j){
   ts.forEach(function(t){t.heavy=t.nSteps>=mSteps*2+2||t.nTools>=mTools*2+4||t.durMs>=mDur*2+60000||t.out>=mOut*2+2000});
 }
 function dsMarks(t){
-  var m=[];if(t.queued)m.push('插话');if(t.images)m.push('图 ×'+t.images);if(t.interrupted)m.push('<u>被打断</u>');if(t.errors)m.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)m.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)m.push('重试 '+t.retries);if(t.compact)m.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)m.push('子代理 '+t.subagents);
+  var m=[];if(t.queued)m.push('插话');if(t.images)m.push('图 ×'+t.images);if(t.interrupted)m.push('<u>被打断</u>');if(t.errors)m.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)m.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)m.push('重试 '+t.retries);if(t.compact)m.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)m.push('子代理 '+t.subagents);if(t.waitMs)m.push('等你 '+dsDur(t.waitMs));
   return m;
 }
 function dsLegend(o,s){
@@ -1711,7 +1714,7 @@ function dsPager(n){
     if(pages>9&&Math.abs(p-dissPage)>2&&p!==0&&p!==pages-1){if(Math.abs(p-dissPage)===3)h+='<span>…</span>';continue}
     h+='<button type="button" data-pg="'+p+'"'+(p===dissPage?' class="on"':'')+'>'+(p+1)+'</button>';
   }
-  return h+'<button type="button" data-pg="'+(dissPage+1)+'"'+(dissPage>=pages-1?' disabled':'')+'>›</button><span>第 '+(dissPage*DS_PAGE+1)+'–'+Math.min(n,(dissPage+1)*DS_PAGE)+' 轮 / 共 '+n+' 轮</span></div>';
+  return h+'<button type="button" data-pg="'+(dissPage+1)+'"'+(dissPage>=pages-1?' disabled':'')+'>›</button><span>第 '+(n-dissPage*DS_PAGE)+'–'+Math.max(1,n-(dissPage+1)*DS_PAGE+1)+' 轮 / 共 '+n+' 轮</span></div>';
 }
 function showSession(restore){
   var j=dissData;if(!j)return;
@@ -1721,18 +1724,18 @@ function showSession(restore){
   if(!ts.length){b.innerHTML='<div class="ds-empty">这个会话还没有对话</div>';return}
   var multi=dsMulti(s),max=0;ts.forEach(function(t){if((t.total||0)>max)max=t.total});
   var h='<div class="ds-k">总消耗 Tokens</div><div class="ds-big">'+dsNum(s.total)+'<small>≈'+dsTk(s.total)+' · 四桶相加</small></div>'+dsLegend(s,s)
-    +'<div class="ds-meta"><b>'+ts.length+'</b> 轮 · <b>'+(s.steps||0)+'</b> 步 · <b>'+(s.tools||0)+'</b> 次工具 · 干活 <b>'+dsDur(s.durMs)+'</b> · 最长 <b>#'+s.longestTurn+'</b> '+dsDur(s.longestMs)+' · 上下文 最大 <b>'+dsTk(s.maxCtx)+'</b>'+(s.ctxLast?' / 现在 <b>'+dsTk(s.ctxLast)+'</b>':'')
+    +'<div class="ds-meta"><b>'+ts.length+'</b> 轮 · <b>'+(s.steps||0)+'</b> 步 · <b>'+(s.tools||0)+'</b> 次工具 · 干活 <b>'+dsDur(s.durMs)+'</b>'+(s.waitMs?'（等你 '+dsDur(s.waitMs)+' 不算）':'')+' · 最长 <b>#'+s.longestTurn+'</b> '+dsDur(s.longestMs)+' · 上下文 最大 <b>'+dsTk(s.maxCtx)+'</b>'+(s.ctxLast?' / 现在 <b>'+dsTk(s.ctxLast)+'</b>':'')
     +(s.compactions?' · 压缩 <b>'+s.compactions+'</b> 次':'')+(s.subagents?' · 子代理 <b>'+s.subagents+'</b>':'')+(s.errors?' · 工具出错 <b>'+s.errors+'</b>':'')+(s.interrupted?' · 打断 <b>'+s.interrupted+'</b>':'')
     +(s.reads||s.writes||s.cmds?' · 读 <b>'+(s.reads||0)+'</b> 改 <b>'+(s.writes||0)+'</b> 个文件 · <b>'+(s.cmds||0)+'</b> 条命令':'')+(s.linesAdded||s.linesRemoved?' · 代码 +'+s.linesAdded+' −'+s.linesRemoved:'')+'</div>'
     +'<div class="ds-meta">'+esc(((s.models||[]).map(dsModel).join(' · ')||s.model||'')+(j.cwdShort?' · '+j.cwdShort:'')+(j.branch?' · '+j.branch:'')+(s.firstAt?' · '+dsWhen(s.firstAt,true)+' → '+dsWhen(s.lastAt,true):''))+'</div>'
     +(s.toolsBy&&s.toolsBy.length?'<div class="ds-meta">'+s.toolsBy.map(function(x){return esc(String(x[0]).replace(/^mcp__/,''))+' <b>'+x[1]+'</b>'}).join(' · ')+'</div>':'');
-  h+='<div class="ds-sec">每一轮<small>一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；红圈 = 工具出错。点球进那一轮</small></div><div class="ds-beads">';
-  var p0=dissPage*DS_PAGE,p1=Math.min(ts.length,p0+DS_PAGE);
-  ts.forEach(function(t,k){h+=dsBead(t,max,k<p0||k>=p1)});
+  h+='<div class="ds-sec">每一轮<button type="button" class="ds-tg" data-tg="beads">'+(dissBeadsOpen?'收起':'展开全部 '+ts.length+' 轮')+'</button><small>一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；红圈 = 工具出错。点球进那一轮</small></div><div class="ds-beads'+(dissBeadsOpen?'':' one')+'">';
+  var hi=ts.length-dissPage*DS_PAGE,lo=Math.max(0,hi-DS_PAGE);   // 当前页：倒序，第一页是最新的几轮；球还是按时间从左到右
+  ts.forEach(function(t,k){h+=dsBead(t,max,k<lo||k>=hi)});
   h+='</div>';
-  h+='<div class="ds-sec">每轮明细<small>点一行进那一轮；橙色序号 = 这轮比本会话中位数重一倍以上，红色 = 工具出错</small></div>'+dsPager(ts.length);
+  h+='<div class="ds-sec">每轮明细<small>最新的在最上面；点一行进那一轮；橙色序号 = 这轮比本会话中位数重一倍以上，红色 = 工具出错</small></div>'+dsPager(ts.length);
   h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>轮</th><th>步</th><th>工具</th><th class="col-inp">输入Σ</th><th class="col-cw ds-opt" title="该轮各步缓存写之和">缓存写</th><th class="col-cr ds-opt" title="该轮末步命中缓存的输入，快照值，各轮不可相加">缓存读·末步</th><th class="col-cr" title="该轮各步缓存读之和，各轮可相加">缓存读Σ</th><th class="col-out">输出Σ</th><th title="输入Σ + 缓存写 + 缓存读Σ + 输出Σ">合计</th><th>耗时</th></tr></thead><tbody>';
-  for(var k=p0;k<p1;k++){
+  for(var k=hi-1;k>=lo;k--){   // 最新一轮在第一行
     var t=ts[k],cls=t.errors?'err':t.heavy?'heavy':'',marks=dsMarks(t);
     h+='<tr class="r" data-i="'+t.i+'"><td class="no '+cls+'">#'+t.i+'</td><td>'+t.nSteps+'</td><td>'+(t.nTools||'')+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr ds-opt">'+(t.crLast==null?'--':dsTk(t.crLast))+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td><b>'+dsTk(t.total)+'</b></td><td>'+dsDur(t.durMs)+'</td></tr>'
       +'<tr class="q" data-i="'+t.i+'"><td colspan="10">'+dsWhen(t.at,multi)+' · '+(t.text?esc(t.text):'（接着上一轮）')+(marks.length?' · '+marks.join(' · '):'')+'</td></tr>';
@@ -1765,7 +1768,7 @@ function showTurn(i){
     var errs=st.tools.filter(function(u){return u.err}).length;
     h+='<tr class="r s" data-k="'+k+'"><td class="no'+(errs?' err':'')+'">'+(k+1)+'</td><td>'+esc(dsModel(st.model))+'</td><td>'+dsDur(st.latMs)+'</td><td class="col-inp">'+dsTk(st.inp)+'</td><td class="col-cw ds-opt">'+(st.cw==null?'--':dsTk(st.cw))+'</td><td class="col-cr">'+(st.cr==null?'--':dsTk(st.cr))+'</td><td class="col-out">'+dsTk(st.out)+'</td><td class="ds-opt">'+(st.think?dsTk(st.think):'')+'</td><td>'+(st.tools.length||'')+'</td><td><b>'+dsTk(st.total)+'</b></td></tr>';
     var d='';
-    st.tools.forEach(function(u){d+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(String(u.name).replace(/^mcp__/,''))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
+    st.tools.forEach(function(u){d+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(String(u.name).replace(/^mcp__/,''))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?(u.wait?'等你 ':'')+dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
     if(st.text)d+='<div class="ds-tx">'+esc(st.text)+'</div>';
     d+='<div class="ds-note">这一步的上下文 '+dsTk(st.ctx)+'（输入 '+dsTk(st.inp)+(st.cr!=null?' + 缓存读 '+dsTk(st.cr):'')+(st.cw!=null?' + 缓存写 '+dsTk(st.cw):'')+'）· 输出 '+dsTk(st.out)+(st.think?'（其中思考 '+dsTk(st.think)+'，已含在输出里）':'')+(st.stop?' · 结束原因 '+esc(st.stop):'')+'</div>';
     h+='<tr class="d" hidden><td colspan="10">'+(d||'这一步没有记录')+'</td></tr>';
@@ -1779,6 +1782,7 @@ dissEl.querySelector('.ds-re').addEventListener('click',openDissect);
 dissEl.querySelector('.ds-prev').addEventListener('click',function(){if(dissTurn>1)showTurn(dissTurn-1)});
 dissEl.querySelector('.ds-next').addEventListener('click',function(){if(dissData&&dissTurn<dissData.turns.length)showTurn(dissTurn+1)});
 dissEl.querySelector('.ds-b').addEventListener('click',function(e){
+  var tg=e.target.closest('[data-tg="beads"]');if(tg){dissBeadsOpen=!dissBeadsOpen;try{localStorage.setItem('claclaw.dissBeads',dissBeadsOpen?'1':'0')}catch(_){}dissScroll=dissEl.querySelector('.ds-b').scrollTop;showSession(true);return}
   var pg=e.target.closest('[data-pg]');if(pg){if(!pg.disabled){dissPage=+pg.dataset.pg;showSession(false);dissEl.querySelector('.ds-b').scrollTop=dissEl.querySelector('.ds-beads').offsetTop-8}return}
   var bd=e.target.closest('.ds-bead');if(bd){showTurn(+bd.dataset.i);return}
   var sr=e.target.closest('tr.s');if(sr){var d=sr.nextElementSibling;if(d&&d.classList.contains('d'))d.hidden=!d.hidden;return}
@@ -3701,7 +3705,8 @@ function rowOpen(s,row,b,bz){
   document.querySelectorAll('#sList .s-item[aria-current]').forEach(function(x){x.removeAttribute('aria-current')});b.setAttribute('aria-current','true');   // 选中色马上换到点的这一行（顺序不动）
   var w=b.querySelector('.when');if(w)w.textContent='打开中…';
   if(!DESKTOP.matches){   // 手机：先切到聊天页、标题马上显示，内容到了再填（不用干等服务器）
-    $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#where').textContent='';$('#modeTag').textContent='';
+    $('#nm').textContent=s.title;$('#sid').textContent=shortId(s.id);$('#modeTag').textContent='';
+    var pl=s.cwdShort&&s.cwdShort!==s.title?s.cwdShort:'';$('#where').textContent=pl+(s.branch?(pl?' · ':'')+s.branch:'');   // 目录、分支列表里就有，马上显示
     showFeedFor(s.id);goChat();
   }
   wsSend({t:'session.open',id:s.id,mode:mode});
