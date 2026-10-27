@@ -246,6 +246,20 @@ async function endHolders(sessionId) {
 
 // 会话最后一条用户消息：Claude Code 每轮都往会话文件末尾写 {"type":"last-prompt"}，只读文件尾部找最后一条；按文件大小 + 修改时间缓存
 const lastPromptCache = new Map();
+// jsonl 一行用户记录 → 用户真正发的那句话；工具结果、系统注入、斜杠命令（/compact 等）及其输出、打断提示都不算（返回空）
+function userTextOf(e) {
+  if (!e || e.type !== 'user' || e.isMeta || e.isCompactSummary || e.isSidechain) return '';
+  const c = e.message && e.message.content;
+  let t = '', img = false;
+  if (typeof c === 'string') t = c;
+  else if (Array.isArray(c)) {
+    if (c.some((x) => x && x.type === 'tool_result')) return '';
+    for (const x of c) { if (x && x.type === 'text') t += (t ? ' ' : '') + (x.text || ''); else if (x && x.type === 'image') img = true; }
+  }
+  t = t.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+  if (/^<(local-command|command-|bash-|task-notification)/.test(t) || /^\[Request interrupted/.test(t)) return '';
+  return t || (img ? '[图片]' : '');
+}
 function lastPromptOf(file) {
   let st; try { st = fs.statSync(file); } catch { return ''; }
   const key = st.size + ':' + st.mtimeMs, c = lastPromptCache.get(file);
@@ -255,10 +269,15 @@ function lastPromptOf(file) {
     const n = Math.min(st.size, 512 * 1024), buf = Buffer.alloc(n), fd = fs.openSync(file, 'r');
     try { fs.readSync(fd, buf, 0, n, st.size - n); } finally { fs.closeSync(fd); }
     const lines = buf.toString('utf8').split('\n');
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (!lines[i].includes('"type":"last-prompt"')) continue;
-      try { text = String(JSON.parse(lines[i]).lastPrompt || ''); break; } catch {}
+    // 优先取最后一条真正的用户消息（刚发出去、还在处理中的也算）；last-prompt 记录要等进程退出才写，会落后
+    let meta = '';
+    for (let i = lines.length - 1; i >= 0 && !text; i--) {
+      const l = lines[i];
+      if (!meta && l.includes('"type":"last-prompt"')) { try { meta = String(JSON.parse(l).lastPrompt || ''); } catch {} continue; }
+      if (l[0] !== '{' || !l.includes('"type":"user"')) continue;
+      try { text = userTextOf(JSON.parse(l)); } catch {}
     }
+    if (!text) text = meta;
   } catch {}
   text = text.replace(/\s+/g, ' ').trim().slice(0, 200);
   lastPromptCache.set(file, { key, text });
