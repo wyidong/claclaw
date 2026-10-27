@@ -380,41 +380,72 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .fv-b img{display:block;max-width:100%;margin:0 auto}
 .fv-b iframe{width:100%;height:100%;border:0}
 .fv-empty{padding:40px 16px;text-align:center;color:var(--muted)}
-/* 会话解剖页：标题栏点会话名打开，按「轮」列出每句话引出了几步、哪些工具、多少 token / 时间 */
-#diss{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg)}
+/* 会话解剖页：标题栏点会话名打开。三层：会话（总消耗、四桶、每轮一颗球、每轮明细表）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） */
+#diss{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg);--ds-inp:#e8912d;--ds-cr:#8b7bff;--ds-cw:#9aa0a6;--ds-out:#3fb950}
 #diss.on{display:flex}
 #diss .ds-back{flex:none;width:36px;height:36px;margin-left:-6px;padding:0;border:0;border-radius:50%;background:none;color:var(--ink);display:grid;place-items:center;-webkit-tap-highlight-color:transparent}
-.ds-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px calc(16px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));font-size:14px}
-.ds-sum{display:flex;flex-wrap:wrap;gap:4px 14px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1.6}
-.ds-sum b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
-.ds-sum .w{flex-basis:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ds-tools{margin:0 2px 10px;color:var(--muted);font-size:12px;line-height:1.6}
-.ds-t{border-top:1px solid var(--line)}
-.ds-t:last-child{border-bottom:1px solid var(--line)}
-.ds-th{display:flex;gap:8px;align-items:flex-start;padding:9px 0;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.ds-th .no{flex:none;min-width:34px;padding-top:2px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-.ds-th .no.heavy{color:var(--warn);font-weight:600}
-.ds-th .no.err{color:var(--deny);font-weight:600}
-.ds-th .bd{flex:1;min-width:0}
-.ds-th .q{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.45}
-.ds-t.open .ds-th .q{white-space:pre-wrap;word-break:break-word}
-.ds-th .st{margin-top:1px;color:var(--muted);font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums}
-.ds-th .st i{font-style:normal;color:var(--warn)}
-.ds-th .st u{text-decoration:none;color:var(--deny)}
-.ds-th .tm{flex:none;padding-top:2px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-.ds-td{display:none;padding:0 0 10px 42px;font-size:13px;line-height:1.5}
-.ds-t.open .ds-td{display:block}
-.ds-step{margin:6px 0 2px}
-.ds-step .h{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-.ds-step .tx{margin-top:1px;color:var(--muted);word-break:break-word}
-.ds-tool{display:flex;gap:6px;padding-left:10px;color:var(--muted);font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums}
+#diss .ds-nav{display:none;gap:6px}
+#diss.t .ds-nav{display:flex}
+#diss.t .ds-re{display:none}
+#diss .fv-share:disabled{opacity:.35}
+.ds-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(16px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));font-size:14px}
+.ds-k{color:var(--muted);font-size:12px}
+.ds-big{margin:2px 0 6px;font-size:30px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.ds-big small{display:block;margin:3px 0 0;font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0;line-height:1.4}
+.ds-lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ds-lg b{color:var(--ink);font-weight:600}
+.ds-dot{display:inline-block;width:9px;height:9px;margin-right:5px;border-radius:2px;vertical-align:-1px}
+.c-inp{background:var(--ds-inp)}.c-cr{background:var(--ds-cr)}.c-cw{background:var(--ds-cw)}.c-out{background:var(--ds-out)}
+.ds-meta{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
+.ds-meta b{color:var(--ink);font-weight:600}
+.ds-sec{margin:16px 0 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.3px}
+.ds-sec small{font-weight:400;margin-left:6px}
+.ds-beads{display:flex;flex-wrap:wrap;gap:5px 6px;align-items:center;margin:6px 0 4px}
+.ds-bead{display:block;cursor:pointer;flex:none}
+.ds-bead.dim{opacity:.35}
+.ds-bead text{font-size:11px;font-weight:600;fill:#fff;text-anchor:middle;pointer-events:none}
+.ds-tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px;padding:0 12px}
+.ds-tb{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ds-tb th,.ds-tb td{padding:5px 5px;text-align:right;border-bottom:1px solid var(--line)}
+.ds-tb th:first-child,.ds-tb td:first-child{text-align:left;padding-left:2px}
+.ds-tb th{color:var(--muted);font-weight:500;font-size:11px;white-space:nowrap}
+.ds-tb tr.r{cursor:pointer}
+.ds-tb tr.r td{border-bottom:0}
+.ds-tb tr.q td{text-align:left;color:var(--muted);font-size:12px;padding:0 2px 6px;max-width:0;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.ds-tb tr.q td i{font-style:normal;color:var(--warn)}
+.ds-tb tr.q td u{text-decoration:none;color:var(--deny)}
+.ds-tb tfoot td{font-weight:600;border-top:1px solid var(--ink);border-bottom:0;color:var(--ink)}
+.ds-tb .no{color:var(--muted)}
+.ds-tb .no.heavy{color:var(--warn);font-weight:600}
+.ds-tb .no.err{color:var(--deny);font-weight:600}
+.ds-tb .col-inp{color:var(--ds-inp)}.ds-tb .col-cr{color:var(--ds-cr)}.ds-tb .col-cw{color:var(--ds-cw)}.ds-tb .col-out{color:var(--ds-out)}
+.ds-tb tr.d td{white-space:normal;text-align:left;padding:6px 6px 10px;background:var(--surface);border-bottom:1px solid var(--line)}
+.ds-tb tr.d[hidden]{display:none}
+@media (hover:hover){.ds-tb tr.r:hover td,.ds-tb tr.q:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
+.ds-rec{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
+.ds-rec b{color:var(--ink);font-weight:600}
+.ds-pg{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;margin:8px 0;font-size:12px;color:var(--muted)}
+.ds-pg button{min-width:30px;height:28px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:none;color:var(--ink);font:inherit;font-size:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ds-pg button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ds-pg button:disabled{opacity:.35;cursor:default}
+.ds-q{margin:6px 0;padding:10px 12px;border-radius:12px;background:var(--user-bg);white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.ds-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ds-chip{padding:2px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.ds-chip b{color:var(--ink);font-weight:600}
+.ds-chip.warn{color:var(--warn);border-color:var(--warn)}
+.ds-chip.bad{color:var(--deny);border-color:var(--deny)}
+.ds-files{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.6;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.ds-tool{display:flex;gap:6px;color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
 .ds-tool .n{flex:none;color:var(--ink)}
 .ds-tool .a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
 .ds-tool .r{flex:none}
 .ds-tool.err .n,.ds-tool.err .r{color:var(--deny)}
-.ds-end{margin-top:6px;color:var(--muted);font-size:12px}
+.ds-tx{margin-top:6px;color:var(--ink);font-size:13px;line-height:1.5;word-break:break-word}
+.ds-note{margin-top:6px;color:var(--muted);font-size:11px;line-height:1.5}
+.ds-reply{margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word}
 .ds-empty{padding:40px 16px;text-align:center;color:var(--muted)}
-@media (min-width:1000px){.ds-b{padding:16px 24px}.ds-th{padding:10px 0}}
+@media (max-width:999px){.ds-tb .ds-opt{display:none}}
+@media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb{font-size:12.5px}.ds-tb th,.ds-tb td{padding:6px 8px}}
 .sfimg{align-self:flex-start;margin:6px 0;max-width:min(260px,80%)}
 .sfimg img{display:block;max-width:100%;max-height:260px;border-radius:10px;border:1px solid var(--line);cursor:zoom-in;background:var(--bg)}
 .sfmedia{width:min(300px,85%)}
@@ -969,6 +1000,8 @@ select.pe-in{text-align-last:right}
   .s-row:hover .s-item{background:var(--bg)}
   .s-item[aria-current="true"]{background:var(--user-bg)!important;border-color:var(--user-bg)!important}
   .s-row.collab:not(.working):not(.waiting):not(.ptint) .s-item:not([aria-current="true"]){border-color:var(--peer)!important}
+  /* 紫微主题给 .s-row 和 .s-item 都画了边框：电脑端卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
+  :root[data-theme="ziwei"] #sList .s-row:not(.wx){border:0;background:none}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
@@ -1129,7 +1162,7 @@ select.pe-in{text-align-last:right}
 
   <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""></div>
   <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-n"></span><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
-  <div id="diss" role="dialog" aria-label="会话解剖"><div class="fv-h"><button type="button" class="ds-back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="fv-n ds-n">解剖</span><button type="button" class="fv-share ds-re">刷新</button></div><div class="ds-b"></div></div>
+  <div id="diss" role="dialog" aria-label="会话解剖"><div class="fv-h"><button type="button" class="ds-back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="fv-n ds-n">解剖</span><span class="ds-nav"><button type="button" class="fv-share ds-prev">‹ 上一轮</button><button type="button" class="fv-share ds-next">下一轮 ›</button></span><button type="button" class="fv-share ds-re">刷新</button></div><div class="ds-b"></div></div>
   <div id="vplayer" role="dialog" aria-label="播放视频"><video controls playsinline></video><button type="button" aria-label="关闭">×</button></div>
 
   <div id="newDlg" aria-hidden="true">
@@ -1614,79 +1647,148 @@ function openPath(p){
 var fvUrl='',fvBlob=null,fvName='';
 // 手机：系统分享面板（存到「文件」、用别的 App 打开）；电脑：直接下载到「下载」（Mac 上的分享面板对很多文件类型没反应）
 var fvTouch=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches),FV_ACT=fvTouch?'分享 / 保存':'保存';
-// ---------- 会话解剖：标题栏点会话名打开，按「轮」看每句话引出了几步、哪些工具、多少 token / 时间 ----------
-var dissEl=$('#diss'),dissFor='';
+// ---------- 会话解剖：标题栏点会话名打开。会话（总消耗、四桶、每轮一颗球、每轮明细表，轮多了分页）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） ----------
+var dissEl=$('#diss'),dissFor='',dissData=null,dissTurn=0,dissPage=0,dissScroll=0,DS_PAGE=30;
 function dsTk(n){n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?(n>=1e4?Math.round(n/1000):(n/1000).toFixed(1).replace(/\.0$/,''))+'k':String(n)}
+function dsNum(n){return Math.round(+n||0).toLocaleString('en-US')}
+function dsVal(n,known){return known===false?'--':dsTk(n)}   // 全程没上报过的桶：-- 不补 0
 function dsDur(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1 秒':'0 秒';if(s<60)return s+' 秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h+' 小时 '+(m%60)+' 分';return m+' 分 '+(s%60)+' 秒'}
-function dsWhen(ms,multi){var d=new Date(ms),hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);return multi?(d.getMonth()+1)+'/'+d.getDate()+' '+hm:hm}
+function dsWhen(ms,multi){if(!ms)return '';var d=new Date(ms),hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);return multi?(d.getMonth()+1)+'/'+d.getDate()+' '+hm:hm}
 function dsModel(m){return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,'')}
 function dsN(n){n=+n||0;return n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'k':String(n)}
+function dsMulti(s){return !!(s&&s.firstAt&&s.lastAt&&new Date(s.firstAt).toDateString()!==new Date(s.lastAt).toDateString())}
 function openDissect(){
   if(!session)return;
   if(/^(op|oc):/.test(session.id)){toast('这个 Claw 还不支持解剖');return}
   var b=dissEl.querySelector('.ds-b');
+  dissEl.classList.remove('t');dissEl.classList.add('on');
   dissEl.querySelector('.ds-n').textContent='解剖 · '+((session.title||'').trim()||session.dir||'会话');
-  dissEl.classList.add('on');
   b.innerHTML='<div class="ds-empty">解剖中…</div>';
-  var id=dissFor=session.id;
+  var id=dissFor=session.id;dissData=null;
   fetch('/api/dissect?id='+encodeURIComponent(id)).then(function(r){
     if(r.status===401){location.replace('/login');throw new Error('需要登录')}
-    if(r.status===404&&r.headers.get('content-type')&&r.headers.get('content-type').indexOf('json')<0)throw new Error('服务端还没更新，重启 claclaw 后可用');
+    if(r.status===404&&!(r.headers.get('content-type')||'').match(/json/))throw new Error('服务端还没更新，重启 claclaw 后可用');
     return r.json().then(function(j){if(!r.ok)throw new Error((j&&j.error)||('HTTP '+r.status));return j});
-  }).then(function(j){if(dissFor!==id||!dissEl.classList.contains('on'))return;renderDissect(j)})
-    .catch(function(e){if(dissFor!==id)return;b.innerHTML='<div class="ds-empty"></div>';b.firstChild.textContent=e.message});
+  }).then(function(j){
+    if(dissFor!==id||!dissEl.classList.contains('on'))return;
+    dissData=j;dsMarkHeavy(j);dissPage=Math.max(0,Math.ceil((j.turns||[]).length/DS_PAGE)-1);
+    showSession(false);
+  }).catch(function(e){if(dissFor!==id)return;b.innerHTML='<div class="ds-empty"></div>';b.firstChild.textContent=e.message});
 }
-function closeDissect(){dissEl.classList.remove('on');dissEl.querySelector('.ds-b').innerHTML='';dissFor=''}
-function renderDissect(j){
-  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},ts=j.turns||[];
-  if(!ts.length){b.innerHTML='<div class="ds-empty">这个会话还没有对话</div>';return}
-  var multi=!!(s.firstAt&&s.lastAt&&new Date(s.firstAt).toDateString()!==new Date(s.lastAt).toDateString());
-  var h='<div class="ds-sum">'
-    +'<span><b>'+ts.length+'</b> 轮</span><span><b>'+(s.steps||0)+'</b> 步</span><span><b>'+(s.tools||0)+'</b> 次工具</span>'
-    +'<span>↑<b>'+dsTk(s.in)+'</b> ↓<b>'+dsTk(s.out)+'</b></span>'+(s.think?'<span>思考 <b>'+dsTk(s.think)+'</b></span>':'')
-    +'<span>干活 <b>'+dsDur(s.durMs)+'</b></span><span>最长 <b>#'+s.longestTurn+'</b> '+dsDur(s.longestMs)+'</span>'
-    +'<span>上下文 最大 <b>'+dsTk(s.maxCtx)+'</b>'+(s.ctxLast?' · 现在 <b>'+dsTk(s.ctxLast)+'</b>':'')+'</span>'
-    +(s.compactions?'<span>压缩 <b>'+s.compactions+'</b> 次</span>':'')
-    +(s.subagents?'<span>子代理 <b>'+s.subagents+'</b></span>':'')
-    +(s.errors?'<span>工具出错 <b>'+s.errors+'</b></span>':'')
-    +(s.interrupted?'<span>打断 <b>'+s.interrupted+'</b></span>':'')
-    +'<span class="w">'+esc(((s.models||[]).map(dsModel).join(' · ')||s.model||'')+(j.cwdShort?' · '+j.cwdShort:'')+(j.branch?' · '+j.branch:''))+'</span>'
-    +'</div>';
-  if(s.toolsBy&&s.toolsBy.length)h+='<div class="ds-tools">'+s.toolsBy.map(function(x){return esc(String(x[0]).replace(/^mcp__/,''))+' '+x[1]}).join(' · ')+'</div>';
-  // 「重」的轮：步数 / 工具 / 耗时 / 输出比这个会话的中位数高出一倍以上（这句话让 AI 绕了很远）
+function closeDissect(){dissEl.classList.remove('on');dissEl.classList.remove('t');dissEl.querySelector('.ds-b').innerHTML='';dissFor='';dissData=null}
+function dsBack(){if(dissEl.classList.contains('t'))showSession(true);else closeDissect()}
+// 「重」的轮：步数 / 工具 / 耗时 / 输出比这个会话的中位数高出一倍以上（这句话让 AI 绕了很远）
+function dsMarkHeavy(j){
+  var ts=j.turns||[];
   var med=function(k){var a=ts.map(function(t){return +t[k]||0}).filter(function(x){return x>0}).sort(function(x,y){return x-y});return a.length?a[a.length>>1]:0};
   var mSteps=med('nSteps'),mTools=med('nTools'),mDur=med('durMs'),mOut=med('out');
-  ts.forEach(function(t){
-    var heavy=t.nSteps>=mSteps*2+2||t.nTools>=mTools*2+4||t.durMs>=mDur*2+60000||t.out>=mOut*2+2000;
-    var cls=t.errors?'err':heavy?'heavy':'';
-    var st=[t.nSteps+' 步',t.nTools?t.nTools+' 工具':'',t.out?'↓'+dsTk(t.out):'',dsDur(t.durMs),t.ctx?'上下文 '+dsTk(t.ctx):''].filter(Boolean).join(' · ');
-    var marks=[];if(t.queued)marks.push('插话');if(t.images)marks.push('图 ×'+t.images);if(t.interrupted)marks.push('<u>被打断</u>');if(t.errors)marks.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)marks.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)marks.push('重试 '+t.retries);if(t.compact)marks.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)marks.push('子代理 '+t.subagents);
-    h+='<div class="ds-t"><div class="ds-th"><span class="no '+cls+'">#'+t.i+'</span><div class="bd"><div class="q">'+(t.text?esc(t.text):'<span style="color:var(--muted)">（接着上一轮）</span>')+'</div><div class="st">'+esc(st)+(marks.length?' · '+marks.join(' · '):'')+'</div></div><span class="tm">'+dsWhen(t.at,multi)+'</span></div>'
-      +'<div class="ds-td">'+dsSteps(t)+'</div></div>';
-  });
-  b.innerHTML=h;
-  b.scrollTop=b.scrollHeight;
+  ts.forEach(function(t){t.heavy=t.nSteps>=mSteps*2+2||t.nTools>=mTools*2+4||t.durMs>=mDur*2+60000||t.out>=mOut*2+2000});
 }
-function dsSteps(t){
-  var h='';
-  (t.steps||[]).forEach(function(s,k){
-    h+='<div class="ds-step"><div class="h">第 '+(k+1)+' 步 · '+esc(dsModel(s.model))+' · 模型 '+dsDur(s.latMs)+' · ↓'+dsTk(s.out)+(s.think?'（思考 '+dsTk(s.think)+'）':'')+(s.in?' · 上下文 '+dsTk(s.in):'')+'</div>';
-    (s.tools||[]).forEach(function(u){h+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(String(u.name).replace(/^mcp__/,''))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
-    if(s.text)h+='<div class="tx">'+esc(s.text)+'</div>';
-    h+='</div>';
-  });
-  var end=[];if(t.chars)end.push('提示词 '+dsN(t.chars)+' 字');if(t.replyChars)end.push('回复 '+dsN(t.replyChars)+' 字');end.push('↑'+dsTk(t.in)+' ↓'+dsTk(t.out));
-  h+='<div class="ds-end">'+esc(end.join(' · '))+'</div>';
-  return h;
+function dsMarks(t){
+  var m=[];if(t.queued)m.push('插话');if(t.images)m.push('图 ×'+t.images);if(t.interrupted)m.push('<u>被打断</u>');if(t.errors)m.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)m.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)m.push('重试 '+t.retries);if(t.compact)m.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)m.push('子代理 '+t.subagents);
+  return m;
 }
-dissEl.querySelector('.ds-back').addEventListener('click',closeDissect);
+function dsLegend(o,s){
+  return '<div class="ds-lg"><span><i class="ds-dot c-inp"></i>输入 <b>'+dsTk(o.inp)+'</b></span><span><i class="ds-dot c-cr"></i>缓存读 <b>'+dsVal(o.cr,s.crKnown)+'</b></span><span><i class="ds-dot c-cw"></i>缓存写 <b>'+dsVal(o.cw,s.cwKnown)+'</b></span><span><i class="ds-dot c-out"></i>输出 <b>'+dsTk(o.out)+'</b>'+(o.think?'<span style="margin-left:4px">（思考 '+dsTk(o.think)+'）</span>':'')+'</span></div>';
+}
+// 一颗球 = 一轮，面积 = 消耗；按面积分层：底层输入（含缓存写）、中层缓存读、顶层输出
+function dsSegH(r,f){   // 圆里从底往上占面积比例 f 的弓形高度（二分）
+  if(f<=0)return 0;if(f>=1)return 2*r;var A=Math.PI*r*r,lo=0,hi=2*r;
+  for(var i=0;i<28;i++){var h=(lo+hi)/2,a=r*r*Math.acos((r-h)/r)-(r-h)*Math.sqrt(Math.max(0,2*r*h-h*h));if(a/A<f)lo=h;else hi=h}
+  return (lo+hi)/2;
+}
+function dsBead(t,max,dim){
+  var tot=t.total||0,r=tot>0&&max>0?7+13*Math.sqrt(tot/max):7,d=r*2,s=Math.round;
+  var fi=tot?((t.inp||0)+(t.cw||0))/tot:0,fc=tot?(t.cr||0)/tot:0;
+  var h1=dsSegH(r,fi),h2=dsSegH(r,fi+fc);
+  var id='dsb'+t.i;
+  return '<svg class="ds-bead'+(dim?' dim':'')+'" data-i="'+t.i+'" width="'+s(d)+'" height="'+s(d)+'" viewBox="0 0 '+d+' '+d+'"><title>第 '+t.i+' 轮 · '+t.nSteps+' 步 · 合计 '+dsNum(tot)+'</title><defs><clipPath id="'+id+'"><circle cx="'+r+'" cy="'+r+'" r="'+r+'"/></clipPath></defs><g clip-path="url(#'+id+')"><rect x="0" y="0" width="'+d+'" height="'+d+'" fill="'+(tot?'var(--ds-out)':'var(--line)')+'"/><rect x="0" y="'+(d-h2)+'" width="'+d+'" height="'+(h2-h1)+'" fill="var(--ds-cr)"/><rect x="0" y="'+(d-h1)+'" width="'+d+'" height="'+h1+'" fill="var(--ds-inp)"/></g>'+(t.errors?'<circle cx="'+r+'" cy="'+r+'" r="'+(r-1)+'" fill="none" stroke="var(--deny)" stroke-width="2"/>':'')+(d>=22?'<text x="'+r+'" y="'+(r+4)+'">'+t.nSteps+'</text>':'')+'</svg>';
+}
+function dsPager(n){
+  var pages=Math.ceil(n/DS_PAGE);if(pages<=1)return '';
+  var h='<div class="ds-pg"><button type="button" data-pg="'+(dissPage-1)+'"'+(dissPage<=0?' disabled':'')+'>‹</button>';
+  for(var p=0;p<pages;p++){
+    if(pages>9&&Math.abs(p-dissPage)>2&&p!==0&&p!==pages-1){if(Math.abs(p-dissPage)===3)h+='<span>…</span>';continue}
+    h+='<button type="button" data-pg="'+p+'"'+(p===dissPage?' class="on"':'')+'>'+(p+1)+'</button>';
+  }
+  return h+'<button type="button" data-pg="'+(dissPage+1)+'"'+(dissPage>=pages-1?' disabled':'')+'>›</button><span>第 '+(dissPage*DS_PAGE+1)+'–'+Math.min(n,(dissPage+1)*DS_PAGE)+' 轮 / 共 '+n+' 轮</span></div>';
+}
+function showSession(restore){
+  var j=dissData;if(!j)return;
+  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},ts=j.turns||[];
+  dissEl.classList.remove('t');
+  dissEl.querySelector('.ds-n').textContent='解剖 · '+((session&&session.title||'').trim()||(session&&session.dir)||'会话');
+  if(!ts.length){b.innerHTML='<div class="ds-empty">这个会话还没有对话</div>';return}
+  var multi=dsMulti(s),max=0;ts.forEach(function(t){if((t.total||0)>max)max=t.total});
+  var h='<div class="ds-k">总消耗 Tokens</div><div class="ds-big">'+dsNum(s.total)+'<small>≈'+dsTk(s.total)+' · 四桶相加</small></div>'+dsLegend(s,s)
+    +'<div class="ds-meta"><b>'+ts.length+'</b> 轮 · <b>'+(s.steps||0)+'</b> 步 · <b>'+(s.tools||0)+'</b> 次工具 · 干活 <b>'+dsDur(s.durMs)+'</b> · 最长 <b>#'+s.longestTurn+'</b> '+dsDur(s.longestMs)+' · 上下文 最大 <b>'+dsTk(s.maxCtx)+'</b>'+(s.ctxLast?' / 现在 <b>'+dsTk(s.ctxLast)+'</b>':'')
+    +(s.compactions?' · 压缩 <b>'+s.compactions+'</b> 次':'')+(s.subagents?' · 子代理 <b>'+s.subagents+'</b>':'')+(s.errors?' · 工具出错 <b>'+s.errors+'</b>':'')+(s.interrupted?' · 打断 <b>'+s.interrupted+'</b>':'')
+    +(s.reads||s.writes||s.cmds?' · 读 <b>'+(s.reads||0)+'</b> 改 <b>'+(s.writes||0)+'</b> 个文件 · <b>'+(s.cmds||0)+'</b> 条命令':'')+(s.linesAdded||s.linesRemoved?' · 代码 +'+s.linesAdded+' −'+s.linesRemoved:'')+'</div>'
+    +'<div class="ds-meta">'+esc(((s.models||[]).map(dsModel).join(' · ')||s.model||'')+(j.cwdShort?' · '+j.cwdShort:'')+(j.branch?' · '+j.branch:'')+(s.firstAt?' · '+dsWhen(s.firstAt,true)+' → '+dsWhen(s.lastAt,true):''))+'</div>'
+    +(s.toolsBy&&s.toolsBy.length?'<div class="ds-meta">'+s.toolsBy.map(function(x){return esc(String(x[0]).replace(/^mcp__/,''))+' <b>'+x[1]+'</b>'}).join(' · ')+'</div>':'');
+  h+='<div class="ds-sec">每一轮<small>一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；红圈 = 工具出错。点球进那一轮</small></div><div class="ds-beads">';
+  var p0=dissPage*DS_PAGE,p1=Math.min(ts.length,p0+DS_PAGE);
+  ts.forEach(function(t,k){h+=dsBead(t,max,k<p0||k>=p1)});
+  h+='</div>';
+  h+='<div class="ds-sec">每轮明细<small>点一行进那一轮；橙色序号 = 这轮比本会话中位数重一倍以上，红色 = 工具出错</small></div>'+dsPager(ts.length);
+  h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>轮</th><th>步</th><th>工具</th><th class="col-inp">输入Σ</th><th class="col-cw ds-opt" title="该轮各步缓存写之和">缓存写</th><th class="col-cr ds-opt" title="该轮末步命中缓存的输入，快照值，各轮不可相加">缓存读·末步</th><th class="col-cr" title="该轮各步缓存读之和，各轮可相加">缓存读Σ</th><th class="col-out">输出Σ</th><th title="输入Σ + 缓存写 + 缓存读Σ + 输出Σ">合计</th><th>耗时</th></tr></thead><tbody>';
+  for(var k=p0;k<p1;k++){
+    var t=ts[k],cls=t.errors?'err':t.heavy?'heavy':'',marks=dsMarks(t);
+    h+='<tr class="r" data-i="'+t.i+'"><td class="no '+cls+'">#'+t.i+'</td><td>'+t.nSteps+'</td><td>'+(t.nTools||'')+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr ds-opt">'+(t.crLast==null?'--':dsTk(t.crLast))+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td><b>'+dsTk(t.total)+'</b></td><td>'+dsDur(t.durMs)+'</td></tr>'
+      +'<tr class="q" data-i="'+t.i+'"><td colspan="10">'+dsWhen(t.at,multi)+' · '+(t.text?esc(t.text):'（接着上一轮）')+(marks.length?' · '+marks.join(' · '):'')+'</td></tr>';
+  }
+  h+='</tbody><tfoot><tr><td>Σ全轮</td><td>'+(s.steps||0)+'</td><td>'+(s.tools||0)+'</td><td class="col-inp">'+dsTk(s.inp)+'</td><td class="col-cw ds-opt">'+dsVal(s.cw,s.cwKnown)+'</td><td class="ds-opt" style="color:var(--muted);font-weight:400">末轮快照</td><td class="col-cr">'+dsVal(s.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(s.out)+'</td><td>'+dsTk(s.total)+'</td><td>'+dsDur(s.durMs)+'</td></tr></tfoot></table></div>'+dsPager(ts.length);
+  var bl=s.bill;
+  if(bl&&bl.total){var diff=s.total-bl.total,ok=Math.abs(diff)<=Math.max(1000,bl.total*0.02);
+    h+='<div class="ds-rec">合计：Σ全轮 = <b>'+dsTk(s.total)+'</b>（'+dsNum(s.total)+'） vs 账单 = <b>'+dsTk(bl.total)+'</b>（'+dsNum(bl.total)+'）（差 '+(diff>0?'+':'')+dsNum(diff)+'） '+(ok?'✅ 基本一致':'⚠ 有出入')+'<br>账单 = '+esc(bl.source||'')+(ok?'':diff>0?'；账单比逐轮少：有的进程被杀掉没记账，或最近这段还没记':'；账单比逐轮多：多出来的多半是子代理、起标题这类不在聊天里的调用')+'</div>';
+  }else h+='<div class="ds-rec">合计：Σ全轮 = <b>'+dsTk(s.total)+'</b>（'+dsNum(s.total)+'）；账单 -- 拿不到，没法对账</div>';
+  b.innerHTML='<div class="ds-in">'+h+'</div>';
+  b.scrollTop=restore?dissScroll:0;
+}
+function showTurn(i){
+  var j=dissData;if(!j||!j.turns||!j.turns[i-1])return;
+  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},t=j.turns[i-1],multi=dsMulti(s);
+  if(!dissEl.classList.contains('t'))dissScroll=b.scrollTop;
+  dissTurn=i;dissEl.classList.add('t');
+  dissEl.querySelector('.ds-n').textContent='第 '+i+' 轮 / '+j.turns.length;
+  dissEl.querySelector('.ds-prev').disabled=i<=1;dissEl.querySelector('.ds-next').disabled=i>=j.turns.length;
+  var marks=dsMarks(t);
+  var h='<div class="ds-k">第 '+i+' 轮 · 本轮消耗 Tokens · '+dsWhen(t.at,true)+'</div><div class="ds-big">'+dsNum(t.total)+'<small>≈'+dsTk(t.total)+' · 共 '+t.nSteps+' 步 · 干活 '+dsDur(t.durMs)+'</small></div>'+dsLegend(t,s)
+    +'<div class="ds-meta">上下文 末步 <b>'+(t.crLast==null&&!t.ctx?'--':dsTk(t.steps.length?t.steps[t.steps.length-1].ctx:0))+'</b> · 最大 <b>'+dsTk(t.ctx)+'</b>'+(t.steps.length?' · 模型 '+esc(dsModel(t.steps[t.steps.length-1].model)):'')+'</div>'
+    +(marks.length?'<div class="ds-chips">'+marks.map(function(m){return '<span class="ds-chip'+(/<u>/.test(m)?' bad':/<i>/.test(m)?' warn':'')+'">'+m.replace(/<\/?[ui]>/g,'')+'</span>'}).join('')+'</div>':'');
+  h+='<div class="ds-sec">你说的<small>'+dsN(t.chars)+' 字'+(t.queued?' · 干活中插的话':'')+'</small></div><div class="ds-q">'+(t.text?esc(t.text):'<span style="color:var(--muted)">（接着上一轮，没有新的话）</span>')+'</div>';
+  h+='<div class="ds-sec">这一轮做了什么</div><div class="ds-chips"><span class="ds-chip"><b>'+t.nSteps+'</b> 步</span><span class="ds-chip"><b>'+t.nTools+'</b> 次工具</span>'+(t.reads?'<span class="ds-chip">读 <b>'+t.reads+'</b> 个文件</span>':'')+(t.writes?'<span class="ds-chip">改 <b>'+t.writes+'</b> 个文件</span>':'')+(t.cmds?'<span class="ds-chip"><b>'+t.cmds+'</b> 条命令</span>':'')+(t.subagents?'<span class="ds-chip">子代理 <b>'+t.subagents+'</b></span>':'')+(t.replyChars?'<span class="ds-chip">回复 <b>'+dsN(t.replyChars)+'</b> 字</span>':'')+'</div>'
+    +(t.files&&t.files.length?'<div class="ds-files">改了：'+t.files.map(esc).join('，')+'</div>':'');
+  h+='<div class="ds-sec">逐步<small>一步 = 一次模型调用；点一步看它调了什么。工具调用本身不另算 token（算在这一步的输出里），所以只给次数</small></div>';
+  h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>步</th><th>模型</th><th>模型耗时</th><th class="col-inp">输入</th><th class="col-cw ds-opt">缓存写</th><th class="col-cr">缓存读</th><th class="col-out">输出</th><th class="ds-opt">思考</th><th>工具</th><th>合计</th></tr></thead><tbody>';
+  (t.steps||[]).forEach(function(st,k){
+    var errs=st.tools.filter(function(u){return u.err}).length;
+    h+='<tr class="r s" data-k="'+k+'"><td class="no'+(errs?' err':'')+'">'+(k+1)+'</td><td>'+esc(dsModel(st.model))+'</td><td>'+dsDur(st.latMs)+'</td><td class="col-inp">'+dsTk(st.inp)+'</td><td class="col-cw ds-opt">'+(st.cw==null?'--':dsTk(st.cw))+'</td><td class="col-cr">'+(st.cr==null?'--':dsTk(st.cr))+'</td><td class="col-out">'+dsTk(st.out)+'</td><td class="ds-opt">'+(st.think?dsTk(st.think):'')+'</td><td>'+(st.tools.length||'')+'</td><td><b>'+dsTk(st.total)+'</b></td></tr>';
+    var d='';
+    st.tools.forEach(function(u){d+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(String(u.name).replace(/^mcp__/,''))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
+    if(st.text)d+='<div class="ds-tx">'+esc(st.text)+'</div>';
+    d+='<div class="ds-note">这一步的上下文 '+dsTk(st.ctx)+'（输入 '+dsTk(st.inp)+(st.cr!=null?' + 缓存读 '+dsTk(st.cr):'')+(st.cw!=null?' + 缓存写 '+dsTk(st.cw):'')+'）· 输出 '+dsTk(st.out)+(st.think?'（其中思考 '+dsTk(st.think)+'，已含在输出里）':'')+(st.stop?' · 结束原因 '+esc(st.stop):'')+'</div>';
+    h+='<tr class="d" hidden><td colspan="10">'+(d||'这一步没有记录')+'</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Σ本轮</td><td></td><td>'+dsDur(t.durMs)+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td class="ds-opt">'+(t.think?dsTk(t.think):'')+'</td><td>'+(t.nTools||'')+'</td><td>'+dsTk(t.total)+'</td></tr></tfoot></table></div>';
+  if(t.reply)h+='<div class="ds-sec">最后的回复<small>'+dsN(t.replyChars)+' 字</small></div><div class="ds-reply">'+esc(t.reply)+'</div>';
+  b.innerHTML='<div class="ds-in">'+h+'</div>';b.scrollTop=0;
+}
+dissEl.querySelector('.ds-back').addEventListener('click',dsBack);
 dissEl.querySelector('.ds-re').addEventListener('click',openDissect);
-dissEl.querySelector('.ds-b').addEventListener('click',function(e){var t=e.target.closest('.ds-t');if(t)t.classList.toggle('open')});
+dissEl.querySelector('.ds-prev').addEventListener('click',function(){if(dissTurn>1)showTurn(dissTurn-1)});
+dissEl.querySelector('.ds-next').addEventListener('click',function(){if(dissData&&dissTurn<dissData.turns.length)showTurn(dissTurn+1)});
+dissEl.querySelector('.ds-b').addEventListener('click',function(e){
+  var pg=e.target.closest('[data-pg]');if(pg){if(!pg.disabled){dissPage=+pg.dataset.pg;showSession(false);dissEl.querySelector('.ds-b').scrollTop=dissEl.querySelector('.ds-beads').offsetTop-8}return}
+  var bd=e.target.closest('.ds-bead');if(bd){showTurn(+bd.dataset.i);return}
+  var sr=e.target.closest('tr.s');if(sr){var d=sr.nextElementSibling;if(d&&d.classList.contains('d'))d.hidden=!d.hidden;return}
+  var tr=e.target.closest('tr[data-i]');if(tr){showTurn(+tr.dataset.i)}
+});
 $('#sessBtn').addEventListener('click',function(){if(session)openDissect()});
-(function(){   // 手机：右滑关闭
+(function(){   // 手机：右滑 = 返回
   var g=null;
-  dissEl.addEventListener('touchstart',function(e){if(e.touches.length!==1){g=null;return}var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now()}},{passive:true});
-  dissEl.addEventListener('touchend',function(e){if(!g)return;var p=e.changedTouches[0],dx=p.clientX-g.x,dy=p.clientY-g.y,dt=Date.now()-g.t;g=null;if(dx>70&&Math.abs(dy)<dx*0.6&&dt<600)closeDissect()},{passive:true});
+  dissEl.addEventListener('touchstart',function(e){if(e.touches.length!==1){g=null;return}var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),tw:!!e.target.closest('.ds-tw')}},{passive:true});
+  dissEl.addEventListener('touchend',function(e){if(!g)return;var p=e.changedTouches[0],dx=p.clientX-g.x,dy=p.clientY-g.y,dt=Date.now()-g.t,tw=g.tw;g=null;if(tw)return;if(dx>70&&Math.abs(dy)<dx*0.6&&dt<600)dsBack()},{passive:true});
 })();
 $('#fview .fv-share').textContent=FV_ACT;
 function showFile(blob,name,msg){
@@ -4825,7 +4927,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   });
 })();
 function notice(t){if(mList)toast(t);else addSys(t)}
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(dissEl.classList.contains('on'))closeDissect();else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(dissEl.classList.contains('on'))dsBack();else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
 

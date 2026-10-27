@@ -2343,7 +2343,10 @@ const handler = async (req, res) => {
         if (isDs(id)) {
           const recs = dsRecordsOf(id);
           if (!recs) return sendJson(res, 404, { error: '找不到这个会话' });
-          return sendJson(res, 200, { claw: 'deepseek', id, ...dissectDs(recs) }, { 'cache-control': 'no-store' });
+          const r = dissectDs(recs), u = dsUsage(id), k = u && u.tokens;
+          // dsh 的累计用量（含子代理）当作账单，给「对账」用
+          if (k) r.summary.bill = { inp: k.uncachedInputTokens || 0, cr: k.cacheReadTokens || 0, cw: k.cacheWriteTokens || 0, out: k.outputTokens || 0, total: (k.uncachedInputTokens || 0) + (k.cacheReadTokens || 0) + (k.cacheWriteTokens || 0) + (k.outputTokens || 0), source: 'dsh 累计用量（含子代理 ' + (u.subagents || 0) + ' 个）' };
+          return sendJson(res, 200, { claw: 'deepseek', id, ...r }, { 'cache-control': 'no-store' });
         }
         if (/^(op|oc):/.test(id)) return sendJson(res, 501, { error: '这个 Claw 还不支持解剖' });
         if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(res, 400, { error: '会话 ID 不对' });
@@ -2353,7 +2356,7 @@ const handler = async (req, res) => {
         const f = jsonlPathOf(info);
         if (!fs.existsSync(f)) return sendJson(res, 404, { error: '这个会话还没有记录' });
         const t0 = Date.now();
-        const r = await dissectClaude(f);
+        const r = await dissectClaude(f, info.cwd || '');
         log('dissect', id.slice(0, 8), r.summary.turns + ' turns', (Date.now() - t0) + 'ms');
         return sendJson(res, 200, { claw: 'claude', id, title: info.customTitle || info.summary || '', cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', ...r }, { 'cache-control': 'no-store' });
       } catch (e) { log('dissect error', id.slice(0, 8), e && e.message); return sendJson(res, 500, { error: '解剖失败：' + String((e && e.message) || e) }); }
