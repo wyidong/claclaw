@@ -52,13 +52,21 @@
   --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
   --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
 }
-/* 九紫离火：重在字——正文深紫、说明紫灰、强调用 clarelay 的紫 #7C3AED；底色保持中性（白 / 浅灰），和 clarelay 外壳顶栏的紫字相融；离火的暖橙只做点缀（提醒、协同） */
+/* 九紫离火：照 clarelay 外壳的样子——淡紫底、白卡片带细边；字是重点：标题 / 名字用 clarelay 紫，说明用石板灰，正文近黑；离火的暖橙只做点缀（提醒、协同） */
 :root[data-theme="ziwei"]{
-  --bg:#F4F4F6;--surface:#FFFFFF;--ink:#3B1A78;--muted:#7D6E9C;--line:#E5E3EA;
-  --accent:#7C3AED;--accent-ink:#FFFFFF;--user-bg:#F1EBFE;--peer:#FDBA8C;
-  --allow:#6D28D9;--on-allow:#FFFFFF;--deny:#D93636;--warn:#C2410C;
-  --add-bg:#E6F4EA;--del-bg:#FCE7E4;--code-bg:#F1F0F4;--banner-bg:#FFF0E3;
+  --bg:#F2F0F8;--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--line:#E4E0EE;
+  --accent:#7C3AED;--accent-ink:#FFFFFF;--user-bg:#EDE7FB;--peer:#FDBA8C;--zw-t:#6D28D9;
+  --allow:#7C3AED;--on-allow:#FFFFFF;--deny:#D93636;--warn:#C2410C;
+  --add-bg:#E6F4EA;--del-bg:#FCE7E4;--code-bg:#F1EEF8;--banner-bg:#FFF0E3;
 }
+/* 卡片、列表行、搜索框：白底细边（像 clarelay 的卡片）；列表 / 设置页的底换成淡紫 */
+:root[data-theme="ziwei"] #setPane .set-card,:root[data-theme="ziwei"] .h-card,:root[data-theme="ziwei"] .claw-card,:root[data-theme="ziwei"] .s-item,:root[data-theme="ziwei"] .s-row,:root[data-theme="ziwei"] #sSearch{background:#FFFFFF;border:1px solid var(--line)}
+:root[data-theme="ziwei"] #sList .s-row.wx .s-item{border:0}
+:root[data-theme="ziwei"] #app #sheet,:root[data-theme="ziwei"] #app #sheet .sheet-p,:root[data-theme="ziwei"] #app #hostPane,:root[data-theme="ziwei"] #app #sTop,:root[data-theme="ziwei"] #app #setTop{background:var(--bg)}
+/* 字：标题、名字用紫 */
+:root[data-theme="ziwei"] .lb,:root[data-theme="ziwei"] .claw-tx b,:root[data-theme="ziwei"] .s-item .t,:root[data-theme="ziwei"] #setTop,:root[data-theme="ziwei"] #nm,:root[data-theme="ziwei"] #setPane .set-h{color:var(--zw-t)}
+:root[data-theme="ziwei"] #setPane .set-h{font-weight:600}
+:root[data-theme="ziwei"] #setTop button,:root[data-theme="ziwei"] #backBtn{color:var(--accent)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
 /* 页面本身不许滚：iOS 弹键盘时会把整个页面往上推，收起后不一定推回来，顶栏就一直压在状态栏下面被模糊。
