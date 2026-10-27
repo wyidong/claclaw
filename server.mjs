@@ -19,8 +19,9 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
-import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx } from './dsh.mjs';
+import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
+import { userTextOf, dissectClaude, dissectDs } from './dissect.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opCtx, opTokSum } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
@@ -246,20 +247,6 @@ async function endHolders(sessionId) {
 
 // 会话最后一条用户消息：Claude Code 每轮都往会话文件末尾写 {"type":"last-prompt"}，只读文件尾部找最后一条；按文件大小 + 修改时间缓存
 const lastPromptCache = new Map();
-// jsonl 一行用户记录 → 用户真正发的那句话；工具结果、系统注入、斜杠命令（/compact 等）及其输出、打断提示都不算（返回空）
-function userTextOf(e) {
-  if (!e || e.type !== 'user' || e.isMeta || e.isCompactSummary || e.isSidechain) return '';
-  const c = e.message && e.message.content;
-  let t = '', img = false;
-  if (typeof c === 'string') t = c;
-  else if (Array.isArray(c)) {
-    if (c.some((x) => x && x.type === 'tool_result')) return '';
-    for (const x of c) { if (x && x.type === 'text') t += (t ? ' ' : '') + (x.text || ''); else if (x && x.type === 'image') img = true; }
-  }
-  t = t.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
-  if (/^<(local-command|command-|bash-|task-notification)/.test(t) || /^\[Request interrupted/.test(t)) return '';
-  return t || (img ? '[图片]' : '');
-}
 function lastPromptOf(file) {
   let st; try { st = fs.statSync(file); } catch { return ''; }
   const key = st.size + ':' + st.mtimeMs, c = lastPromptCache.get(file);
@@ -2349,6 +2336,28 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/sessions/delete' && req.method === 'POST') return handleDelete(req, res);
     if (url.pathname === '/api/sessions/rename' && req.method === 'POST') return handleRename(req, res);
+    // 会话解剖：按「轮」拆开（每句提示词引出了几步、哪些工具、多少 token / 时间），给会话详情页用。只读会话记录
+    if (url.pathname === '/api/dissect' && req.method === 'GET') {
+      const id = String(url.searchParams.get('id') || '');
+      try {
+        if (isDs(id)) {
+          const recs = dsRecordsOf(id);
+          if (!recs) return sendJson(res, 404, { error: '找不到这个会话' });
+          return sendJson(res, 200, { claw: 'deepseek', id, ...dissectDs(recs) }, { 'cache-control': 'no-store' });
+        }
+        if (/^(op|oc):/.test(id)) return sendJson(res, 501, { error: '这个 Claw 还不支持解剖' });
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(res, 400, { error: '会话 ID 不对' });
+        const list = await listSessions({ includeProgrammatic: true, limit: 500 });
+        const info = list.find(s => s.sessionId === id) || runners.get(id)?.info;
+        if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
+        const f = jsonlPathOf(info);
+        if (!fs.existsSync(f)) return sendJson(res, 404, { error: '这个会话还没有记录' });
+        const t0 = Date.now();
+        const r = await dissectClaude(f);
+        log('dissect', id.slice(0, 8), r.summary.turns + ' turns', (Date.now() - t0) + 'ms');
+        return sendJson(res, 200, { claw: 'claude', id, title: info.customTitle || info.summary || '', cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', ...r }, { 'cache-control': 'no-store' });
+      } catch (e) { log('dissect error', id.slice(0, 8), e && e.message); return sendJson(res, 500, { error: '解剖失败：' + String((e && e.message) || e) }); }
+    }
     if (url.pathname === '/api/recent' && req.method === 'GET') {
       return sendJson(res, 200, await recentList(), { 'cache-control': 'no-store' });
     }

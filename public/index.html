@@ -92,7 +92,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 
 /* 标题栏：平的，不加底边框（白底坐在浅灰的聊天区上，边界自然就有）；左边两行「名字 ID / 目录 · 分支」，右边两行「模型 · 推理强度 / 权限」 */
 header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;border-bottom:1px solid var(--line);background:var(--surface)}
-#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:default}
+#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
 #sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
 #sid .hid:active{color:var(--accent)}
@@ -380,6 +380,41 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .fv-b img{display:block;max-width:100%;margin:0 auto}
 .fv-b iframe{width:100%;height:100%;border:0}
 .fv-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+/* 会话解剖页：标题栏点会话名打开，按「轮」列出每句话引出了几步、哪些工具、多少 token / 时间 */
+#diss{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg)}
+#diss.on{display:flex}
+#diss .ds-back{flex:none;width:36px;height:36px;margin-left:-6px;padding:0;border:0;border-radius:50%;background:none;color:var(--ink);display:grid;place-items:center;-webkit-tap-highlight-color:transparent}
+.ds-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px calc(16px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));font-size:14px}
+.ds-sum{display:flex;flex-wrap:wrap;gap:4px 14px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1.6}
+.ds-sum b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.ds-sum .w{flex-basis:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds-tools{margin:0 2px 10px;color:var(--muted);font-size:12px;line-height:1.6}
+.ds-t{border-top:1px solid var(--line)}
+.ds-t:last-child{border-bottom:1px solid var(--line)}
+.ds-th{display:flex;gap:8px;align-items:flex-start;padding:9px 0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ds-th .no{flex:none;min-width:34px;padding-top:2px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.ds-th .no.heavy{color:var(--warn);font-weight:600}
+.ds-th .no.err{color:var(--deny);font-weight:600}
+.ds-th .bd{flex:1;min-width:0}
+.ds-th .q{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.45}
+.ds-t.open .ds-th .q{white-space:pre-wrap;word-break:break-word}
+.ds-th .st{margin-top:1px;color:var(--muted);font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums}
+.ds-th .st i{font-style:normal;color:var(--warn)}
+.ds-th .st u{text-decoration:none;color:var(--deny)}
+.ds-th .tm{flex:none;padding-top:2px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.ds-td{display:none;padding:0 0 10px 42px;font-size:13px;line-height:1.5}
+.ds-t.open .ds-td{display:block}
+.ds-step{margin:6px 0 2px}
+.ds-step .h{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.ds-step .tx{margin-top:1px;color:var(--muted);word-break:break-word}
+.ds-tool{display:flex;gap:6px;padding-left:10px;color:var(--muted);font-size:12px;line-height:1.5;font-variant-numeric:tabular-nums}
+.ds-tool .n{flex:none;color:var(--ink)}
+.ds-tool .a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+.ds-tool .r{flex:none}
+.ds-tool.err .n,.ds-tool.err .r{color:var(--deny)}
+.ds-end{margin-top:6px;color:var(--muted);font-size:12px}
+.ds-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+@media (min-width:1000px){.ds-b{padding:16px 24px}.ds-th{padding:10px 0}}
 .sfimg{align-self:flex-start;margin:6px 0;max-width:min(260px,80%)}
 .sfimg img{display:block;max-width:100%;max-height:260px;border-radius:10px;border:1px solid var(--line);cursor:zoom-in;background:var(--bg)}
 .sfmedia{width:min(300px,85%)}
@@ -1094,6 +1129,7 @@ select.pe-in{text-align-last:right}
 
   <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""></div>
   <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-n"></span><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
+  <div id="diss" role="dialog" aria-label="会话解剖"><div class="fv-h"><button type="button" class="ds-back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="fv-n ds-n">解剖</span><button type="button" class="fv-share ds-re">刷新</button></div><div class="ds-b"></div></div>
   <div id="vplayer" role="dialog" aria-label="播放视频"><video controls playsinline></video><button type="button" aria-label="关闭">×</button></div>
 
   <div id="newDlg" aria-hidden="true">
@@ -1578,6 +1614,80 @@ function openPath(p){
 var fvUrl='',fvBlob=null,fvName='';
 // 手机：系统分享面板（存到「文件」、用别的 App 打开）；电脑：直接下载到「下载」（Mac 上的分享面板对很多文件类型没反应）
 var fvTouch=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches),FV_ACT=fvTouch?'分享 / 保存':'保存';
+// ---------- 会话解剖：标题栏点会话名打开，按「轮」看每句话引出了几步、哪些工具、多少 token / 时间 ----------
+var dissEl=$('#diss'),dissFor='';
+function dsTk(n){n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?(n>=1e4?Math.round(n/1000):(n/1000).toFixed(1).replace(/\.0$/,''))+'k':String(n)}
+function dsDur(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1 秒':'0 秒';if(s<60)return s+' 秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h+' 小时 '+(m%60)+' 分';return m+' 分 '+(s%60)+' 秒'}
+function dsWhen(ms,multi){var d=new Date(ms),hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);return multi?(d.getMonth()+1)+'/'+d.getDate()+' '+hm:hm}
+function dsModel(m){return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,'')}
+function dsN(n){n=+n||0;return n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'k':String(n)}
+function openDissect(){
+  if(!session)return;
+  if(/^(op|oc):/.test(session.id)){toast('这个 Claw 还不支持解剖');return}
+  var b=dissEl.querySelector('.ds-b');
+  dissEl.querySelector('.ds-n').textContent='解剖 · '+((session.title||'').trim()||session.dir||'会话');
+  dissEl.classList.add('on');
+  b.innerHTML='<div class="ds-empty">解剖中…</div>';
+  var id=dissFor=session.id;
+  fetch('/api/dissect?id='+encodeURIComponent(id)).then(function(r){
+    if(r.status===401){location.replace('/login');throw new Error('需要登录')}
+    if(r.status===404&&r.headers.get('content-type')&&r.headers.get('content-type').indexOf('json')<0)throw new Error('服务端还没更新，重启 claclaw 后可用');
+    return r.json().then(function(j){if(!r.ok)throw new Error((j&&j.error)||('HTTP '+r.status));return j});
+  }).then(function(j){if(dissFor!==id||!dissEl.classList.contains('on'))return;renderDissect(j)})
+    .catch(function(e){if(dissFor!==id)return;b.innerHTML='<div class="ds-empty"></div>';b.firstChild.textContent=e.message});
+}
+function closeDissect(){dissEl.classList.remove('on');dissEl.querySelector('.ds-b').innerHTML='';dissFor=''}
+function renderDissect(j){
+  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},ts=j.turns||[];
+  if(!ts.length){b.innerHTML='<div class="ds-empty">这个会话还没有对话</div>';return}
+  var multi=!!(s.firstAt&&s.lastAt&&new Date(s.firstAt).toDateString()!==new Date(s.lastAt).toDateString());
+  var h='<div class="ds-sum">'
+    +'<span><b>'+ts.length+'</b> 轮</span><span><b>'+(s.steps||0)+'</b> 步</span><span><b>'+(s.tools||0)+'</b> 次工具</span>'
+    +'<span>↑<b>'+dsTk(s.in)+'</b> ↓<b>'+dsTk(s.out)+'</b></span>'+(s.think?'<span>思考 <b>'+dsTk(s.think)+'</b></span>':'')
+    +'<span>干活 <b>'+dsDur(s.durMs)+'</b></span><span>最长 <b>#'+s.longestTurn+'</b> '+dsDur(s.longestMs)+'</span>'
+    +'<span>上下文 最大 <b>'+dsTk(s.maxCtx)+'</b>'+(s.ctxLast?' · 现在 <b>'+dsTk(s.ctxLast)+'</b>':'')+'</span>'
+    +(s.compactions?'<span>压缩 <b>'+s.compactions+'</b> 次</span>':'')
+    +(s.subagents?'<span>子代理 <b>'+s.subagents+'</b></span>':'')
+    +(s.errors?'<span>工具出错 <b>'+s.errors+'</b></span>':'')
+    +(s.interrupted?'<span>打断 <b>'+s.interrupted+'</b></span>':'')
+    +'<span class="w">'+esc(((s.models||[]).map(dsModel).join(' · ')||s.model||'')+(j.cwdShort?' · '+j.cwdShort:'')+(j.branch?' · '+j.branch:''))+'</span>'
+    +'</div>';
+  if(s.toolsBy&&s.toolsBy.length)h+='<div class="ds-tools">'+s.toolsBy.map(function(x){return esc(String(x[0]).replace(/^mcp__/,''))+' '+x[1]}).join(' · ')+'</div>';
+  // 「重」的轮：步数 / 工具 / 耗时 / 输出比这个会话的中位数高出一倍以上（这句话让 AI 绕了很远）
+  var med=function(k){var a=ts.map(function(t){return +t[k]||0}).filter(function(x){return x>0}).sort(function(x,y){return x-y});return a.length?a[a.length>>1]:0};
+  var mSteps=med('nSteps'),mTools=med('nTools'),mDur=med('durMs'),mOut=med('out');
+  ts.forEach(function(t){
+    var heavy=t.nSteps>=mSteps*2+2||t.nTools>=mTools*2+4||t.durMs>=mDur*2+60000||t.out>=mOut*2+2000;
+    var cls=t.errors?'err':heavy?'heavy':'';
+    var st=[t.nSteps+' 步',t.nTools?t.nTools+' 工具':'',t.out?'↓'+dsTk(t.out):'',dsDur(t.durMs),t.ctx?'上下文 '+dsTk(t.ctx):''].filter(Boolean).join(' · ');
+    var marks=[];if(t.queued)marks.push('插话');if(t.images)marks.push('图 ×'+t.images);if(t.interrupted)marks.push('<u>被打断</u>');if(t.errors)marks.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)marks.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)marks.push('重试 '+t.retries);if(t.compact)marks.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)marks.push('子代理 '+t.subagents);
+    h+='<div class="ds-t"><div class="ds-th"><span class="no '+cls+'">#'+t.i+'</span><div class="bd"><div class="q">'+(t.text?esc(t.text):'<span style="color:var(--muted)">（接着上一轮）</span>')+'</div><div class="st">'+esc(st)+(marks.length?' · '+marks.join(' · '):'')+'</div></div><span class="tm">'+dsWhen(t.at,multi)+'</span></div>'
+      +'<div class="ds-td">'+dsSteps(t)+'</div></div>';
+  });
+  b.innerHTML=h;
+  b.scrollTop=b.scrollHeight;
+}
+function dsSteps(t){
+  var h='';
+  (t.steps||[]).forEach(function(s,k){
+    h+='<div class="ds-step"><div class="h">第 '+(k+1)+' 步 · '+esc(dsModel(s.model))+' · 模型 '+dsDur(s.latMs)+' · ↓'+dsTk(s.out)+(s.think?'（思考 '+dsTk(s.think)+'）':'')+(s.in?' · 上下文 '+dsTk(s.in):'')+'</div>';
+    (s.tools||[]).forEach(function(u){h+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(String(u.name).replace(/^mcp__/,''))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
+    if(s.text)h+='<div class="tx">'+esc(s.text)+'</div>';
+    h+='</div>';
+  });
+  var end=[];if(t.chars)end.push('提示词 '+dsN(t.chars)+' 字');if(t.replyChars)end.push('回复 '+dsN(t.replyChars)+' 字');end.push('↑'+dsTk(t.in)+' ↓'+dsTk(t.out));
+  h+='<div class="ds-end">'+esc(end.join(' · '))+'</div>';
+  return h;
+}
+dissEl.querySelector('.ds-back').addEventListener('click',closeDissect);
+dissEl.querySelector('.ds-re').addEventListener('click',openDissect);
+dissEl.querySelector('.ds-b').addEventListener('click',function(e){var t=e.target.closest('.ds-t');if(t)t.classList.toggle('open')});
+$('#sessBtn').addEventListener('click',function(){if(session)openDissect()});
+(function(){   // 手机：右滑关闭
+  var g=null;
+  dissEl.addEventListener('touchstart',function(e){if(e.touches.length!==1){g=null;return}var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now()}},{passive:true});
+  dissEl.addEventListener('touchend',function(e){if(!g)return;var p=e.changedTouches[0],dx=p.clientX-g.x,dy=p.clientY-g.y,dt=Date.now()-g.t;g=null;if(dx>70&&Math.abs(dy)<dx*0.6&&dt<600)closeDissect()},{passive:true});
+})();
 $('#fview .fv-share').textContent=FV_ACT;
 function showFile(blob,name,msg){
   var v=$('#fview'),b=v.querySelector('.fv-b');
@@ -3852,7 +3962,7 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
   var g=null;
   function hScroll(el){for(;el&&el!==document.body;el=el.parentElement){if(el.scrollWidth>el.clientWidth+2){var o=getComputedStyle(el).overflowX;if(o==='auto'||o==='scroll')return true}}return false}
   function shown(el){if(!el||!el.offsetParent)return false;var r=el.getBoundingClientRect();return r.width>0&&r.height>0}
-  function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
+  function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#diss.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
   function backBtn(){
     if(!mList)return $('#backBtn');
     var c=[].slice.call(document.querySelectorAll('#setBack,.pe-back')).filter(function(x){return shown(x)});
@@ -4715,7 +4825,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   });
 })();
 function notice(t){if(mList)toast(t);else addSys(t)}
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(dissEl.classList.contains('on'))closeDissect();else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
 

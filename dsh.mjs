@@ -193,6 +193,14 @@ export function dsCtx(id) {
   }
   return null;
 }
+// 一个会话的全部记录（给会话解剖用）；找不到返回 null
+export function dsRecordsOf(id) {
+  if (!isDs(id)) return null;
+  const sid = sidOf(id);
+  if (sid.includes('/') || sid.includes('..')) return null;
+  const f = fileOf(sid);
+  return f ? readRecords(f) : null;
+}
 export function dsUsage(id) {
   if (!isDs(id)) return null;
   const sid = sidOf(id);
