@@ -1655,7 +1655,8 @@ document.addEventListener('touchmove',function(e){
       var t=textOf(me),cur=ta.value;
       ta.value=cur.trim()?cur.replace(/\s+$/,'')+'\n'+t:t;
       ta.dispatchEvent(new Event('input',{bubbles:true}));
-      ta.focus();try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch(_){}
+      if(!COARSE.matches||document.activeElement===ta){ta.focus();try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch(_){}}   // 手机上不唤起键盘：多数时候直接点发送，要改再点输入框
+      else syncSend();
       toast(cur.trim()?'已接在输入框后面':'已放回输入框');
     }else{lastEl=me;lastAt=now}
   },{passive:false});
