@@ -479,6 +479,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.two .s-ren{right:46px}
 .s-ren:hover,.s-ren:focus-visible{color:var(--accent);background:var(--bg)}
 .s-item .t,.s-item .m span,.s-item .bz{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+.s-hide{display:none}
 .s-del{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 .s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
 #delDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
@@ -833,6 +834,10 @@ select.pe-in{text-align-last:right}
   .s-row.sw .s-ren,.s-row.sw .s-del{visibility:visible}
   .s-ren span,.s-del span{display:block}
   .s-del{right:0;background:#F23C3C}
+  .s-hide{position:absolute;top:0;bottom:0;right:0;width:72px;border:0;background:#F23C3C;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;visibility:hidden;z-index:0}
+  .s-row.sw .s-hide{visibility:visible}
+  #sList .s-row.wx{position:relative;overflow:hidden}
+  #sList .s-row.wx .s-item{position:relative;z-index:1;background:var(--surface)}
   .s-ren{right:0;background:#8B95A3}
   .s-row.two .s-ren,.s-row.three .s-ren{right:72px}
   .s-ren:hover,.s-ren:focus-visible{color:#fff;background:#8B95A3}
@@ -3494,6 +3499,16 @@ function loadRecent(){
       if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';
       b.title=CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管'):'');
       b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
+      // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
+      var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
+      hd.addEventListener('click',function(e){
+        e.stopPropagation();
+        fetch('/api/recent/hide',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:s.id})}).then(function(r){return r.json()}).then(function(j){
+          if(!j.ok){toast(j.error||'删除失败');return}
+          row.remove();if(lastList)lastList=lastList.filter(function(x){return x.id!==s.id});toast('已从最近里删除');
+        }).catch(function(){toast('删除失败')});
+      });
+      row.appendChild(hd);
       list.appendChild(row);
     });
     applySearch();renderUnread();renderActivity();
@@ -3759,7 +3774,7 @@ function swClose(row,now){
 function swMax(row){return row.querySelector('.s-del')?144:72}
 $('#sList').addEventListener('touchstart',function(e){
   if(DESKTOP.matches||e.touches.length!==1)return;
-  var row=e.target.closest('.s-row');if(!row||row.classList.contains('wx')||e.target.closest('.s-ren,.s-del'))return;   // 「最近」里没有编辑 / 删除，不能滑
+  var row=e.target.closest('.s-row');if(!row||e.target.closest('.s-ren,.s-del,.s-hide'))return;   // 「最近」里左滑只有「删除」（只从列表拿掉）
   if(swOpen&&swOpen!==row){swClose(swOpen);swSuppress=Date.now()}   // 点别的行：先收起已打开的那行
   var t=e.touches[0];
   sw={row:row,it:row.querySelector('.s-item'),x:t.clientX,y:t.clientY,t:Date.now(),base:row.classList.contains('open')?-swMax(row):0,lock:null,off:0};
@@ -3786,9 +3801,9 @@ $('#sList').addEventListener('touchend',swEnd);$('#sList').addEventListener('tou
 // 刚滑过 / 有行开着时，点一下只是收起，不打开会话
 $('#sList').addEventListener('click',function(e){
   if(DESKTOP.matches)return;
-  if(Date.now()-swSuppress<150&&!e.target.closest('.s-ren,.s-del')){e.preventDefault();e.stopPropagation();return}
-  if(swOpen&&!e.target.closest('.s-ren,.s-del')){e.preventDefault();e.stopPropagation();swClose(swOpen);return}
-  if(e.target.closest('.s-ren,.s-del')){var r=e.target.closest('.s-row');setTimeout(function(){swClose(r,true)},50)}
+  if(Date.now()-swSuppress<150&&!e.target.closest('.s-ren,.s-del,.s-hide')){e.preventDefault();e.stopPropagation();return}
+  if(swOpen&&!e.target.closest('.s-ren,.s-del,.s-hide')){e.preventDefault();e.stopPropagation();swClose(swOpen);return}
+  if(e.target.closest('.s-ren,.s-del,.s-hide')){var r=e.target.closest('.s-row');setTimeout(function(){swClose(r,true)},50)}
 },true);
 document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest('#sList'))swClose(swOpen)},{passive:true});
 // ---------- 手机：左右滑 ----------
@@ -3811,7 +3826,7 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
     if(DESKTOP.matches||e.touches.length!==1||overlayOn())return;
     var t=e.target;if(t.closest('input,textarea,select,[contenteditable="true"],#mtabs')||hScroll(t))return;
     var row=t.closest('#sList .s-row');
-    var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),row:row&&!row.classList.contains('wx')?row:null,rowOpen:!!(row&&row.classList.contains('open'))};
+    var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),row:row||null,rowOpen:!!(row&&row.classList.contains('open'))};
   },{passive:true,capture:true});
   document.addEventListener('touchmove',function(e){
     if(!g)return;var p=e.touches[0],dx=p.clientX-g.x,dy=p.clientY-g.y;

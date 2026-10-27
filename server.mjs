@@ -1747,6 +1747,9 @@ function touchWeb(id) {
 // 之后有新动静的会话才回到列表里；会话本身不删
 const RECENT_FILE = path.join(DATA, 'recent.json');
 let recentCleared = (() => { try { return Number(JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).clearedAt) || 0; } catch { return 0; } })();
+// 单条从「最近」里移除：记下移除时间，之后有新消息才回来（会话本身不删）
+let recentHidden = (() => { try { const h = JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).hidden; return h && typeof h === 'object' ? h : {}; } catch { return {}; } })();
+const saveRecent = () => writeJsonAtomic(RECENT_FILE, { clearedAt: recentCleared, hidden: recentHidden });
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 async function recentList() {
   const safe = p => withTimeout(Promise.resolve().then(p), 8000).catch(() => []);
@@ -1761,7 +1764,7 @@ async function recentList() {
     for (const x of Array.isArray(arr) ? arr : []) {
       // 只按会话里最后一条消息的时间排（像微信）；点开、切换、重启不算
       const at = claw === 'claude' && !x.unsent ? (lastMsgAt(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || x.lastModified || 0) : (x.lastModified || 0);
-      if (at <= recentCleared) continue;
+      if (at <= recentCleared || at <= (recentHidden[x.id] || 0)) continue;
       const it = { ...x, claw: x.claw || claw, at };
       if (claw === 'claude' && !it.lastPrompt && !it.unsent) it.lastPrompt = lastPromptOf(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || undefined;
       out.push(it);
@@ -2293,8 +2296,18 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/recent/clear' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
-      recentCleared = Date.now();
-      try { writeJsonAtomic(RECENT_FILE, { clearedAt: recentCleared }); } catch (e) { return sendJson(res, 500, { error: e.message }); }
+      recentCleared = Date.now(); recentHidden = {};
+      try { saveRecent(); } catch (e) { return sendJson(res, 500, { error: e.message }); }
+      return sendJson(res, 200, { ok: true });
+    }
+    if (url.pathname === '/api/recent/hide' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      let b = {}; try { b = JSON.parse(await readBody(req, 1024)); } catch {}
+      const id = String(b.id || '').slice(0, 200);
+      if (!id) return sendJson(res, 400, { error: '缺会话 id' });
+      recentHidden[id] = Date.now();
+      for (const [k, t] of Object.entries(recentHidden)) if (t <= recentCleared) delete recentHidden[k];
+      try { saveRecent(); } catch (e) { return sendJson(res, 500, { error: e.message }); }
       return sendJson(res, 200, { ok: true });
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'openclaw') {
