@@ -119,6 +119,33 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
   return null;
 }
 
+// 这一步是不是来信直接点名要做的：来信里出现了这条命令的程序 / 子命令、脚本或文件名、网址的域名。
+// 用户的规矩：消息来自协同通道，但做什么是我们自己定的，就不用确认；只有对方点名要做的才问。
+// 读敏感内容不走这条（回复会传回对方，读到的钥匙等于交出去），调用方自己判断。
+export function peerInstructed(name, input, text) {
+  const t = String(text || '').toLowerCase();
+  if (!t) return false;
+  const has = x => { x = String(x || '').toLowerCase(); return x.length >= 3 && t.includes(x); };
+  const base = x => String(x || '').replace(/\/+$/, '').split('/').pop();
+  input = input || {};
+  if (name === 'Bash') {
+    const segs = String(input.command || '').split(/&&|\|\||[;|&\n]/).map(x => x.trim()).filter(Boolean);
+    for (const seg of segs) {
+      if (has(seg.replace(/\s+/g, ' '))) return true;                      // 整段命令原样出现在来信里
+      const w = words(seg).filter(a => !/^-/.test(a));
+      if (!w.length) continue;
+      if (w.length > 1 && has(base(w[0]) + ' ' + w[1])) return true;      // git push、npm publish 这类「程序 + 子命令」
+      if (base(w[0]).length >= 5 && has(base(w[0]))) return true;       // 程序名本身够特别（preprodwebpull.sh、rsync…）
+      for (const a of w) if (/[/~]/.test(a) || /\.\w{1,5}$/.test(a)) { const b = base(a); if (b.length >= 4 && has(b)) return true; }   // 脚本、文件名
+    }
+    return false;
+  }
+  if (input.file_path || input.notebook_path) return has(base(input.file_path || input.notebook_path));
+  if (input.url) { try { return has(new URL(input.url).hostname); } catch { return false; } }
+  if (input.query) return true;
+  return true;   // 认不出来的工具：按对方点名算，照样问
+}
+
 // 工具调用的风险：null = 直接放行；否则返回 { key（「本轮同类都允许」按它记）, reason }
 export function peerRisk(name, input, cwd, roots, opts) {
   input = input || {};

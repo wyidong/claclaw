@@ -29,7 +29,7 @@ setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(()
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody } from './httpbody.mjs';
 import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
-import { peerRisk, sensitiveRoots } from './peerguard.mjs';
+import { peerRisk, peerInstructed, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 协同那一轮里不用确认的常规维护（npm run check / npm test / npm run restart）：只在本仓库、且没有没提交的改动时
 const PEER_OPTS = {
@@ -1010,7 +1010,7 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
     const timer = setTimeout(() => end(504, { ok: false, error: '30 分钟内没等到回复', partial: (cur || reply).trim() }), 30 * 60 * 1000);   // 对方早已拿到 202，这里只是兜底
     r.subscribe(sub);
     // 对方发来的、或本机会话在处理对方消息时转过来的：这一轮有风险的操作要用户确认
-    if (r instanceof Runner && (!local || runners.get(fromId)?.peerTurn)) r.peerTurn = { from: from || '对方', allowed: new Set() };
+    if (r instanceof Runner && (!local || runners.get(fromId)?.peerTurn)) r.peerTurn = { from: from || '对方', allowed: new Set(), text };
     r.send(msg);
     r.emit({ t: 'user', text: msg, images: [] });
   });
@@ -1492,6 +1492,8 @@ class Runner {
     const risk = peerRisk(inp.tool_name, inp.tool_input, this.cwd, PEER_ROOTS, PEER_OPTS);
     if (!risk) return {};
     if (pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
+    // 来信没点名要做这一步：是这边自己决定的，不用确认（读敏感内容除外：回复会传回对方）
+    if (risk.key !== 'read-sensitive' && !peerInstructed(inp.tool_name, inp.tool_input, pt.text)) { log('peer-guard self', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
     log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason);
     const res = await this.askPermission(inp.tool_name, inp.tool_input, {
       toolUseID, signal: o?.signal, title: '对方（' + pt.from + '）发来的请求要' + risk.reason + '，允许吗？',

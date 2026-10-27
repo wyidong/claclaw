@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { peerRisk, bashRisk, sensitiveRoots } from '../peerguard.mjs';
+import { peerRisk, bashRisk, sensitiveRoots, peerInstructed } from '../peerguard.mjs';
 
 const H = os.homedir(), proj = path.join(H, 'w', 'proj'), data = path.join(proj, 'data');
 const roots = sensitiveRoots(data);
@@ -76,4 +76,16 @@ test('git pull / fetch 只认 origin', () => {
 test('改 node_modules 要确认（否则改完再跑测试 / 重启就绕过了）', () => {
   assert.ok(risk('Edit', { file_path: path.join(proj, 'node_modules/ws/index.js') }));
   assert.equal(risk('Edit', { file_path: path.join(proj, 'test/a.test.mjs') }), null);
+});
+
+test('peerInstructed：来信点名的才算对方要求，其余是这边自己决定的', () => {
+  const B = c => ({ command: c });
+  assert.equal(peerInstructed('Bash', B('~/.aws/preprodwebpull.sh -y 2>&1 | tail -12'), '详情页按钮没有入口，看看 render_actions'), false);
+  assert.equal(peerInstructed('Bash', B('~/.aws/preprodwebpull.sh -y'), '改完跑一下 preprodwebpull.sh'), true);
+  assert.equal(peerInstructed('Bash', B('git push origin main'), '改完 git push 一下'), true);
+  assert.equal(peerInstructed('Bash', B('git push origin main'), '这个 bug 修一下'), false);
+  assert.equal(peerInstructed('Bash', B('rm -rf build'), 'rm -rf build 一下'), true);
+  assert.equal(peerInstructed('Edit', { file_path: '/x/app/views.py' }, '看看 views.py'), true);
+  assert.equal(peerInstructed('WebFetch', { url: 'https://example.com/a' }, '查资料'), false);
+  assert.equal(peerInstructed('mcp__x__y', {}, '随便'), true);
 });
