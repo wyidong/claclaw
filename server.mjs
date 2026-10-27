@@ -30,6 +30,11 @@ import { readBody } from './httpbody.mjs';
 import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
+// 协同那一轮里不用确认的常规维护（npm run check / npm test / npm run restart）：只在本仓库、且没有没提交的改动时
+const PEER_OPTS = {
+  repos: [path.dirname(fileURLToPath(import.meta.url))],
+  clean: dir => { try { return execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8', timeout: 5000 }).trim() === ''; } catch { return false; } },
+};
 import { saveVideo, videoFile, videoDuration, videoThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
 const uploadKeepDays = () => { const d = Math.round(Number(settings().uploadKeepDays)); return d >= 1 && d <= 3650 ? d : KEEP_DAYS_DEFAULT; };
 setTimeout(() => { try { cleanUploads(uploadsDir(DATA), uploadKeepDays()); } catch {} }, 15000);   // 启动后清一次过期附件
@@ -1447,7 +1452,7 @@ class Runner {
   async peerGuard(inp, toolUseID, o) {
     const pt = this.peerTurn;
     if (!pt || inp?.hook_event_name !== 'PreToolUse') return {};
-    const risk = peerRisk(inp.tool_name, inp.tool_input, this.cwd, PEER_ROOTS);
+    const risk = peerRisk(inp.tool_name, inp.tool_input, this.cwd, PEER_ROOTS, PEER_OPTS);
     if (!risk) return {};
     if (pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
     log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason);

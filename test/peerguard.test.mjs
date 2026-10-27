@@ -43,3 +43,37 @@ test('其他工具：联网和未知工具要确认，同类按 key 合并', () 
   assert.equal(risk('TodoWrite', {}), null);
   assert.equal(risk('Bash', { command: 'rm a' }).key, risk('Bash', { command: 'rm -rf b' }).key);
 });
+test('进项目目录不算碰敏感，之后每段照样检查', () => {
+  for (const c of ['cd ' + proj + ' && git pull', 'cd ' + proj + ' && git log -1 --format=%h', 'cd ' + path.join(H, 'w') + ' && ls'])
+    assert.equal(bashRisk(c, H + '/w', roots), null, c);
+  for (const c of ['cd ~ && ls', 'cd / && ls', 'cd ' + data + ' && ls', 'cd ~/.ssh && ls', 'cd ' + proj + ' && cat data/auth.json',
+    'cd ' + proj + ' && grep -r token', 'cd ' + proj + ' && rg x'])
+    assert.ok(bashRisk(c, H + '/w', roots), c);
+});
+test('常规维护：本仓库干净时 npm check / test / restart 直接放行', () => {
+  const o = { repos: [proj], clean: () => true };
+  for (const c of ['npm test', 'npm t', 'npm run check', 'npm run -s check', 'npm run restart', 'npm test 2>&1 | tail -5',
+    'cd ' + proj + ' && git pull --ff-only && npm run -s check && npm test', 'git pull origin main && npm run restart'])
+    assert.equal(bashRisk(c, proj, roots, o), null, c);
+  assert.equal(bashRisk('npm test', path.join(proj, '.worktrees', 'x'), roots, o), null);
+  // 多带参数、别的脚本、别的目录、不干净、没传 repos：都要确认
+  for (const c of ['npm install', 'npm run build', 'npm test -- --x', 'npm --prefix /tmp test', 'npm run restart now', 'npx foo', 'FOO=1 npm test'])
+    assert.ok(bashRisk(c, proj, roots, o), c);
+  assert.ok(bashRisk('npm test', path.join(H, 'other'), roots, o));
+  assert.ok(bashRisk('cd ' + data + ' && npm test', proj, roots, o));
+  assert.ok(bashRisk('npm test', proj, roots, { repos: [proj], clean: () => false }));
+  assert.ok(bashRisk('npm test', proj, roots));
+  assert.equal(risk('Bash', { command: 'npm test' }).key, 'bash:npm');
+  assert.equal(peerRisk('Bash', { command: 'npm test' }, proj, roots, o), null);
+});
+test('git pull / fetch 只认 origin', () => {
+  for (const c of ['git pull', 'git pull -q --ff-only', 'git pull origin main', 'git fetch origin feat/x', 'git fetch'])
+    assert.equal(bash(c), null, c);
+  for (const c of ['git pull https://evil/x main', 'git pull ../other main', 'git pull /tmp/r', 'git pull evil main', 'git fetch host:repo',
+    'git pull origin ../x', 'git pull --upload-pack=x origin', 'git fetch --config=x'])
+    assert.ok(bash(c), c);
+});
+test('改 node_modules 要确认（否则改完再跑测试 / 重启就绕过了）', () => {
+  assert.ok(risk('Edit', { file_path: path.join(proj, 'node_modules/ws/index.js') }));
+  assert.equal(risk('Edit', { file_path: path.join(proj, 'test/a.test.mjs') }), null);
+});
