@@ -138,6 +138,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* DeepSeek / OpenCode 回复中又发的消息：排队，这一轮结束后自动发出 */
 .msg.user.queued{opacity:.7}
 .msg.user.queued::after{content:'排队中 · 这一轮结束后自动发出';display:block;margin-top:4px;font-size:11.5px;opacity:.8}
+.upeer{font-size:12px;opacity:.6;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg.user{align-self:flex-end;max-width:86%;padding:9px 13px;background:var(--user-bg);border-radius:16px 16px 4px 16px}
 .msg.ai{align-self:stretch}
 .msg[data-ts]::after,.peer[data-ts]::after{content:attr(data-ts);display:block;margin-top:3px;font-size:11px;line-height:1.3;color:var(--muted);text-align:right;white-space:nowrap}
@@ -1483,6 +1484,9 @@ function addUser(t,images,vid){
     });
     e.appendChild(g);
   }
+  // 协同 / 本机会话发来的消息：开头给 AI 看的说明不显示，只留一个「协同 · 来源」小标签
+  var pm2=t&&/^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t);
+  if(pm2){var pt=document.createElement('div');pt.className='upeer';var pf=pm2[2].split(' · ');if(pf.length>2&&pf[0]===pf[pf.length-1])pf.pop();pt.textContent=(pm2[1]==='协同'?'协同 · ':'本机 · ')+pf.join(' · ');e.appendChild(pt);t=t.slice(pm2[0].length)}
   if(t){var tx=document.createElement('div');tx.className='ut';tx.textContent=t;e.appendChild(tx)}
   feed.appendChild(e);scrollDown(true);
   return e;

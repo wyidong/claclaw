@@ -1081,7 +1081,9 @@ async function peerHandler(req, res) {
     if (peerBusy.has(info.sessionId)) return out(429, { ok: false, error: '上一条还在处理，稍后再发' });
     peerBusy.add(info.sessionId);
     log('peer in', peer.name, ip, '→', info.sessionId.slice(0, 8), text.length + ' chars');
-    const result = peerDeliver(info, text, peer.name + (from && from !== peer.name ? ' · ' + from : ''), peer.id);
+    // 对方发来的 from 是「会话名 · 它自己的名字」，后半段和我们给它起的名字一样就去掉，不显示两遍
+    const fromS = from.endsWith(' · ' + peer.name) ? from.slice(0, -(' · ' + peer.name).length) : from;
+    const result = peerDeliver(info, text, peer.name + (fromS && fromS !== peer.name ? ' · ' + fromS : ''), peer.id);
     if (dupKey) peerSeen.set(dupKey, { at: Date.now(), result });
     // 60 秒内没回完：先回 202「已收到」+ 编号，连接放掉（经中继的连接等久了会被线路挂断，回复会丢），回完再主动发到对方的会话
     const id = msgId || crypto.randomUUID();
