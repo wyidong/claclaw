@@ -480,6 +480,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-ren:hover,.s-ren:focus-visible{color:var(--accent);background:var(--bg)}
 .s-item .t,.s-item .m span,.s-item .bz{overflow-wrap:anywhere;word-break:break-word;min-width:0}
 .s-hide{display:none}
+.ctxm{position:fixed;z-index:80;min-width:150px;padding:5px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.ctxm button{display:block;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:var(--ink);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.ctxm button:hover{background:var(--bg)}
+.ctxm button.danger{color:#E5484D}
 .s-del{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 .s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
 #delDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
@@ -3501,14 +3505,16 @@ function loadRecent(){
       b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
       // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
       var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
-      hd.addEventListener('click',function(e){
-        e.stopPropagation();
+      var hideIt=function(){
         fetch('/api/recent/hide',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:s.id})}).then(function(r){return r.json()}).then(function(j){
           if(!j.ok){toast(j.error||'删除失败');return}
           row.remove();if(lastList)lastList=lastList.filter(function(x){return x.id!==s.id});toast('已从最近里删除');
         }).catch(function(){toast('删除失败')});
-      });
+      };
+      hd.addEventListener('click',function(e){e.stopPropagation();hideIt()});
       row.appendChild(hd);
+      // 电脑：右键弹出「从最近里删除」
+      b.addEventListener('contextmenu',function(e){if(TOUCH&&!DESKTOP.matches)return;e.preventDefault();ctxMenu(e.clientX,e.clientY,[['从最近里删除',hideIt,'danger']])});
       list.appendChild(row);
     });
     applySearch();renderUnread();renderActivity();
@@ -3849,6 +3855,18 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
   },{passive:true,capture:true});
   document.addEventListener('touchcancel',function(){g=null},{passive:true,capture:true});
 })();
+// 右键菜单（电脑）：items = [[文字, 点了做什么, 'danger'?]]；点别处 / Esc / 滚动收起
+var ctxEl=null;
+function ctxClose(){if(ctxEl){ctxEl.remove();ctxEl=null}}
+function ctxMenu(x,y,items){
+  ctxClose();ctxEl=document.createElement('div');ctxEl.className='ctxm';ctxEl.setAttribute('role','menu');
+  items.forEach(function(it){var b=document.createElement('button');b.type='button';b.textContent=it[0];if(it[2])b.className=it[2];b.addEventListener('click',function(){ctxClose();it[1]()});ctxEl.appendChild(b)});
+  document.body.appendChild(ctxEl);
+  var w=ctxEl.offsetWidth,h=ctxEl.offsetHeight;ctxEl.style.left=Math.min(x,innerWidth-w-6)+'px';ctxEl.style.top=Math.min(y,innerHeight-h-6)+'px';
+}
+document.addEventListener('mousedown',function(e){if(ctxEl&&!ctxEl.contains(e.target))ctxClose()},true);
+document.addEventListener('keydown',function(e){if(e.key==='Escape')ctxClose()});
+document.addEventListener('scroll',ctxClose,true);window.addEventListener('blur',ctxClose);
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
