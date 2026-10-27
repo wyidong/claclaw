@@ -69,9 +69,7 @@
 /* 宿主页、协同页：页头、分组标题、每行名称同样用紫 */
 :root[data-theme="ziwei"] .pg-hd,:root[data-theme="ziwei"] .h-h,:root[data-theme="ziwei"] .h-row .k{color:var(--zw-t)}
 :root[data-theme="ziwei"] .pe-back{color:var(--accent)}
-/* 手机设置页：标题栏下原来空出的 14px 露出淡紫底像多了一节——标题栏贴住内容、底下一条细线，留白挪进滚动区 */
-:root[data-theme="ziwei"] #app.m-list.set-on #setTop{margin-bottom:0;border-bottom:1px solid var(--line)}
-:root[data-theme="ziwei"] #app.m-list.set-on #setBody{padding-top:22px}
+
 :root[data-theme="ziwei"] #setTop button,:root[data-theme="ziwei"] #backBtn{color:var(--accent)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
@@ -648,8 +646,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #app.m-list.set-on #mtabs{display:none}
   #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
   #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 6px;background:var(--surface)}
-  #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:8px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
-  #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600}
+  #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:22px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
+  #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
+  /* 标题栏下不留空：原来空出的 14px 里内容滚上去会被截掉，像多了一节；留白挪进滚动区 */
   #setBack{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
 }
 #mtabs{display:none}
