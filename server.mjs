@@ -29,7 +29,8 @@ setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(()
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody } from './httpbody.mjs';
 import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
-import { peerRisk, peerInstructed, peerIntent, destructive, sensitiveRoots } from './peerguard.mjs';
+import { peerRisk, destructive, sensitiveRoots } from './peerguard.mjs';
+import { peerJudge } from './peerjudge.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 协同那一轮里不用确认的常规维护（npm run check / npm test / npm run restart）：只在本仓库、且没有没提交的改动时
 const PEER_OPTS = {
@@ -1010,7 +1011,7 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
     const timer = setTimeout(() => end(504, { ok: false, error: '30 分钟内没等到回复', partial: (cur || reply).trim() }), 30 * 60 * 1000);   // 对方早已拿到 202，这里只是兜底
     r.subscribe(sub);
     // 对方发来的、或本机会话在处理对方消息时转过来的：这一轮有风险的操作要用户确认
-    if (r instanceof Runner && (!local || runners.get(fromId)?.peerTurn)) r.peerTurn = { from: from || '对方', allowed: new Set(), text };
+    if (r instanceof Runner && (!local || runners.get(fromId)?.peerTurn)) { r.peerTurn = { from: from || '对方', allowed: new Set(), text }; r.lastSaid = ''; }
     r.send(msg);
     r.emit({ t: 'user', text: msg, images: [] });
   });
@@ -1333,6 +1334,7 @@ class Runner {
           this.liveText += e.delta.text;   // 断线重连时把正在输出的这段整段补给网页
           this.emit({ t: 'ai.delta', text: e.delta.text });
         } else if (e.type === 'content_block_stop' && this.textOpen) {
+          if (this.liveText.trim()) this.lastSaid = this.liveText.slice(-1500);   // 协同审查用：AI 动手前说的打算
           this.textOpen = false; this.liveText = ''; this.emit({ t: 'ai.end' });
         }
       } else if (m.type === 'assistant') {
@@ -1492,15 +1494,21 @@ class Runner {
     const risk = peerRisk(inp.tool_name, inp.tool_input, this.cwd, PEER_ROOTS, PEER_OPTS);
     if (!risk) return {};
     if (pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
-    // 来信没点名要做这一步：是这边自己决定的，不用确认（读敏感内容除外：回复会传回对方）
-    // 删除 / 覆盖 / 推送这类收不回来的、来信里有动手意思的（「把 build 删掉」没写命令也算），照样确认
-    if (risk.key !== 'read-sensitive' && !destructive(inp.tool_name, inp.tool_input) && !peerIntent(pt.text) && !peerInstructed(inp.tool_name, inp.tool_input, pt.text)) { log('peer-guard self', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
+    // 规则只负责标出「有风险」；要不要打扰用户，交给小模型看需求 + 这一步来判断（peerjudge.mjs）。
+    // 读敏感内容不交给它：这一轮的回复会传回对方，读到的钥匙等于交出去，一律确认。
+    const des = destructive(inp.tool_name, inp.tool_input);
+    let why = '';
+    if (risk.key !== 'read-sensitive') {
+      const t0 = Date.now();
+      const j = await peerJudge({ need: pt.text, plan: this.lastSaid || '', tool: inp.tool_name, input: inp.tool_input, cwd: this.cwd, reason: risk.reason, destructive: des, env: CHILD_ENV });
+      log('peer-guard judge', j.allow ? 'allow' : 'ask', this.id.slice(0, 8), inp.tool_name, risk.reason, '·', j.why, (Date.now() - t0) + 'ms');
+      if (j.allow) return {};
+      why = j.why;
+    }
     log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason);
     const res = await this.askPermission(inp.tool_name, inp.tool_input, {
-      toolUseID, signal: o?.signal, title: destructive(inp.tool_name, inp.tool_input)
-        ? '⚠ 处理对方（' + pt.from + '）的消息时要' + risk.reason + '：对方的需求一般用不着删改本地文件，确定允许？'
-        : '对方（' + pt.from + '）发来的请求要' + risk.reason + '，允许吗？',
-      description: '这一轮是协同消息触发的，有风险的操作要你确认', peerKey: risk.key,
+      toolUseID, signal: o?.signal, title: (des ? '⚠ ' : '') + '处理对方（' + pt.from + '）的消息时要' + risk.reason + '，允许吗？' + (why ? '（审查：' + why + '）' : ''),
+      description: why ? '审查意见：' + why : '这一轮是协同消息触发的，有风险的操作要你确认', peerKey: risk.key,
     });
     const ok = res.behavior === 'allow';
     log('peer-guard', ok ? 'allowed' : 'denied', this.id.slice(0, 8), inp.tool_name);
