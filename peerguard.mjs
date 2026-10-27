@@ -146,6 +146,28 @@ export function peerInstructed(name, input, text) {
   return true;   // 认不出来的工具：按对方点名算，照样问
 }
 
+// 删除、覆盖、重置、强推、杀进程、发布这类做了收不回来的：不管是谁的主意都要确认
+const DESTRUCTIVE_CMDS = new Set(['rm', 'rmdir', 'unlink', 'shred', 'dd', 'mkfs', 'kill', 'killall', 'pkill', 'sudo', 'su', 'chmod', 'chown',
+  'launchctl', 'shutdown', 'reboot', 'halt', 'truncate', 'trash', 'srm', 'diskutil', 'crontab', 'systemctl', 'service']);
+const DESTRUCTIVE_GIT = new Set(['push', 'reset', 'clean', 'rebase', 'checkout', 'restore', 'switch', 'filter-branch', 'filter-repo', 'gc', 'prune', 'update-ref', 'rm', 'mv', 'stash', 'branch', 'tag', 'commit', 'merge', 'cherry-pick', 'revert', 'am', 'apply']);
+const DESTRUCTIVE_WORDS = /\b(drop|delete|truncate|flushall|flushdb|destroy|purge|prune|wipe|--force|-f\b|--hard|publish|deploy|terminate|rmi)\b/i;
+export function destructive(name, input) {
+  if (name !== 'Bash') return false;
+  const segs = String((input || {}).command || '').split(/&&|\|\||[;|&\n]/).map(x => x.trim()).filter(Boolean);
+  for (const seg of segs) {
+    const w = words(seg), c = String(w[0] || '').split('/').pop();
+    if (DESTRUCTIVE_CMDS.has(c)) return true;
+    if (c === 'mv' || c === 'cp' && w.includes('-f')) return true;
+    if (c === 'find' && w.some(a => /^-(delete|exec|execdir)$/.test(a))) return true;
+    if (c === 'git' && DESTRUCTIVE_GIT.has(w.find((a, i) => i > 0 && !/^-/.test(a)))) return true;
+    if (DESTRUCTIVE_WORDS.test(seg)) return true;
+  }
+  return false;
+}
+// 来信里有要动手的意思（删、清、重置、部署、推送、重启……）：这一轮有风险的操作都确认，不管来信写没写具体命令
+const INTENT_WORDS = /删|清空|清理|清掉|移除|去掉.{0,4}(目录|文件|库|表|数据)|销毁|丢弃|重置|覆盖|回滚|还原|强推|推送|推上去|部署|上线|发布|重启|停掉|停止服务|杀掉|关掉进程|格式化|改权限|drop|delete|remove|truncate|reset|deploy|publish|release|kill|restart|force|wipe|purge|rm\s/i;
+export function peerIntent(text) { return INTENT_WORDS.test(String(text || '')); }
+
 // 工具调用的风险：null = 直接放行；否则返回 { key（「本轮同类都允许」按它记）, reason }
 export function peerRisk(name, input, cwd, roots, opts) {
   input = input || {};

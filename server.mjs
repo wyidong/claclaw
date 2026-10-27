@@ -29,7 +29,7 @@ setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(()
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody } from './httpbody.mjs';
 import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
-import { peerRisk, peerInstructed, sensitiveRoots } from './peerguard.mjs';
+import { peerRisk, peerInstructed, peerIntent, destructive, sensitiveRoots } from './peerguard.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 协同那一轮里不用确认的常规维护（npm run check / npm test / npm run restart）：只在本仓库、且没有没提交的改动时
 const PEER_OPTS = {
@@ -1493,7 +1493,8 @@ class Runner {
     if (!risk) return {};
     if (pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
     // 来信没点名要做这一步：是这边自己决定的，不用确认（读敏感内容除外：回复会传回对方）
-    if (risk.key !== 'read-sensitive' && !peerInstructed(inp.tool_name, inp.tool_input, pt.text)) { log('peer-guard self', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
+    // 删除 / 覆盖 / 推送这类收不回来的、来信里有动手意思的（「把 build 删掉」没写命令也算），照样确认
+    if (risk.key !== 'read-sensitive' && !destructive(inp.tool_name, inp.tool_input) && !peerIntent(pt.text) && !peerInstructed(inp.tool_name, inp.tool_input, pt.text)) { log('peer-guard self', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
     log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason);
     const res = await this.askPermission(inp.tool_name, inp.tool_input, {
       toolUseID, signal: o?.signal, title: '对方（' + pt.from + '）发来的请求要' + risk.reason + '，允许吗？',

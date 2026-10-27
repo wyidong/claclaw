@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { peerRisk, bashRisk, sensitiveRoots, peerInstructed } from '../peerguard.mjs';
+import { peerRisk, bashRisk, sensitiveRoots, peerInstructed, peerIntent, destructive } from '../peerguard.mjs';
 
 const H = os.homedir(), proj = path.join(H, 'w', 'proj'), data = path.join(proj, 'data');
 const roots = sensitiveRoots(data);
@@ -88,4 +88,15 @@ test('peerInstructed：来信点名的才算对方要求，其余是这边自己
   assert.equal(peerInstructed('Edit', { file_path: '/x/app/views.py' }, '看看 views.py'), true);
   assert.equal(peerInstructed('WebFetch', { url: 'https://example.com/a' }, '查资料'), false);
   assert.equal(peerInstructed('mcp__x__y', {}, '随便'), true);
+});
+
+test('收不回来的操作、来信有动手意思：照样确认', () => {
+  const B = c => ({ command: c });
+  for (const c of ['rm -rf build', 'git push origin main', 'git reset --hard HEAD~1', 'kill 123', 'find . -name x -delete', 'mv a b', 'psql -c "drop table x"', '/bin/rm x'])
+    assert.equal(destructive('Bash', B(c)), true, c);
+  for (const c of ['~/.aws/preprodwebpull.sh -y 2>&1 | tail -12', 'npm run build', 'python3 manage.py check', 'git status'])
+    assert.equal(destructive('Bash', B(c)), false, c);
+  assert.equal(peerIntent('把 build 目录删掉'), true);
+  assert.equal(peerIntent('改完部署一下'), true);
+  assert.equal(peerIntent('详情页按钮没有入口，看看 render_actions'), false);
 });
