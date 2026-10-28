@@ -134,7 +134,6 @@ window.__sc=(function(){
 :root[data-theme="shichen"] #mtabs button.on,:root[data-theme="shichen"] #rail button.on,:root[data-theme="shichen"] #rail button:hover{color:var(--sc-f);background:var(--sc-on)}
 :root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c1,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #hostPane .pg-hd,:root[data-theme="shichen"] #hostPane .pe-back{color:var(--sc-th)}   /* 设置 / 宿主页标题栏：标题和返回键用天干色，和页面里的标题同色（在地支底上调到看得清） */
 :root[data-theme="shichen"] header .sid,:root[data-theme="shichen"] header .where,:root[data-theme="shichen"] header #cfgBtn{color:var(--sc-m)}
-:root[data-theme="shichen"] header #cfgBtn[data-m="bypass"] .c2{text-decoration:underline}
 :root[data-theme="shichen"] #sSearch{background:#FFFFFF;border-color:transparent}
 /* 卡片、列表行：白底细边；列表 / 设置 / 宿主页的底换成地支淡色 */
 :root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row{background:#FFFFFF;border:1px solid var(--line)}
@@ -594,10 +593,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #setPane .set-item:active{background:var(--surface)}
 #setPane .lb{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;line-height:1.35}
 #setPane .lb small{font-size:12.5px;color:var(--muted)}
-#setPane .set-item select{flex:none;max-width:45%;border:0;background:none;color:var(--muted);font:inherit;font-size:14.5px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;padding:4px 18px 4px 4px;cursor:pointer;
+#setPane .set-item select{flex:none;max-width:45%;border:0;background:none;color:var(--muted);font:inherit;font-size:16px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;padding:4px 18px 4px 4px;cursor:pointer;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
 #setPane .set-num{flex:none;display:flex;align-items:center;gap:2px;color:var(--muted);font-size:14.5px}
-#setPane .set-num input{width:64px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:15px;text-align:right;padding:4px 6px}
+#setPane .set-num input{width:64px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;text-align:right;padding:4px 6px}
 #setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
 /* 开关 */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
@@ -762,8 +761,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   #sid .hid{margin-left:0;line-height:22px}
   #hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
   #cfgBtn .c1{font-size:13px;line-height:22px}
-  #cfgBtn .c1:not(:empty)::after{content:'·';margin:0 6px;font-weight:400}
   #cfgBtn .c2{font-size:13px;line-height:22px}
+  #cfgBtn .c1:not(:empty)+.c2{margin-left:10px}   /* 权限名左右留一样的空：右边到 > 约 10px */
   #cfgBtn>span{flex:0 1 auto;min-width:0}
   #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
   #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
@@ -1174,8 +1173,8 @@ select.pe-in{text-align-last:right}
   #sid .hid{margin-left:0;line-height:22px}
   #hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
   #cfgBtn .c1{font-size:13px;line-height:22px}
-  #cfgBtn .c1:not(:empty)::after{content:'·';margin:0 6px;font-weight:400}
   #cfgBtn .c2{font-size:13px;line-height:22px}
+  #cfgBtn .c1:not(:empty)+.c2{margin-left:10px}   /* 权限名左右留一样的空：右边到 > 约 10px */
   #cfgBtn>span{flex:0 1 auto;min-width:0}
   #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
 
@@ -3127,7 +3126,8 @@ function setMode(key,announce){
   var m=MODES.find(function(x){return x.key===key})||MODES[0];
   mode=m.key;
   var dm=dmOf(m.key);
-  $('#cfgMode').textContent=m.label;$('#cfgBtn').dataset.m=dm;
+  $('#cfgMode').textContent={acceptEdits:'自动',bypassPermissions:'全权'}[m.key]||m.label;   // 标题栏用短名，设置里仍是全名
+  $('#cfgBtn').dataset.m=dm;
   var tag=$('#modeTag');tag.textContent=session?m.key:'';tag.dataset.m=dm;
   if(String(cfgBusy).indexOf('mode:')===0)cfgBusy=null;
   renderCfg();
@@ -3168,7 +3168,7 @@ function curModelRow(){var ms=cfg.models||[];return ms.find(function(m){return m
 function curModelLabel(){if(cfg.model)return modelShort(cfg.model);var r=curModelRow();return r?modelShort(r.resolved||r.value):''}
 function effortLabel(k){var e=EFFORTS.find(function(x){return x.key===k});return e?e.label:''}
 function renderCfgBtn(){
-  $('#cfgModel').textContent=claudeSess()&&(cfg.models||cfg.model)?curModelLabel()+(cfg.effort?' · '+effortLabel(cfg.effort):''):'';
+  $('#cfgModel').textContent=claudeSess()&&(cfg.models||cfg.model)?(curModelLabel()+(cfg.effort?effortLabel(cfg.effort):'')).replace(/\s+/g,''):'';   // 标题栏紧凑：Opus5.5高
 }
 function modeList(){   // 这个会话能切换的权限模式（继承来的特殊模式也在里面）；Claude 会话随时可以切到「跳过确认」（服务端会重启进程）
   var want=sessionModes.indexOf(mode)<0?sessionModes.concat(mode):sessionModes.slice();
@@ -5285,7 +5285,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   var GK='claclaw.gyro',live=false;   // 重力滚动开关存在本机：'on' / 'off'；长按圆球切换
   function pref(){try{return localStorage.getItem(GK)}catch(_){return null}}
   function setPref(v){try{localStorage.setItem(GK,v)}catch(_){}}
-  function ask(quiet){   // 拖完松手时调（quiet＝打开页面时按上次的开关自动接上，不提示）；iOS 拖动不算「点击」，授权框弹不出来，就先给一个按钮让用户点一下
+  function ask(quiet){   // 长按圆球松手时调（quiet＝打开页面时按上次的开关自动接上，不提示）；授权框弹不出来就给一个按钮让用户点一下
     if(asked||live||pref()==='off')return;asked=true;var D=window.DeviceOrientationEvent;
     if(!window.isSecureContext){if(!quiet)toast('重力感应要 HTTPS 地址才能用，现在只能手拖');return}
     if(!D){if(!quiet)toast('这个浏览器不支持重力感应，只能手拖');return}
@@ -5299,7 +5299,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   }
   function pill(D){
     var el=document.createElement('button');el.type='button';el.id='gyroAsk';el.textContent='点这里开启重力感应';document.body.appendChild(el);
-    var t=setTimeout(function(){el.remove();asked=false},6000);   // 没点就收起，下次拖完再出现
+    var t=setTimeout(function(){el.remove();asked=false},6000);   // 没点就收起，下次长按再出现
     el.addEventListener('click',function(){clearTimeout(t);el.remove();req(D,true)});
   }
   function toggle(){if(live)stop();else{setPref('on');asked=false;ask()}}
@@ -5307,7 +5307,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   balls.forEach(function(b){
     var sx=0,so=0,px=0,pt=0,moved=false,id=null,lp=0,lpd=false;
     b.addEventListener('pointerdown',function(e){if(!on()||e.button)return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false;lpd=false;
-      clearTimeout(lp);lp=setTimeout(function(){lpd=true;b._nc=true;toggle()},550)});   // 长按不动：开关重力滚动
+      clearTimeout(lp);lp=setTimeout(function(){lpd=true;b._nc=true;try{b.setPointerCapture(id)}catch(_){}toast(live?'松手关闭重力滚动':'松手开启重力滚动')},550)});   // 长按不动：松手时开关重力滚动（iOS 要在 touchend 里请求授权才弹框）
     b.addEventListener('pointermove',function(e){
       if(e.pointerId!==id)return;var dx=e.clientX-sx;
       if(!moved){if(Math.abs(dx)<6||lpd)return;moved=true;clearTimeout(lp);drag=b;try{b.setPointerCapture(id)}catch(_){}}
@@ -5317,10 +5317,11 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
     });
     function end(e){
       if(e.pointerId!==id)return;id=null;clearTimeout(lp);
-      if(lpd){ncAt=Date.now();setTimeout(function(){b._nc=false},400)}
-      if(moved){b._nc=true;ncAt=Date.now();setTimeout(function(){b._nc=false},400);drag=null;if(e.timeStamp-pt>80)b._v=0;kick();ask()}
+      if(lpd){ncAt=Date.now();setTimeout(function(){b._nc=false},400);if(e.pointerType!=='touch'){lpd=false;toggle()}}
+      if(moved){b._nc=true;ncAt=Date.now();setTimeout(function(){b._nc=false},400);drag=null;if(e.timeStamp-pt>80)b._v=0;kick()}
     }
     b.addEventListener('pointerup',end);b.addEventListener('pointercancel',end);
+    b.addEventListener('touchend',function(){if(lpd){lpd=false;toggle()}});
   });
   document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('.hd-ic');if((b&&b._nc)||Date.now()-ncAt<400){if(b)b._nc=false;ncAt=0;e.stopImmediatePropagation();e.preventDefault()}},true);   // 拖完 / 长按松手不算点：手指离开时可能已不在球上（球被挡在边上），落到会话名上也要拦
   DESKTOP.addEventListener('change',function(){if(!on())balls.forEach(function(b){b._o=0;b._v=0;put(b)})});
