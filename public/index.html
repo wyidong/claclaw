@@ -659,6 +659,8 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .cfg-p{box-sizing:border-box;width:100%;max-width:520px;max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:20px 20px 0 0;padding:6px 16px calc(18px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));animation:cfgUp .2s ease-out}
 @keyframes cfgUp{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
 @media (min-width:600px){#cfgDlg{align-items:center}.cfg-p{border-radius:18px;padding-bottom:18px}.cfg-grab{display:none}}
+/* 电脑端会话设置：滚动条收在上下圆角以内（轨道上下各让出圆角的高度），去掉轨道底色 */
+@media (min-width:600px){.cfg-p::-webkit-scrollbar{width:8px}.cfg-p::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:4px}.cfg-p::-webkit-scrollbar-track{background:transparent;margin:18px 0}}
 .cfg-grab{width:38px;height:5px;margin:4px auto 6px;border-radius:3px;background:var(--line)}
 .cfg-h{display:flex;align-items:center;justify-content:space-between;min-height:40px}
 .cfg-h b{font-size:17px}
