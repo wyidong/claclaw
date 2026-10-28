@@ -59,6 +59,7 @@ window.__sc=(function(){
 <style>html.boot #app{filter:blur(8px);opacity:.45}</style>
 <style>
 :root{
+  --gl-a:rgba(255,255,255,.62);--gl-b:rgba(255,255,255,.22);--gl-hi:rgba(255,255,255,.9);--gl-rim:rgba(255,255,255,.55);--gl-sh:rgba(0,0,0,.10);   /* 标题栏圆按钮的 iOS 玻璃：上亮下透、顶边高光、细亮边、轻投影 */
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
   --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;--peer:#C4B5F4;
   --allow:#17794A;--on-allow:#FFFFFF;--deny:#B23A2E;--warn:#A86200;
@@ -71,6 +72,7 @@ window.__sc=(function(){
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
     --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
     --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
@@ -79,6 +81,7 @@ window.__sc=(function(){
   }
 }
 :root[data-theme="dark"]{
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
   --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
   --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
@@ -114,7 +117,7 @@ window.__sc=(function(){
 :root[data-theme="shichen"]{--strip:var(--sc-b);--strip-line:transparent;--rail-line:transparent}
 :root[data-theme="shichen"] #mtabs button,:root[data-theme="shichen"] #rail button{color:var(--sc-m)}
 :root[data-theme="shichen"] #mtabs button.on,:root[data-theme="shichen"] #rail button.on,:root[data-theme="shichen"] #rail button:hover{color:var(--sc-f);background:var(--sc-on)}
-:root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #hostPane .pg-hd,:root[data-theme="shichen"] #hostPane .pe-back{color:var(--sc-th)}   /* 设置 / 宿主页标题栏：标题和返回键用天干色，和页面里的标题同色（在地支底上调到看得清） */
+:root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c1,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #hostPane .pg-hd,:root[data-theme="shichen"] #hostPane .pe-back{color:var(--sc-th)}   /* 设置 / 宿主页标题栏：标题和返回键用天干色，和页面里的标题同色（在地支底上调到看得清） */
 :root[data-theme="shichen"] header .sid,:root[data-theme="shichen"] header .where,:root[data-theme="shichen"] header #cfgBtn{color:var(--sc-m)}
 :root[data-theme="shichen"] header #cfgBtn[data-m="bypass"] .c2{text-decoration:underline}
 :root[data-theme="shichen"] #sSearch{background:#FFFFFF;border-color:transparent}
@@ -183,6 +186,9 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .hd-ic[hidden]{display:none}
 .hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .hd-ic:active{opacity:.5}
+@media (max-width:999px){.hd-ic{touch-action:none;position:relative;z-index:3;opacity:.5}.hd-ic:active{opacity:1}}   /* 手机上圆球能左右拖，拖到标题上要盖在字上；平时半透明，按住/拖动时不透明 */
+.hd-ic{background:linear-gradient(180deg,var(--gl-a),var(--gl-b));-webkit-backdrop-filter:blur(14px) saturate(180%);backdrop-filter:blur(14px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh)}
 .hd-ctx{font-size:12.5px;font-weight:700;letter-spacing:-.2px}
 .hd-ctx.busy{font-size:11px;font-weight:600;cursor:default}
 .hd-ctx.done{cursor:default}
@@ -5214,6 +5220,77 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
     try{if(sel.value)localStorage.setItem('claclaw.theme',sel.value);else localStorage.removeItem('claclaw.theme')}catch(_){}
     applyTheme(sel.value);
   });
+})();
+// 手机端：标题栏的玻璃圆球（上下文用量、朗读开关）可以左右拖，拖到标题上看玻璃浮在字上的效果；
+// 第一次拖完顺带请求「运动与方向」授权（iOS 必须由手指操作触发），授权后手机左右一歪它就滚过去，两个球互相碰
+(function(){
+  var balls=[$('#ctxBtn'),$('#ttsMute')],tilt=null,asked=false,raf=0,lastT=0,drag=null;
+  balls.forEach(function(b){b._o=0;b._v=0});
+  function on(){return !DESKTOP.matches}
+  function vis(){return balls.filter(function(b){return !b.hidden&&b.offsetParent})}
+  function put(b){b.style.transform=b._o?'translateX('+b._o.toFixed(1)+'px)':''}
+  function bounds(){var h=$('header').getBoundingClientRect(),bk=$('#backBtn').getBoundingClientRect();return [bk.width?bk.right+2:h.left+8,h.right-8]}
+  function acc(){   // 手机横着拿时换成对应的轴
+    if(!tilt)return 0;var ang=(screen.orientation&&screen.orientation.angle)||window.orientation||0,d=tilt.g;
+    if(ang===90)d=-tilt.b;else if(ang===-90||ang===270)d=tilt.b;else if(ang===180)d=-tilt.g;
+    return Math.sin(Math.max(-60,Math.min(60,d||0))*Math.PI/180)*2600;
+  }
+  function items(){   // 看得见的球，左右顺序固定（不会互相穿过）；每个球能到的范围要给左右两边的球留位置
+    var bd=bounds(),it=vis().map(function(b){var r=b.getBoundingClientRect();return {b:b,n:r.left-b._o,w:r.width}});
+    var lo=bd[0];it.forEach(function(o){o.lo=lo;lo+=o.w+4});
+    var hi=bd[1];for(var i=it.length-1;i>=0;i--){it[i].hi=hi-it[i].w;hi-=it[i].w+4}
+    return it;
+  }
+  function clamp(o){var x=o.n+o.b._o;if(x<o.lo){o.b._o=o.lo-o.n;if(o.b._v<0)o.b._v=-o.b._v*.35}else if(x>o.hi){o.b._o=o.hi-o.n;if(o.b._v>0)o.b._v=-o.b._v*.35}}
+  function frame(t){
+    raf=0;var dt=Math.min(.05,lastT?(t-lastT)/1000:.016);lastT=t;
+    var it=items();if(!on()||!it.length){lastT=0;return}
+    var a=acc(),moving=!!drag||!!tilt;
+    it.forEach(function(o){
+      var b=o.b;if(b===drag)return;
+      b._v+=a*dt;b._v*=Math.pow(.25,dt);if(Math.abs(b._v)<4&&!a)b._v=0;
+      b._o+=b._v*dt;clamp(o);if(b._v)moving=true;
+    });
+    for(var i=0;i+1<it.length;i++){   // 两个球相撞：推开、交换速度
+      var L=it[i],R=it[i+1],ov=(L.n+L.b._o+L.w+4)-(R.n+R.b._o);
+      if(ov>0){
+        if(L.b===drag)R.b._o+=ov;else if(R.b===drag)L.b._o-=ov;else{L.b._o-=ov/2;R.b._o+=ov/2}
+        var v=L.b._v;L.b._v=R.b._v*.8;R.b._v=v*.8;
+      }
+    }
+    it.forEach(clamp);it.forEach(function(o){put(o.b)});
+    if(moving)raf=requestAnimationFrame(frame);else lastT=0;
+  }
+  function kick(){if(!raf)raf=requestAnimationFrame(frame)}
+  function onOri(e){if(e.gamma==null&&e.beta==null)return;tilt={g:e.gamma,b:e.beta};if(!document.hidden)kick()}
+  function ask(){   // iOS 要在用户手势（touchend）里调 requestPermission 才会弹授权框
+    if(asked)return;asked=true;var D=window.DeviceOrientationEvent;
+    if(!window.isSecureContext){toast('重力感应要 HTTPS 地址才能用，现在只能手拖');return}
+    if(!D){toast('这个浏览器不支持重力感应，只能手拖');return}
+    var go=function(){window.addEventListener('deviceorientation',onOri);toast('左右歪一下手机，圆球会滚过去')};
+    if(typeof D.requestPermission==='function')D.requestPermission().then(function(r){if(r==='granted')go();else toast('重力感应被拒绝了：要重新允许得退出 app 再进')}).catch(function(){asked=false;toast('重力感应授权没弹出来，再拖一次试试')});
+    else go();
+  }
+  balls.forEach(function(b){
+    var sx=0,so=0,px=0,pt=0,moved=false,id=null;
+    b.addEventListener('pointerdown',function(e){if(!on()||e.button)return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false});
+    b.addEventListener('pointermove',function(e){
+      if(e.pointerId!==id)return;var dx=e.clientX-sx;
+      if(!moved){if(Math.abs(dx)<6)return;moved=true;drag=b;try{b.setPointerCapture(id)}catch(_){}}
+      var dt=Math.max(1,e.timeStamp-pt);b._v=(e.clientX-px)/dt*1000;px=e.clientX;pt=e.timeStamp;
+      b._o=so+dx;var v=b._v;items().forEach(function(o){if(o.b===b)clamp(o)});b._v=v;
+      put(b);kick();
+    });
+    function end(e){
+      if(e.pointerId!==id)return;id=null;
+      if(moved){b._nc=true;setTimeout(function(){b._nc=false},400);drag=null;if(e.timeStamp-pt>80)b._v=0;kick();if(e.pointerType!=='touch')ask()}
+    }
+    b.addEventListener('pointerup',end);b.addEventListener('pointercancel',end);
+    b.addEventListener('touchend',function(){if(moved&&on())ask()});   // 手指拖完：在 touchend 里请求授权（pointerup 在 iOS 不算手势）
+  });
+  document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('.hd-ic');if(b&&b._nc){b._nc=false;e.stopImmediatePropagation();e.preventDefault()}},true);   // 拖完松手不算点
+  DESKTOP.addEventListener('change',function(){if(!on())balls.forEach(function(b){b._o=0;b._v=0;put(b)})});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&tilt)kick()});
 })();
 // 15 个主题快捷方块（普通 / 深色 / 九紫离火 / 流变时辰 12 个时辰）：点时辰方块就固定显示那个时辰，刷新后回到按时间自动换
 (function(){
