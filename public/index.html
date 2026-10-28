@@ -950,7 +950,7 @@ select.pe-in{text-align-last:right}
 #tmpTh button{border-radius:3px}
 #tmpTh button::after{content:"";position:absolute;left:3.5px;top:3.5px;width:7px;height:7px;border-radius:1.5px;background:var(--c);box-shadow:0 0 0 .5px rgba(0,0,0,.18)}   /* 极淡的一圈：流变时辰下选中色和底色相同、申白在白底上，不加就看不见 */
 #tmpTh:not(.open) button[data-th]:not([aria-pressed="true"]){display:none}   /* 收起时只露选中的那个 + 展开箭头（像目录组标题） */
-#tmpTh .th-tg{order:-1;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+#tmpTh .th-tg{order:-1;display:flex;align-items:center;justify-content:center;color:var(--line)}
 #tmpTh .th-tg svg{transition:transform .15s}
 #tmpTh:not(.open) .th-tg svg{transform:rotate(-90deg)}
 @media (max-width:999px){#tmpTh{display:none}}   /* 手机端不要 */
