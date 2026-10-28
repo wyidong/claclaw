@@ -155,9 +155,9 @@ body{position:fixed;inset:0;width:100%}
 html{background:var(--surface)}
 body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
-/* 雾感（和 clarelay 外壳同一套数值）：加载中 / 刷新前蒙雾，界面仍看得见 */
-body.leaving #app{opacity:.45;filter:blur(8px);pointer-events:none}
-html.fog #app{filter:blur(8px);opacity:.45;pointer-events:none}
+/* 雾感：加载中 / 刷新前蒙一层轻雾，最雾时也能勉强看清下面的内容（原来和 clarelay 外壳同一套 .45 / 8px，调轻了） */
+body.leaving #app{opacity:.72;filter:blur(2.5px);pointer-events:none}
+html.fog #app{filter:blur(2.5px);opacity:.72;pointer-events:none}
 #app{transition:filter .35s,opacity .35s}
 button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -293,9 +293,12 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .think i{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.5;animation:blink 1.1s infinite}
 .think i:nth-child(2){animation-delay:.18s}.think i:nth-child(3){animation-delay:.36s}
 @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
-#setPane .rl-ic{flex:none;color:var(--muted)}
-#setPane .rl-ic.spin{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
 @keyframes rlspin{to{transform:rotate(360deg)}}
+#bgReload{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-22px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 不仔细看看不出来 */
+#bgReload[hidden]{display:none}
+#bgReload:active{opacity:.4}
+#bgReload.new{color:var(--accent);opacity:.35}   /* 服务器有新版本：显眼一点 */
+#bgReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
 .tool{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
@@ -1205,8 +1208,9 @@ select.pe-in{text-align-last:right}
   if(q.get('s')||q.get('view')==='peer')return;
   var claw=ls.getItem('claclaw.claw'),sess=ls.getItem('claclaw.session'),view=ss.getItem('claclaw.view')||'';
   var onClaw=window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-  if(ss.getItem('claclaw.reloadTo')==='set')app.className='m-list set-on';
-  else if(onClaw||!/^(claude|openclaw|deepseek|opencode)$/.test(claw||''))app.className='m-list claw-on';
+  var rt=ss.getItem('claclaw.reloadTo')||'';   // 刷新前在哪一页（见主脚本 railReload）：直接画那一页
+  if(rt){app.className={set:'m-list set-on',host:'m-list host-on',claw:'m-list claw-on',recent:'m-list',chats:'m-list',chat:''}[rt]||'';return}
+  if(onClaw||!/^(claude|openclaw|deepseek|opencode)$/.test(claw||''))app.className='m-list claw-on';
   else if(view!=='chat'||!sess)app.className='m-list';
 }catch(e){}})();
 </script>
@@ -1289,6 +1293,8 @@ select.pe-in{text-align-last:right}
   </div>
 
   <!-- 手机底部菜单（只在列表页显示，进入聊天隐藏，像微信） -->
+  <!-- 手机：最近 / 会话 / Claw 页背景里的「更新客户端」圈，和 clarelay 顶上的房子上下对称；被列表内容盖住时隐藏 -->
+  <button type="button" id="bgReload" aria-label="更新客户端" title="更新客户端" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button>
   <nav id="mtabs" aria-label="底部菜单">
     <button type="button" data-tab="recent"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle class="f" cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg><span>最近</span></button>
     <button type="button" data-tab="chats" class="on"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.6A8.5 8.5 0 1 1 21 11.5z"/></svg><span>会话</span></button>
@@ -1384,12 +1390,6 @@ select.pe-in{text-align-last:right}
       <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
       <div id="setBody">
       <h2>设置</h2>
-      <div class="set-sec">
-        <div class="set-h">客户端</div>
-        <div class="set-card">
-          <button type="button" class="set-item" id="setReload"><span class="lb">更新客户端<small id="setReloadSub">重新加载最新版本</small></span><svg class="rl-ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
-        </div>
-      </div>
       <div class="set-sec">
         <div class="set-h">宿主</div>
         <div class="set-card">
@@ -2217,7 +2217,7 @@ var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[
 function checkVersion(){
   fetch('/',{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){
     var v=(h.match(/页面版本 ([0-9a-f]{7})/)||[])[1];
-    if(v&&PAGE_VER&&v!==PAGE_VER){updateReady=true;$('#setReloadSub').textContent='有新版本，点这里更新';banner('claclaw 已更新 · 点这里刷新使用新版本');$('#bannerT').classList.add('link')}
+    if(v&&PAGE_VER&&v!==PAGE_VER){updateReady=true;$('#bgReload').classList.add('new');banner('claclaw 已更新 · 点这里刷新使用新版本');$('#bannerT').classList.add('link')}
   }).catch(function(){});
 }
 setInterval(function(){if(!document.hidden&&!updateReady)checkVersion()},300000);
@@ -3866,17 +3866,28 @@ $('#setRecentClear').addEventListener('click',function(){
     toast('已清空最近');if(listMode==='recent'){lastList=null;$('#sList').innerHTML='';if(DESKTOP.matches)openSheet()}
   }).catch(function(e){alert('清空失败：'+e.message)});
 });
-// 设置里的「更新客户端」：图标转两圈再刷新，刷新后停在设置页
-$('#setReload').addEventListener('click',function(){
-  var ic=$('#setReload .rl-ic');if(ic.classList.contains('spin'))return;
-  ic.classList.add('spin');
-  try{sessionStorage.setItem('claclaw.reloadTo','set')}catch(_){}
-  setTimeout(function(){$('#railReload').click()},150);
-});
-var reloadToSet=false;try{reloadToSet=sessionStorage.getItem('claclaw.reloadTo')==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
+// 背景里的「更新客户端」圈（手机的最近 / 会话 / Claw 页）：只在页面内容没盖到它的时候显示、能点
+(function(){
+  var btn=$('#bgReload'),sp=$('.sheet-p'),q=0;
+  function lastBottom(box){for(var el=box.lastElementChild;el;el=el.previousElementSibling){var r=el.getClientRects();if(r.length)return el.getBoundingClientRect().bottom}return box.getBoundingClientRect().top}
+  function upd(){
+    q=0;var app=$('#app');
+    var on=!DESKTOP.matches&&app.classList.contains('m-list')&&!app.classList.contains('set-on')&&!app.classList.contains('host-on');
+    if(on){btn.hidden=false;var top=btn.getBoundingClientRect().top;on=lastBottom(app.classList.contains('claw-on')?$('#clawPane'):$('#sList'))<top-6}
+    btn.hidden=!on;
+  }
+  function later(){if(!q)q=requestAnimationFrame(upd)}
+  sp.addEventListener('scroll',later,{capture:true,passive:true});window.addEventListener('resize',later);DESKTOP.addEventListener('change',later);
+  new MutationObserver(later).observe($('#app'),{attributes:true,attributeFilter:['class']});
+  new MutationObserver(later).observe(sp,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class']});
+  btn.addEventListener('click',function(){if(btn.classList.contains('spin'))return;btn.classList.add('spin');setTimeout(function(){$('#railReload').click()},150)});
+  later();
+})();
+var reloadTo='',reloadToSet=false;try{reloadTo=sessionStorage.getItem('claclaw.reloadTo')||'';reloadToSet=reloadTo==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
 if(reloadToSet&&DESKTOP.matches){reloadToSet=false;railTab(true)}
 // 刷新：重新加载页面（拿到最新版本）。输入框里没发的字先存起来，刷新后放回去
 $('#railReload').addEventListener('click',function(){
+  if(!DESKTOP.matches)try{var a=$('#app').classList;sessionStorage.setItem('claclaw.reloadTo',!mList?'chat':a.contains('set-on')?'set':a.contains('host-on')?'host':a.contains('claw-on')?'claw':listMode==='recent'?'recent':'chats')}catch(_){}   // 手机：刷新后回到同一页
   // 各会话没发的字都存起来（图片存不了）
   try{var all={};for(var k in drafts)if(drafts[k].text)all[k]=drafts[k].text;if(ta.value)all[draftOwner||'']=ta.value;if(Object.keys(all).length)sessionStorage.setItem('claclaw.drafts',JSON.stringify(all))}catch(_){}
   document.body.classList.add('leaving');try{if(session&&!mList)sessionStorage.setItem('claclaw.scroll',JSON.stringify({id:session.id,top:feed.scrollTop,stick:stick}))}catch(_){}setTimeout(function(){location.reload()},350);   // 先起雾再刷新；记下正在看的位置   // 先淡出再刷新，不生硬
@@ -4354,15 +4365,15 @@ $('#sid').addEventListener('click',function(e){var h=e.target.closest('.hid');if
 var mList=false,lastSess=null,lastList=null,opening=null,openingAt=0;
 // 手机上以主屏幕 App 打开、或嵌在 clarelay 外壳里：一打开先到 Claw 页（只要一个很轻的请求），不先拉会话列表——
 // 经中继访问时每多一个请求都明显变慢；选了 Claw 才加载它的会话。通知点进来的照旧直接打开那个会话
-var startOnClaw=!DESKTOP.matches&&(window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true);
+var startOnClaw=!reloadTo&&!DESKTOP.matches&&(window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true);
 function goList(toClaw){
   if(DESKTOP.matches)return;
   if(session){wsSend({t:'session.leave'});if(feedOwner===session.id)saveFeed(session.id);feedOwner=null;session=null;setBusy(false)}   // 先存（聊天区还可见，量得出高度）再切到列表
   if(!mList){mList=true;$('#app').classList.add('m-list')}
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
-  if((toClaw||(!clawSel&&listMode!=='recent'))&&!$('#app').classList.contains('set-on'))mTab('claw');   // 首次使用：先选 Claw（正在设置页就留在设置页）
-  if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：刷新后回到设置页
+  if((toClaw||(!clawSel&&listMode!=='recent'))&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on'))mTab('claw');   // 首次使用：先选 Claw（正在设置页就留在设置页）
+  if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 在设置页刷新：刷新后回到设置页
   if(toClaw){syncPushBtn();return}   // 停在 Claw 页：会话列表等选了 Claw 再加载
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
   renderUnread();renderActivity();postViewing();
@@ -5613,8 +5624,12 @@ syncSend();
 // 手机：不等连上就先切到该去的页面（列表 / Claw 页），免得先闪一下空的聊天页再跳
 if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
   var view0='';try{view0=sessionStorage.getItem('claclaw.view')||''}catch(_){}
-  if(reloadToSet){reloadToSet=false;startOnClaw=false;mList=true;$('#app').classList.add('m-list');history.pushState({set:1},'');mTab('set')}   // 设置里点了「更新客户端」：直接回设置页，不经过别的页
-  else if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(listMode==='recent'){mTab('recent');openSheet()}else if(startOnClaw||!clawSel)mTab('claw');else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
+  if(reloadToSet){reloadToSet=false;startOnClaw=false;mList=true;$('#app').classList.add('m-list');history.pushState({set:1},'');mTab('set')}   // 在设置页刷新：直接回设置页，不经过别的页
+  else if(reloadTo==='host'){mList=true;$('#app').classList.add('m-list');history.pushState({set:1},'');mTab('host')}
+  else if(reloadTo==='claw'||(reloadTo==='chats'&&!clawSel)){mList=true;$('#app').classList.add('m-list');mTab('claw')}
+  else if(reloadTo==='recent'||reloadTo==='chats'){mList=true;$('#app').classList.add('m-list');mTab(reloadTo);openSheet()}
+  else if(reloadTo==='chat'){}   // 在聊天页刷新：连上后照常打开上次的会话（claclaw.view 还是 chat）
+  else if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||(!clawSel&&listMode!=='recent'))mTab('claw');else if(listMode==='recent'){mTab('recent');openSheet()}else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
 }
 document.documentElement.classList.remove('boot');
 takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});
