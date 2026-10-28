@@ -1157,6 +1157,8 @@ function peerPublic(c, local) {
   };
 }
 setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c); }, 1000);
+// 协同端口没占到（比如被别的进程占着）：每分钟再试一次，占着的走了就接上
+setInterval(() => { const c = loadPeer(); if (c.enabled && !peerStatus().listening) applyListener(c, peerHandler, log); }, 60e3).unref();
 
 // ---------- 跨网络：经 clarelay 中继 ----------
 // 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
@@ -3007,10 +3009,20 @@ setInterval(() => {
 
 skills.setupLocal(PORT, log);
 skills.syncInstalled(log);
+// 端口被占 = 已经有一个 claclaw 在跑（两次重启撞在一起时会这样）。占不到主地址的这个必须退出：
+// 不退的话它网页端口没有，却照样占着协同端口 8788、连着中继、收协同消息，在没人看得见的地方跑会话
+// （2026-10 出过：一个这样的进程活了一天，协同消息全被它吞了，别的会话被它判成「在终端里用」拒收）。
+// 其他地址被占：多半是同时启动的另一个刚退出、还没放开，过几秒再试
 for (const host of HOSTS) {
   const srv = http.createServer(handler);
+  let tries = 0;
   srv.on('upgrade', onUpgrade);
-  srv.on('error', e => log(`listen ${host}:${PORT} failed:`, e.code || e.message));
+  srv.on('error', e => {
+    log(`listen ${host}:${PORT} failed:`, e.code || e.message);
+    if (e.code !== 'EADDRINUSE') return;
+    if (host === HOSTS[0]) { log('已有 claclaw 在跑（端口 ' + PORT + ' 被占），这个进程退出'); process.exit(1); }
+    if (++tries <= 10) setTimeout(() => srv.listen(PORT, host), 3000);
+  });
   srv.listen(PORT, host, () => log(`claclaw listening on http://${host}:${PORT}`));
 }
 
