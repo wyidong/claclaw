@@ -25,13 +25,15 @@ window.__sc=(function(){
   var GC=['1E6B3A','9CCB8E','D62828','F2A0A0','D49A2A','F2D27A','F2F0EB','D9D9D9','1F3A6B','5B8FC7'];
   var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
   var ZF=['000000','A4A9B1','FFFFFF','000000','1F3A6B','FFFFFF','000000','1E6B3A','000000','000000','8B1A1A','FFFFFF'];   // 地支底上的字色（六十甲子表定的；辰戌丑未用墓库那一行的色）
-  var VARS=['--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-f','--sc-m','--sc-on','--sc-t','--bg','--line','--user-bg'];
+  var VARS=['--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-f','--sc-m','--sc-on','--sc-t','--sc-th','--bg','--line','--user-bg'];
   function rgb(h){return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]}
   function hex(c){return '#'+c.map(function(v){return ('0'+Math.round(v).toString(16)).slice(-2)}).join('').toUpperCase()}
   function mix(a,b,t){return [0,1,2].map(function(i){return a[i]+(b[i]-a[i])*t})}
   function lum(c){var l=c.map(function(v){v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*l[0]+.7152*l[1]+.0722*l[2]}
   function cr(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
   function deepen(c,bg,n){for(var t=0;t<=1;t+=.02){var m=mix(c,K,t);if(cr(m,bg)>=n)return m}return K}
+  // 天干色放在地支底上（标题栏的标题、返回键）：看不清就往黑或往白调，哪边调得少用哪边
+  function onBg(c,bg,n){for(var t=0;t<=1;t+=.02){var d=mix(c,K,t),l=mix(c,W,t);if(cr(d,bg)>=n)return d;if(cr(l,bg)>=n)return l}return cr(K,bg)>cr(W,bg)?K:W}
   function now(d){
     d=d||new Date();var x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
     var day=Math.floor(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate())/864e5)+2440588+49;   // 儒略日 +49：0 = 甲子日
@@ -40,7 +42,7 @@ window.__sc=(function(){
   function apply(){
     var n=now(),b=rgb(ZC[n.z]),f=rgb(ZF[n.z]),acc=deepen(b,W,4.5),s=document.documentElement.style,lt=lum(f)>.5;
     var v={'--accent':hex(acc),'--accent-ink':'#FFFFFF','--allow':hex(acc),'--on-allow':'#FFFFFF','--sc-b':hex(b),'--sc-f':hex(f),'--sc-m':hex(mix(f,b,.35)),
-      '--sc-on':lt?'rgba(255,255,255,.18)':'rgba(0,0,0,.08)','--sc-t':hex(deepen(rgb(GC[n.g]),W,4.5)),
+      '--sc-on':lt?'rgba(255,255,255,.18)':'rgba(0,0,0,.08)','--sc-t':hex(deepen(rgb(GC[n.g]),W,4.5)),'--sc-th':hex(onBg(rgb(GC[n.g]),b,4.5)),
       '--bg':hex(mix(b,W,.9)),'--line':hex(mix(b,W,.7)),'--user-bg':hex(mix(b,W,.75))};
     for(var k in v)s.setProperty(k,v[k]);
     return n.name;
@@ -108,11 +110,11 @@ window.__sc=(function(){
    列表 / 设置 / 宿主 / Claw 页的底用地支色的淡色，上面是白卡片细边；聊天内容区保持普通主题的底。
    标题、名字、分组标题用天干色（--sc-t）。变量都由 window.__sc 按时辰算好：
    --sc-b 地支色 / --sc-f 地支底上的字色 / --sc-m 没选中的字色 / --sc-on 选中格的底 / --sc-t 天干色 / --bg --line --user-bg 地支淡色 */
-:root[data-theme="shichen"] #app.m-list #mtabs,:root[data-theme="shichen"] #rail,:root[data-theme="shichen"] header,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app.m-list.set-on #setTop{background:var(--sc-b);border-color:transparent}
+:root[data-theme="shichen"] #app.m-list #mtabs,:root[data-theme="shichen"] #rail,:root[data-theme="shichen"] header,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app.m-list.set-on #setTop,:root[data-theme="shichen"] #app.m-list.host-on #hostPane .pg-hd{background:var(--sc-b);border-color:transparent}
 :root[data-theme="shichen"]{--strip:var(--sc-b);--strip-line:transparent;--rail-line:transparent}
 :root[data-theme="shichen"] #mtabs button,:root[data-theme="shichen"] #rail button{color:var(--sc-m)}
 :root[data-theme="shichen"] #mtabs button.on,:root[data-theme="shichen"] #rail button.on,:root[data-theme="shichen"] #rail button:hover{color:var(--sc-f);background:var(--sc-on)}
-:root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button{color:var(--sc-f)}
+:root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #hostPane .pg-hd,:root[data-theme="shichen"] #hostPane .pe-back{color:var(--sc-th)}   /* 设置 / 宿主页标题栏：标题和返回键用天干色，和页面里的标题同色（在地支底上调到看得清） */
 :root[data-theme="shichen"] header .sid,:root[data-theme="shichen"] header .where,:root[data-theme="shichen"] header #cfgBtn{color:var(--sc-m)}
 :root[data-theme="shichen"] header #cfgBtn[data-m="bypass"] .c2{text-decoration:underline}
 :root[data-theme="shichen"] #sSearch{background:#FFFFFF;border-color:transparent}
@@ -918,6 +920,9 @@ select.pe-in{text-align-last:right}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
+  /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
+  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-20px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;margin:calc(-20px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 6px;background:var(--strip);border-bottom:1px solid var(--line)}
+  #app.m-list.host-on #hostPane .pe-back{left:0}
   .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
   .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
   .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
