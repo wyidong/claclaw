@@ -1660,6 +1660,14 @@ function saveSettings(patch) {
   writeJsonAtomic(SETTINGS, next);   // 原子写：崩溃不会写坏 settings.json
   return next;
 }
+// 手机网页的个人设置（语音档位、压缩提示阈值、主题……）也在电脑上存一份：clarelay 外壳里 claclaw 嵌在别的网址里，
+// iOS 杀掉 App 后嵌入页的 localStorage 会丢。页面下发时塞进去，本机没有的项由页面补回
+const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro'];
+function clientPrefs() {
+  const p = settings().clientPrefs, out = {};
+  if (p && typeof p === 'object') for (const k of PREF_KEYS) if (typeof p[k] === 'string') out[k] = p[k];
+  return out;
+}
 const SOUND_DIR = '/System/Library/Sounds';
 const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.endsWith('.aiff')).map(f => f.slice(0, -5)).sort(); } catch { return []; } })() : [];
 const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soundName : 'Glass');
@@ -2246,8 +2254,9 @@ const handler = async (req, res) => {
       const pad = n => String(n).padStart(2, '0');
       const ver = crypto.createHash('sha1').update(html).digest('hex').slice(0, 7) +
         ' · ' + pad(mt.getMonth() + 1) + '-' + pad(mt.getDate()) + ' ' + pad(mt.getHours()) + ':' + pad(mt.getMinutes());
+      const prefs = JSON.stringify(clientPrefs()).replace(/</g, '\\u003c').replace(/\u2028|\u2029/g, c => '\\u' + c.charCodeAt(0).toString(16));
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(html.replace('__PAGE_VERSION__', ver));
+      return res.end(html.replace('__PAGE_VERSION__', ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
     }
     if (url.pathname === '/api/upload/file') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));
@@ -2312,6 +2321,20 @@ const handler = async (req, res) => {
         else push.unsubscribe(String(body.endpoint || ''));
         return sendJson(res, 200, { ok: true });
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
+    }
+    if (url.pathname === '/api/prefs' && req.method === 'POST') {   // 手机网页的个人设置备份（见 clientPrefs）
+      if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+      let body = null;
+      try { body = JSON.parse(await readBody(req, 32 * 1024)); } catch {}
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(res, 400, { error: 'bad request' });
+      const next = clientPrefs();
+      for (const [k, v] of Object.entries(body)) {
+        if (!PREF_KEYS.includes(k)) continue;
+        if (v === null) delete next[k];
+        else if (typeof v === 'string' && v.length <= 16000) next[k] = v;
+      }
+      saveSettings({ clientPrefs: next });
+      return sendJson(res, 200, { ok: true });
     }
     if (url.pathname === '/api/settings/session') {
       if (req.method === 'POST') {

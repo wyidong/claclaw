@@ -50,6 +50,21 @@ window.__sc=(function(){
   function clear(){var s=document.documentElement.style;VARS.forEach(function(k){s.removeProperty(k)})}
   return {now:now,apply:apply,clear:clear};
 })();
+// 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
+// iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
+(function(){
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro'],ls,pend={},n=0,t=0;
+  try{ls=localStorage}catch(_){return}
+  function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
+  function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
+  try{K.forEach(function(k){var v=ls.getItem('claclaw.'+k),s=P&&typeof P[k]==='string'?P[k]:null;
+    if(v===null&&s!==null)ls.setItem('claclaw.'+k,s);else if(v!==null&&v!==s)q('claclaw.'+k,v)})}catch(_){}
+  var S=Storage.prototype,set=S.setItem,rm=S.removeItem;
+  S.setItem=function(k,v){set.apply(this,arguments);if(this===ls)q(String(k),String(v))};
+  S.removeItem=function(k){rm.apply(this,arguments);if(this===ls)q(String(k),null)};
+  addEventListener('pagehide',function(){clearTimeout(t);flush()});
+  document.addEventListener('visibilitychange',function(){if(document.hidden){clearTimeout(t);flush()}});
+})();
 (function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){window.__sc.apply();var b=document.documentElement.style.getPropertyValue('--sc-b');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
@@ -2954,6 +2969,9 @@ $('#ctxBtn').addEventListener('click',function(){
 (function(){
   var inp=$('#setCtxK');if(!inp)return;
   var v=localStorage.getItem('claclaw.ctxWarnK');if(v)inp.value=v;
+  inp.addEventListener('input',function(){   // 边输入边存：改完没点别处就杀掉 App 也不丢（不改输入框里的字，免得打字时被清空）
+    var n=parseInt(inp.value,10);try{if(n>=8)localStorage.setItem('claclaw.ctxWarnK',String(n));else localStorage.removeItem('claclaw.ctxWarnK')}catch(_){}
+  });
   inp.addEventListener('change',function(){
     var n=parseInt(inp.value,10);
     try{if(n>=8){localStorage.setItem('claclaw.ctxWarnK',String(n));inp.value=String(n)}else{localStorage.removeItem('claclaw.ctxWarnK');inp.value=''}}catch(_){}
