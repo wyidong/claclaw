@@ -35,7 +35,7 @@ window.__sc=(function(){
   function now(d){
     d=d||new Date();var x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
     var day=Math.floor(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate())/864e5)+2440588+49;   // 儒略日 +49：0 = 甲子日
-    var z=Math.floor((d.getHours()+1)%24/2);return {g:(day%10%5*2+z)%10,z:z,name:G[(day%10%5*2+z)%10]+Z[z]};
+    var z=window.__scZ!=null?window.__scZ:Math.floor((d.getHours()+1)%24/2);return {g:(day%10%5*2+z)%10,z:z,name:G[(day%10%5*2+z)%10]+Z[z]};
   }
   function apply(){
     var n=now(),b=rgb(ZC[n.z]),f=rgb(ZF[n.z]),acc=deepen(b,W,4.5),s=document.documentElement.style,lt=lum(f)>.5;
@@ -943,6 +943,17 @@ select.pe-in{text-align-last:right}
 }
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
+/* 15 个主题快捷方块：点一下切主题（普通 / 深色 / 九紫离火 / 流变时辰 12 个时辰） */
+#sTop{position:relative}
+#tmpTh{position:absolute;left:12px;right:12px;bottom:3px;display:flex;gap:3px;z-index:3}
+#tmpTh button{position:relative;width:14px;height:14px;padding:0;border:0;background:none;cursor:pointer;flex:none}
+#tmpTh button{border-radius:3px}
+#tmpTh button::after{content:"";position:absolute;left:3.5px;top:3.5px;width:7px;height:7px;border-radius:1.5px;background:var(--c);box-shadow:0 0 0 .5px rgba(0,0,0,.18)}   /* 极淡的一圈：流变时辰下选中色和底色相同、申白在白底上，不加就看不见 */
+#tmpTh:not(.open) button[data-th]:not([aria-pressed="true"]){display:none}   /* 收起时只露选中的那个 + 展开箭头（像目录组标题） */
+#tmpTh .th-tg{order:-1;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+#tmpTh .th-tg svg{transition:transform .15s}
+#tmpTh:not(.open) .th-tg svg{transform:rotate(-90deg)}
+@media (max-width:999px){#tmpTh{display:none}}   /* 手机端不要 */
 #sSearch{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
 #sSearch:focus{outline:none;border-color:var(--accent)}
 #sNew{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
@@ -1310,7 +1321,7 @@ select.pe-in{text-align-last:right}
     <div id="sheetGrip" title="拖动调整宽度，双击恢复默认" aria-hidden="true"></div>
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2>会话</h2>
-      <div id="sTop"><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -5194,6 +5205,28 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
     try{if(sel.value)localStorage.setItem('claclaw.theme',sel.value);else localStorage.removeItem('claclaw.theme')}catch(_){}
     applyTheme(sel.value);
   });
+})();
+// 15 个主题快捷方块（普通 / 深色 / 九紫离火 / 流变时辰 12 个时辰）：点时辰方块就固定显示那个时辰，刷新后回到按时间自动换
+(function(){
+  var box=$('#tmpTh'),sel=$('#setTheme'),Z='子丑寅卯辰巳午未申酉戌亥';
+  var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
+  var L=[['light','#FFFFFF','普通'],['dark','#161B21','深色'],['ziwei','#5B21B6','九紫离火']];
+  for(var i=0;i<12;i++)L.push(['shichen','#'+ZC[i],Z[i]+'时',i]);
+  function mark(){var t=document.documentElement.getAttribute('data-theme');[].forEach.call(box.querySelectorAll('[data-th]'),function(b){b.setAttribute('aria-pressed',String(b._t===t&&(t!=='shichen'||b._z===window.__scZ)))})}
+  L.forEach(function(x){
+    var b=document.createElement('button');b.type='button';b.style.setProperty('--c',x[1]);b.title=x[2];b.setAttribute('aria-label',x[2]);b._t=x[0];b._z=x[3];
+    b.addEventListener('click',function(){
+      window.__scZ=x[0]==='shichen'?x[3]:null;
+      try{localStorage.setItem('claclaw.theme',x[0])}catch(_){}
+      sel.value=x[0];applyTheme(x[0]);mark();box.classList.remove('open');b.blur();
+    });
+    b.setAttribute('data-th','');box.appendChild(b);
+  });
+  var tg=document.createElement('button');tg.type='button';tg.className='th-tg';tg.title='切换主题';tg.setAttribute('aria-label','切换主题');
+  tg.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  tg.addEventListener('click',function(){box.classList.toggle('open');tg.blur()});
+  box.appendChild(tg);
+  mark();
 })();
 function notice(t){if(mList)toast(t);else addSys(t)}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(dissEl.classList.contains('on'))dsBack();else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
