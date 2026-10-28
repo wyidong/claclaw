@@ -329,6 +329,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #taWrap.sug #ta::placeholder{opacity:.9}
 #attachBtn,#send{position:absolute;top:2px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1}
 #attachBtn{left:-8px;color:var(--muted)}
+#micBtn{position:absolute;top:2px;left:26px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--muted);-webkit-tap-highlight-color:transparent}   /* 语音输入（试验）：一键开始听，再点停止 */
+#micBtn[hidden]{display:none}
+#micBtn.on{color:var(--deny);animation:pulse 1.2s infinite}
+#composer.mic #ta{padding-left:68px}
 #send{right:2px;color:var(--accent)}
 #send:disabled,#send.sugfill{color:var(--muted);opacity:.45;cursor:default}
 #send.sugfill{cursor:pointer}
@@ -1144,6 +1148,7 @@ select.pe-in{text-align-last:right}
     <div id="atts" hidden></div>
     <div id="composer">
       <button type="button" id="attachBtn" aria-label="添加图片"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4.5v13M4.5 11h13"/></svg></button>
+      <button type="button" id="micBtn" hidden aria-label="语音输入" title="语音输入（试验）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
       <input type="file" id="fileIn" multiple hidden>
       <div id="taWrap">
         <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
@@ -2184,6 +2189,21 @@ sugBtn.addEventListener('click',function(){acceptSuggestion(true)});
 // ---------- 发图片：选图 / 拍照 / 粘贴，先在手机上压缩再发 ----------
 
 var MAX_IMAGES=5,attachments=[],attsEl=$('#atts'),fileIn=$('#fileIn');
+// ---------- 语音输入（试验）：浏览器自带的语音识别（iOS 走苹果听写）。加号右边的麦克风：一键开始听，再点一下停止；识别出来的字接到输入框里 ----------
+var SR=window.SpeechRecognition||window.webkitSpeechRecognition,micBtn=$('#micBtn'),micRec=null;
+function micShow(){var on=!!SR&&COARSE.matches;micBtn.hidden=!on;$('#composer').classList.toggle('mic',on)}
+micBtn.addEventListener('click',function(){
+  if(micRec){try{micRec.stop()}catch(_){}return}
+  var r;try{r=new SR()}catch(e){toast('这里用不了语音识别：'+e.message);return}
+  r.lang='zh-CN';r.continuous=true;r.interimResults=true;
+  var base=ta.value,fin='';
+  r.onresult=function(e){var interim='';for(var i=e.resultIndex;i<e.results.length;i++){var x=e.results[i];if(x.isFinal)fin+=x[0].transcript;else interim+=x[0].transcript}
+    ta.value=base+(base&&!/\s$/.test(base)?' ':'')+fin+interim;ta.dispatchEvent(new Event('input',{bubbles:true}))};
+  r.onerror=function(e){toast('语音识别出错：'+(e.error||'未知'));try{clog('speech error '+e.error+' standalone='+!!navigator.standalone+' embedded='+(window.parent!==window))}catch(_){}};
+  r.onend=function(){micRec=null;micBtn.classList.remove('on');syncSend()};
+  try{r.start();micRec=r;micBtn.classList.add('on');toast('说吧，再点一下停止')}catch(e){toast('启动失败：'+e.message);try{clog('speech start fail '+e.message)}catch(_){}}
+});
+micShow();
 $('#attachBtn').addEventListener('click',function(){if(attachments.length>=MAX_IMAGES){addSys('一次最多 '+MAX_IMAGES+' 张图片');return}fileIn.click()});
 fileIn.addEventListener('change',function(){addFiles(fileIn.files);fileIn.value=''});
 // 粘贴图片：整个页面都接（焦点不在输入框时也能粘），items 和 files 两种来源都看（Safari 有时只给 files）
@@ -4446,6 +4466,7 @@ function srvNext(){
   if(srvBusy)return;
   var it=srvQ[0];if(!it){ttsShowStop();return}
   srvBusy=true;
+  srvKeepIdle(true);   // 开念就点亮静音保活，整段只占一个媒体会话（见 srvKeepIdle）
   srvQ.slice(0,4).forEach(srvFetch);   // 后面几句先并行合成，念完一句下一句已经好了
   var gen=srvGen;
   srvFetch(it).then(function(){
@@ -4470,7 +4491,7 @@ function srvNext(){
   ttsShowStop();
 }
 function srvSay(parts,voice){parts.forEach(function(p){srvQ.push({text:p,voice:voice})});srvNext()}
-function srvStop(){srvGen++;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}})}
+function srvStop(){srvGen++;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
 // P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
 function srvInterrupt(text,voice){
   if(!text)return;
@@ -4481,7 +4502,31 @@ function srvInterrupt(text,voice){
   srvNext();
 }
 function srvPlaying(){return !!srvCur&&!srvCur.paused}
-function srvKeepIdle(){}
+// ── 让 macOS 的「正在播放」托盘别一句一闪（Touch Bar 闪烁的根因）─────────────
+// 系统托盘跟着媒体会话起落：按句换 <audio>，浏览器每句念完就 clear 一次 nowPlayingInfo，
+// Control Strip 于是一句弹一次、灭一次 —— 在带 Touch Bar 的 Mac 上就是肉眼可见的闪烁。
+// 对策：整段朗读期间挂一条循环静音，自始至终只有一个连续的媒体会话，托盘只弹一次、念完才收。
+// 静音必须 ≥5s：更短的音频会被 Chrome/Edge 当一次性音效，不建立持久媒体会话，保活就失效。
+// iPhone / iPad 不挂：那边没有 Touch Bar，常驻静音只会在锁屏多出一个播放控件、白耗电。
+var srvIdleEl=null,srvIdleOn=false,srvIdleT=0;
+var srvIdleOK=!(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform)));
+function srvKeepIdle(on,now){
+  if(!srvIdleOK)return;
+  if(on){
+    if(srvIdleT){clearTimeout(srvIdleT);srvIdleT=0}
+    if(srvIdleOn)return;
+    if(!srvIdleEl){srvIdleEl=new Audio();srvIdleEl.loop=true;srvIdleEl.preload='auto';srvIdleEl.src=SILENT_BLOB(10)}
+    srvIdleOn=true;
+    var p=srvIdleEl.play();if(p&&p.catch)p.catch(function(){srvIdleOn=false});   // 被自动播放策略拦下就算了：大不了退回原来的闪，不影响朗读
+    return;
+  }
+  if(!srvIdleOn)return;
+  var off=function(){srvIdleT=0;srvIdleOn=false;try{srvIdleEl.pause()}catch(_){}};
+  if(now){if(srvIdleT){clearTimeout(srvIdleT);srvIdleT=0}off();return}
+  // 不立刻收：「边写边念」时队列常在两句之间短暂见底，一见底就收托盘，下一句又弹出来 —— 照样闪。
+  // 拖 8 秒，把中途的空档一律当成「还在念」，真念完了才收那一次。
+  if(!srvIdleT)srvIdleT=setTimeout(off,8000);
+}
 // iPhone：<audio> 第一次播放要由点击触发；点一下时两个都放一小段静音，之后就能自己播
 function SILENT_WAV(){
   var n=800,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
@@ -4491,6 +4536,15 @@ function SILENT_WAV(){
   var str='';for(var j=0;j<b.length;j++)str+=String.fromCharCode(b[j]);return 'data:audio/wav;base64,'+btoa(str);
 }
 var SILENT_SRC=SILENT_WAV();
+// 保活用的长静音（秒）：走 Blob 而不是 data: URI —— 10 秒的 8kHz 单声道有 8 万字节，
+// base64 塞进字符串要 10 万多字符，没必要。内容同样是 8 位无符号静音（128）。
+function SILENT_BLOB(sec){
+  var r=8000,n=r*sec,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
+  w(0,'RIFF');d.setUint32(4,36+n,true);w(8,'WAVEfmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
+  d.setUint32(24,r,true);d.setUint32(28,r,true);d.setUint16(32,1,true);d.setUint16(34,8,true);w(36,'data');d.setUint32(40,n,true);
+  for(var i=0;i<n;i++)b[44+i]=128;
+  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+}
 function srvUnlock(force){
   if(tts.srvUnlocked&&!force)return;
   if(srvPlaying())return;
