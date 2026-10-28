@@ -4571,10 +4571,12 @@ setTimeout(function(){var q=window.__clq||[];window.__clq=null;q.forEach(functio
 function postTheme(){
   if(window.parent===window)return;
   var t=document.documentElement.getAttribute('data-theme');
-  if(t==='shichen'){var f=scVar('--sc-f');try{window.parent.postMessage({clarelay:1,type:'theme',top:scVar('--sc-b'),scheme:f==='#FFFFFF'?'dark':'light'},'*')}catch(e){}return}
+  if(t==='shichen'){var f=scVar('--sc-f');try{window.parent.postMessage({clarelay:1,type:'theme',top:scVar('--sc-b'),fg:titleColor(),scheme:f==='#FFFFFF'?'dark':'light'},'*')}catch(e){}return}
   var dark=t?t==='dark':!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
-  try{window.parent.postMessage({clarelay:1,type:'theme',top:stripColor(),scheme:dark?'dark':'light'},'*')}catch(e){}
+  try{window.parent.postMessage({clarelay:1,type:'theme',top:stripColor(),fg:titleColor(),scheme:dark?'dark':'light'},'*')}catch(e){}
 }
+// 顶栏标题（会话名）的字色：外壳顶栏的字也用它，和底色一样跟着主题走
+function titleColor(){var el=document.getElementById('nm'),c=el?getComputedStyle(el).color:'',m=c.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);return m?'#'+[m[1],m[2],m[3]].map(function(x){return ('0'+(+x).toString(16)).slice(-2)}).join('').toUpperCase():''}
 // 顶栏的底色（--strip）：外壳的顶栏、手机状态栏都染成它，和页面顶部连成一片
 function stripColor(){return getComputedStyle(document.documentElement).getPropertyValue('--strip').trim()||'#FFFFFF'}
 try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if(!document.documentElement.getAttribute('data-theme'))postTheme()})}catch(e){}
