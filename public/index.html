@@ -18,7 +18,37 @@
 <title>Claclaw</title>
 <script>
 // 主题：跟随系统（默认）/ 普通 / 深色，按设备记在本机；在页面画出来之前就设好，免得先闪一下
-(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei')document.documentElement.setAttribute('data-theme',t)}catch(e){}})();
+// 流变时辰：按当前时辰的干支换色——地支色定底色和强调色，天干色定标题字（看不清就往深里调）。
+// 日干按儒略日推（2000-01-01 戊午日），时干按五鼠遁；23 点起算次日子时
+window.__sc=(function(){
+  var G='甲乙丙丁戊己庚辛壬癸',Z='子丑寅卯辰巳午未申酉戌亥',W=[255,255,255],K=[0,0,0];
+  var GC=['1E6B3A','9CCB8E','D62828','F2A0A0','D49A2A','F2D27A','F2F0EB','D9D9D9','1F3A6B','5B8FC7'];
+  var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
+  var ZF=['000000','A4A9B1','FFFFFF','000000','1F3A6B','FFFFFF','000000','1E6B3A','000000','000000','8B1A1A','FFFFFF'];   // 地支底上的字色（六十甲子表定的；辰戌丑未用墓库那一行的色）
+  var VARS=['--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-f','--sc-m','--sc-on','--sc-t','--bg','--line','--user-bg'];
+  function rgb(h){return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]}
+  function hex(c){return '#'+c.map(function(v){return ('0'+Math.round(v).toString(16)).slice(-2)}).join('').toUpperCase()}
+  function mix(a,b,t){return [0,1,2].map(function(i){return a[i]+(b[i]-a[i])*t})}
+  function lum(c){var l=c.map(function(v){v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*l[0]+.7152*l[1]+.0722*l[2]}
+  function cr(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
+  function deepen(c,bg,n){for(var t=0;t<=1;t+=.02){var m=mix(c,K,t);if(cr(m,bg)>=n)return m}return K}
+  function now(d){
+    d=d||new Date();var x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
+    var day=Math.floor(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate())/864e5)+2440588+49;   // 儒略日 +49：0 = 甲子日
+    var z=Math.floor((d.getHours()+1)%24/2);return {g:(day%10%5*2+z)%10,z:z,name:G[(day%10%5*2+z)%10]+Z[z]};
+  }
+  function apply(){
+    var n=now(),b=rgb(ZC[n.z]),f=rgb(ZF[n.z]),acc=deepen(b,W,4.5),s=document.documentElement.style,lt=lum(f)>.5;
+    var v={'--accent':hex(acc),'--accent-ink':'#FFFFFF','--allow':hex(acc),'--on-allow':'#FFFFFF','--sc-b':hex(b),'--sc-f':hex(f),'--sc-m':hex(mix(f,b,.35)),
+      '--sc-on':lt?'rgba(255,255,255,.18)':'rgba(0,0,0,.08)','--sc-t':hex(deepen(rgb(GC[n.g]),W,4.5)),
+      '--bg':hex(mix(b,W,.9)),'--line':hex(mix(b,W,.7)),'--user-bg':hex(mix(b,W,.75))};
+    for(var k in v)s.setProperty(k,v[k]);
+    return n.name;
+  }
+  function clear(){var s=document.documentElement.style;VARS.forEach(function(k){s.removeProperty(k)})}
+  return {now:now,apply:apply,clear:clear};
+})();
+(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){window.__sc.apply();var b=document.documentElement.style.getPropertyValue('--sc-b');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
@@ -34,10 +64,11 @@
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
   /* 协同对方的 7 组配色（b 名字底色 / f 名字字色）；深色模式下面另有一套。字色和底色的对比度都在 6.4:1 以上 */
+  --strip:var(--surface);--strip-line:var(--line);--rail-on:var(--bg);
   --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
 }
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]):not([data-theme="ziwei"]){
+  :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
     --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
     --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
@@ -58,6 +89,7 @@
   --accent:#5B21B6;--accent-ink:#FFFFFF;--user-bg:#EDE7FB;--peer:#FDBA8C;--zw-t:#4C1D95;
   --allow:#5B21B6;--on-allow:#FFFFFF;--deny:#D93636;--warn:#C2410C;
   --add-bg:#E6F4EA;--del-bg:#FCE7E4;--code-bg:#F1EEF8;--banner-bg:#FFF0E3;
+  --strip:var(--bg);--rail-on:var(--surface);
 }
 /* 卡片、列表行、搜索框：白底细边（像 clarelay 的卡片）；列表 / 设置页的底换成淡紫 */
 :root[data-theme="ziwei"] #setPane .set-card,:root[data-theme="ziwei"] .h-card,:root[data-theme="ziwei"] .claw-card,:root[data-theme="ziwei"] .s-item,:root[data-theme="ziwei"] .s-row,:root[data-theme="ziwei"] #sSearch{background:#FFFFFF;border:1px solid var(--line)}
@@ -71,6 +103,30 @@
 :root[data-theme="ziwei"] .pe-back{color:var(--accent)}
 
 :root[data-theme="ziwei"] #setTop button,:root[data-theme="ziwei"] #backBtn{color:var(--accent)}
+/* 流变时辰：照九紫离火的路子衔接——
+   导航区（手机底部菜单、电脑最左栏）和所有顶栏（会话标头、列表搜索栏、设置页头）铺满当前地支色，状态栏也染成这个色，上下连成一个框；
+   列表 / 设置 / 宿主 / Claw 页的底用地支色的淡色，上面是白卡片细边；聊天内容区保持普通主题的底。
+   标题、名字、分组标题用天干色（--sc-t）。变量都由 window.__sc 按时辰算好：
+   --sc-b 地支色 / --sc-f 地支底上的字色 / --sc-m 没选中的字色 / --sc-on 选中格的底 / --sc-t 天干色 / --bg --line --user-bg 地支淡色 */
+:root[data-theme="shichen"] #app.m-list #mtabs,:root[data-theme="shichen"] #rail,:root[data-theme="shichen"] header,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app.m-list.set-on #setTop{background:var(--sc-b);border-color:transparent}
+:root[data-theme="shichen"]{--strip:var(--sc-b);--strip-line:transparent;--rail-line:transparent}
+:root[data-theme="shichen"] #mtabs button,:root[data-theme="shichen"] #rail button{color:var(--sc-m)}
+:root[data-theme="shichen"] #mtabs button.on,:root[data-theme="shichen"] #rail button.on,:root[data-theme="shichen"] #rail button:hover{color:var(--sc-f);background:var(--sc-on)}
+:root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button{color:var(--sc-f)}
+:root[data-theme="shichen"] header .sid,:root[data-theme="shichen"] header .where,:root[data-theme="shichen"] header #cfgBtn{color:var(--sc-m)}
+:root[data-theme="shichen"] header #cfgBtn[data-m="bypass"] .c2{text-decoration:underline}
+:root[data-theme="shichen"] #sSearch{background:#FFFFFF;border-color:transparent}
+/* 卡片、列表行：白底细边；列表 / 设置 / 宿主页的底换成地支淡色 */
+:root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row{background:#FFFFFF;border:1px solid var(--line)}
+:root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg);border-color:var(--line)}
+:root[data-theme="shichen"] #sList .s-row.wx .s-item{border:0}
+:root[data-theme="shichen"] #app #sheet,:root[data-theme="shichen"] #app #sheet .sheet-p,:root[data-theme="shichen"] #app #hostPane{background:var(--bg)}
+/* 聊天内容区：普通主题的底 */
+:root[data-theme="shichen"] #feed,:root[data-theme="shichen"] #banner{background:#F1F3F5}
+/* 字：标题、名字、分组标题用天干色 */
+:root[data-theme="shichen"] .lb,:root[data-theme="shichen"] .claw-tx b,:root[data-theme="shichen"] .s-item .t,:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .pg-hd,:root[data-theme="shichen"] .h-h,:root[data-theme="shichen"] .h-row .k{color:var(--sc-t)}
+:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .h-h{font-weight:600}
+:root[data-theme="shichen"] .pe-back{color:var(--accent)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
 /* 页面本身不许滚：iOS 弹键盘时会把整个页面往上推，收起后不一定推回来，顶栏就一直压在状态栏下面被模糊。
@@ -91,7 +147,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 @media (min-width:800px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 
 /* 标题栏：平的，不加底边框（白底坐在浅灰的聊天区上，边界自然就有）；左边两行「名字 ID / 目录 · 分支」，右边两行「模型 · 推理强度 / 权限」 */
-header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;border-bottom:1px solid var(--line);background:var(--surface)}
+header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;border-bottom:1px solid var(--line);background:var(--strip)}
 #sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
 #sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
@@ -186,6 +242,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md table{border-collapse:collapse;font-size:14px;min-width:60%}
 .md th,.md td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
 .md th{background:var(--code-bg);font-weight:600;white-space:nowrap}
+.md .mdh{margin:0 0 .7em;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.md [style]{max-width:100%}
 .md img.mdimg{display:block;max-width:100%;max-height:320px;margin:.3em 0;border-radius:10px;cursor:zoom-in}
 .peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:3px solid var(--muted);border-radius:4px 10px 10px 4px;background:var(--code-bg);font-size:14px;line-height:1.5}
 .md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px}
@@ -687,7 +744,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   /* 列表页：搜索栏是固定的顶栏，只有下面的列表滚动。
      新版 iOS 会在「顶到状态栏的可滚动区域」上加一层渐变模糊，整页滚动时顶部会一直发虚 */
   #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
-  #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--surface)}
+  #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--strip)}
   #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   .sheet-p>h2:first-child{display:none}   /* 会话列表顶部不要「会话」标题，搜索栏直接在最上面 */
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
@@ -717,7 +774,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   /* 设置是子页面（像点进一个会话）：没有底部菜单，左上角返回，退出登录和版本沉到页面最底下 */
   #app.m-list.set-on #mtabs{display:none}
   #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
-  #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 6px;background:var(--surface)}
+  #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 6px;background:var(--strip)}
   #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:22px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
   #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
   /* 标题栏下不留空：原来空出的 14px 里内容滚上去会被截掉，像多了一节；留白挪进滚动区 */
@@ -735,6 +792,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .h-link:active{background:var(--surface)}
 .h-link .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-left:2px}
 /* 所有子页面的返回：和会话页、设置页同一个样式（左边一个箭头，标题居中） */
+.ovs{display:none}
 .pg-hd{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600;color:var(--ink)}
 .pg-t{max-width:calc(100% - 96px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #hostPane .pg-hd{margin-top:-17px}
@@ -910,7 +968,7 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .wx-bd{display:none;position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--surface);color:#fff;font-size:11px;font-weight:600;line-height:18px;text-align:center}
 #sList .s-row.wx.unread .wx-bd{display:block}
 #sList .s-row.wx .wx-bd.num{top:-7px;right:-8px;width:auto;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px}   /* 1 条只亮红点；多于 1 条显示条数（像微信） */
-@media (hover:hover){#sList .s-row.wx .s-item:hover{background:color-mix(in srgb,var(--muted) 13%,transparent)}#sList .s-row.wx .s-item:hover .wx-b{border-bottom-color:transparent}}   /* 鼠标划过：浅灰底 */
+@media (hover:hover){#sList .s-row.wx .s-item:hover{background:color-mix(in srgb,var(--user-bg) 55%,transparent)}#sList .s-row.wx .s-item:hover .wx-b{border-bottom-color:transparent}}   /* 鼠标划过：选中色的一半深浅，跟着主题走（普通淡绿、九紫离火淡紫、流变时辰地支淡色） */
 #sList .s-row.wx .s-item[aria-current="true"],#sList .s-row.wx.opening .s-item{background:var(--user-bg)!important}
 #sList .s-row.wx .s-item[aria-current="true"] .wx-b,#sList .s-row.wx.opening .wx-b{border-bottom-color:transparent}
 @media (max-width:999px){
@@ -951,9 +1009,32 @@ select.pe-in{text-align-last:right}
   /* 图标栏 */
   #rail{grid-column:1;grid-row:1 / -1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 12px;background:var(--code-bg);border-right:1px solid var(--line)}
   #rail .logo{width:38px;height:38px;border-radius:9px;margin-bottom:12px}
+  /* 顶部一条：左栏头像、列表搜索栏、聊天标头连成一体——等高（--hd-h 量自聊天标头）、同底色（--strip）、同一条底线（--strip-line），
+     这一条里不画左右分界线（分界线改成从这条下面才开始的 ::after） */
+  #rail{position:relative;border-right:0;padding-top:calc((var(--hd-h,56px) - 39px) / 2);
+    background:var(--strip)}   /* 左栏整条一个底色，和顶部那条同色，不画横线 */
+  #rail .logo{margin-bottom:calc(var(--hd-h,56px) / 2 - 16.5px)}
+  #sheet::after{content:'';position:absolute;top:var(--hd-h,56px);bottom:0;right:0;width:1px;background:var(--line);pointer-events:none;z-index:3}
+  /* 列表栏 + 聊天区是一整块：外面一圈细边框、四角圆角，左边是图标栏、右下留一点边（底色同顶部那条）。
+     圆角外面那一小块用同色的外阴影盖住（只扩 6px，盖不到图标栏的按钮） */
+  #app{position:relative;box-sizing:border-box;padding:0 8px 8px 0;background:var(--strip)}
+  #app::after{content:'';position:absolute;top:0;left:64px;right:8px;bottom:8px;border:1px solid var(--line);border-radius:12px;box-shadow:0 0 0 6px var(--strip);pointer-events:none;z-index:20}
+  /* 聊天区滚动条：位置始终留着（内容不跟着跳），没有底色 */
+  #feed{scrollbar-gutter:stable}
+  #feed::-webkit-scrollbar{width:8px}
+  #feed::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:4px}
+  #feed::-webkit-scrollbar-track{background:transparent}
+  /* 会话列表照微信：每行铺满到两边，滚动条浮在行上面、不占位置。系统滚动条在有的 WebView 里是常驻的粗条（占一条白底），
+     所以把它藏掉，换成脚本画的细条 .ovs：滚动、鼠标移进列表时出现，停一会儿淡出；可以拖 */
+  .sheet-p{scrollbar-width:none}
+  .sheet-p::-webkit-scrollbar{display:none}
+  .ovs{display:block;position:absolute;top:0;right:2px;width:6px;border-radius:3px;background:rgba(128,128,128,.5);opacity:0;transition:opacity .3s;z-index:4;cursor:default;touch-action:none}
+  .ovs.on,#sheet:hover .ovs{opacity:1}
+  .ovs:hover,.ovs.drag{background:rgba(128,128,128,.75)}
+  #app #sheet .sheet-p{background-image:linear-gradient(var(--strip) calc(var(--hd-h,56px) - 1px),var(--strip-line) 0,var(--strip-line) var(--hd-h,56px),transparent 0)!important}   /* 滚动条那一窄条在顶部也用顶部的底色（各主题给 .sheet-p 设的是 background，这里只补图层） */
   #rail button{width:44px;height:44px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
-  #rail button:hover{background:var(--surface);color:var(--ink)}
-  #rail button.on{color:var(--accent);background:var(--surface)}
+  #rail button:hover{background:var(--rail-on,var(--surface));color:var(--ink)}
+  #rail button.on{color:var(--accent);background:var(--rail-on,var(--surface))}
   #rail .gap{flex:1}
   /* 左栏只放活跃的 Claw（当前选中的、有会话在干活的、有未读的）；其余收在下面的「⌃」里，点开在它上方展开 */
   #rclaws{display:flex;flex-direction:column;align-items:center;gap:6px}
@@ -975,11 +1056,12 @@ select.pe-in{text-align-last:right}
   #rail .rsep{width:24px;margin:4px 0;border-top:1px solid var(--line)}
 
   /* 会话列表栏 */
-  #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:relative;display:block;background:var(--surface);border-right:1px solid var(--line);min-height:0;z-index:auto}
+  #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:relative;display:block;background:var(--surface);border-right:0;min-height:0;z-index:auto}
   .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:0 10px 16px;overflow-y:auto}
   #sList{--lpad:10px}
   .sheet-p>h2:first-child{display:none}
   #sTop{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:2;margin:0 -10px 4px;padding:14px 12px 10px;background:var(--surface)}
+  #sTop{box-sizing:border-box;min-height:var(--hd-h,56px);margin-bottom:0;padding-top:0;padding-bottom:0;border-bottom:1px solid var(--strip-line);background:var(--strip)}   /* 和右边聊天标头一样高、底线对齐（--hd-h 由脚本量标头得来） */
   #sSearch{flex:1;min-width:0;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
   #sSearch:focus{outline:none;border-color:var(--accent)}
   #sNew{flex:none;width:32px;height:32px;border:0;border-radius:8px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
@@ -995,6 +1077,13 @@ select.pe-in{text-align-last:right}
   /* 宿主页（图标栏的显示器）：和设置一样，占会话列表那一栏 */
   #app.host-on #sTop,#app.host-on #sList{display:none}
   #app.host-on #hostPane{display:block;padding:16px 0 8px}
+  /* 设置页、宿主 / 协同等子页的标题栏：和会话列表的搜索栏一样，做成顶部那一条（等高、同底色、同底线、滚动时钉在顶上） */
+  #app.set-on #setTop,#app.host-on #hostPane .pg-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:var(--hd-h,56px);margin:0 -10px 14px;padding:0 48px;background:var(--strip);border-bottom:1px solid var(--strip-line);font-size:17px;font-weight:600}
+  #app.set-on #setBack{display:none}   /* 电脑端回会话列表点图标栏，不要返回键 */
+  #app.set-on #setPane{padding-top:0}
+  #app.set-on #setPane h2{display:none}   /* 标题已在顶部那条里 */
+  #app.host-on #hostPane{padding-top:0}
+  #app.host-on #hostPane .pe-back{left:4px;top:0;bottom:0}
   #hostPane .claw-h{margin:0 6px 16px;font-size:17px;font-weight:600;color:var(--ink)}
   #hostPane .h-row{min-height:40px;padding:8px 12px;font-size:13.5px}
   #hostPane .h-row .v{font-size:12.5px}
@@ -1008,6 +1097,7 @@ select.pe-in{text-align-last:right}
   .s-row.collab:not(.working):not(.waiting):not(.ptint) .s-item:not([aria-current="true"]){border-color:var(--peer)!important}
   /* 紫微主题给 .s-row 和 .s-item 都画了边框：电脑端卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
   :root[data-theme="ziwei"] #sList .s-row:not(.wx){border:0;background:none}
+  :root[data-theme="shichen"] #sList .s-row:not(.wx){border:0;background:none}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
@@ -1026,7 +1116,7 @@ select.pe-in{text-align-last:right}
   #sList .s-row[hidden],#sList .s-grp[hidden]{display:none}
 
   /* 聊天区标题：像微信，只有名字加粗，没有框 */
-  header{padding:0 20px;min-height:56px;border-bottom:1px solid var(--line);background:var(--surface)}
+  header{padding:0 20px;min-height:56px;border-bottom:1px solid var(--strip-line);background:var(--strip)}
   /* 和手机一样的两行（不显示目录，「已恢复会话」那行有）：
      第一行  ● 会话名称（整行）
      第二行    ID ······ 模型 · 推理强度 · 权限 ›
@@ -1292,7 +1382,7 @@ select.pe-in{text-align-last:right}
         <div class="set-h">外观</div>
         <div class="set-card">
           <label class="set-item"><span class="lb">主题<small>跟随系统：随这台设备的深浅色自动切换</small></span>
-            <select id="setTheme"><option value="">跟随系统</option><option value="light">普通</option><option value="dark">深色</option><option value="ziwei">九紫离火</option></select></label>
+            <select id="setTheme"><option value="">跟随系统</option><option value="light">普通</option><option value="dark">深色</option><option value="ziwei">九紫离火</option><option value="shichen">流变时辰</option></select></label>
         </div>
       </div>
       <div class="set-sec">
@@ -1410,6 +1500,69 @@ function isPathLike(c){
   if(c.indexOf('/')>=0)return /[^.\/]\.[a-z][a-z0-9]{0,7}$/i.test(last);
   return /^[^.]/.test(last)&&FILE_EXT.test(last);
 }
+// ---------- 回复里夹的 HTML（色块、表格）：只放行一小撮排版标签，style 只留排版类属性 ----------
+// 不放行：脚本、事件属性、链接、图片和任何会去外网拉东西的写法（url()、image-set() 等）——回复内容可能来自网页 / 工具输出
+var HTML_OK={span:1,div:1,p:1,br:1,hr:1,b:1,strong:1,i:1,em:1,u:1,s:1,del:1,ins:1,small:1,sub:1,sup:1,mark:1,code:1,kbd:1,pre:1,center:1,
+  table:1,thead:1,tbody:1,tfoot:1,tr:1,th:1,td:1,caption:1,colgroup:1,col:1,ul:1,ol:1,li:1,blockquote:1,details:1,summary:1,h1:1,h2:1,h3:1,h4:1,h5:1,h6:1};
+var HTML_INLINE={span:1,b:1,strong:1,i:1,em:1,u:1,s:1,del:1,ins:1,small:1,sub:1,sup:1,mark:1,kbd:1,br:1};
+// 连内容一起删的；其余不认识的标签（a、font 等）只去掉标签、留文字
+var HTML_DROP={script:1,style:1,iframe:1,object:1,embed:1,frame:1,frameset:1,noscript:1,template:1,svg:1,math:1,link:1,meta:1,base:1,form:1,input:1,button:1,textarea:1,select:1,option:1,video:1,audio:1,img:1,picture:1,source:1,track:1,canvas:1,title:1,head:1,dialog:1,portal:1};
+var HTML_BLOCK=/^\s*<(table|div|details|center|blockquote|ul|ol|pre|p|h[1-6])(?=[\s>\/])/i;
+var CSS_OK=/^(color|background|background-color|width|height|min-width|max-width|min-height|max-height|display|padding(-(top|right|bottom|left))?|margin(-(top|right|bottom|left))?|border(-(top|right|bottom|left))?(-(width|style|color))?|border-(radius|collapse|spacing)|font|font-(weight|style|size|family|variant)|text-(align|decoration|transform|indent)|vertical-align|line-height|letter-spacing|white-space|word-break|opacity|box-sizing|list-style(-type)?|gap|flex|flex-(direction|wrap|grow|shrink|basis)|align-items|justify-content|text-shadow|-webkit-text-stroke(-(width|color))?|paint-order)$/;
+function cleanStyle(s){
+  return String(s).split(';').map(function(d){
+    var k=d.indexOf(':');if(k<0)return '';
+    var p=d.slice(0,k).trim().toLowerCase(),v=d.slice(k+1).trim(),w=v.replace(/#[0-9a-f]{3,8}\b/gi,'#');
+    // 负数（往外挪盖住别的界面）、超大数、注释、转义、!important 都不要；函数只认颜色函数
+    if(!CSS_OK.test(p)||!v||/[\\<>@"`]|\/\*|\d{5,}|!important/i.test(w)||(p!=='text-shadow'&&/-\s*[\d.]/.test(w)))return '';   // 文字阴影的负偏移不挪版面，放行
+    var fn=w.match(/[a-z-]+\s*\(/gi);if(fn&&fn.some(function(f){return !/^(rgba?|hsla?)\s*\($/i.test(f)}))return '';
+    if(p==='display'&&!/^(inline|inline-block|block|flex|inline-flex|table|table-cell|table-row|none)$/i.test(v))return '';
+    return p+':'+v;
+  }).filter(Boolean).join(';');
+}
+function cleanAttr(tag,name,v){
+  name=name.toLowerCase();v=String(v);
+  if(name==='style'){v=cleanStyle(v);return v?v:null}
+  if((name==='colspan'||name==='rowspan'||name==='start'||name==='span')&&/^\d{1,2}$/.test(v))return v;
+  if((name==='align'||name==='valign')&&/^[a-z]{3,8}$/i.test(v))return v;
+  if((name==='width'||name==='height')&&/^\d{1,4}%?$/.test(v))return v;
+  if(name==='open'&&tag==='details')return '';
+  return null;
+}
+// 整段 HTML：放进 <template> 解析（里面的脚本不执行、图片不加载），按白名单清洗后再序列化
+function cleanHtml(html){
+  var t=document.createElement('template');t.innerHTML=html;
+  (function walk(n){
+    for(var c=n.firstChild,nx;c;c=nx){
+      nx=c.nextSibling;
+      if(c.nodeType===3)continue;
+      if(c.nodeType!==1){n.removeChild(c);continue}
+      var tag=c.tagName.toLowerCase();
+      if(HTML_DROP[tag]){n.removeChild(c);continue}
+      walk(c);
+      if(!HTML_OK[tag]){while(c.firstChild)n.insertBefore(c.firstChild,c);n.removeChild(c);continue}
+      Array.prototype.slice.call(c.attributes).forEach(function(a){
+        var v=cleanAttr(tag,a.name,a.value);
+        if(v==null)c.removeAttribute(a.name);else if(v!==a.value)c.setAttribute(a.name,v);
+      });
+    }
+  })(t.content);
+  var d=document.createElement('div');d.appendChild(t.content);return d.innerHTML;
+}
+// 一行里的行内标签（已经被 esc 转义过）：认得的还原成清洗过的标签，没配对的结束标签照原样显示，行尾补齐没关的
+function mdTags(s,put){
+  var st=[],unq=function(v){return v.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')};
+  s=s.replace(/&lt;(\/?)([a-z][a-z0-9]*)((?:\s+[a-z][a-z-]*(?:\s*=\s*(?:&quot;.*?&quot;|'[^']*'|[^\s&'"]+))?)*)\s*\/?&gt;/gi,function(m,cl,tag,attrs){
+    tag=tag.toLowerCase();if(!HTML_INLINE[tag])return m;
+    if(tag==='br')return cl?m:put('<br>');
+    if(cl){var k=st.lastIndexOf(tag);if(k<0)return m;var h='';while(st.length>k)h+='</'+st.pop()+'>';return put(h)}
+    var out='';attrs.replace(/([a-z][a-z-]*)\s*=\s*(?:&quot;(.*?)&quot;|'([^']*)'|([^\s&'"]+))/gi,function(_,n,a,b,c){
+      var v=cleanAttr(tag,n,unq(a!=null?a:b!=null?b:c));if(v!=null)out+=' '+n.toLowerCase()+'="'+esc(v)+'"';return ''});
+    st.push(tag);return put('<'+tag+out+'>');
+  });
+  if(st.length){var h='';while(st.length)h+='</'+st.pop()+'>';s+=put(h)}
+  return s;
+}
 function mdInline(s){
   var keep=[];
   var put=function(h){keep.push(h);return '\u0000'+(keep.length-1)+'\u0000'};
@@ -1419,6 +1572,7 @@ function mdInline(s){
   // 像 ID、命令、路径的行内代码后面跟一个复制图标（太短或纯单词的只是强调，不加）
   // 像文件路径的（class fp）：点代码打开文件，复制交给后面的图标
   s=s.replace(/`([^`\n]+)`/g,function(_,c){var fp=isPathLike(c);return put('<code'+(fp?' class="fp"':'')+'>'+c+'</code>'+(fp||c.trim().length>=6&&/[0-9\/._:@=-]/.test(c)?COPY_BTN:''))});
+  s=mdTags(s,put);
   // 图片 ![说明](地址)：只认 http(s) 和本站路径（/icons/... 这类，不认 // 开头的）
   // 图片 ![说明](地址)：只自动加载本站（/ 开头）的；外链的渲染成普通链接、显示地址，点了才打开
   // （AI 回复里的图片可能带着会话数据，自动加载等于把它送出去）
@@ -1441,7 +1595,7 @@ function mdInline(s){
 var MD_LIST=/^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 var MD_TABLE_SEP=/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 function mdBlockStart(l,next){
-  return /^\s*(```|~~~)/.test(l)||/^#{1,6}\s/.test(l)||/^\s*>/.test(l)||MD_LIST.test(l)||/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)||(l.indexOf('|')>=0&&next!==undefined&&MD_TABLE_SEP.test(next));
+  return /^\s*(```|~~~)/.test(l)||HTML_BLOCK.test(l)||/^#{1,6}\s/.test(l)||/^\s*>/.test(l)||MD_LIST.test(l)||/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)||(l.indexOf('|')>=0&&next!==undefined&&MD_TABLE_SEP.test(next));
 }
 function mdCells(l){l=l.trim().replace(/^\|/,'').replace(/\|$/,'');return l.split('|').map(function(c){return c.trim()})}
 function mdCode(code){return '<div class="cb"><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code)+'</code></pre></div>'}
@@ -1464,6 +1618,14 @@ function md(src){
       var fence=m[1],code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
       i++;out.push(mdCode(code.join('\n')));continue;
+    }
+    if((m=l.match(HTML_BLOCK))){                  // 整段 HTML（<table>…</table> 等）：到同名标签配平为止；配不平就到空行为止
+      var tg=m[1].toLowerCase(),re=new RegExp('<(/?)'+tg+'(?=[\\s>/])','gi'),dep=0,end=-1,hm;
+      for(var j=i;j<L.length&&j<i+800;j++){re.lastIndex=0;while((hm=re.exec(L[j])))dep+=hm[1]?-1:1;if(dep<=0){end=j;break}}
+      if(end<0){end=i;while(end+1<L.length&&L[end+1].trim())end++}
+      var hh=cleanHtml(L.slice(i,end+1).join('\n'));i=end+1;
+      if(hh.trim())out.push('<div class="'+(/^\s*<table/i.test(hh)?'tbl':'mdh')+'">'+hh+'</div>');
+      continue;
     }
     if((m=l.match(/^(#{1,6})\s+(.*)$/))){var n=Math.min(m[1].length+2,6);out.push('<h'+n+'>'+mdInline(m[2])+'</h'+n+'>');i++;continue}
     if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)){out.push('<hr>');i++;continue}
@@ -3764,12 +3926,16 @@ function loadRecent(){
       var k=s.claw||clawOf(s.id);
       b.querySelector('.wx-av').innerHTML=clawIcon(k)+'<span class="wx-bd"></span>';b.querySelector('.wx-av').dataset.claw=k;
       b.querySelector('.t').textContent=s.title;
+      if(s.peerLast){   // 协同会话：名字用最近通信的那个对方的标识色（和按目录分组的列表、协同页一致）
+        row.classList.add('ptint',peerPc(s.peerLast));
+        var tn=document.createElement('span');tn.className='ptn';tn.textContent=s.title;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
+      }
       var dir=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'';
       var c=b.querySelector('.cwd');c.textContent=s.lastPrompt||s.branch||dir;c.title=(s.cwd||'')+(s.branch?'\n'+(s.claw&&s.claw!=='claude'?'模型：':'分支：')+s.branch:'');
       var whenTxt=s.unsent?'新建':wxTime(s.at||s.lastModified);
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
       if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';
-      b.title=CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管'):'');
+      b.title=CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管'):'')+(s.peerLast?'\n最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at):'');
       b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
       // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
       var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
@@ -4307,14 +4473,55 @@ function restoreFeed(id){
 // ---------- 主题 ----------
 function applyTheme(t){
   var root=document.documentElement;
-  if(t==='light'||t==='dark'||t==='ziwei')root.setAttribute('data-theme',t);else root.removeAttribute('data-theme');
-  var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=t==='light'||t==='ziwei'?'light':t==='dark'?'dark':'light dark';
+  if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')root.setAttribute('data-theme',t);else root.removeAttribute('data-theme');
+  var lt=t==='light'||t==='ziwei'||t==='shichen';
+  var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=lt?'light':t==='dark'?'dark':'light dark';
   // 状态栏 / 浏览器顶栏颜色：选了固定主题就两条 theme-color 都用那个颜色
   document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){
-    var dark=/dark/.test(m.media);m.content=t==='light'||t==='ziwei'?'#FFFFFF':t==='dark'?'#161B21':(dark?'#161B21':'#FFFFFF');
+    var dark=/dark/.test(m.media);m.content=t?stripColor():(dark?'#161B21':'#FFFFFF');
   });
+  scTick(true);   // 流变时辰：状态栏改成地支色（scTick 里设），再报给外壳
   postTheme();
 }
+// 流变时辰：每分钟看一次时辰变没变，变了就换色；设置里的选项名带上当前时辰
+var scName='';
+function scVar(k){return document.documentElement.style.getPropertyValue(k).trim()}
+function scTick(force){
+  var on=document.documentElement.getAttribute('data-theme')==='shichen';
+  if(!on){if(scName){window.__sc.clear();scName=''}return}
+  var n=window.__sc.now().name;if(n===scName&&!force)return;
+  scName=window.__sc.apply();
+  var sb=scVar('--sc-b');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});
+  if(!force)postTheme();
+  var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='流变时辰（'+scName+'时）';
+}
+setInterval(function(){scTick(false)},60000);
+// 电脑端会话列表的浮动滚动条（像微信）：系统滚动条藏掉，这里画一根细条浮在行上；从顶部那条下面开始，到底留 4px
+(function(){
+  var sc=document.querySelector('#sheet .sheet-p'),box=document.getElementById('sheet');if(!sc||!box||!window.ResizeObserver)return;
+  var th=document.createElement('div');th.className='ovs';box.appendChild(th);
+  var hideT=0,drag=null;
+  function top0(){return (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hd-h'))||56)+2}
+  function geo(){var t=top0(),track=sc.clientHeight-t-4,h=Math.max(28,track*sc.clientHeight/sc.scrollHeight);return {t:t,track:track,h:h,max:sc.scrollHeight-sc.clientHeight}}
+  function upd(show){
+    if(!DESKTOP.matches||sc.scrollHeight<=sc.clientHeight+1){th.style.visibility='hidden';return}
+    var g=geo();th.style.visibility='';th.style.height=g.h+'px';
+    th.style.transform='translateY('+(g.t+(g.track-g.h)*sc.scrollTop/g.max)+'px)';
+    if(show){th.classList.add('on');clearTimeout(hideT);hideT=setTimeout(function(){if(!drag)th.classList.remove('on')},900)}
+  }
+  sc.addEventListener('scroll',function(){upd(true)},{passive:true});
+  box.addEventListener('mouseenter',function(){upd(false)});
+  new ResizeObserver(function(){upd(false)}).observe(sc);
+  new MutationObserver(function(){upd(false)}).observe(sc,{childList:true,subtree:true});
+  th.addEventListener('pointerdown',function(e){e.preventDefault();th.setPointerCapture(e.pointerId);drag={y:e.clientY,s:sc.scrollTop};th.classList.add('drag','on')});
+  th.addEventListener('pointermove',function(e){if(!drag)return;var g=geo();sc.scrollTop=drag.s+(e.clientY-drag.y)*g.max/Math.max(1,g.track-g.h)});
+  function end(){if(!drag)return;drag=null;th.classList.remove('drag');upd(true)}
+  th.addEventListener('pointerup',end);th.addEventListener('pointercancel',end);
+  DESKTOP.addEventListener('change',function(){upd(false)});
+})();
+// 电脑端：左边会话列表的搜索栏和右边聊天标头对齐——标头高度会随内容变，量出来给 #sTop 用
+(function(){var h=document.querySelector('header');if(!h||!window.ResizeObserver)return;new ResizeObserver(function(){document.documentElement.style.setProperty('--hd-h',h.offsetHeight+'px')}).observe(h)})();
+document.addEventListener('visibilitychange',function(){if(!document.hidden)scTick(false)});
 // 嵌在 clarelay 外壳里：iframe 里 env(safe-area-inset-bottom) 可能量不到，外壳量好发过来（embedded / insets），底部留边取两者大的
 window.addEventListener('message',function(e){
   var m=e.data;if(window.parent===window||e.source!==window.parent||!m||m.clarelay!==1)return;
@@ -4351,9 +4558,12 @@ setTimeout(function(){var q=window.__clq||[];window.__clq=null;q.forEach(functio
 function postTheme(){
   if(window.parent===window)return;
   var t=document.documentElement.getAttribute('data-theme');
+  if(t==='shichen'){var f=scVar('--sc-f');try{window.parent.postMessage({clarelay:1,type:'theme',top:scVar('--sc-b'),scheme:f==='#FFFFFF'?'dark':'light'},'*')}catch(e){}return}
   var dark=t?t==='dark':!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
-  try{window.parent.postMessage({clarelay:1,type:'theme',top:dark?'#161B21':'#FFFFFF',scheme:dark?'dark':'light'},'*')}catch(e){}
+  try{window.parent.postMessage({clarelay:1,type:'theme',top:stripColor(),scheme:dark?'dark':'light'},'*')}catch(e){}
 }
+// 顶栏的底色（--strip）：外壳的顶栏、手机状态栏都染成它，和页面顶部连成一片
+function stripColor(){return getComputedStyle(document.documentElement).getPropertyValue('--strip').trim()||'#FFFFFF'}
 try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if(!document.documentElement.getAttribute('data-theme'))postTheme()})}catch(e){}
 // ---------- 自动朗读回复（浏览器自带的语音合成，不联网、不花钱） ----------
 // 只念正在看的会话里新来的文字回复（历史不念）；代码、表格、链接这些不适合听的换成简短说明。

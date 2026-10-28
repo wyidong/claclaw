@@ -16,7 +16,25 @@
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#161B21" media="(prefers-color-scheme: dark)">
 <title>登录 · Claclaw</title>
-<script>(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}})();</script>
+<script>(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen')shichen()}catch(e){}
+// 流变时辰（和 index.html 的 window.__sc 同一套算法和颜色）：整页铺当前地支色，标题用天干色、按钮用地支色，看不清就往深里调
+function shichen(){
+  var G='甲乙丙丁戊己庚辛壬癸',Z='子丑寅卯辰巳午未申酉戌亥',W=[255,255,255];
+  var GC=['1E6B3A','9CCB8E','D62828','F2A0A0','D49A2A','F2D27A','F2F0EB','D9D9D9','1F3A6B','5B8FC7'];
+  var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
+  var ZF=['000000','A4A9B1','FFFFFF','000000','1F3A6B','FFFFFF','000000','1E6B3A','000000','000000','8B1A1A','FFFFFF'];
+  function rgb(h){return [0,2,4].map(function(i){return parseInt(h.substr(i,2),16)})}
+  function hex(c){return '#'+c.map(function(v){return ('0'+Math.round(v).toString(16)).slice(-2)}).join('')}
+  function lum(c){var l=c.map(function(v){v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*l[0]+.7152*l[1]+.0722*l[2]}
+  function deepen(c){for(var t=0;t<=1;t+=.02){var m=c.map(function(v){return v*(1-t)});if(1.05/(lum(m)+.05)>=4.5)return m}return [0,0,0]}
+  var d=new Date(),x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
+  var day=Math.floor(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate())/864e5)+2440588+49,z=Math.floor((d.getHours()+1)%24/2),g=(day%10%5*2+z)%10;
+  var s=document.documentElement.style;
+  s.setProperty('--sc-b','#'+ZC[z]);s.setProperty('--sc-f','#'+ZF[z]);s.setProperty('--sc-t',hex(deepen(rgb(GC[g]))));s.setProperty('--accent',hex(deepen(rgb(ZC[z]))));
+  window.__scName=G[g]+Z[z];
+  document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content='#'+ZC[z]});
+}
+})();</script>
 <style>
 :root{
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
@@ -43,6 +61,11 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline
 button{width:100%;min-height:52px;margin-top:20px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
 button:disabled{opacity:.5}
 #err{min-height:1.5em;margin-top:12px;color:var(--deny);font-size:14px}
+:root[data-theme="shichen"] body{background:var(--sc-b);flex-direction:column}
+:root[data-theme="shichen"] form{box-sizing:border-box;border-color:transparent;box-shadow:0 8px 30px rgba(0,0,0,.12)}
+:root[data-theme="shichen"] h1{color:var(--sc-t)}
+#sc{display:none;margin-top:14px;text-align:center;font-size:13px;color:var(--sc-f);letter-spacing:.2em}
+:root[data-theme="shichen"] #sc{display:block}
 </style>
 </head>
 <body>
@@ -60,6 +83,7 @@ button:disabled{opacity:.5}
   <button type="submit" id="go">登录</button>
   <div id="err" role="alert"></div>
 </form>
+<div id="sc"></div><script>if(window.__scName)document.getElementById('sc').textContent=window.__scName+'时'</script>
 <script>
 (function(){
 var f=document.getElementById('f'),err=document.getElementById('err'),go=document.getElementById('go');

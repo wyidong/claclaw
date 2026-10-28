@@ -1763,6 +1763,20 @@ function saveUnread(u) {
 }
 function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveUnread(u); return unreadTotal(u); }
 function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); devRead(id); }
+// 兜底：会话已经不在了（别处删的、删除时没清到的）还挂着未读，红点和角标会一直亮着却找不到是哪个。
+// 启动时查一遍：Claude 看 ~/.claude/projects/*/<id>.jsonl 在不在，DeepSeek 看 dsh 的会话文件；OpenCode / OpenClaw 不好查，不动
+function pruneUnread() {
+  const u = unreadMap(), ids = Object.keys(u);
+  if (!ids.length) return;
+  let dirs = [];
+  try { dirs = fs.readdirSync(path.join(HOME, '.claude', 'projects')); } catch { return; }
+  for (const id of ids) {
+    let gone = false;
+    if (isDs(id)) gone = !dsExists(id);
+    else if (/^[0-9a-f-]{36}$/i.test(id)) gone = !dirs.some(d => fs.existsSync(path.join(HOME, '.claude', 'projects', d, id + '.jsonl')));
+    if (gone) { clearUnread(id); log('unread pruned', id.slice(0, 11)); }
+  }
+}
 // 提醒发出去：报给 clarelay（推到外壳、算角标），按设置决定自己的 Web Push 要不要发。
 // snippet 给 clarelay 的另算（配对码之类不该出本机的用 safeSnippet 替掉）；clarelay 自己再截成前 N 个字
 // watched：有页面正看着这个会话。clarelay 照报（正在看的过滤交给中继，它按外壳报的 viewing 比对）；claclaw 自己的 Web Push 不推
@@ -2083,6 +2097,7 @@ async function handleDelete(req, res) {
     r?.dispose();
     // opencode 的会话在它的数据库里：先导出一份 JSON 到回收站（opencode import 能找回），再删
     try { await opDelete(body.id, TRASH); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 删除失败：' + e.message }); }
+    clearUnread(body.id);   // 会话没了，它的未读也要清，不然红点和 App 角标一直亮着却找不到是哪个会话
     log('deleted session', body.id);
     return sendJson(res, 200, { ok: true });
   }
@@ -2104,6 +2119,7 @@ async function handleDelete(req, res) {
       fs.renameSync(dir, dest);
       fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: body.id, from: dir, deletedAt: new Date().toISOString() }, null, 2));
     }
+    clearUnread(body.id);   // 会话没了，它的未读也要清，不然红点和 App 角标一直亮着却找不到是哪个会话
     log('deleted session', body.id);
     return sendJson(res, 200, { ok: true });
   }
@@ -2132,6 +2148,7 @@ async function handleDelete(req, res) {
   fs.renameSync(file, path.join(dest, path.basename(file)));
   const sub = file.replace(/\.jsonl$/, '');
   if (fs.existsSync(sub)) fs.renameSync(sub, path.join(dest, path.basename(sub)));
+  clearUnread(info.sessionId);
   log('deleted session', info.sessionId.slice(0, 8), '→', path.relative(ROOT, dest));
   sendJson(res, 200, { ok: true });
 }
@@ -2593,6 +2610,7 @@ function sameOrigin(req) {
 }
 
 const wss = new WebSocketServer({ noServer: true });
+try { pruneUnread(); } catch (e) { log('unread prune', e.message); }   // 要在 wss 之后：清未读会广播给已连的页面
 let ttsOwner = null, ttsOwnerAt = 0;   // 正在朗读的页面
 function onUpgrade(req, socket, head) {
   if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
