@@ -799,11 +799,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
   /* 设置是子页面（像点进一个会话）：没有底部菜单，左上角返回，退出登录和版本沉到页面最底下 */
   #app.m-list.set-on #mtabs{display:none}
   #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
-  #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 6px;background:var(--strip)}
+  #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip)}
   #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:22px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
-  #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
+  #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
   /* 标题栏下不留空：原来空出的 14px 里内容滚上去会被截掉，像多了一节；留白挪进滚动区 */
-  #setBack{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
+  #setBack{position:absolute;left:0;top:env(safe-area-inset-top,0px);bottom:0;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
 }
 #mtabs{display:none}
 #setTop{display:none}
@@ -942,8 +942,8 @@ select.pe-in{text-align-last:right}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
-  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-20px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;margin:calc(-20px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 6px;background:var(--strip);border-bottom:1px solid var(--line)}
-  #app.m-list.host-on #hostPane .pe-back{left:0}
+  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip);border-bottom:1px solid var(--line)}
+  #app.m-list.host-on #hostPane .pe-back{left:0;top:env(safe-area-inset-top,0px);bottom:0}   /* 标题上下留白一样：不再往上多挪 6px、底下不多留 6px */
   .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
   .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
   .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
@@ -1387,20 +1387,20 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">客户端</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setReload"><span class="lb">更新客户端<small id="setReloadSub">重新加载网页，用上电脑上的最新版本</small></span><svg class="rl-ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+          <button type="button" class="set-item" id="setReload"><span class="lb">更新客户端<small id="setReloadSub">重新加载最新版本</small></span><svg class="rl-ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
         </div>
       </div>
       <div class="set-sec">
         <div class="set-h">宿主</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setHost"><span class="lb"><span id="setHostName">宿主</span><small>这台宿主的电脑状态、claclaw 版本、Claw、claclaw 协同</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setHost"><span class="lb"><span id="setHostName">宿主</span><small>电脑状态、版本、Claw、协同</small></span><span class="chev" aria-hidden="true"></span></button>
         </div>
       </div>
       <div class="set-sec">
         <div class="set-h">语音</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读<small id="setTtsSub">开着时，正在看的会话来了新回复就念出来（这台设备）</small></span><span class="sw" aria-hidden="true"></span></button>
-          <label class="set-item"><span class="lb">播报范围<small id="setTtsModeSub">只念回复：不念工具进度</small></span>
+          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读<small id="setTtsSub">念出正在看的会话的新回复</small></span><span class="sw" aria-hidden="true"></span></button>
+          <label class="set-item"><span class="lb">播报范围<small id="setTtsModeSub">只念回复</small></span>
             <select id="setTtsMode"><option value="off">关（不朗读）</option><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
             <select id="setTtsVoice"></select></label>
@@ -1411,34 +1411,34 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">会话</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">上下文压缩提示<small>Claude 会话的上下文超过这个大小，标题栏出现压缩按钮（单位 k，默认 128）</small></span>
+          <label class="set-item"><span class="lb">上下文压缩提示<small>超过这个大小，标题栏出现压缩按钮（默认 128k）</small></span>
             <span class="set-num"><input id="setCtxK" type="number" inputmode="numeric" min="8" max="2000" step="1" placeholder="128" aria-label="上下文压缩提示（k）">k</span></label>
-          <button type="button" class="set-item" id="setEnterSend" hidden><span class="lb">键盘回车键发送<small>开着：回车键直接发送，输入框右边的发送键平时收起；换行用键盘的长按回车（看键盘支不支持）。关掉：回车换行，点发送键发</small></span><span class="sw" aria-hidden="true"></span></button>
-          <button type="button" class="set-item" id="setRecentClear"><span class="lb">清空最近<small>只清空「最近」列表，不删除任何会话；之后有新动静的会话会再出现。删除会话请到各 Claw 的会话列表里删</small></span></button>
+          <button type="button" class="set-item" id="setEnterSend" hidden><span class="lb">键盘回车键发送<small>开：回车发送；关：回车换行</small></span><span class="sw" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setRecentClear"><span class="lb">清空最近<small>只清列表，不删会话</small></span></button>
         </div>
       </div>
       <div class="set-sec">
         <div class="set-h">外观</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">主题<small>跟随系统：随这台设备的深浅色自动切换</small></span>
+          <label class="set-item"><span class="lb">主题<small>「跟随系统」随设备深浅色切换</small></span>
             <select id="setTheme"><option value="">跟随系统</option><option value="light">普通</option><option value="dark">深色</option><option value="ziwei">九紫离火</option><option value="shichen">流变时辰</option></select></label>
         </div>
       </div>
       <div class="set-sec">
         <div class="set-h">本机附件</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">保留时间<small id="vidUse">发过的图片原图、视频、文件存在这台设备上，聊天记录里点开直接看</small></span>
+          <label class="set-item"><span class="lb">保留时间<small id="vidUse">图片原图、视频、文件存在本机</small></span>
             <select id="setVidKeep"><option value="30">1 个月</option><option value="60">2 个月</option><option value="180">6 个月</option><option value="365">1 年</option></select></label>
           <label class="set-item"><span class="lb">空间上限<small>超过后先删最早的</small></span>
             <select id="setVidCap"><option value="512">500MB</option><option value="1024">1GB</option><option value="2048">2GB</option><option value="5120">5GB</option></select></label>
-          <label class="set-item"><span class="lb">电脑上保留<small>原文件存在电脑上，换设备打开聊天记录也能取回；超过就删（所有设备共用）</small></span>
+          <label class="set-item"><span class="lb">电脑上保留<small>原文件存在电脑上，换设备也能取回</small></span>
             <select id="setUpKeep"><option value="7">7 天</option><option value="30">1 个月</option><option value="60">2 个月</option><option value="180">6 个月</option><option value="365">1 年</option></select></label>
         </div>
       </div>
       <div class="set-sec">
         <div class="set-h">会话</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">空闲关闭<small>网页里的会话没人看、也没在干活，多久后关掉进程</small></span>
+          <label class="set-item"><span class="lb">空闲关闭<small>没人看也没在干活，多久后关掉</small></span>
             <select id="setIdle"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="240">4 小时</option></select></label>
           <label class="set-item"><span class="lb">接管等待<small>终端 / VS Code 里的会话闲置多久后可以接管</small></span>
             <select id="setTake"><option value="0">随时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select></label>
@@ -1447,8 +1447,8 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">通知</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="pushBtn" hidden><span class="lb">推送通知<small id="pushSub">回复完了、要你确认时提醒</small></span><span class="sw" aria-hidden="true"></span></button>
-          <button type="button" class="set-item" id="pushLocal" hidden><span class="lb">本机测试通知<small>不经推送服务，检查这台设备能不能弹出</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="pushBtn" hidden><span class="lb">推送通知<small id="pushSub">回复完、要确认时提醒</small></span><span class="sw" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="pushLocal" hidden><span class="lb">本机测试通知<small>检查这台设备能否弹出</small></span><span class="chev" aria-hidden="true"></span></button>
           <label class="set-item" id="pushViaRow" hidden><span class="lb">推送App<small id="pushViaSub">推到哪个 App</small></span>
             <select id="setPushVia"><option value="auto">自动</option><option value="clarelay">clarelay</option><option value="self">claclaw</option><option value="both">都推</option></select></label>
         </div>
@@ -1458,7 +1458,7 @@ select.pe-in{text-align-last:right}
         <div class="set-h">电脑提示音</div>
         <div class="set-card">
           <button type="button" class="set-item" id="soundBtn" hidden><span class="lb">推送时电脑响一声<small>运行 claclaw 的那台电脑</small></span><span class="sw" aria-hidden="true"></span></button>
-          <label class="set-item" id="soundPick" hidden><span class="lb">提示音<small>选了会先试听</small></span><select id="soundSel"></select></label>
+          <label class="set-item" id="soundPick" hidden><span class="lb">提示音<small>选了试听</small></span><select id="soundSel"></select></label>
         </div>
       </div>
       <div class="set-foot">
@@ -4699,7 +4699,7 @@ function ttsPickVoice(){
   var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(srvLabel(v))+'</option>'}).join('');
   sel.innerHTML=(pc?'<optgroup label="电脑合成（微软在线语音 / Mac 上的声音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
   sel.value=ttsSrvVoice()?tts.want:tts.voice?tts.voice.voiceURI:'';
-  $('#setTtsVoiceSub').textContent=srv.length?'选了会试听一句；电脑合成的声音更自然':'选了会试听一句';
+  $('#setTtsVoiceSub').textContent=srv.length?'选了试听；电脑合成的更自然':'选了试听';
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
 // 电脑合成的声音列表：开着朗读且选的是电脑声音才在启动时拉，否则等进设置页再拉
@@ -5159,8 +5159,8 @@ function ttsSync(){
   var sel=$('#setTtsMode');if(sel)sel.value=tts.mode;
   // 朗读关着时，声音和语速用不上：一起收起来
   $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
-  var label={off:'关着：不朗读',reply:'只念文字回复，不念工具进度',steps:'关键节点 + 回复：等你确认、改文件/跑命令、完成，再念正文',brief:'只念关键节点，不念正文'};
-  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；页面保持在前台，锁屏后停止':'关着：点一下打开朗读';
+  var label={off:'不朗读',reply:'只念回复',steps:'念关键节点和回复',brief:'只念关键节点'};
+  $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；锁屏后停':'关着';
   var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
   ttsMuteShow();
@@ -5231,7 +5231,7 @@ ttsSync();
   k.addEventListener('change',function(){try{localStorage.setItem('claclaw.vidKeep',k.value)}catch(_){}vidPrune().then(showVidUse,function(){})});
   c.addEventListener('change',function(){try{localStorage.setItem('claclaw.vidCap',c.value)}catch(_){}vidPrune().then(showVidUse,function(){})});
 })();
-function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$('#vidUse').textContent='发过的图片原图、视频、文件存在这台设备上，点开直接看；现在存了 '+u.n+' 个，共 '+(u.size/1048576).toFixed(1)+'MB'}).catch(function(){})}
+function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$('#vidUse').textContent='图片原图、视频、文件存在本机：'+u.n+' 个，'+(u.size/1048576).toFixed(1)+'MB'}).catch(function(){})}
 (function(){
   var sel=$('#setTheme'),t='';try{t=localStorage.getItem('claclaw.theme')||''}catch(_){}
   sel.value=t;applyTheme(t);
@@ -5355,7 +5355,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
 
 var pushBtn=$('#pushBtn'),pushTip=$('#pushTip');
-function pushUI(on){pushBtn.dataset.on=on?'1':'';$('#pushSub').textContent=on?'回复完了、要你确认时会提醒这台设备':'关着：这台设备收不到提醒'}
+function pushUI(on){pushBtn.dataset.on=on?'1':'';$('#pushSub').textContent=on?'回复完、要确认时提醒':'关着'}
 var swReg=null;
 if('serviceWorker' in navigator&&window.isSecureContext){
   navigator.serviceWorker.register('/sw.js').then(function(r){swReg=r}).catch(function(e){console.warn('sw',e)});
@@ -5420,7 +5420,7 @@ function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').t
 // 会话相关设置：空闲关闭时间、接管等待时间（存在服务器，所有设备共用）
 function showSessSet(j){
   var cp=j.clarelayPush,pv=$('#pushViaRow');pv.hidden=!cp;
-  if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='自动：clarelay '+(cp.online?'在线':'不在线')+'，在线推到 clarelay，不在线 claclaw 自己推'}
+  if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='自动：clarelay '+(cp.online?'在线，走 clarelay':'不在线，claclaw 自己推')}
   if(j.uploadKeepDays){var uk=$('#setUpKeep'),uv=String(j.uploadKeepDays);if(![].some.call(uk.options,function(o){return o.value===uv})){var o2=document.createElement('option');o2.value=uv;o2.textContent=uv+' 天';uk.appendChild(o2)}uk.value=uv}
   [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
     var sel=$(x[0]),v=String(x[1]);
