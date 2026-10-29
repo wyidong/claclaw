@@ -397,6 +397,11 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ptint .pe-peer-name>span{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px}   /* 只给名字加底色，和会话列表里这个对方的名字标签一样 */
 .s-row.ptint .t .ptn{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
+/* 加入了 claclaw 协同的会话：会话名左上方的背景里藏一个「两个人、箭头一来一回」的矢量图（取代原来的浅紫色边框）；和背景里的「更新客户端」圈一样淡，仔细看才看得到 */
+.s-row.collab .s-item,.s-row.collab .wx-b,.s-row.collab .t,.s-row.collab .m,.s-row.collab .wx-top{position:relative}
+.s-row.collab.wx .wx-b::before,.s-row.collab:not(.wx) .s-item::before{content:'';position:absolute;width:40px;height:30px;background:var(--muted);opacity:.13;pointer-events:none;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 48'%3E%3Ccircle cx='14' cy='14' r='7'/%3E%3Cpath d='M2 37V32C2 26.5 7.5 23 14 23S26 26.5 26 32V37Z'/%3E%3Ccircle cx='50' cy='24' r='7'/%3E%3Cpath d='M38 47V42C38 36.5 43.5 33 50 33S62 36.5 62 42V47Z'/%3E%3Cpath d='M30 7L37 1V4.5H50V9.5H37V13Z'/%3E%3Crect x='23' y='11' width='11' height='3' rx='1.5'/%3E%3Crect x='27' y='19' width='13' height='3' rx='1.5' fill-opacity='.5'/%3E%3Cpath d='M41 30L34 24.5V27.5H27V32.5H34V35.5Z'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 48'%3E%3Ccircle cx='14' cy='14' r='7'/%3E%3Cpath d='M2 37V32C2 26.5 7.5 23 14 23S26 26.5 26 32V37Z'/%3E%3Ccircle cx='50' cy='24' r='7'/%3E%3Cpath d='M38 47V42C38 36.5 43.5 33 50 33S62 36.5 62 42V47Z'/%3E%3Cpath d='M30 7L37 1V4.5H50V9.5H37V13Z'/%3E%3Crect x='23' y='11' width='11' height='3' rx='1.5'/%3E%3Crect x='27' y='19' width='13' height='3' rx='1.5' fill-opacity='.5'/%3E%3Cpath d='M41 30L34 24.5V27.5H27V32.5H34V35.5Z'/%3E%3C/svg%3E") no-repeat center/contain}
+.s-row.collab.wx .wx-b::before{left:-10px;top:2px}
+.s-row.collab:not(.wx) .s-item::before{left:0;top:0}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
 @media (prefers-reduced-motion:reduce){.think i,.tool[data-k="run"] .st,.tgroup[data-k="run"] .tg-h .st{animation:none}}
@@ -892,6 +897,17 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .h-row.pe-peer{flex-direction:row;align-items:center;flex-wrap:nowrap}
 .h-row.pe-peer .pe-peer-name{flex:1;min-width:0;display:flex;align-items:center}
 .h-row.pe-peer>.v{flex:none}
+.h-row.pe-peer{transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+.h-row.pe-peer.sw{transform:translateX(-76px)}
+.pe-peer .pe-ren{position:absolute;top:0;bottom:0;right:-76px;width:76px;padding:0;border:0;background:#8B95A3;color:#fff;font:inherit;font-size:14px;font-weight:600;display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 手机：左滑露出，和会话列表的「编辑」同色 */
+.pe-peer .pe-ren svg{display:none}
+@media (hover:hover) and (pointer:fine){   /* 电脑：和会话列表一样，鼠标移上去在名字后面出现铅笔 */
+  .pe-peer .pe-ren{position:static;flex:none;width:30px;height:26px;border-radius:8px;background:none;color:var(--muted);opacity:0}
+  .pe-peer .pe-ren svg{display:block}.pe-peer .pe-ren span{display:none}
+  .pe-peer:hover .pe-ren,.pe-peer .pe-ren:focus-visible{opacity:1}
+  .pe-peer .pe-ren:hover{color:var(--ink);background:color-mix(in srgb,var(--muted) 12%,transparent)}
+}
+.pe-peer .pnm-in{min-width:0;flex:0 1 220px;padding:2px 8px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px;outline:none}
 .pe-ss-list{margin:0;padding-left:1.2em}
 .pe-allow label{display:flex;align-items:center;gap:8px;padding:2px 0;cursor:pointer}
 .pe-allow label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1046,8 +1062,6 @@ select.pe-in{text-align-last:right}
   .s-row.waiting{border-color:var(--warn)}
   /* 选中的会话：和电脑端一样，整张卡片浅绿底、不再画绿框 */
   .s-row:has(> .s-item[aria-current="true"]){border-color:var(--user-bg);background:var(--user-bg)}
-  /* 加入了 claclaw 协同的会话：只在完全普通的状态下用浅紫色边框提示——名字已经带协同配色、选中、在干活 / 等确认时都不加 */
-  .s-row.collab:not(.working):not(.waiting):not(.ptint):not(:has(> .s-item[aria-current="true"])){border-color:var(--peer)}
   .s-row > .s-item[aria-current="true"]{background:var(--user-bg)}
   .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
   .s-row.dragging .s-item{transition:none}
@@ -1162,7 +1176,6 @@ select.pe-in{text-align-last:right}
   .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding-top:7px;padding-bottom:7px;padding-left:9px;border:1px solid var(--bg);border-radius:8px;background:none;cursor:pointer}
   .s-row:hover .s-item{background:var(--bg)}
   .s-item[aria-current="true"]{background:var(--user-bg)!important;border-color:var(--user-bg)!important}
-  .s-row.collab:not(.working):not(.waiting):not(.ptint) .s-item:not([aria-current="true"]){border-color:var(--peer)!important}
   /* 紫微主题给 .s-row 和 .s-item 都画了边框：电脑端卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
   :root[data-theme="ziwei"] #sList .s-row:not(.wx){border:0;background:none}
   :root[data-theme="shichen"] #sList .s-row:not(.wx){border:0;background:none}
@@ -3425,7 +3438,10 @@ function renderSkills(){
 // 只有在本机用 127.0.0.1 打开时能改设置；第一版只走局域网
 var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
 $('#hostBody').addEventListener('click',function(e){
+  if(e.target.closest('.pnm-in'))return;   // 正在改名：点输入框不跳转
+  var sw=$('#hostBody .pe-peer.sw');if(sw&&!e.target.closest('.pe-ren')){sw.classList.remove('sw');return}   // 有左滑开着的：先收起，不跳转
   var a=e.target.closest('[data-act]');if(!a)return;
+  if(a.dataset.act==='peer-rename'){e.stopPropagation();peRename(a.closest('.pe-peer'),a.dataset.id);return}
   var act=a.dataset.act;
   if(act==='peer'){hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();return}
   if(act==='peer-sub'){peerGo(a.dataset.sub);return}
@@ -3626,13 +3642,48 @@ function relayStateText(c){   // 主中继的状态（有备用的话带上个�
   return (RELAY_ST[st.status]||'没连')+(l.length>1?'，'+on+'/'+l.length+' 个在线':'');
 }
 function peerLink(act,sub,k,v){return '<div class="h-row h-link" data-act="'+act+'" data-sub="'+sub+'"><span class="k">'+k+'</span><span class="v">'+(v||'')+'</span><span class="chev" aria-hidden="true"></span></div>'}
+// 已配对的对方改别名（和会话列表一样）：手机左滑一行露出「编辑」，电脑鼠标移上去出现铅笔；名字原地变输入框，回车 / 点别处保存，Esc 取消
+function peRename(row,id){
+  if(!row)return;row.classList.remove('sw');
+  var nm=row.querySelector('.pnm');if(!nm||row.querySelector('.pnm-in'))return;
+  var old=nm.textContent,inp=document.createElement('input');inp.className='pnm-in';inp.value=old;inp.maxLength=40;inp.setAttribute('enterkeyhint','done');inp.setAttribute('aria-label','对方的别名');
+  nm.replaceWith(inp);inp.focus();inp.select();
+  var done=false;
+  function fin(save){if(done)return;done=true;var v=inp.value.replace(/\s+/g,' ').trim();
+    inp.replaceWith(nm);if(save&&v&&v!==old)peerPost('/rename',{id:id,name:v},'已改名为「'+v+'」，和 AI 说时就用这个名字')}   // 先放回原名字；成功后整块重画成新名字，失败（重名）显示原因
+  inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();fin(true)}else if(e.key==='Escape'){e.preventDefault();fin(false)}});
+  inp.addEventListener('blur',function(){fin(true)});
+}
+(function(){   // 手机：已配对的行左滑露出「编辑」，右滑收起
+  var g=null,W=76;
+  $('#hostBody').addEventListener('touchstart',function(e){
+    var row=e.target.closest('.pe-peer');if(!row||e.touches.length!==1||e.target.closest('.pnm-in')){g=null;return}
+    document.querySelectorAll('#hostBody .pe-peer.sw').forEach(function(r){if(r!==row)r.classList.remove('sw')});
+    var t=e.touches[0];g={row:row,x:t.clientX,y:t.clientY,o:row.classList.contains('sw')?-W:0,lock:''};
+  },{passive:true});
+  $('#hostBody').addEventListener('touchmove',function(e){
+    if(!g)return;var t=e.touches[0],dx=t.clientX-g.x,dy=t.clientY-g.y;
+    if(!g.lock&&(Math.abs(dx)>8||Math.abs(dy)>8))g.lock=Math.abs(dx)>Math.abs(dy)?'h':'v';
+    if(g.lock!=='h')return;
+    var x=Math.max(-W-16,Math.min(0,g.o+dx));g.row.style.transition='none';g.row.style.transform='translateX('+x+'px)';g.dx=dx;
+  },{passive:true});
+  function end(){
+    if(!g)return;var r=g.row,o=g.o,dx=g.dx||0,lk=g.lock;g=null;
+    r.style.transition='';r.style.transform='';
+    if(lk!=='h')return;
+    r.classList.toggle('sw',o+dx<-W/2);
+    r._sw=Date.now();
+  }
+  $('#hostBody').addEventListener('touchend',end);$('#hostBody').addEventListener('touchcancel',end);
+  $('#hostBody').addEventListener('click',function(e){var r=e.target.closest('.pe-peer');if(r&&r._sw&&Date.now()-r._sw<400){r._sw=0;e.stopImmediatePropagation();e.preventDefault()}},true);   // 滑完松手不算点
+})();
 // 已配对列表（主页）
 function peerPeersHtml(c){
   if(!c.peers||!c.peers.length)return hSec('已配对','<div class="h-row"><span class="v pe-left">还没有配对。'+(c.local?'点「添加对方」，或者把「复制邀请」发给对方。':'')+'</span></div>');
   return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
     var o=peerOnline[p.id];
     var v=!p.canCall?'只能对方找我们':!o?'检查中…':o.online?(o.sessions||[]).length+' 个会话':'离线';
-    return '<div class="h-row h-link pe-peer ptint '+peerPc(p)+'" data-act="peer-sub" data-sub="p:'+esc(p.id)+'"><span class="k pe-peer-name">'+peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span><span class="v">'+v+'</span><span class="chev" aria-hidden="true"></span></div>';
+    return '<div class="h-row h-link pe-peer ptint '+peerPc(p)+'" data-act="peer-sub" data-sub="p:'+esc(p.id)+'"><span class="k pe-peer-name">'+peerDot(p)+'<span class="pnm">'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span><button type="button" class="pe-ren" data-act="peer-rename" data-id="'+esc(p.id)+'" aria-label="改名" title="改名">'+ICON_PEN+'<span>编辑</span></button><span class="v">'+v+'</span><span class="chev" aria-hidden="true"></span></div>';
   }).join('')+'</div></div>';
 }
 // 对方详情里会随在线检查变的部分（每 10 秒刷新，不动下面的勾选框）
@@ -3790,7 +3841,7 @@ function peerMainHtml(c){
 }
 function paintPeerLive(){
   if(hostView!=='peer'||!peerCfg)return;
-  if(!peerSub){var a=$('#pePending'),b=$('#pePeers');if(a)a.innerHTML=peerPendingHtml(peerCfg);if(b)b.innerHTML=peerPeersHtml(peerCfg);return}
+  if(!peerSub){var a=$('#pePending'),b=$('#pePeers');if(a)a.innerHTML=peerPendingHtml(peerCfg);if(b&&!b.querySelector('.pe-peer.sw,.pnm-in'))b.innerHTML=peerPeersHtml(peerCfg);return}   // 正在左滑 / 改名时不重画
   if(peerSub.indexOf('p:')===0){var p=(peerCfg.peers||[]).find(function(x){return 'p:'+x.id===peerSub}),d=$('#peDetLive');if(p&&d)d.innerHTML=peerDetailLive(peerCfg,p)}
 }
 function renderPeer(){
@@ -4353,7 +4404,7 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
   document.addEventListener('touchstart',function(e){
     g=null;
     if(DESKTOP.matches||e.touches.length!==1||overlayOn())return;
-    var t=e.target;if(t.closest('input,textarea,select,[contenteditable="true"],#mtabs,.hd-ic')||hScroll(t))return;   // 标题栏圆球能左右拖，不算右滑返回
+    var t=e.target;if(t.closest('input,textarea,select,[contenteditable="true"],#mtabs,.hd-ic,.pe-peer')||hScroll(t))return;   // 标题栏圆球能左右拖、已配对的行能左右滑，都不算右滑返回
     var row=t.closest('#sList .s-row');
     var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),row:row||null,rowOpen:!!(row&&row.classList.contains('open'))};
   },{passive:true,capture:true});

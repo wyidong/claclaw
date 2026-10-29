@@ -2480,6 +2480,13 @@ const handler = async (req, res) => {
         const h = String(b.host || '').trim(); if (h && !/^[\w.-]+:\d+$/.test(h)) return sendJson(res, 400, { error: '格式：host:port' });
         if (h) p.relayFirst = h; else delete p.relayFirst; savePeer(c); log('peer relay-first', p.name, h || '默认'); return sendJson(res, 200, pub(c));
       }
+      if (act === '/rename') {   // 给已配对的对方改个别名（只改我们这边的叫法；AI 用 peer_send 时按这个名字找对方）
+        const p = c.peers.find(x => x.id === b.id); if (!p) return sendJson(res, 404, { error: '没有这个对方' });
+        const n = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        if (!n) return sendJson(res, 400, { error: '名字不能为空' });
+        if (c.peers.some(x => x.id !== p.id && x.name === n)) return sendJson(res, 400, { error: '已经有叫「' + n + '」的对方了' });
+        log('peer rename', p.name, '→', n); p.name = n; savePeer(c); return sendJson(res, 200, pub(c));
+      }
       if (act === '/revoke') { c.peers = c.peers.filter(p => p.id !== b.id); savePeer(c); log('peer revoked', b.id); return sendJson(res, 200, pub(c)); }
       if (act === '/check') {
         // 已配对的对方在不在线：能用钥匙列出对方的会话就算在线
