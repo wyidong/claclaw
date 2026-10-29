@@ -53,9 +53,12 @@ const ROUTINE_NPM = new Set(['test', 't', 'run check', 'run test', 'run restart'
 const inRepo = (dir, repos) => repos.some(r => dir === r || inside(dir, path.join(r, '.worktrees')));
 
 function words(seg) {
-  // 粗分词：引号里的空格不拆。分错只会多问，不会少问（每一段都要单独过检查）
+  // 粗分词：引号里的空格不拆，反斜杠转义下一个字符（和 shell 一样）。分错只会多问，不会少问（每一段都要单独过检查）
   const out = []; let cur = '', q = '';
-  for (const ch of seg) {
+  for (let i = 0; i < seg.length; i++) {
+    const ch = seg[i];
+    if (q === "'") { if (ch === q) q = ''; else cur += ch; continue; }
+    if (ch === '\\' && i + 1 < seg.length && (!q || /["\\$`]/.test(seg[i + 1]))) { cur += seg[++i]; continue; }
     if (q) { if (ch === q) q = ''; else cur += ch; continue; }
     if (ch === '"' || ch === "'") { q = ch; continue; }
     if (/\s/.test(ch)) { if (cur) out.push(cur), cur = ''; continue; }
@@ -65,13 +68,37 @@ function words(seg) {
   return out;
 }
 
+// 引号里、反斜杠后面的字符换成占位符（长度不变）：| ; & > 只有在这之外才是分隔符 / 重定向。
+// 按 shell 的规矩：单引号里没有转义；双引号里 \" \\ 是转义、不结束引号；引号外 \x 就是字面的 x
+function unquoted(s) {
+  let out = '', q = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (q === "'") { if (ch === "'") { q = ''; out += ch; } else out += '_'; continue; }
+    if (ch === '\\' && i + 1 < s.length) { out += '__'; i++; continue; }
+    if (q === '"') { if (ch === '"') { q = ''; out += ch; } else out += '_'; continue; }
+    if (ch === '"' || ch === "'") q = ch;
+    out += ch;
+  }
+  return out;
+}
+// 按 && || ; | & 换行切成一段段命令（引号里的不算）
+export function segments(cmd) {
+  const s = String(cmd || ''), out = [];
+  let last = 0;
+  for (const m of unquoted(s).matchAll(/&&|\|\||[;|&\n]/g)) { out.push(s.slice(last, m.index)); last = m.index + m[0].length; }
+  out.push(s.slice(last));
+  return out.map(x => x.trim()).filter(Boolean);
+}
+
 // 返回 null = 安全；否则返回要确认的原因。repos：可以跑常规维护的仓库目录
 export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = {}) {
   let s = String(cmd || '');
   if (/\$\(|`|<\(|>\(|\$\{/.test(s)) return '命令里有嵌套执行';
+  if (/\$'/.test(s)) return "命令里有 $'…' 转义串";   // 里面的 \' 不结束引号，切分会和 shell 对不上
   s = s.replace(/\s\d?>\s*\/dev\/null/g, ' ').replace(/\s2>&1/g, ' ');
-  if (/>/.test(s)) return '命令会写文件';
-  const segs = s.split(/&&|\|\||[;|&\n]/).map(x => x.trim()).filter(Boolean);
+  if (/>/.test(unquoted(s))) return '命令会写文件';
+  const segs = segments(s);
   if (!segs.length) return '空命令';
   let dir = cwd;
   for (const seg of segs) {
@@ -129,7 +156,7 @@ export function peerInstructed(name, input, text) {
   const base = x => String(x || '').replace(/\/+$/, '').split('/').pop();
   input = input || {};
   if (name === 'Bash') {
-    const segs = String(input.command || '').split(/&&|\|\||[;|&\n]/).map(x => x.trim()).filter(Boolean);
+    const segs = segments(input.command);
     for (const seg of segs) {
       if (has(seg.replace(/\s+/g, ' '))) return true;                      // 整段命令原样出现在来信里
       const w = words(seg).filter(a => !/^-/.test(a));
@@ -153,7 +180,7 @@ const DESTRUCTIVE_GIT = new Set(['push', 'reset', 'clean', 'rebase', 'checkout',
 const DESTRUCTIVE_WORDS = /\b(drop|delete|truncate|flushall|flushdb|destroy|purge|prune|wipe|--force|-f\b|--hard|publish|deploy|terminate|rmi)\b/i;
 export function destructive(name, input) {
   if (name !== 'Bash') return false;
-  const segs = String((input || {}).command || '').split(/&&|\|\||[;|&\n]/).map(x => x.trim()).filter(Boolean);
+  const segs = segments((input || {}).command);
   for (const seg of segs) {
     const w = words(seg), c = String(w[0] || '').split('/').pop();
     if (DESTRUCTIVE_CMDS.has(c)) return true;

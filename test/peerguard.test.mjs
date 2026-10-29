@@ -100,3 +100,14 @@ test('收不回来的操作、来信有动手意思：照样确认', () => {
   assert.equal(peerIntent('改完部署一下'), true);
   assert.equal(peerIntent('详情页按钮没有入口，看看 render_actions'), false);
 });
+test('引号里的 | ; & > 不当分隔符 / 重定向（grep 正则里的 | 不再被拆成一段「命令」）', () => {
+  const o = { repos: [proj], clean: () => true };
+  for (const c of ['npm test 2>&1 | grep -E "^ℹ (tests|pass|fail)"', "grep -E 'a|b;c' server.mjs", 'echo "a > b"', "git log --format='%h|%s' -3",
+    'grep -n "x && y" README.md', 'ls \\; rm x', 'echo "a\\" ; rm x ; echo \\""'])   // 后两条：shell 里 \; 和双引号里的 \" 都是字面字符，确实只跑 ls / echo
+    assert.equal(bashRisk(c, proj, roots, o), null, c);
+});
+test('引号 / 转义的花招骗不过切分', () => {
+  for (const c of ['echo \\"; rm -rf x; echo \\"', "echo $'\\'' ; rm x ; echo 'a'", "echo 'a' ; rm x", 'grep "x" ; rm x',
+    'echo "a" > out', "echo 'a'>out", 'cat a | sh'])
+    assert.ok(bash(c), c);
+});
