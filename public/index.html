@@ -2512,21 +2512,35 @@ var videoJob=null;
 function vidName(n){return String(n||'视频').replace(/[\r\n\]「」]/g,' ').slice(0,80)}
 function startVideoJob(v,sid,host){
   var job={v:v,sid:sid,el:host||addUser('',[],{kind:v.kind,name:v.name,size:v.size,url:v.url,label:'上传 0%'})};if(!host)job.el.classList.add('pending');videoJob=job;
-  var x=new XMLHttpRequest(),lab=function(t){if(job.el&&job.el.vbadge)job.el.vbadge.textContent=t};
-  var isDoc=v.kind==='file';
-  x.open('POST',isDoc?'/api/upload/doc':'/api/upload/video');x.setRequestHeader('content-type',v.file.type||(isDoc?'application/octet-stream':'video/quicktime'));
-  if(isDoc)x.setRequestHeader('x-file-name',encodeURIComponent(v.name||''));
-  x.upload.onprogress=function(e){if(e.lengthComputable)lab('上传 '+Math.floor(e.loaded*100/e.total)+'%')};
+  var lab=function(t){if(job.el&&job.el.vbadge)job.el.vbadge.textContent=t},prog=function(l,t){if(t)lab('上传 '+Math.floor(l*100/t)+'%')};
+  var isDoc=v.kind==='file',url=isDoc?'/api/upload/doc':'/api/upload/video',ctype=v.file.type||(isDoc?'application/octet-stream':'video/quicktime');
   var fail=function(msg){
     if(videoJob===job)videoJob=null;
     if(job.el&&job.el.isConnected){if(job.el.dataset.vpend){var tl=job.el.querySelector('.uvid');if(tl)tl.remove();delete job.el.dataset.vpend}else job.el.remove()}
     addSys((v.kind==='file'?'文件':'视频')+'上传失败'+(msg?'：'+msg:'')+'，已放回输入框，可以重发');
     if(session&&session.id===sid&&!attachments.some(function(a){return a.video})){attachments.push({url:v.url,data:true,video:{kind:v.kind,name:v.name,file:v.file,id:'',size:v.size}});renderAtts()}
   };
-  x.onload=function(){var j={};try{j=JSON.parse(x.responseText)}catch(_){}
-    if(x.status===200&&j.id){v.id=j.id;vidSave(j.id,v.file,v.name,v.kind);var tl=job.el&&job.el.querySelector('.uvid');if(tl)tl.dataset.vid=j.id;lab('等待发送…');job.ready=true;sendVideoJob()}else fail(j.error)};
-  x.onerror=function(){fail('网络')};
-  x.send(v.file);
+  var done=function(status,text){var j={};try{j=JSON.parse(text)}catch(_){}
+    if(status===200&&j.id){v.id=j.id;vidSave(j.id,v.file,v.name,v.kind);var tl=job.el&&job.el.querySelector('.uvid');if(tl)tl.dataset.vid=j.id;lab('等待发送…');job.ready=true;sendVideoJob()}else fail(j.error)};
+  // 经中继：XHR（原生 fetch 没有上传进度）
+  var viaXhr=function(){
+    var x=new XMLHttpRequest();
+    x.open('POST',url);x.setRequestHeader('content-type',ctype);
+    if(isDoc)x.setRequestHeader('x-file-name',encodeURIComponent(v.name||''));
+    x.upload.onprogress=function(e){if(e.lengthComputable)prog(e.loaded,e.total)};
+    x.onload=function(){done(x.status,x.responseText)};
+    x.onerror=function(){fail('网络')};
+    x.send(v.file);
+  };
+  // clarelay 直连通着：走直连（分片、控流、按送达字节算进度）；中途断了改走中继从头重传
+  if(CR&&CR.route==='direct'){
+    var hd={'content-type':ctype};if(isDoc)hd['x-file-name']=encodeURIComponent(v.name||'');
+    CR.fetch(url,{method:'POST',body:v.file,headers:hd,onUploadProgress:prog})
+      .then(function(r){return r.text().then(function(t){return [r.status,t]})})
+      .then(function(x){done(x[0],x[1])},function(){clog('直连上传断了，改走中继重传');prog(0,1);viaXhr()});
+    return;
+  }
+  viaXhr();
 }
 // 视频传好了、前一条文字也送到了：把视频作为下一条发出去（AI 正忙就作为插话排队）
 function sendVideoJob(){
