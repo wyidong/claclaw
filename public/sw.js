@@ -1,5 +1,10 @@
-// claclaw 的 Service Worker：只负责推送通知 —— 收到推送就弹通知，点通知回到对应会话。
+// claclaw 的 Service Worker：主要负责推送通知 —— 收到推送就弹通知，点通知回到对应会话。
 // 不做离线缓存（页面每次都要连本机服务，缓存旧页面只会添乱）。只有 Claw logo 例外，见下面。
+// 经 clarelay 打开、而且页面当前是直连时：图片 / 视频 / 附件这类浏览器自己取的请求，交给 clarelay 走直连（支持 Range）；
+// 直接访问 claclaw 时这个脚本 404，importScripts 抛错，忽略
+try { importScripts('/_clarelay/sw.js'); } catch (e) {}
+const VIA_DIRECT = u => /^\/(api\/upload\/(file|thumb)|api\/himg|sc-bg\/)/.test(u.pathname);
+self.addEventListener('fetch', e => { if (self.clarelay && self.clarelay.handle(e, VIA_DIRECT)) e.stopImmediatePropagation(); });
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 
