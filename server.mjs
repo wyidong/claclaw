@@ -97,9 +97,10 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const REGISTRY = path.join(os.homedir(), '.claude', 'sessions');
 const HOME = os.homedir();
 
-// 网页上可切换的基本模式；原会话用的是别的模式（比如 bypassPermissions）时，
-// 网页继承它，并把它加进这个会话可切换的列表里 —— 只对该会话有效，不会凭空给出 bypass
-const MODES = ['default', 'acceptEdits', 'plan'];
+// 网页上每个 Claude 会话都能切的模式（运行中直接 setPermissionMode）。
+// 「跳过确认」不在这里：它要在进程启动时就允许（allowDangerouslySkipPermissions），切过去走 switchToBypass——
+// 网页先确认，这一轮结束后重启这个会话的进程并记住。协同消息触发的那一轮，不管什么模式 peerGuard 照样拦。
+const MODES = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const ALL_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions', 'dontAsk', 'auto'];
 
@@ -2449,8 +2450,9 @@ const handler = async (req, res) => {
       catch (e) { return sendJson(res, 502, { error: e.message }); }
     }
     if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
-      const local = isLocalReq(req), c = loadPeer();
-      const pub = cc => ({ ...peerPublic(cc, true), canAssign: local });   // canAssign：能不能改开放哪些会话（只在本机）
+      const c = loadPeer();
+      // canAssign：能不能改开放哪些会话。原来只在本机 127.0.0.1 能改；用户实际用下来觉得没必要，登录了的网页（手机、经中继）都能改
+      const pub = cc => ({ ...peerPublic(cc, true), canAssign: true });
       if (req.method === 'GET' && url.pathname === '/api/peer') {
         // 协同池里每个会话的名字、目录（有的会话不在会话列表里，比如网页里新建的，页面上只能显示 ID）
         const all = c.sessions.length ? await localSessions().catch(() => []) : [];
@@ -2460,8 +2462,7 @@ const handler = async (req, res) => {
       let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024) || '{}'); } catch {}
       const act = url.pathname.slice('/api/peer'.length);
       // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
-      // 手机（不是本机打开）也能做全部操作——只有「开放哪些会话」（协同池、给某个对方开放哪些）要在这台电脑上用 127.0.0.1 设
-      if (!local && (act === '/allow' || (act === '' && Array.isArray(b.sessions)))) return sendJson(res, 403, { error: '开放哪些会话只能在这台电脑上用 127.0.0.1 打开网页时设置' });
+      // 手机、经中继打开的网页也能做全部操作，包括「开放哪些会话」（协同池、给某个对方开放哪些）
       if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
       if (act === '/peer-relay') {
         // 给已配对的对方补上 / 改掉它的中继地址（跨网络时用；局域网仍然优先）

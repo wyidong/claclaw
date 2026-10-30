@@ -2817,7 +2817,7 @@ function onEvent(m){
     $('#sessBtn .dot').innerHTML=clawIcon(clawKeyOf(m.id));
     setHeader();postViewing();
     $('#sessBtn .dot').classList.remove('off');
-    sessionModes=m.modes||['default','acceptEdits','plan'];
+    sessionModes=m.modes||['default','acceptEdits','plan','auto','dontAsk'];
     $('#cfgBtn').style.display=/^(oc|ds):/.test(m.id)?'none':'';   // OpenClaw / DeepSeek 没有权限模式
     cfg={models:null,model:null,effort:null,pick:'default'};cfgBusy=null;applyModel(m);
     setMode(m.mode,false);
@@ -3452,7 +3452,7 @@ function renderSkills(){
   $('#hostBody').innerHTML=h;
 }
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
-// 只有在本机用 127.0.0.1 打开时能改设置；第一版只走局域网
+// 登录了的网页（本机、手机、经中继）都能改全部协同设置；服务端 canAssign 恒为 true，下面 !canAssign 的分支只为兼容老服务端
 var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
 $('#hostBody').addEventListener('click',function(e){
   if(e.target.closest('.pnm-in'))return;   // 正在改名：点输入框不跳转
