@@ -1748,7 +1748,7 @@ function saveSettings(patch) {
 }
 // 手机网页的个人设置（语音档位、压缩提示阈值、主题……）也在电脑上存一份：clarelay 外壳里 claclaw 嵌在别的网址里，
 // iOS 杀掉 App 后嵌入页的 localStorage 会丢。页面下发时塞进去，本机没有的项由页面补回
-const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg'];
+const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang'];
 function clientPrefs() {
   const p = settings().clientPrefs, out = {};
   if (p && typeof p === 'object') for (const k of PREF_KEYS) if (typeof p[k] === 'string') out[k] = p[k];
@@ -2314,6 +2314,11 @@ const handler = async (req, res) => {
       if (!fs.existsSync(f)) { res.writeHead(404, { 'cache-control': 'no-store' }); return res.end(); }
       res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
       return fs.createReadStream(f).pipe(res);
+    }
+    // 英文界面的词典 + 翻译引擎（登录页也用，免登录；里面只有界面文字）
+    if (url.pathname === '/i18n/en.js') {
+      res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache' });
+      return fs.createReadStream(path.join(ROOT, 'public', 'i18n', 'en.js')).pipe(res);
     }
     // manifest 由浏览器不带 cookie 去取，必须免登录
     // Service Worker 脚本：浏览器更新它时不一定带 cookie，免登录（里面没有任何敏感内容）

@@ -63,7 +63,7 @@ window.__sc=(function(){
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
 (function(){
-  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg'],ls,pend={},n=0,t=0;
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang'],ls,pend={},n=0,t=0;
   try{ls=localStorage}catch(_){return}
   function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
   function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
@@ -75,6 +75,8 @@ window.__sc=(function(){
   addEventListener('pagehide',function(){clearTimeout(t);flush()});
   document.addEventListener('visibilitychange',function(){if(document.hidden){clearTimeout(t);flush()}});
 })();
+// 界面语言：默认中文；设置里选了 English 就先加载 /i18n/en.js（词典 + 翻译引擎，看着页面把界面文字换成英文）
+(function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
 (function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){window.__sc.apply();var b=document.documentElement.style.getPropertyValue('--sc-b');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
@@ -1475,6 +1477,8 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">外观</div>
         <div class="set-card">
+          <label class="set-item"><span class="lb">语言 / Language<small>切换后页面会刷新</small></span>
+            <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
           <label class="set-item"><span class="lb">主题<small>「跟随系统」随设备深浅色切换</small></span>
             <select id="setTheme"><option value="">跟随系统</option><option value="light">普通</option><option value="dark">深色</option><option value="ziwei">九紫离火</option><option value="shichen">流变时辰</option></select></label>
           <label class="set-item" id="setScImgRow"><span class="lb">时辰背景<small>每个时辰一张同色系图片；还没有图的时辰用纯色</small></span>
@@ -2013,7 +2017,7 @@ function showSession(restore){
   for(var k=hi-1;k>=lo;k--){   // 最新一轮在第一行
     var t=ts[k],cls=t.errors?'err':t.heavy?'heavy':'',marks=dsMarks(t);
     h+='<tbody class="tn"><tr class="r" data-i="'+t.i+'"><td class="no '+cls+'">#'+t.i+'</td><td>'+t.nSteps+'</td><td>'+(t.nTools||'')+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr ds-opt">'+(t.crLast==null?'--':dsTk(t.crLast))+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td><b>'+dsTk(t.total)+'</b></td><td>'+dsDur(t.durMs)+'</td></tr>'
-      +'<tr class="q" data-i="'+t.i+'"><td colspan="10"><span class="tm">'+dsWhen(t.at,multi)+'</span>'+(t.text?esc(t.text):'（接着上一轮）')+(marks.length?' · '+marks.join(' · '):'')+'</td></tr></tbody>';
+      +'<tr class="q" data-i="'+t.i+'"><td colspan="10"><span class="tm">'+dsWhen(t.at,multi)+'</span>'+(t.text?'<span>'+esc(t.text)+'</span>':'（接着上一轮）')+(marks.length?' · '+marks.map(function(m){return '<span>'+m+'</span>'}).join(' · '):'')+'</td></tr></tbody>';
   }
   h+='<tfoot><tr><td>Σ全轮</td><td>'+(s.steps||0)+'</td><td>'+(s.tools||0)+'</td><td class="col-inp">'+dsTk(s.inp)+'</td><td class="col-cw ds-opt">'+dsVal(s.cw,s.cwKnown)+'</td><td class="ds-opt" style="color:var(--muted);font-weight:400">末轮快照</td><td class="col-cr">'+dsVal(s.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(s.out)+'</td><td>'+dsTk(s.total)+'</td><td>'+dsDur(s.durMs)+'</td></tr></tfoot></table></div>'+dsPager(ts.length);
   var bl=s.bill;
@@ -5412,6 +5416,11 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   sel.addEventListener('change',function(){
     try{if(sel.value)localStorage.setItem('claclaw.theme',sel.value);else localStorage.removeItem('claclaw.theme')}catch(_){}
     applyTheme(sel.value);
+  });
+  var lg=$('#setLang');try{lg.value=localStorage.getItem('claclaw.lang')==='en'?'en':''}catch(_){}
+  lg.addEventListener('change',function(){
+    try{if(lg.value)localStorage.setItem('claclaw.lang',lg.value);else localStorage.removeItem('claclaw.lang')}catch(_){}
+    setTimeout(function(){$("#railReload").click()},350);   // 等设置同步到电脑（300ms 防抖）再刷新，刷新后停在设置页
   });
   var im=$('#setScImg');
   try{im.value=localStorage.getItem('claclaw.scImg')==='1'?'1':''}catch(_){}
