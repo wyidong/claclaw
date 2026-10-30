@@ -2464,18 +2464,20 @@ var SR=window.SpeechRecognition||window.webkitSpeechRecognition,micBtn=$('#micBt
 function micShow(){var on=!!SR&&COARSE.matches;micBtn.hidden=!on;$('#composer').classList.toggle('mic',on)}
 micBtn.addEventListener('click',function(){
   if(micRec){try{micRec.stop()}catch(_){}return}
+  try{ttsStop()}catch(_){}   // 正在念的先停：iOS 放着声音时一开麦克风就被打断（aborted）
   var r;try{r=new SR()}catch(e){toast('这里用不了语音识别：'+e.message);return}
   r.lang='zh-CN';r.continuous=true;r.interimResults=true;
   var base=ta.value,fin='';
   r.onresult=function(e){var interim='';for(var i=e.resultIndex;i<e.results.length;i++){var x=e.results[i];if(x.isFinal)fin+=x[0].transcript;else interim+=x[0].transcript}
     ta.value=base+(base&&!/\s$/.test(base)?' ':'')+fin+interim;ta.dispatchEvent(new Event('input',{bubbles:true}))};
-  r.onerror=function(e){toast('语音识别出错：'+(e.error||'未知'));try{clog('speech error '+e.error+' standalone='+!!navigator.standalone+' embedded='+(window.parent!==window))}catch(_){}};
+  var t0=Date.now();
+  r.onerror=function(e){if(e.error==='aborted'&&Date.now()-t0<2000)toast('麦克风没开起来（被打断了），再点一下试试');else if(e.error!=='aborted'&&e.error!=='no-speech')toast('语音识别出错：'+(e.error||'未知'));try{clog('speech error '+e.error+' standalone='+!!navigator.standalone+' embedded='+(window.parent!==window))}catch(_){}};
   r.onend=function(){micRec=null;micBtn.classList.remove('on');syncSend()};
   try{r.start();micRec=r;micBtn.classList.add('on');toast('说吧，再点一下停止')}catch(e){toast('启动失败：'+e.message);try{clog('speech start fail '+e.message)}catch(_){}}
 });
 micShow();
 // 发送时关掉语音输入：开着麦克风时 iOS 不放声音（自动播报播不出来），而且关晚了还会把识别出的字又写回已经清空的输入框
-function micOff(){var r=micRec;if(!r)return;r.onresult=null;try{r.abort()}catch(_){try{r.stop()}catch(__){}}}
+function micOff(){var r=micRec;if(!r)return;r.onresult=null;r.onerror=null;try{r.abort()}catch(_){try{r.stop()}catch(__){}}}
 $('#attachBtn').addEventListener('click',function(){if(attachments.length>=MAX_IMAGES){addSys('一次最多 '+MAX_IMAGES+' 张图片');return}fileIn.click()});
 fileIn.addEventListener('change',function(){addFiles(fileIn.files);fileIn.value=''});
 // 粘贴图片：整个页面都接（焦点不在输入框时也能粘），items 和 files 两种来源都看（Safari 有时只给 files）
