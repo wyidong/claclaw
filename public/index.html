@@ -3153,8 +3153,22 @@ function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideo
 // clarelay 直连：路线变了更新宿主页那一行；变成直连时悄悄重连一次 ws，把实时连接搬到直连上（服务端重连后会补发全部状态）
 function crRouteText(){if(!CR)return '中转';var v=CR.via!=null?CR.via:(CR.route==='direct'?'direct':'relay');return {lan:'直连 · 局域网',internet:'直连 · 外网',tailscale:'直连 · Tailscale',direct:'直连',relay:'中转'}[v]||'中转'}
 var crLast=CR&&CR.route;
+// 「当前连接」：中转时在后面小字写上次没连上直连的原因和下次重试时间（clarelay.info() 是异步的）
+function crPaint(){
+  var el=document.getElementById('crRoute');if(!el)return;
+  el.textContent=crRouteText();
+  if(!CR||CR.route==='direct'||!CR.info)return;
+  Promise.resolve(CR.info()).then(function(i){
+    if(!i||CR.route==='direct'||!el.isConnected)return;
+    var t=i.lastError?'上次没连上：'+i.lastError:'';
+    if(i.nextTry){var d=new Date(i.nextTry);if(!isNaN(d))t+=(t?' · ':'')+d.toTimeString().slice(0,8)+' 再试'}
+    if(i.disabled)t+=(t?' · ':'')+'电脑端没开直连';
+    if(t){var sm=document.createElement('small');sm.textContent=t;el.appendChild(sm)}
+  }).catch(function(){});
+}
+if(CR)setInterval(function(){if(!document.hidden)crPaint()},10000);
 if(CR&&CR.addEventListener)CR.addEventListener('route',function(e){
-  var el=document.getElementById('crRoute');if(el)el.textContent=crRouteText();
+  crPaint();
   var was=crLast;crLast=e&&e.detail&&e.detail.route;
   if(crLast==='direct'&&was!=='direct'&&ws&&ws.readyState===1){var old=ws;ws=null;old.onclose=null;old.onmessage=null;try{old.close()}catch(_){}connect()}
 });
@@ -3425,7 +3439,7 @@ function loadHost(){
       return hRow(w.name,(w.version?esc(w.version):'版本未知'),(st?st+' · ':'')+'打开 '+w.open+(w.busy?' · 工作中 '+w.busy:''))
         .replace('<span class="k">','<span class="k"><i class="h-dot'+(on?' on':'')+'"></i>');
     }).join('')+'<div class="h-row h-link" data-act="skills"><span class="k">技能</span><span class="v">'+skillsSum()+'</span><span class="chev" aria-hidden="true"></span></div>');
-    $('#hostBody').innerHTML=h;
+    $('#hostBody').innerHTML=h;crPaint();
   }).catch(function(e){if(!$('#hostBody .h-row'))$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
 // 宿主（这台电脑）的名字：显示在宿主页标题和设置里
