@@ -3152,9 +3152,11 @@ function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideo
 // 丢掉疑似已死的连接，立即重连（不等浏览器慢慢发现断线）
 // clarelay 直连：路线变了更新宿主页那一行；变成直连时悄悄重连一次 ws，把实时连接搬到直连上（服务端重连后会补发全部状态）
 function crRouteText(){if(!CR)return '中转';var v=CR.via!=null?CR.via:(CR.route==='direct'?'direct':'relay');return {lan:'直连 · 局域网',internet:'直连 · 外网',tailscale:'直连 · Tailscale',direct:'直连',relay:'中转'}[v]||'中转'}
+var crLast=CR&&CR.route;
 if(CR&&CR.addEventListener)CR.addEventListener('route',function(e){
   var el=document.getElementById('crRoute');if(el)el.textContent=crRouteText();
-  if(e&&e.detail&&e.detail.route==='direct'&&ws&&ws.readyState===1){var old=ws;ws=null;old.onclose=null;old.onmessage=null;try{old.close()}catch(_){}connect()}
+  var was=crLast;crLast=e&&e.detail&&e.detail.route;
+  if(crLast==='direct'&&was!=='direct'&&ws&&ws.readyState===1){var old=ws;ws=null;old.onclose=null;old.onmessage=null;try{old.close()}catch(_){}connect()}
 });
 function reconnectNow(){
   var old=ws;ws=null;
