@@ -29,13 +29,15 @@ for (const f of files) {
     console.error(String(e.stderr || e.message).split('\n').slice(0, 4).join('\n'));
   }
 }
-console.log(`✓ ${files.length} 个 .mjs 语法检查通过`);
+// 有错时最后一行也要说有错：只看结尾几行（| tail）的人不会被一句「通过」骗过去
+console.log(bad ? `✗ ${files.length} 个 .mjs 里有 ${bad} 个语法错误（详情见上）` : `✓ ${files.length} 个 .mjs 语法检查通过`);
 
 // 内联脚本：<script>…</script>（没有 src 的那种）逐个抽出来做语法检查
 const html = path.join(ROOT, 'public', 'index.html');
 if (fs.existsSync(html)) {
   const src = fs.readFileSync(html, 'utf8');
   const blocks = [...src.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  const badBefore = bad;
   blocks.forEach((code, i) => {
     const tmp = path.join(ROOT, '.check-inline-' + i + '.js');
     try {
@@ -49,7 +51,7 @@ if (fs.existsSync(html)) {
       try { fs.unlinkSync(tmp); } catch {}
     }
   });
-  console.log(`✓ public/index.html 里 ${blocks.length} 段内联脚本语法检查通过`);
+  console.log(bad > badBefore ? `✗ public/index.html 里 ${blocks.length} 段内联脚本有 ${bad - badBefore} 段语法错误（详情见上）` : `✓ public/index.html 里 ${blocks.length} 段内联脚本语法检查通过`);
 }
 
 process.exit(bad ? 1 : 0);

@@ -3508,6 +3508,7 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-relay-clear')peerPost('',{relayInvite:''},'已改回只走局域网');
   if(act==='peer-off')peerPost('',{enabled:false},'协同已关闭');
   if(act==='peer-reject')peerPost('/reject',{id:a.dataset.id},'已拒绝');
+  if(act==='peer-outbox-cancel'){if(confirm('取消这条排队中的消息？取消后不会再发'))peerPost('/outbox-cancel',{id:a.dataset.id},'已取消');return}
   if(act==='peer-revoke'){if(confirm('撤销和「'+a.dataset.name+'」的配对？撤销后对方要重新申请才能联系我们'))peerPost('/revoke',{id:a.dataset.id},'已撤销')}
   if(act==='peer-start'){peerMsg={ok:'正在向对方申请…'};paintPeerMsg();peerPost('/pair-start',{url:$('#peUrl').value.replace(/\s+/g,'')},'已向对方申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
   if(act==='peer-near-pair'){peerMsg={ok:'正在向「'+a.dataset.name+'」申请…'};paintPeerMsg();peerPost('/pair-start',{url:a.dataset.url,urlAlt:a.dataset.alt||''},'已向「'+a.dataset.name+'」申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
@@ -3642,6 +3643,16 @@ function peerInvite(c){
     '- 发消息：POST '+b+'  {"from":"你是谁","text":"正文（4000 字内）","session":"可选，会话 id"} → {"ok":true,"reply":"我们这一轮的回复原文"}（最多等 10 分钟）\n'+
     '- 错误码：400 消息为空或没指定会话，401 没配对或钥匙不对，409 会话正忙，413 太长，429 上一条还在处理，504 超时。\n\n'+
     '如果你也用 claclaw：在「宿主 → claclaw 协同」开启后，「附近的 claclaw」里会直接列出我们，点「申请配对」即可；列不出来就在「向对方申请配对」里填上面的协同地址'+(c.relay?'（带上 #pin=… 整串）':'')+'。'+peerInviteBack(c);
+}
+// 排队中的消息：对方连不上 / 正忙时先存着，按 1、2、5、10 分钟、之后每 10 分钟重发，最长 24 小时；可以取消
+function peerOutboxHtml(c){
+  if(!c.outbox||!c.outbox.length)return '';
+  var hm=function(t){var d=new Date(t);return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)};
+  return '<div><div class="h-h">排队中的消息</div><div class="h-card">'+c.outbox.map(function(x){
+    return '<div class="pe-req"><div class="pe-req-t"><b>'+(x.kind==='reply'?'回复':'消息')+' → '+esc(x.peer||'对方')+'</b><small>'+esc(x.text||'')+'</small>'+
+      '<small>'+hm(x.at)+' 发出 · 重试 '+(x.tries||0)+' 次'+(x.lastError?' · '+esc(x.lastError):'')+'</small></div>'+
+      '<div class="pe-req-b"><small>下次 '+hm(x.next)+'</small><button type="button" class="pe-btn del pe-mini" data-act="peer-outbox-cancel" data-id="'+esc(x.id)+'">取消</button></div></div>';
+  }).join('')+'</div><div class="pe-note">对方连不上或正忙时，消息先排在这里自动重发（最长 24 小时），送到后对方的回复会回到发起的会话。</div></div>';
 }
 function peerPendingHtml(c){
   if(!c.pending||!c.pending.length)return '';
@@ -3872,7 +3883,7 @@ function peerMainHtml(c){
     hRow('名字',esc(c.name||''))+
     hRow('网络','局域网'+(c.relay||c.relayInvite?' + 中继（'+relayStateText(c)+'）':''))+
     '</div></div>';
-  h+='<div id="pePending">'+peerPendingHtml(c)+'</div><div id="pePeers">'+peerPeersHtml(c)+'</div>';
+  h+='<div id="pePending">'+peerPendingHtml(c)+'</div><div id="peOutbox">'+peerOutboxHtml(c)+'</div><div id="pePeers">'+peerPeersHtml(c)+'</div>';
   h+='<div><div class="h-card">'+
     (c.local?peerLink('peer-sub','add','添加对方',''):'')+
     peerLink('peer-sub','pool','协同会话',(c.sessions||[]).length+' 个')+
@@ -3884,7 +3895,7 @@ function peerMainHtml(c){
 }
 function paintPeerLive(){
   if(hostView!=='peer'||!peerCfg)return;
-  if(!peerSub){var a=$('#pePending'),b=$('#pePeers');if(a)a.innerHTML=peerPendingHtml(peerCfg);if(b&&!b.querySelector('.pe-peer.sw,.pnm-in'))b.innerHTML=peerPeersHtml(peerCfg);return}   // 正在左滑 / 改名时不重画
+  if(!peerSub){var a=$('#pePending'),b=$('#pePeers'),o=$('#peOutbox');if(a)a.innerHTML=peerPendingHtml(peerCfg);if(o)o.innerHTML=peerOutboxHtml(peerCfg);if(b&&!b.querySelector('.pe-peer.sw,.pnm-in'))b.innerHTML=peerPeersHtml(peerCfg);return}   // 正在左滑 / 改名时不重画
   if(peerSub.indexOf('p:')===0){var p=(peerCfg.peers||[]).find(function(x){return 'p:'+x.id===peerSub}),d=$('#peDetLive');if(p&&d)d.innerHTML=peerDetailLive(peerCfg,p)}
 }
 function renderPeer(){
