@@ -25,7 +25,29 @@ window.__sc=(function(){
   var GC=['1E6B3A','9CCB8E','D62828','F2A0A0','D49A2A','F2D27A','F2F0EB','D9D9D9','1F3A6B','5B8FC7'];
   var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
   var ZF=['000000','A4A9B1','FFFFFF','000000','1F3A6B','FFFFFF','000000','1E6B3A','000000','000000','8B1A1A','FFFFFF'];   // 地支底上的字色（六十甲子表定的；辰戌丑未用墓库那一行的色）
-  var VARS=['--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-f','--sc-m','--sc-on','--sc-t','--sc-th','--bg','--line','--user-bg'];
+  // 时辰纹样（设置里「时辰背景：纹样」时用）：每个地支一张可平铺的矢量暗纹，按五行选图案，颜色取地支色深一点 / 浅一点
+  //   水 子 水波 · 亥 涟漪；木 寅 竹叶 · 卯 藤蔓；火 巳 火焰 · 午 祥云；金 申 回纹 · 酉 铜钱纹；土 辰 山峦 · 戌 丘陵 · 丑 田字 · 未 龟背
+  var PAT=[
+    [40,16,"<path d='M0 8Q10 2 20 8T40 8'/>"],
+    [32,32,"<path d='M2 2H30V30H2ZM16 2V30M2 16H30'/>"],
+    [40,40,"<path d='M8 32Q12 18 26 12Q20 26 8 32ZM8 32L26 12M26 38Q30 28 38 24Q34 34 26 38Z'/>"],
+    [48,24,"<path d='M0 12C8 4 16 4 24 12S40 20 48 12'/><path d='M12 7Q15 1 20 2Q17 7 12 7ZM36 17Q33 23 28 22Q31 17 36 17Z'/>"],
+    [48,24,"<path d='M0 22L12 8L20 16L30 4L48 22'/><path d='M27 8L30 4L33 8'/>"],
+    [32,40,"<path d='M16 34C8 28 10 18 16 8C17 16 24 18 22 26C21 31 18 34 16 34Z'/><path d='M16 30C13 27 14 23 16 20C17 24 19 26 16 30Z'/>"],
+    [56,36,"<path d='M8 26H46M14 26A6 6 0 1 1 22 18A8 8 0 0 1 37 20A5 5 0 1 1 40 26'/><path d='M19 24A2.5 2.5 0 1 1 22 21'/>"],
+    [28,49,'HEX'],
+    [32,32,"<path d='M2 30V2H30V26H6V6H26V22H10V10H22V18H14V14H18'/>"],
+    [24,24,"<circle cx='0' cy='0' r='12'/><circle cx='24' cy='0' r='12'/><circle cx='0' cy='24' r='12'/><circle cx='24' cy='24' r='12'/><circle cx='12' cy='12' r='12'/>"],
+    [60,24,"<path d='M0 20Q15 6 30 20Q45 10 60 20'/>"],
+    [48,48,"<circle cx='24' cy='24' r='4'/><circle cx='24' cy='24' r='10'/><circle cx='24' cy='24' r='17'/>"]
+  ];
+  var HEX="<path stroke='none' d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/>";
+  function pat(z,b){
+    var p=PAT[z],c=hex(lum(b)>.45?mix(b,K,.13):mix(b,W,.16)),fill=z===7?c:'none';
+    var svg="<svg xmlns='http://www.w3.org/2000/svg' width='"+p[0]+"' height='"+p[1]+"' fill='"+fill+"' stroke='"+c+"' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'>"+(p[2]==='HEX'?HEX:p[2])+"</svg>";   // 未（龟背）用填充画
+    return 'url("data:image/svg+xml,'+encodeURIComponent(svg)+'")';
+  }
+  var VARS=['--sc-img','--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-f','--sc-m','--sc-on','--sc-t','--sc-th','--bg','--line','--user-bg'];
   function rgb(h){return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]}
   function hex(c){return '#'+c.map(function(v){return ('0'+Math.round(v).toString(16)).slice(-2)}).join('').toUpperCase()}
   function mix(a,b,t){return [0,1,2].map(function(i){return a[i]+(b[i]-a[i])*t})}
@@ -43,8 +65,9 @@ window.__sc=(function(){
     var n=now(),b=rgb(ZC[n.z]),f=rgb(ZF[n.z]),acc=deepen(b,W,4.5),s=document.documentElement.style,lt=lum(f)>.5;
     var v={'--accent':hex(acc),'--accent-ink':'#FFFFFF','--allow':hex(acc),'--on-allow':'#FFFFFF','--sc-b':hex(b),'--sc-f':hex(f),'--sc-m':hex(mix(f,b,.35)),
       '--sc-on':lt?'rgba(255,255,255,.18)':'rgba(0,0,0,.08)','--sc-t':hex(deepen(rgb(GC[n.g]),W,4.5)),'--sc-th':hex(onBg(rgb(GC[n.g]),b,4.5)),
-      '--bg':hex(mix(b,W,.9)),'--line':hex(mix(b,W,.7)),'--user-bg':hex(mix(b,W,.75))};
+      '--bg':hex(mix(b,W,.9)),'--line':hex(mix(b,W,.7)),'--user-bg':hex(mix(b,W,.75)),'--sc-img':pat(n.z,b)};
     for(var k in v)s.setProperty(k,v[k]);
+    try{document.documentElement.classList.toggle('sc-img',localStorage.getItem('claclaw.scImg')==='1')}catch(_){}   // 时辰背景：纹样 / 纯色（默认纯色）
     return n.name;
   }
   function clear(){var s=document.documentElement.style;VARS.forEach(function(k){s.removeProperty(k)})}
@@ -53,7 +76,7 @@ window.__sc=(function(){
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
 (function(){
-  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro'],ls,pend={},n=0,t=0;
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg'],ls,pend={},n=0,t=0;
   try{ls=localStorage}catch(_){return}
   function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
   function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
@@ -130,6 +153,7 @@ window.__sc=(function(){
    --sc-b 地支色 / --sc-f 地支底上的字色 / --sc-m 没选中的字色 / --sc-on 选中格的底 / --sc-t 天干色 / --bg --line --user-bg 地支淡色 */
 :root[data-theme="shichen"] #app.m-list #mtabs,:root[data-theme="shichen"] #rail,:root[data-theme="shichen"] header,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app.m-list.set-on #setTop,:root[data-theme="shichen"] #app.m-list.host-on #hostPane .pg-hd{background:var(--sc-b);border-color:transparent}
 :root[data-theme="shichen"]{--strip:var(--sc-b);--strip-line:transparent;--rail-line:transparent}
+:root[data-theme="shichen"].sc-img #app.m-list #mtabs,:root[data-theme="shichen"].sc-img #rail,:root[data-theme="shichen"].sc-img header,:root[data-theme="shichen"].sc-img #app #sTop,:root[data-theme="shichen"].sc-img #app.m-list.set-on #setTop,:root[data-theme="shichen"].sc-img #app.m-list.host-on #hostPane .pg-hd{background-image:var(--sc-img)}   /* 时辰背景选「纹样」：地支色上铺一层同色系暗纹 */
 :root[data-theme="shichen"] #mtabs button,:root[data-theme="shichen"] #rail button{color:var(--sc-m)}
 :root[data-theme="shichen"] #mtabs button.on,:root[data-theme="shichen"] #rail button.on,:root[data-theme="shichen"] #rail button:hover{color:var(--sc-f);background:var(--sc-on)}
 :root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c1,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #hostPane .pg-hd,:root[data-theme="shichen"] #hostPane .pe-back{color:var(--sc-th)}   /* 设置 / 宿主页标题栏：标题和返回键用天干色，和页面里的标题同色（在地支底上调到看得清） */
@@ -621,6 +645,7 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #setPane .set-card{background:var(--bg);border-radius:12px;overflow:hidden}
 #setPane .set-card:not(:has(> :not([hidden]))){display:none}
 #setPane .set-sec:not(:has(.set-card > :not([hidden]))):not(:has(.set-note:not([hidden]))){display:none}
+#setPane #setScImgRow{display:none}:root[data-theme="shichen"] #setPane #setScImgRow{display:flex}   /* 「时辰背景」只在流变时辰主题下出现 */
 #setPane .set-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:54px;margin:0;padding:11px 14px;border:0;background:none;text-align:left;font:inherit;font-size:15px;color:var(--ink);cursor:pointer;box-sizing:border-box}
 #setPane .set-item[hidden]{display:none}
 #setPane .set-item:not([hidden]) ~ .set-item:not([hidden])::before{content:'';position:absolute;top:0;left:14px;right:0;border-top:1px solid var(--line)}
@@ -1461,6 +1486,8 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <label class="set-item"><span class="lb">主题<small>「跟随系统」随设备深浅色切换</small></span>
             <select id="setTheme"><option value="">跟随系统</option><option value="light">普通</option><option value="dark">深色</option><option value="ziwei">九紫离火</option><option value="shichen">流变时辰</option></select></label>
+          <label class="set-item" id="setScImgRow"><span class="lb">时辰背景<small>每个时辰一种同色系纹样</small></span>
+            <select id="setScImg"><option value="">纯色</option><option value="1">纹样</option></select></label>
         </div>
       </div>
       <div class="set-sec">
@@ -5335,6 +5362,12 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   sel.addEventListener('change',function(){
     try{if(sel.value)localStorage.setItem('claclaw.theme',sel.value);else localStorage.removeItem('claclaw.theme')}catch(_){}
     applyTheme(sel.value);
+  });
+  var im=$('#setScImg');
+  try{im.value=localStorage.getItem('claclaw.scImg')==='1'?'1':''}catch(_){}
+  im.addEventListener('change',function(){
+    try{if(im.value)localStorage.setItem('claclaw.scImg','1');else localStorage.removeItem('claclaw.scImg')}catch(_){}
+    if(window.__sc&&sel.value==='shichen')window.__sc.apply();
   });
 })();
 // 手机端：标题栏的玻璃圆球（上下文用量、朗读开关）可以左右拖，拖到标题上看玻璃浮在字上的效果；
