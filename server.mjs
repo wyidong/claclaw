@@ -249,6 +249,13 @@ async function endHolders(sessionId) {
 
 // 会话最后一条用户消息：Claude Code 每轮都往会话文件末尾写 {"type":"last-prompt"}，只读文件尾部找最后一条；按文件大小 + 修改时间缓存
 const lastPromptCache = new Map();
+// 协同 / 本机会话发来的消息，列表里的缩略不显示给 AI 看的那段说明，改成「对方别名：正文」（正文开头的「回复 <编号>」也去掉）
+function peerPreview(t) {
+  const m = /^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t || '');
+  if (!m) return t;
+  const who = m[1] === '协同' ? m[2].split(' · ')[0] : m[2].replace(/（[^（）]*）\s*$/, '');
+  return who.trim() + '：' + t.slice(m[0].length).replace(/^回复 [\w-]+\s*/, '');
+}
 function lastPromptOf(file) {
   let st; try { st = fs.statSync(file); } catch { return ''; }
   const key = st.size + ':' + st.mtimeMs, c = lastPromptCache.get(file);
@@ -268,7 +275,7 @@ function lastPromptOf(file) {
     }
     if (!text) text = meta;
   } catch {}
-  text = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+  text = peerPreview(text).replace(/\s+/g, ' ').trim().slice(0, 200);
   lastPromptCache.set(file, { key, text });
   return text;
 }
@@ -1932,7 +1939,7 @@ async function sessionList(limit = 80) {   // 各 Claw 列表默认 80 个；「
       cwdShort: relPath(s.cwd || '', null),
       branch: s.gitBranch === 'HEAD' ? '' : s.gitBranch || '',   // HEAD：不是 git 目录（或没在任何分支上），不显示
       // 没有分支的会话、最近在网页里活跃过的会话（「最近活跃」组始终显示）：标题下面显示最后一条用户消息
-      lastPrompt: s.gitBranch && s.gitBranch !== 'HEAD' && !((webActive[s.sessionId] || 0) > Date.now() - 6 * 3600e3) ? undefined : lastPromptOf(jsonlPathOf(s)) || s.firstPrompt || undefined,
+      lastPrompt: s.gitBranch && s.gitBranch !== 'HEAD' && !((webActive[s.sessionId] || 0) > Date.now() - 6 * 3600e3) ? undefined : lastPromptOf(jsonlPathOf(s)) || peerPreview(s.firstPrompt || "") || undefined,
       lastModified: s.lastModified,
       openInWeb: ours,
       busyElsewhere: elsewhere,
