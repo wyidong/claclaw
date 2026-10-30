@@ -1,4 +1,4 @@
-<!-- claclaw logo 源图（自己画的龙头，可自由使用）。图标 png = 浅蓝→白渐变底 + 这张图占边长 50% 居中。 -->
+<!-- claclaw logo 源图（自己画的龙头，可自由使用）。图标 png = 浅蓝→白渐变底 + 这张图占边长 72% 居中。 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="24 12 152 154">
 <defs>
  <radialGradient id="face" cx=".5" cy=".42" r=".62"><stop offset="0" stop-color="#8EE05A"/><stop offset=".65" stop-color="#43B02A"/><stop offset="1" stop-color="#1F7A1F"/></radialGradient>
