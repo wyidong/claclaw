@@ -2219,6 +2219,14 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
       return fs.createReadStream(iconFile).pipe(res);
     }
+    // 流变时辰的壁纸：data/sc-bg/<地支序号 0-11>.jpg（子=0 … 亥=11），图片来源不明不进仓库；没有这个时辰的图就 404，页面用回纯色
+    const scBg = url.pathname.match(/^\/sc-bg\/(\d{1,2})\.jpg$/);
+    if (scBg && +scBg[1] < 12) {
+      const f = path.join(DATA, 'sc-bg', scBg[1] + '.jpg');
+      if (!fs.existsSync(f)) { res.writeHead(404, { 'cache-control': 'no-store' }); return res.end(); }
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
+      return fs.createReadStream(f).pipe(res);
+    }
     // manifest 由浏览器不带 cookie 去取，必须免登录
     // Service Worker 脚本：浏览器更新它时不一定带 cookie，免登录（里面没有任何敏感内容）
     if (url.pathname === '/sw.js') {
