@@ -3151,7 +3151,7 @@ function trySend(){
 function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideoJob,0)}
 // 丢掉疑似已死的连接，立即重连（不等浏览器慢慢发现断线）
 // clarelay 直连：路线变了更新宿主页那一行；变成直连时悄悄重连一次 ws，把实时连接搬到直连上（服务端重连后会补发全部状态）
-function crRouteText(){return CR&&CR.route==='direct'?'直连':'中转'}
+function crRouteText(){if(!CR)return '中转';var v=CR.via!=null?CR.via:(CR.route==='direct'?'direct':'relay');return {lan:'直连 · 局域网',internet:'直连 · 外网',tailscale:'直连 · Tailscale',direct:'直连',relay:'中转'}[v]||'中转'}
 if(CR&&CR.addEventListener)CR.addEventListener('route',function(e){
   var el=document.getElementById('crRoute');if(el)el.textContent=crRouteText();
   if(e&&e.detail&&e.detail.route==='direct'&&ws&&ws.readyState===1){var old=ws;ws=null;old.onclose=null;old.onmessage=null;try{old.close()}catch(_){}connect()}
@@ -3408,7 +3408,7 @@ function loadHost(){
       (dk?hRow('磁盘',fmtBytes(dk.total-dk.free)+' / '+fmtBytes(dk.total),'剩余 '+fmtBytes(dk.free),(dk.total-dk.free)/dk.total):'')+
       (b?hRow('电池',b.percent+'%',(b.ac?'接着电源':'用电池')+(b.state&&b.state!=='AC attached'?' · '+({charging:'充电中',discharging:'放电中',charged:'已充满','finishing charge':'即将充满'}[b.state]||b.state):''),b.percent/100,true):''));
     var cr=x.net.clarelay;
-    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+(cr?hRow('clarelay',esc(cr.url.replace(/^https:\/\//,'')),cr.status==='revoked'?'已撤销':cr.status!=='active'?'等管理员批准':cr.online?'在线':'离线'+(cr.error?'：'+cr.error:'')):'')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip))}).join('')+(CR?'<div class="h-row"><span class="k">手机连接</span><span class="v" id="crRoute">'+crRouteText()+'</span></div>':'')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、'))
+    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+(cr?hRow('clarelay',esc(cr.url.replace(/^https:\/\//,'')),cr.status==='revoked'?'已撤销':cr.status!=='active'?'等管理员批准':cr.online?'在线':'离线'+(cr.error?'：'+cr.error:'')):'')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip))}).join('')+(CR?'<div class="h-row"><span class="k">本页连接</span><span class="v" id="crRoute">'+crRouteText()+'</span></div>':'')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、'))
       +'<div class="h-row h-link" data-act="peer"><span class="k">claclaw 协同</span><span class="v">'+(peerSt?(peerSt.enabled?(peerSt.listening?'已开启 · '+peerSt.sessions.length+' 个会话'+(peerSt.peers&&peerSt.peers.length?' · 已配对 '+peerSt.peers.length:'')+(peerSt.pending&&peerSt.pending.length?' · 有配对申请':''):'已开启 · 未在监听'):'未开启'):'')+'</span><span class="chev" aria-hidden="true"></span></div>');
     var k=x.claclaw;
     h+=hSec('claclaw',
