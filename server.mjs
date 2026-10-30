@@ -2212,6 +2212,8 @@ const handler = async (req, res) => {
     const setUp = isSetUp();
     if (url.pathname === '/setup') return setUp ? go('/login') : page('login.html');
     if (url.pathname === '/login') return setUp ? page('login.html') : go('/setup');
+    // /_clarelay/*（直连脚本 rtc.js 等）由电脑端 clarelay 在转发前接住；直接访问 claclaw 时没有，回 404，页面就用原生 fetch / WebSocket
+    if (url.pathname.startsWith('/_clarelay/')) { res.writeHead(404, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); return res.end(); }
     // 主屏幕图标：iOS 添加到主屏幕时不带 cookie 去取，必须免登录；只放行 icons/ 下已知的 png
     // data/icons/ 下有同名图就优先用它：本机自己换的图标（来源不明的图片不进仓库）
     const icon = url.pathname.match(/^\/icons\/([a-z0-9-]+\.png)$/);
