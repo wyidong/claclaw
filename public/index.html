@@ -2474,6 +2474,8 @@ micBtn.addEventListener('click',function(){
   try{r.start();micRec=r;micBtn.classList.add('on');toast('说吧，再点一下停止')}catch(e){toast('启动失败：'+e.message);try{clog('speech start fail '+e.message)}catch(_){}}
 });
 micShow();
+// 发送时关掉语音输入：开着麦克风时 iOS 不放声音（自动播报播不出来），而且关晚了还会把识别出的字又写回已经清空的输入框
+function micOff(){var r=micRec;if(!r)return;r.onresult=null;try{r.abort()}catch(_){try{r.stop()}catch(__){}}}
 $('#attachBtn').addEventListener('click',function(){if(attachments.length>=MAX_IMAGES){addSys('一次最多 '+MAX_IMAGES+' 张图片');return}fileIn.click()});
 fileIn.addEventListener('change',function(){addFiles(fileIn.files);fileIn.value=''});
 // 粘贴图片：整个页面都接（焦点不在输入框时也能粘），items 和 files 两种来源都看（Safari 有时只给 files）
@@ -3125,6 +3127,7 @@ function run(text){
   cmdMenu.hidden=true;
   var images=[],video=null;
   attachments.forEach(function(a){if(a.video)video={kind:a.video.kind||'video',id:a.video.id,name:a.video.name,file:a.video.file,url:a.url,size:a.video.size};else{images.push({media_type:a.media_type,data:a.data});if(a.orig)vidSave('img:'+imgKey(a.data),a.orig,a.orig.name,'image');URL.revokeObjectURL(a.url)}});
+  micOff();
   attachments=[];renderAtts();   // 视频的预览地址留着：聊天区那条消息还要用
   ta.value='';ta.style.height='auto';ta.style.overflowY='hidden';
   busy=true;setDock('busy');
