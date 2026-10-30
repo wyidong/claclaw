@@ -249,12 +249,12 @@ async function endHolders(sessionId) {
 
 // 会话最后一条用户消息：Claude Code 每轮都往会话文件末尾写 {"type":"last-prompt"}，只读文件尾部找最后一条；按文件大小 + 修改时间缓存
 const lastPromptCache = new Map();
-// 协同 / 本机会话发来的消息，列表里的缩略不显示给 AI 看的那段说明，改成「对方别名· 正文 / 👉🏻会话名· 正文（正文开头的「回复 <编号>」也去掉）
+// 协同 / 本机会话发来的消息，列表里的缩略不显示给 AI 看的那段说明，改成「对方别名· 正文 / 👉🏻会话名· 正文（正文只取前 20 个字）
 function peerPreview(t) {
   const m = /^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t || '');
   if (!m) return t;
   const who = m[1] === '协同' ? m[2].split(' · ')[0] : m[2].replace(/（[^（）]*）\s*$/, '');
-  return (m[1] === '协同' ? '「' : '👉🏻') + who.trim() + '· ' + t.slice(m[0].length).replace(/^回复 [\w-]+\s*/, '');
+  return (m[1] === '协同' ? '「' : '👉🏻') + who.trim() + '· ' + t.slice(m[0].length).replace(/\s+/g, ' ').trim().slice(0, 20);
 }
 function lastPromptOf(file) {
   let st; try { st = fs.statSync(file); } catch { return ''; }
