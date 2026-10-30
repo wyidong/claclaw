@@ -127,3 +127,8 @@ test('shell 启动文件、命令历史算敏感文件', () => {
   assert.ok(risk('Grep', { pattern: 'KEY', path: path.join(H, '.bash_profile') }));
   assert.equal(risk('Read', { file_path: path.join(proj, 'profile.md') }), null);
 });
+
+test('git grep / ls-tree / cat-file 只读放行，读提交过的钥匙文件和 grep -O 要拦', () => {
+  for (const c of ['git grep -n "app-key" production -- public/v3', 'git ls-tree -r HEAD', 'git cat-file -p HEAD:server.mjs', 'git show HEAD:server.mjs']) assert.equal(bash(c), null, c);
+  for (const c of ['git grep -O"sh -c id" x', 'git show HEAD:.env', 'git cat-file -p HEAD:config/secret.yml']) assert.ok(bash(c), c);
+});

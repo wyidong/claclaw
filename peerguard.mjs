@@ -45,7 +45,7 @@ const HARMLESS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', '
 // 只读命令：第一个词在这里才可能放行
 const SAFE_CMDS = new Set(['ls', 'pwd', 'cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'rg', 'find', 'stat', 'file', 'du', 'df',
   'which', 'echo', 'date', 'uname', 'tree', 'diff', 'sort', 'uniq', 'cut', 'tr', 'cd', 'true', 'basename', 'dirname', 'realpath', 'jq', 'sed', 'git']);
-const SAFE_GIT = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'branch', 'tag', 'blame', 'ls-files', 'shortlog', 'describe', 'pull', 'fetch', 'remote']);
+const SAFE_GIT = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'branch', 'tag', 'blame', 'ls-files', 'shortlog', 'describe', 'pull', 'fetch', 'remote', 'grep', 'ls-tree', 'cat-file']);
 const SEARCH_CMDS = new Set(['grep', 'egrep', 'rg', 'find', 'du', 'tree', 'ls']);
 // 展开了也无害的环境变量；其余的（*_KEY、*_TOKEN……）在协同那一轮里展开，回复传回对方就等于把值交出去
 const SAFE_VARS = new Set(['HOME', 'USER', 'LOGNAME', 'PWD', 'OLDPWD', 'SHELL', 'TMPDIR', 'LANG', 'TERM', 'PATH', 'HOSTNAME']);
@@ -121,6 +121,8 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
       const sub = args[0];
       if (!SAFE_GIT.has(sub)) return 'git ' + (sub || '');
       if (args.some(a => /^--(output|exec|upload-pack|receive-pack|ext-diff)/.test(a) || /^-[cC]$/.test(a))) return 'git 带了会执行或写文件的参数';
+      if ((sub === 'show' || sub === 'cat-file') && args.slice(1).some(a => { const i = a.indexOf(':'); return i >= 0 && SENSITIVE_NAME.test(a.slice(i + 1)); })) return '读敏感位置（git 里提交过的 ' + sub + '）';   // HEAD:.env 这类
+      if (sub === 'grep' && args.some(a => /^(-O|--open-files-in-pager)/.test(a))) return 'git grep 用分页程序打开文件';   // -O<程序> 会执行命令
       if ((sub === 'branch' || sub === 'tag') && args.slice(1).some(a => /^-/.test(a) && !/^-(a|v|vv|r|l|-list|-all|-verbose|-show-current|-contains)$/.test(a))) return 'git ' + sub + ' 改动';
       if (sub === 'remote' && args.slice(1).some(a => /^(add|remove|rm|rename|set-url|set-head|prune)$/.test(a))) return 'git remote 改动';
       // pull / fetch 只认 origin：别处（网址、本地路径）拉来的代码会被后面的测试 / 重启执行
