@@ -4048,9 +4048,9 @@ $('#hostBack').addEventListener('click',function(){mTab('set')});
 })();
 // 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
 // 刚发出（或别的设备在这个会话里发出）一条消息：列表里「最后一条消息」立刻换成它，不等列表刷新
-// 协同 / 本机会话发来的消息：缩略显示「对方别名 / 会话名：正文」（和服务端 peerPreview 一致）
+// 协同 / 本机会话发来的消息：缩略显示「对方别名」正文 / [会话名] 正文（和服务端 peerPreview 一致）
 function peerPreview(t){var m=/^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t||'');if(!m)return t;
-  var who=m[1]==='协同'?m[2].split(' · ')[0]:m[2].replace(/（[^（）]*）\s*$/,'');return who.trim()+'：'+t.slice(m[0].length).replace(/^回复 [\w-]+\s*/,'')}
+  var who=m[1]==='协同'?m[2].split(' · ')[0]:m[2].replace(/（[^（）]*）\s*$/,'');return (m[1]==='协同'?'「'+who.trim()+'」':'['+who.trim()+'] ')+t.slice(m[0].length).replace(/^回复 [\w-]+\s*/,'')}
 function liveLastPrompt(id,text){
   text=peerPreview(String(text)).replace(/\s+/g,' ').trim();if(!text)return;
   var it=(lastList||[]).find(function(x){return x.id===id});
