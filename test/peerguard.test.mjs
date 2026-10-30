@@ -111,3 +111,19 @@ test('引号 / 转义的花招骗不过切分', () => {
     'echo "a" > out', "echo 'a'>out", 'cat a | sh'])
     assert.ok(bash(c), c);
 });
+test('环境变量里的 key 不能被带出去：展开非白名单变量、env / printenv、jq env 都要确认', () => {
+  for (const c of ['echo $NBUDDY_KEY', 'echo "$NBUDDY_KEY"', 'echo "key=$GITHUB_TOKEN"', 'ls $SECRET', 'cd $X', 'cat a | grep $API_KEY',
+    'env', 'printenv NBUDDY_KEY', "jq -n 'env.NBUDDY_KEY'", "jq -n '$ENV'", 'jq -n env', 'cat <<EOF\n$TOKEN\nEOF'])
+    assert.ok(bash(c), c);
+  for (const c of ['echo $HOME', 'ls $HOME/Documents', 'echo "$USER"', "echo '$NBUDDY_KEY'", 'grep -n "a\\$b" README.md', "grep -n 'foo$' server.mjs",
+    "jq '.a' x.json"])
+    assert.equal(bash(c), null, c);
+});
+test('shell 启动文件、命令历史算敏感文件', () => {
+  for (const f of ['.bash_profile', '.bashrc', '.zshrc', '.zprofile', '.profile', '.zsh_history', '.bash_history', '.config/fish/config.fish']) {
+    assert.ok(risk('Read', { file_path: path.join(H, f) }), f);
+    assert.ok(bash('cat ~/' + f), f);
+  }
+  assert.ok(risk('Grep', { pattern: 'KEY', path: path.join(H, '.bash_profile') }));
+  assert.equal(risk('Read', { file_path: path.join(proj, 'profile.md') }), null);
+});

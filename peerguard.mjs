@@ -13,7 +13,8 @@ export function sensitiveRoots(dataDir) {
     '.kube', 'Library/Keychains', '.claude/.credentials.json', '.claude.json', '.config/opencode', '.openclaw',
   ].map(p => path.join(HOME, p)).concat(dataDir ? [path.resolve(dataDir)] : []);
 }
-const SENSITIVE_NAME = /(^|\/)(\.env(\.[^/]*)?|id_(rsa|dsa|ecdsa|ed25519)[^/]*|[^/]*\.(pem|p12|pfx|key|keychain(-db)?)|[^/]*(credential|secret|token|passw|auth\.json|vapid)[^/]*|ssh_[^/]*)$/i;
+const SENSITIVE_NAME = /(^|\/)(\.env(\.[^/]*)?|id_(rsa|dsa|ecdsa|ed25519)[^/]*|[^/]*\.(pem|p12|pfx|key|keychain(-db)?)|[^/]*(credential|secret|token|passw|auth\.json|vapid)[^/]*|ssh_[^/]*|\.(bash_profile|bashrc|bash_login|profile|zshrc|zprofile|zshenv|zlogin|bash_history|zsh_history|python_history|node_repl_history|psql_history|mysql_history)|config\.fish)$/i;
+// 上面最后两组：shell 启动文件（常在这里 export *_KEY）和命令历史（敲过的 key、密码会留在里面）
 
 const expand = (p, cwd) => {
   let s = String(p || '').trim().replace(/^['"]|['"]$/g, '');
@@ -46,6 +47,8 @@ const SAFE_CMDS = new Set(['ls', 'pwd', 'cat', 'head', 'tail', 'wc', 'grep', 'eg
   'which', 'echo', 'date', 'uname', 'tree', 'diff', 'sort', 'uniq', 'cut', 'tr', 'cd', 'true', 'basename', 'dirname', 'realpath', 'jq', 'sed', 'git']);
 const SAFE_GIT = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'branch', 'tag', 'blame', 'ls-files', 'shortlog', 'describe', 'pull', 'fetch', 'remote']);
 const SEARCH_CMDS = new Set(['grep', 'egrep', 'rg', 'find', 'du', 'tree', 'ls']);
+// 展开了也无害的环境变量；其余的（*_KEY、*_TOKEN……）在协同那一轮里展开，回复传回对方就等于把值交出去
+const SAFE_VARS = new Set(['HOME', 'USER', 'LOGNAME', 'PWD', 'OLDPWD', 'SHELL', 'TMPDIR', 'LANG', 'TERM', 'PATH', 'HOSTNAME']);
 // 常规维护：在 claclaw 仓库（或它的 .worktrees/ 里）跑自检、测试、空闲后重启。
 // 跑的是仓库里提交过的代码——和「拉代码 + 重启」本来就会跑的一样，用户认可这是常规操作，不用每次确认。
 // 参数要一字不差，多带一个都不算；仓库里有没提交的改动（可能是这一轮刚改的）就照样确认，免得「先改代码再跑测试」绕过去。
@@ -69,14 +72,15 @@ function words(seg) {
 }
 
 // 引号里、反斜杠后面的字符换成占位符（长度不变）：| ; & > 只有在这之外才是分隔符 / 重定向。
-// 按 shell 的规矩：单引号里没有转义；双引号里 \" \\ 是转义、不结束引号；引号外 \x 就是字面的 x
-function unquoted(s) {
+// 按 shell 的规矩：单引号里没有转义；双引号里 \" \\ 是转义、不结束引号；引号外 \x 就是字面的 x。
+// keepDq：双引号里的内容原样保留（$变量 在双引号里照样展开，查变量时要看得见）
+function unquoted(s, keepDq = false) {
   let out = '', q = '';
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
     if (q === "'") { if (ch === "'") { q = ''; out += ch; } else out += '_'; continue; }
     if (ch === '\\' && i + 1 < s.length) { out += '__'; i++; continue; }
-    if (q === '"') { if (ch === '"') { q = ''; out += ch; } else out += '_'; continue; }
+    if (q === '"') { if (ch === '"') { q = ''; out += ch; } else out += keepDq ? ch : '_'; continue; }
     if (ch === '"' || ch === "'") q = ch;
     out += ch;
   }
@@ -95,7 +99,9 @@ export function segments(cmd) {
 export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = {}) {
   let s = String(cmd || '');
   if (/\$\(|`|<\(|>\(|\$\{/.test(s)) return '命令里有嵌套执行';
-  if (/\$'/.test(s)) return "命令里有 $'…' 转义串";   // 里面的 \' 不结束引号，切分会和 shell 对不上
+  // $'…' 里的 \' 不结束引号，切分会和 shell 对不上，一律确认；只看引号外的（grep 'abc$' 里的 $' 是字面字符）
+  if (/\$'/.test(unquoted(s))) return "命令里有 $'…' 转义串";
+  for (const m of unquoted(s, true).matchAll(/\$([A-Za-z_][A-Za-z0-9_]*)/g)) if (!SAFE_VARS.has(m[1])) return '读取环境变量 $' + m[1];
   s = s.replace(/\s\d?>\s*\/dev\/null/g, ' ').replace(/\s2>&1/g, ' ');
   if (/>/.test(unquoted(s))) return '命令会写文件';
   const segs = segments(s);
@@ -110,6 +116,7 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
       continue;
     }
     if (!SAFE_CMDS.has(c)) return '运行 ' + c;
+    if (c === 'jq' && args.some(a => /\$ENV|\benv\b/.test(a))) return 'jq 读取环境变量';
     if (c === 'git') {
       const sub = args[0];
       if (!SAFE_GIT.has(sub)) return 'git ' + (sub || '');
