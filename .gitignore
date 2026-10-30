@@ -3,6 +3,8 @@ node_modules/
 *.log
 .env
 data/
+# 本机的设计草案、笔记（不公开）
+.data/
 
 # 本机交接/核实笔记，含私人环境信息，不公开
 claude-web-handoff.md
