@@ -2471,7 +2471,7 @@ micBtn.addEventListener('click',function(){
   r.onresult=function(e){var interim='';for(var i=e.resultIndex;i<e.results.length;i++){var x=e.results[i];if(x.isFinal)fin+=x[0].transcript;else interim+=x[0].transcript}
     ta.value=base+(base&&!/\s$/.test(base)?' ':'')+fin+interim;ta.dispatchEvent(new Event('input',{bubbles:true}))};
   var t0=Date.now();
-  r.onerror=function(e){if(e.error==='aborted'&&Date.now()-t0<2000)toast('麦克风没开起来（被打断了），再点一下试试');else if(e.error!=='aborted'&&e.error!=='no-speech')toast('语音识别出错：'+(e.error||'未知'));try{clog('speech error '+e.error+' standalone='+!!navigator.standalone+' embedded='+(window.parent!==window))}catch(_){}};
+  r.onerror=function(e){if(e.error==='aborted'&&Date.now()-t0<2000)toast('麦克风没开起来（被打断了），再点一下试试');else if(e.error!=='aborted'&&e.error!=='no-speech')toast('语音识别出错：'+(e.error||'未知'));try{clog('speech error '+e.error+' after '+(Date.now()-t0)+'ms tts='+(typeof srvPlaying==='function'&&srvPlaying()?1:0)+' standalone='+!!navigator.standalone+' embedded='+(window.parent!==window))}catch(_){}};
   r.onend=function(){micRec=null;micBtn.classList.remove('on');syncSend()};
   try{r.start();micRec=r;micBtn.classList.add('on');toast('说吧，再点一下停止')}catch(e){toast('启动失败：'+e.message);try{clog('speech start fail '+e.message)}catch(_){}}
 });
@@ -5395,7 +5395,8 @@ document.addEventListener('visibilitychange',function(){
   else{ttsWake();ttsPickVoice();if(narration&&narration.onVisible)narration.onVisible()}
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
 
-document.addEventListener('pointerdown',ttsUnlock,{capture:true});
+// 点麦克风、或正在语音输入时不解锁：解锁会放一小段静音，iPhone 一放声音就把刚开的语音识别打断（aborted）
+document.addEventListener('pointerdown',function(e){if(micRec||(micBtn&&micBtn.contains(e.target)))return;ttsUnlock()},{capture:true});
 ttsSync();
 // 视频：本机保留天数、空间上限（存在这台设备上）
 (function(){
