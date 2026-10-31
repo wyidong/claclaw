@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { WebSocket } from 'ws';
+import { storeNow, splitGroups, hostOf } from './modelpick.mjs';
 
 const CFG = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 export const OC_PREFIX = 'oc:';
@@ -17,6 +18,19 @@ function config() {
     const c = JSON.parse(fs.readFileSync(CFG, 'utf8'));
     return { port: c.gateway?.port || 18789, token: c.gateway?.auth?.token || '' };
   } catch { return null; }
+}
+
+// OpenClaw 各供应商的接口地址（openclaw.json 的 models.providers，再补 main 代理自己的 models.json）：拿来和模型库对上
+function ocProviderBases() {
+  const out = {};
+  for (const f of [CFG, path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent', 'models.json')]) {
+    try {
+      const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+      const ps = j.models?.providers || j.providers || {};
+      for (const [k, v] of Object.entries(ps)) if (!out[k] && v?.baseUrl) out[k] = v.baseUrl;
+    } catch {}
+  }
+  return out;
 }
 
 // ---------- Gateway 连接（单例，断了下次用时再连） ----------
@@ -164,6 +178,36 @@ export class OcRunner {
     return { items: toItems(h.messages || []), more: !!h.hasMore };
   }
 
+  // 会话设置里的模型选择：网关的 models.list（它放行的那些），按供应商地址 + 模型 ID 对上模型库；
+  // 模型库里有、OpenClaw 没放行的也列出来，灰着、写明原因（要放行得改 OpenClaw 自己的配置）
+  async loadXModels() {
+    const r = await call('models.list', {}, this.log);
+    this.ocModels = Array.isArray(r?.models) ? r.models : [];
+    this.emit({ t: 'xmodels', ...this.xmodels() });
+  }
+  xmodels() {
+    if (!this.ocModels) return { current: null, label: this.model ? this.model.split('/').pop() : '', groups: null };
+    const store = storeNow(), bases = ocProviderBases();
+    const own = this.ocModels.map(m => ({ value: m.provider + '/' + m.id, label: m.name || m.id, sub: m.provider, id: m.id, base: bases[m.provider] || '' }));
+    const have = new Set(own.map(o => o.value)), extra = [];
+    for (const p of store.providers) for (const m of p.models) {
+      const oc = Object.keys(bases).find(k => Object.values(p.endpoints || {}).some(u => hostOf(u) === hostOf(bases[k])));
+      if (oc && have.has(oc + '/' + m.id)) continue;
+      extra.push({ value: (oc || p.id) + '/' + m.id, label: m.name || m.id, sub: oc ? 'OpenClaw 还没放行这个模型' : 'OpenClaw 里没有这个供应商', disabled: true });
+    }
+    return { current: this.model || null, label: this.model ? this.model.split('/').pop() : '', groups: splitGroups(store, 'OpenClaw', own, extra) };
+  }
+  async pickModel(value) {
+    if (this.busy) throw new Error('这一轮结束后再换模型');
+    try { await call('sessions.patch', { key: this.key, model: value }, this.log); }
+    catch (e) { throw new Error(/not allowed/i.test(e.message) ? 'OpenClaw 没放行这个模型' : e.message); }
+    this.model = value;
+    this.emit({ t: 'session.meta', cwdShort: 'OpenClaw · ' + value });
+    this.emit({ t: 'xmodels', ...this.xmodels() });
+    this.log?.('openclaw model', this.key, '→', value);
+    return value.split('/').pop();
+  }
+
   async more() {
     if (this.nextOffset == null) return { items: [], more: false };
     const h = await call('chat.history', { sessionKey: this.key, limit: 60, offset: this.nextOffset }, this.log);
@@ -228,7 +272,7 @@ export class OcRunner {
     try {
       const h = await call('chat.history', { sessionKey: this.key, limit: 1 }, this.log);
       const model = [h.sessionInfo?.modelProvider, h.sessionInfo?.model].filter(Boolean).join('/');
-      if (model && model !== this.model) { this.model = model; this.emit({ t: 'session.meta', cwdShort: 'OpenClaw · ' + model }); }
+      if (model && model !== this.model) { this.model = model; this.emit({ t: 'session.meta', cwdShort: 'OpenClaw · ' + model }); if (this.ocModels) this.emit({ t: 'xmodels', ...this.xmodels() }); }
       // 上下文大小（标题栏的压缩提示）；刚发过 /compact 的这一轮算压缩
       const c = ocCtxOf(h.sessionInfo), compacted = this.compactAsked;
       this.compactAsked = false;

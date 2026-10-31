@@ -22,6 +22,7 @@ import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, rel
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { userTextOf, dissectClaude, dissectDs } from './dissect.mjs';
+import { opModelsChanged } from './opencode.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opCtx, opTokSum } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
@@ -1840,7 +1841,7 @@ function announceDsOpened(r) {
   try { hist = r.history(); } catch { return; }
   const pg = historyPage(hist, hist.total, HISTORY_PAGE);
   const payload = {
-    t: 'session.opened', sessionId: r.id, id: r.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
+    t: 'session.opened', sessionId: r.id, id: r.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek', xmodels: r.xmodels(),
     mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, compacted: true, ctx: (r.ctx = dsCtx(r.id)),
     history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
     pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(r.id),
@@ -2523,6 +2524,8 @@ const handler = async (req, res) => {
           try { fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 }); fs.writeFileSync(f, JSON.stringify(r.removed, null, 2), { mode: 0o600 }); trimTrash(); } catch (e) { log('models trash failed', e.message); }
         }
         saveStore(MODELS_FILE, store);
+        opModelsChanged(log);
+        for (const m of [dsRunners, opRunners, ocRunners]) for (const r of m.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
         log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : '');
         return sendJson(res, 200, { ...modelsPublic(store), saved: r.saved || null });
       }
@@ -2922,7 +2925,7 @@ wss.on('connection', (ws, req) => {
         log('new openclaw session', r.key);
         return send({
           t: 'session.opened', id, title: title || r.title || '新会话', cwd: 'OpenClaw', cwdShort: 'OpenClaw' + (r.model ? ' · ' + r.model : ''),
-          mode: 'default', modes: ['default'], busy: false, claw: 'openclaw', commands: r.commands || [],
+          mode: 'default', modes: ['default'], busy: false, claw: 'openclaw', xmodels: r.xmodels(), commands: r.commands || [],
           history: pg.items, historyStart: 100000 - pg.items.length, historyTotal: 100000, historyMore: pg.more,
           pending: [], suggestion: null, isNew: true,
         });
@@ -2947,7 +2950,7 @@ wss.on('connection', (ws, req) => {
         r.subscribe(ws);
         log('new opencode session', r.sid, 'in', cwd);
         return send({
-          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'opencode',
+          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'opencode', xmodels: r.xmodels(),
           mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
           commands: r.commands, isNew: true,
         });
@@ -2971,7 +2974,7 @@ wss.on('connection', (ws, req) => {
         r.subscribe(ws);
         log('new dsh session', r.sid, 'in', cwd);
         return send({
-          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'deepseek',
+          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'deepseek', xmodels: r.xmodels(),
           mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
           commands: r.commands, isNew: true, usage: dsUsage(r.id),
         });
@@ -3029,7 +3032,7 @@ wss.on('connection', (ws, req) => {
         for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });   // 排着队、还没发出的
         log('open dsh', r.sid, hist.total, 'items');
         send({
-          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek',
+          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek', xmodels: r.xmodels(),
           mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = dsCtx(m.id)),
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
@@ -3058,7 +3061,7 @@ wss.on('connection', (ws, req) => {
         for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });   // 排着队、还没发出的
         log('open opencode', r.sid, hist.total, 'items');
         send({
-          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'opencode',
+          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'opencode', xmodels: r.xmodels(),
           mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = opCtx(m.id)), tokSum: opTokSum(m.id),
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
@@ -3078,7 +3081,7 @@ wss.on('connection', (ws, req) => {
         log('open openclaw', r.key, pg.items.length, 'items');
         send({
           t: 'session.opened', id: m.id, title: r.title, cwd: 'OpenClaw', cwdShort: 'OpenClaw' + (r.model ? ' · ' + r.model : ''),
-          mode: 'default', modes: ['default'], busy: r.busy, claw: 'openclaw', commands: r.commands || [], ctx: r.ctx ?? null,
+          mode: 'default', modes: ['default'], busy: r.busy, claw: 'openclaw', xmodels: r.xmodels(), commands: r.commands || [], ctx: r.ctx ?? null,
           history: pg.items, historyStart: total - pg.items.length, historyTotal: total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0, pending: [], suggestion: null,
         });
@@ -3180,6 +3183,12 @@ wss.on('connection', (ws, req) => {
         runner.replyPermission(m.requestId, m.decision, m.answers);
       } else if (m.t === 'interrupt') {
         await runner.interrupt();
+      } else if (m.t === 'xmodels.load' && runner?.loadXModels) {
+        // dsh / OpenCode / OpenClaw：打开会话设置时取模型清单（ACP 还没接上的先接上）
+        await runner.loadXModels();
+      } else if (m.t === 'xmodel.set' && runner?.pickModel) {
+        const label = await runner.pickModel(String(m.value || ''));
+        runner.emit({ t: 'sys', text: '已切换为 ' + label + '（下一条消息生效）', cfg: true });
       } else if (m.t === 'model.set' && runner instanceof Runner) {
         await runner.setModel(String(m.model || ''));
       } else if (m.t === 'effort.set' && runner instanceof Runner) {

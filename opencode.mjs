@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFile, execFileSync } from 'node:child_process';
+import { storeNow, opencodeInject, splitGroups } from './modelpick.mjs';
 
 const HOME = os.homedir();
 const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(HOME, '.local', 'share'), 'opencode');
@@ -241,6 +242,7 @@ function opBin() {
 const binEnv = () => ({ ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin'].join(':') });
 
 let proc = null, ready = null, rid = 0, idleTimer = null, caps = {};
+let acpSig = '', acpStale = false;   // 模型库注入的签名；模型库改了 → 没有会话接着时重启 opencode 进程
 const pending = new Map();
 const owners = new Map();   // opencode 会话 id → OpRunner（收 session/update 和权限请求）
 // 正在关闭的会话：sid → 关闭用的 Promise。旧 runner 的关闭还没结束，同一个会话又被打开时，
@@ -251,7 +253,11 @@ function startAcp(log) {
   if (ready) return ready;
   const bin = opBin();
   if (!bin) return Promise.reject(new Error('没找到 opencode 命令，先装好 OpenCode'));
-  const p = spawn(bin, ['acp'], { stdio: ['pipe', 'pipe', 'pipe'], cwd: HOME, env: binEnv() });
+  // 模型库里的供应商注入进去（OpenCode 会和用户自己的配置合并）：claclaw-<id>，key 走环境变量
+  const inj = opencodeInject(storeNow());
+  acpSig = inj.sig; acpStale = false;
+  const env = { ...binEnv(), ...(inj.content ? { OPENCODE_CONFIG_CONTENT: inj.content, ...inj.env } : {}) };
+  const p = spawn(bin, ['acp'], { stdio: ['pipe', 'pipe', 'pipe'], cwd: HOME, env });
   proc = p;
   let buf = '', errTail = '';
   p.stdout.on('data', d => {
@@ -330,7 +336,14 @@ function onAgentRequest(m) {
 function idleCheck() {
   clearTimeout(idleTimer);
   if (owners.size || !proc) return;
+  if (acpStale) { try { proc.stdin.end(); proc.kill(); } catch {} return; }   // 模型库改过：现在没人用，马上重启（下次用时带上新的）
   idleTimer = setTimeout(() => { if (!owners.size && proc) { try { proc.stdin.end(); proc.kill(); } catch {} } }, 10 * 60 * 1000);
+}
+// 模型库改了：opencode 进程要重启才看得到。没有会话接着就马上关，有就等它们都关掉（idleCheck）
+export function opModelsChanged(log) {
+  if (!proc || opencodeInject(storeNow()).sig === acpSig) return;
+  acpStale = true;
+  if (!owners.size) { log?.('opencode acp restart: models changed'); idleCheck(); }
 }
 export function opShutdown() { try { proc?.stdin.end(); proc?.kill(); } catch {} }
 export const opAcpRunning = () => !!proc;
@@ -435,6 +448,38 @@ export class OpRunner {
     this.config = cfg;
     const name = optName(cfg, 'model').replace(/^[^/]+\//, '');   // 「OpenCode/MiniMax …」只留模型名
     if (name && name !== this.model) { this.model = name; this.emit({ t: 'session.meta', cwdShort: this.metaLine() }); }
+    this.emit({ t: 'xmodels', ...this.xmodels() });
+  }
+
+  // 会话设置里的模型选择：模型库注入的（claclaw-*）一组，OpenCode 自带的一组。还没接上 opencode 时只有当前模型名
+  xmodels() {
+    const opt = this.config?.find(o => o.id === 'model');
+    if (!opt) return { current: null, label: this.model || '', groups: null };
+    const store = storeNow(), list = flatOptions(opt);
+    const own = list.map(o => {
+      const v = String(o.value), name = String(o.name || v), slash = v.indexOf('/');
+      const prov = slash > 0 ? v.slice(0, slash) : '', id = slash > 0 ? v.slice(slash + 1) : v;
+      const sp = prov.startsWith('claclaw-') ? store.providers.find(p => 'claclaw-' + p.id === prov) : null;
+      return { value: v, label: name.replace(/^[^/]+\//, ''), sub: name.includes('/') ? name.split('/')[0] : prov, id, base: sp ? Object.values(sp.endpoints)[0] : '' };
+    });
+    const cur = list.find(o => o.value === opt.currentValue);
+    return { current: opt.currentValue, label: cur ? String(cur.name).replace(/^[^/]+\//, '') : this.model, groups: splitGroups(store, 'OpenCode', own) };
+  }
+  // 打开会话设置时：还没接上 opencode 就先接上（拿到模型清单）
+  async loadXModels() {
+    if (!this.attached) await this.attach();
+    this.emit({ t: 'xmodels', ...this.xmodels() });
+  }
+  async pickModel(value) {
+    if (this.busy) throw new Error('这一轮结束后再换模型');
+    if (!this.attached) await this.attach();
+    const opt = this.config?.find(o => o.id === 'model');
+    const hit = flatOptions(opt).find(o => o.value === value);
+    if (!opt || !hit) throw new Error('没有这个模型');
+    const r = await rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value });
+    this.setConfig(r?.configOptions);
+    this.log?.('opencode model', this.sid.slice(0, 12), '→', value);
+    return String(hit.name || value).replace(/^[^/]+\//, '');
   }
 
   emit(ev) {

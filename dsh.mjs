@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { DATA } from './auth.mjs';
+import { storeNow, splitGroups } from './modelpick.mjs';
 
 const HOME = os.homedir();
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
@@ -660,6 +661,37 @@ export class DsRunner {
     this.config = cfg;
     const name = modelName(cfg);
     if (name && name !== this.model) { this.model = name; this.emit({ t: 'session.meta', cwdShort: this.metaLine() }); }
+    this.emit({ t: 'xmodels', ...this.xmodels() });
+  }
+
+  // 会话设置里的模型选择：dsh 的选项值是 JSON 串 ["供应商","模型"]；DeepSeek 官方的（deepseek-*）走 api.deepseek.com，
+  // 和模型库里同地址、同 ID 的对上就归到「模型库」。还没接上 dsh 时只有当前模型名
+  xmodels() {
+    const opt = this.config?.find(o => o.id === 'model');
+    if (!opt) return { current: null, label: this.model || '', groups: null };
+    const list = flatOptions(opt);
+    const own = list.map(o => {
+      let prov = '', id = String(o.name || o.value);
+      try { [prov, id] = JSON.parse(o.value); } catch {}
+      return { value: o.value, label: String(o.name || id), sub: prov, id, base: /^deepseek/.test(prov) ? 'https://api.deepseek.com' : '' };
+    });
+    const cur = list.find(o => o.value === opt.currentValue);
+    return { current: opt.currentValue, label: cur ? cur.name : modelName(this.config), groups: splitGroups(storeNow(), 'dsh', own) };
+  }
+  async loadXModels() {
+    if (!this.attached) await this.attach();
+    this.emit({ t: 'xmodels', ...this.xmodels() });
+  }
+  async pickModel(value) {
+    if (this.busy) throw new Error('这一轮结束后再换模型');
+    if (!this.attached) await this.attach();
+    const opt = this.config?.find(o => o.id === 'model');
+    const hit = flatOptions(opt).find(o => o.value === value);
+    if (!opt || !hit) throw new Error('没有这个模型');
+    const r = await rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value });
+    this.setConfig(r?.configOptions);
+    this.log?.('dsh model', this.sid.slice(0, 8), '→', hit.name);
+    return hit.name;
   }
 
   emit(ev) {

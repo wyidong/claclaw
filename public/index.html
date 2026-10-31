@@ -754,6 +754,9 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .cfg-opt .md[data-m="accept"]{background:var(--warn)}
 .cfg-opt .md[data-m="plan"]{background:var(--accent)}
 .cfg-opt .md[data-m="bypass"]{background:var(--deny)}
+.cfg-opt:disabled{opacity:.5;cursor:default}
+.cfg-g{margin:6px 2px -2px;font-size:12px;color:var(--muted)}
+.cfg-empty{padding:14px 4px;font-size:13.5px;color:var(--muted)}
 .cfg-opt.busy,.cfg-seg button.busy{opacity:.55;animation:cfgPulse 1s ease-in-out infinite alternate}
 @keyframes cfgPulse{to{opacity:.25}}
 .cfg-seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
@@ -1394,7 +1397,7 @@ select.pe-in{text-align-last:right}
       <div class="cfg-h"><b>会话设置</b><button type="button" id="cfgX" aria-label="关闭">×</button></div>
       <section id="cfgModelSec" hidden><h4>模型</h4><div class="cfg-list" id="cfgModels" role="radiogroup" aria-label="模型"></div></section>
       <section id="cfgEffortSec" hidden><h4>推理强度<span id="cfgEffortNote"></span></h4><div class="cfg-seg" id="cfgEfforts" role="radiogroup" aria-label="推理强度"></div></section>
-      <section><h4>权限</h4><div class="cfg-list" id="cfgModes" role="radiogroup" aria-label="权限"></div></section>
+      <section id="cfgModeSec"><h4>权限</h4><div class="cfg-list" id="cfgModes" role="radiogroup" aria-label="权限"></div></section>
     </div>
   </div>
 
@@ -2865,7 +2868,9 @@ function onEvent(m){
     setHeader();postViewing();
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan','auto','dontAsk'];
-    $('#cfgBtn').style.display=/^(oc|ds):/.test(m.id)?'none':'';   // OpenClaw / DeepSeek 没有权限模式
+    // dsh / OpenCode / OpenClaw：会话设置里只有模型（从模型库 + 各 Claw 自带的里选），没有推理强度和权限模式
+    xcfg=/^(oc|ds|op):/.test(m.id)?(m.xmodels||{current:null,label:'',groups:null}):null;xcfgAsked=false;xcfgErr='';
+    $('#cfgMode').hidden=!!xcfg;$('#cfgBtn').style.display='';
     cfg={models:null,model:null,effort:null,pick:'default'};cfgBusy=null;applyModel(m);
     setMode(m.mode,false);
     if(!reuse){
@@ -3001,6 +3006,12 @@ function onEvent(m){
     if(m.modes)sessionModes=m.modes;   // 换了进程（比如切到跳过确认）：能切的模式也变了
     setMode(m.mode,true);
     break;
+  case 'xmodels':
+    if(!xcfg||!session||m.sessionId!==session.id)break;
+    xcfg={current:m.current,label:m.label||'',groups:m.groups||null};
+    if(/^xmodel:/.test(String(cfgBusy)))cfgBusy=null;
+    renderCfgBtn();renderCfg();
+    break;
   case 'models': case 'model':
     applyModel(m);
     if(m.changed)cfgNote();
@@ -3044,6 +3055,7 @@ function onEvent(m){
       else clog('shell open 期间收到错误，继续等：'+(m.message||''));
     }
     openFailed();clearOpening();
+    if(xcfg&&!xcfg.groups&&xcfgAsked&&!xcfgErr){xcfgErr=m.message||'出错了';renderCfg()}
     if(cfgBusy){cfgBusy=null;renderCfg()}
     if(outbox){outboxRestore();if(!m.busy)setBusy(false)}   // 会话还在忙（只是这条没收下）：别把它显示成空闲
     notice('⚠ '+m.message);
@@ -3281,7 +3293,8 @@ function cfgNote(extra){
 }
 // ---------- 会话设置：模型 / 推理强度 / 权限（标题栏右边的按钮 + 面板）----------
 // 模型列表由服务器从 Claude Code 实时取（这个账号能用哪些就列哪些），只有 Claude 会话有
-var cfg={models:null,model:null,effort:null,pick:'default'},cfgBusy=null,cfgBusyT=null,lastModels=null;   // lastModels：新建对话框用（在列表页时没有打开的会话）
+var cfg={models:null,model:null,effort:null,pick:'default'},cfgBusy=null,cfgBusyT=null,lastModels=null;
+var xcfg=null,xcfgAsked=false,xcfgErr='';   // dsh / OpenCode / OpenClaw 会话的模型选择：{current, label, groups:[{name, items:[{value,label,sub,disabled}]}]}（groups 为 null = 还没取）   // lastModels：新建对话框用（在列表页时没有打开的会话）
 var EFFORTS=[
  {key:'low',label:'低',note:'最快、最省用量'},
  {key:'medium',label:'中',note:'速度和质量均衡'},
@@ -3303,6 +3316,7 @@ function curModelRow(){var ms=cfg.models||[];return ms.find(function(m){return m
 function curModelLabel(){if(cfg.model)return modelShort(cfg.model);var r=curModelRow();return r?modelShort(r.resolved||r.value):''}
 function effortLabel(k){var e=EFFORTS.find(function(x){return x.key===k});return e?e.label:''}
 function renderCfgBtn(){
+  if(xcfg){$('#cfgModel').textContent=xcfg.label||'模型';return}
   $('#cfgModel').textContent=claudeSess()&&(cfg.models||cfg.model)?(curModelLabel()+(cfg.effort?effortLabel(cfg.effort):'')).replace(/\s+/g,''):'';   // 标题栏紧凑：Opus5.5高
 }
 function modeList(){   // 这个会话能切换的权限模式（继承来的特殊模式也在里面）；Claude 会话随时可以切到「跳过确认」（服务端会重启进程）
@@ -3322,8 +3336,31 @@ function cfgSend(key,msg){
   cfgBusy=key;wsSend(msg);renderCfg();
   clearTimeout(cfgBusyT);cfgBusyT=setTimeout(function(){if(cfgBusy===key){cfgBusy=null;renderCfg();toast('没有回应，请再试一次')}},10000);
 }
+function renderXCfg(){
+  $('#cfgModelSec').hidden=false;$('#cfgEffortSec').hidden=true;$('#cfgModeSec').hidden=true;
+  var box=$('#cfgModels');box.innerHTML='';
+  if(!xcfg.groups){
+    box.innerHTML='<div class="cfg-empty">正在读取可选的模型…</div>';
+    if(xcfgErr){box.firstChild.textContent='读不到模型清单：'+xcfgErr;return}
+    if(!xcfgAsked){xcfgAsked=true;wsSend({t:'xmodels.load'})}
+    return;
+  }
+  if(!xcfg.groups.length){box.innerHTML='<div class="cfg-empty">没有可选的模型</div>';return}
+  xcfg.groups.forEach(function(g){
+    var h=document.createElement('div');h.className='cfg-g';h.textContent=g.name;box.appendChild(h);
+    g.items.forEach(function(it){
+      var b=cfgOpt(it.label,it.sub||'',it.value===xcfg.current);
+      if(it.disabled)b.disabled=true;
+      if(cfgBusy==='xmodel:'+it.value)b.classList.add('busy');
+      b.addEventListener('click',function(){if(!it.disabled&&it.value!==xcfg.current)cfgSend('xmodel:'+it.value,{t:'xmodel.set',value:it.value})});
+      box.appendChild(b);
+    });
+  });
+}
 function renderCfg(){
   var dlg=$('#cfgDlg');if(!dlg||!dlg.classList.contains('on'))return;
+  if(xcfg)return renderXCfg();
+  $('#cfgModeSec').hidden=false;
   var ms=claudeSess()&&cfg.models&&cfg.models.length?cfg.models:null;
   $('#cfgModelSec').hidden=!ms;$('#cfgEffortSec').hidden=!ms;
   if(ms){
@@ -3361,7 +3398,7 @@ function renderCfg(){
     mb.appendChild(b);
   });
 }
-function openCfg(){var d=$('#cfgDlg');d.classList.add('on');d.setAttribute('aria-hidden','false');renderCfg()}
+function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');d.classList.add('on');d.setAttribute('aria-hidden','false');renderCfg()}
 function closeCfg(){var d=$('#cfgDlg');d.classList.remove('on');d.setAttribute('aria-hidden','true')}
 $('#cfgGo').addEventListener('click',openCfg);
 $('#cfgX').addEventListener('click',closeCfg);
