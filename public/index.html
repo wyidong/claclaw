@@ -718,6 +718,7 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .dlg .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .dlg .err{min-height:1.4em;margin-top:10px;color:var(--deny);font-size:14px}
 .dlg .chips{display:flex;flex-wrap:wrap;gap:6px}
+.dlg select{width:100%;box-sizing:border-box;min-height:42px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
 .chip{min-height:34px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
 .chip[aria-checked="true"]{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600}
 /* 会话设置面板：手机从底部滑上来，电脑居中；三组：模型（卡片）、推理强度（分段）、权限（卡片） */
@@ -1360,7 +1361,9 @@ select.pe-in{text-align-last:right}
       <input id="newName" autocomplete="off">
       <div id="newPick" hidden>
         <label>模型</label><div class="chips" id="newModels" role="radiogroup" aria-label="模型"></div>
-        <label>推理强度</label><div class="chips" id="newEfforts" role="radiogroup" aria-label="推理强度"></div>
+        <select id="newModelSel" aria-label="模型" hidden></select>
+        <div id="newEffortRow"><label>推理强度</label><div class="chips" id="newEfforts" role="radiogroup" aria-label="推理强度"></div></div>
+        <div id="newModeRow"><label>权限</label><div class="chips" id="newModes" role="radiogroup" aria-label="权限"></div></div>
       </div>
       <div class="row">
         <button type="button" class="btn cancel" id="newNo">取消</button>
@@ -3010,10 +3013,13 @@ function onEvent(m){
     if(m.modes)sessionModes=m.modes;   // 换了进程（比如切到跳过确认）：能切的模式也变了
     setMode(m.mode,true);
     break;
+  case 'claw.opts':
+    drawNewOpts(m.claw,m.opts);
+    break;
   case 'xmodels':
     if(!xcfg||!session||m.sessionId!==session.id)break;
-    xcfg={current:m.current,label:m.label||'',groups:m.groups||null,cached:m.cached};
-    if(/^xmodel:/.test(String(cfgBusy)))cfgBusy=null;
+    xcfg={current:m.current,label:m.label||'',groups:m.groups||null,cached:m.cached,effort:m.effort||null,mode:m.mode||null};
+    if(/^(xmodel|xeffort|xmode):/.test(String(cfgBusy)))cfgBusy=null;
     renderCfgBtn();renderCfg();
     break;
   case 'models': case 'model':
@@ -3323,7 +3329,7 @@ function curModelRow(){var ms=cfg.models||[];return ms.find(function(m){return m
 function curModelLabel(){if(cfg.model)return modelShort(cfg.model);var r=curModelRow();return r?modelShort(r.resolved||r.value):''}
 function effortLabel(k){var e=EFFORTS.find(function(x){return x.key===k});return e?e.label:''}
 function renderCfgBtn(){
-  if(xcfg){$('#cfgModel').textContent=xcfg.label||'模型';return}
+  if(xcfg){var xe=xcfg.effort&&xcfg.effort.items.find(function(i){return i.value===xcfg.effort.current});$('#cfgModel').textContent=((xcfg.label||'模型')+(xe?' '+xe.label:'')).replace(/\s+/g,'');return}
   $('#cfgModel').textContent=claudeSess()&&(cfg.models||cfg.model)?(curModelLabel()+(cfg.effort?effortLabel(cfg.effort):'')).replace(/\s+/g,''):'';   // 标题栏紧凑：Opus5.5高
 }
 function modeList(){   // 这个会话能切换的权限模式（继承来的特殊模式也在里面）；Claude 会话随时可以切到「跳过确认」（服务端会重启进程）
@@ -3343,8 +3349,36 @@ function cfgSend(key,msg){
   cfgBusy=key;wsSend(msg);renderCfg();
   clearTimeout(cfgBusyT);cfgBusyT=setTimeout(function(){if(cfgBusy===key){cfgBusy=null;renderCfg();toast('没有回应，请再试一次')}},10000);
 }
+// ACP 会话的推理强度 / 权限：agent 给什么就列什么（推理强度跟着模型变，没有就不显示）
+function renderXOpts(){
+  var ef=xcfg.effort,md=xcfg.mode;
+  $('#cfgEffortSec').hidden=!ef;$('#cfgModeSec').hidden=!md;
+  if(ef){
+    var seg=$('#cfgEfforts');seg.innerHTML='';seg.style.gridTemplateColumns='repeat('+ef.items.length+',1fr)';
+    ef.items.forEach(function(it){
+      var b=document.createElement('button');b.type='button';b.setAttribute('role','radio');b.textContent=it.label;
+      b.setAttribute('aria-checked',it.value===ef.current?'true':'false');
+      if(cfgBusy==='xeffort:'+it.value)b.classList.add('busy');
+      b.addEventListener('click',function(){if(it.value!==ef.current)cfgSend('xeffort:'+it.value,{t:'xcfg.set',kind:'effort',value:it.value})});
+      seg.appendChild(b);
+    });
+    var cur=ef.items.find(function(i){return i.value===ef.current});
+    $('#cfgEffortNote').textContent=cur?cur.sub||'':'';
+  }
+  if(md){
+    var mb=$('#cfgModes');mb.innerHTML='';
+    md.items.forEach(function(it){
+      var b=cfgOpt(it.label,it.sub||'',it.value===md.current);
+      if(cfgBusy==='xmode:'+it.value)b.classList.add('busy');
+      b.addEventListener('click',function(){if(it.value!==md.current)cfgSend('xmode:'+it.value,{t:'xcfg.set',kind:'mode',value:it.value})});
+      mb.appendChild(b);
+    });
+  }
+}
 function renderXCfg(){
-  $('#cfgModelSec').hidden=false;$('#cfgEffortSec').hidden=true;$('#cfgModeSec').hidden=true;
+  $('#cfgModelSec').hidden=false;$('#cfgEfforts').style.gridTemplateColumns='';
+  $('#cfgEffortSec').hidden=true;$('#cfgModeSec').hidden=true;
+  if(xcfg.groups)renderXOpts();
   var box=$('#cfgModels');box.innerHTML='';
   if(!xcfg.groups){
     box.innerHTML='<div class="cfg-empty">正在读取可选的模型…</div>';
@@ -3382,7 +3416,7 @@ function renderCfg(){
       box.appendChild(b);
     });
     var row=curModelRow(),sup=row&&row.efforts&&row.efforts.length?row.efforts:EFFORTS.map(function(e){return e.key});
-    var seg=$('#cfgEfforts');seg.innerHTML='';
+    var seg=$('#cfgEfforts');seg.innerHTML='';seg.style.gridTemplateColumns='';
     EFFORTS.forEach(function(e){
       var b=document.createElement('button');b.type='button';b.setAttribute('role','radio');b.textContent=e.label;
       b.setAttribute('aria-checked',cfg.effort===e.key?'true':'false');b.disabled=sup.indexOf(e.key)<0;
@@ -5882,7 +5916,7 @@ document.addEventListener('visibilitychange',function(){wsSend({t:'visible',on:p
 
 // ---------- 新建同目录会话 ----------
 
-var newDlg=$('#newDlg'),newFrom=null,newPick={model:null,effort:null};
+var newDlg=$('#newDlg'),newFrom=null,newPick={model:null,effort:null,mode:null};
 function pickChips(box,items,cur,onPick){
   box.innerHTML='';
   items.forEach(function(it){
@@ -5900,20 +5934,46 @@ function newSibling(s){
   var d=$('#newDir');d.value=(s.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   d.style.width=Math.max(8,d.value.length+1)+'ch';
   $('#newName').value='';$('#newErr').textContent='';
-  // Claude 会话：可以选模型 / 推理强度；默认「沿用」= 用参照会话的
+  // Claude 会话：可以选模型 / 推理强度 / 权限；默认「沿用」= 用参照会话的
   var isClaude=!NOT_CLAUDE.test(s.id||'')&&(!s.claw||s.claw==='claude');
   var ms=isClaude?(cfg.models&&cfg.models.length?cfg.models:lastModels):null;
-  newPick={model:null,effort:null};$('#newPick').hidden=!ms;
-  if(ms){
+  newPick={model:null,effort:null,mode:null};$('#newPick').hidden=!isClaude;
+  $('#newModels').hidden=false;$('#newModelSel').hidden=true;$('#newEffortRow').hidden=!ms;$('#newModeRow').hidden=false;
+  $('#newPick > label').hidden=!ms;$('#newModels').hidden=!ms;
+  if(isClaude){
     var same=session&&session.id===s.id;
-    var keepM=same?'沿用（'+curModelLabel()+'）':'沿用原会话',keepE=same&&cfg.effort?'沿用（'+effortLabel(cfg.effort)+'）':'沿用原会话';
-    pickChips($('#newModels'),[{value:null,label:keepM}].concat(ms.map(function(m){return {value:m.value,label:m.value==='default'?'默认':modelShort(m.resolved||m.value)}})),null,function(v){newPick.model=v});
-    pickChips($('#newEfforts'),[{value:null,label:keepE}].concat(EFFORTS.map(function(e){return {value:e.key,label:e.label}})),null,function(v){newPick.effort=v});
+    if(ms){
+      var keepM=same?'沿用（'+curModelLabel()+'）':'沿用原会话',keepE=same&&cfg.effort?'沿用（'+effortLabel(cfg.effort)+'）':'沿用原会话';
+      pickChips($('#newModels'),[{value:null,label:keepM}].concat(ms.map(function(m){return {value:m.value,label:m.value==='default'?'默认':modelShort(m.resolved||m.value)}})),null,function(v){newPick.model=v});
+      pickChips($('#newEfforts'),[{value:null,label:keepE}].concat(EFFORTS.map(function(e){return {value:e.key,label:e.label}})),null,function(v){newPick.effort=v});
+    }
+    var mx=MODES.find(function(x){return x.key===mode});
+    pickChips($('#newModes'),[{value:null,label:same&&mx?'沿用（'+mx.label+'）':'沿用原会话'}].concat(MODES.map(function(x){return {value:x.key,label:x.label}})),null,function(v){newPick.mode=v});
+  }else if(s.claw&&CLAW_T.some(function(c){return c.id===s.claw&&c.acp})){
+    newOptsFor=s.claw;wsSend({t:'claw.opts',claw:s.claw});   // 按上次记下的清单给可选项，回来再画（claw.opts）
   }
   showDlg(newDlg,true);
   $('#newName').focus();
 }
-function closeNew(){showDlg(newDlg,false);newFrom=null}
+var newOptsFor=null;
+// ACP Claw 的新建：模型（下拉，分组）、推理强度、权限（agent 给什么列什么；「默认」= 不改，用 agent 自己的）
+function drawNewOpts(claw,o){
+  if(!newFrom||newOptsFor!==claw||!o)return;
+  var groups=(o.groups||[]).filter(function(g){return g.items&&g.items.length});
+  if(!groups.length&&!o.effort&&!o.mode)return;
+  $('#newPick').hidden=false;
+  $('#newPick > label').hidden=!groups.length;$('#newModels').hidden=true;
+  var sel=$('#newModelSel');sel.hidden=!groups.length;sel.innerHTML='';
+  if(groups.length){
+    var d0=document.createElement('option');d0.value='';d0.textContent='默认（'+(o.label||'agent 自己的')+'）';sel.appendChild(d0);
+    groups.forEach(function(g){var og=document.createElement('optgroup');og.label=g.name;g.items.forEach(function(it){if(it.disabled)return;var op=document.createElement('option');op.value=it.value;op.textContent=it.label+(it.sub?' · '+it.sub:'');og.appendChild(op)});if(og.children.length)sel.appendChild(og)});
+    sel.onchange=function(){newPick.model=sel.value||null};
+  }
+  $('#newEffortRow').hidden=!o.effort;$('#newModeRow').hidden=!o.mode;
+  if(o.effort)pickChips($('#newEfforts'),[{value:null,label:'默认'}].concat(o.effort.items.map(function(i){return {value:i.value,label:i.label}})),null,function(v){newPick.effort=v});
+  if(o.mode)pickChips($('#newModes'),[{value:null,label:'默认'}].concat(o.mode.items.map(function(i){return {value:i.value,label:i.label}})),null,function(v){newPick.mode=v});
+}
+function closeNew(){showDlg(newDlg,false);newFrom=null;newOptsFor=null}
 $('#newDir').addEventListener('input',function(e){e.target.style.width=Math.max(8,e.target.value.length+1)+'ch'});
 $('#newNo').addEventListener('click',closeNew);
 newDlg.addEventListener('click',function(e){if(e.target===newDlg)closeNew()});
@@ -5925,6 +5985,7 @@ $('#newForm').addEventListener('submit',function(e){
   if(dir&&(dir!==orig||!newFrom.id))msg.cwd=dir;   // 改了目录（或没有参照会话）才带上；服务器会检查目录是否存在
   if(newPick.model)msg.model=newPick.model;
   if(newPick.effort)msg.effort=newPick.effort;
+  if(newPick.mode)msg.mode=newPick.mode;
   closeNew();closeSheet();
   wsSend(msg);
 });

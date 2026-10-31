@@ -23,7 +23,7 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
-import { AcpRunner } from './acp.mjs';
+import { AcpRunner, cfgKindName } from './acp.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { userTextOf, dissectClaude, dissectDs, dissectKimi } from './dissect.mjs';
@@ -816,7 +816,7 @@ const CLAWS = [
     list: () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy }),
     make: id => dsExists(id) ? new DsRunner(id, dsOpts()) : null,
     refCwd: id => dsSessionList().find(s => s.id === id)?.cwd,
-    newSession: cwd => dsNewSession(cwd, dsOpts()),
+    newSession: cwd => dsNewSession(cwd, dsOpts()), cls: DsRunner,
     openExtra: r => ({ usage: dsUsage(r.id) }), newExtra: r => ({ usage: dsUsage(r.id) }),
     short: shortKeep(/^ds:(?:session-)?/),
     rename: async (id, title) => (await dsRename(id, title)).title,
@@ -841,7 +841,7 @@ const CLAWS = [
     // 终端里的 opencode 正开着它：和 Claude 会话一样，闲置够久才能接管，接管会结束终端里的 opencode
     takeover: id => opTakeoverInfo(id, takeoverMin()), endHolders: opEndHolders,
     refCwd: id => opSessionList().find(s => s.id === id)?.cwd,
-    newSession: cwd => opNewSession(cwd, dsOpts()),
+    newSession: cwd => opNewSession(cwd, dsOpts()), cls: OpRunner,
     openExtra: r => ({ tokSum: opTokSum(r.id) }),
     short: shortKeep(/^op:(?:ses_)?/),
     // opencode 的会话在它的数据库里：先导出一份 JSON 到回收站（opencode import 能找回），再删
@@ -854,7 +854,7 @@ const CLAWS = [
     list: () => kmSessionList({ busy: x => !!kmRunners.get(x)?.busy }),
     make: async id => { const s = await kmInfo(id).catch(() => null); return s ? new KmRunner(id, { ...dsOpts(), info: s }) : null; },
     refCwd: async id => (await kmInfo(id).catch(() => null))?.cwd,
-    newSession: cwd => kmNewSession(cwd, dsOpts()),
+    newSession: cwd => kmNewSession(cwd, dsOpts()), cls: KmRunner,
     short: shortKeep(/^km:(?:session_)?/),
     // kimi 的会话：先 kimi export 一份 zip 到回收站，再删
     del: id => kmDelete(id, TRASH, log), rename: async (id, title) => { await kmRename(id, title, log); return title; },
@@ -866,7 +866,7 @@ const CLAWS = [
     list: () => qwSessionList({ busy: x => !!qwRunners.get(x)?.busy }),
     make: id => { const s = qwInfo(id); return s ? new QwRunner(id, { ...dsOpts(), info: s }) : null; },
     refCwd: id => qwInfo(id)?.cwd,
-    newSession: cwd => qwNewSession(cwd, dsOpts()),
+    newSession: cwd => qwNewSession(cwd, dsOpts()), cls: QwRunner,
     short: shortKeep(/^qw:/),
     // qwen 的会话：先把会话文件复制一份到回收站，再让 qwen 删
     del: id => qwDelete(id, TRASH, log), rename: (id, title) => qwRename(id, title, log),
@@ -878,7 +878,7 @@ const CLAWS = [
     list: () => cxSessionList({ busy: x => !!cxRunners.get(x)?.busy }),
     make: id => { const s = cxInfo(id); return s ? new CxRunner(id, { ...dsOpts(), info: s }) : null; },
     refCwd: id => cxInfo(id)?.cwd,
-    newSession: cwd => cxNewSession(cwd, dsOpts()),
+    newSession: cwd => cxNewSession(cwd, dsOpts()), cls: CxRunner,
     short: shortKeep(/^cx:/),
     // Codex 的删除是归档（~/.codex/archived_sessions），能找回
     del: id => cxDelete(id, log), rename: (id, title) => cxRename(id, title, log),
@@ -2947,6 +2947,13 @@ wss.on('connection', (ws, req) => {
         const pg = historyPage(hist, Number(m.before) || 0, HISTORY_MORE);
         return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
       }
+      if (m.t === 'claw.opts') {
+        // 新建对话框：这个 Claw 能选的模型 / 推理强度 / 权限（按上次记下的清单）
+        const c = clawById(String(m.claw || ''));
+        let opts = null;
+        try { opts = c?.cls?.preview() || null; } catch {}
+        return send({ t: 'claw.opts', claw: m.claw, opts });
+      }
       if (m.t === 'session.new' && (isOc(m.from) || m.claw === 'openclaw')) {
         ensureSkill('openclaw');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         // OpenClaw：网关新建会话（没有目录的概念），建好直接打开
@@ -2982,6 +2989,14 @@ wss.on('connection', (ws, req) => {
         if (!isDir(cwd)) return send({ t: 'error', message: '目录不存在：' + cwd });
         let r;
         try { r = await c.newSession(cwd); } catch (e) { return send({ t: 'error', message: c.label + ' 新建会话失败：' + e.message }); }
+        // 新建对话框里选的模型 / 推理强度 / 权限（先换模型：推理强度有哪几档跟着模型变）；换不成的提示一句，会话照样建好
+        const notes = [];
+        if (typeof m.model === 'string' && m.model) {
+          try { const res = await r.pickModel(m.model); if (res?.runner) { const old = r; r = res.runner; old.dispose(); } } catch (e) { notes.push('模型没换成：' + e.message); }
+        }
+        for (const k of ['effort', 'mode']) if (typeof m[k] === 'string' && m[k]) {
+          try { await r.setOption(k, m[k]); } catch (e) { notes.push(cfgKindName(k) + '没设上：' + e.message); }
+        }
         runner?.unsubscribe(ws);
         runner = r;
         r.subscribe(ws);
@@ -2991,6 +3006,8 @@ wss.on('connection', (ws, req) => {
           mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
           commands: r.commands, isNew: true, ...(c.newExtra?.(r) || {}),
         });
+        for (const n of notes) r.emit({ t: 'sys', text: n });
+        return;
       }
       if (m.t === 'session.new') {
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
@@ -3008,7 +3025,8 @@ wss.on('connection', (ws, req) => {
         if (!fs.existsSync(cwd)) return send({ t: 'error', message: '会话目录已不存在：' + cwd });
         const title = String(m.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
         const id = crypto.randomUUID();
-        const inherited = from ? ((runners.get(from.sessionId)?.mode) || inheritedMode(from)) : 'default';
+        // 权限：新建对话框里选的优先，否则沿用参照会话的
+        const inherited = ALL_MODES.includes(m.mode) ? m.mode : from ? ((runners.get(from.sessionId)?.mode) || inheritedMode(from)) : 'default';
         const allowed = MODES.includes(inherited) ? MODES : [...MODES, inherited];
         const info = { sessionId: id, cwd, summary: title || '新会话', customTitle: title || undefined };
         runner?.unsubscribe(ws);
@@ -3199,6 +3217,11 @@ wss.on('connection', (ws, req) => {
           });
           r.emit({ t: 'sys', text: '已切换为 ' + res.label + '（下一条消息生效）', cfg: true });
         } else runner.emit({ t: 'sys', text: '已切换为 ' + res + '（下一条消息生效）', cfg: true });
+      } else if (m.t === 'xcfg.set' && runner?.setOption) {
+        // ACP 会话的推理强度 / 权限（会话设置里点的）
+        const kind = m.kind === 'mode' ? 'mode' : 'effort';
+        const label = await runner.setOption(kind, String(m.value || ''));
+        runner.emit({ t: 'sys', text: cfgKindName(kind) + '已切换为「' + label + '」' + (kind === 'effort' ? '（下一条消息生效）' : ''), cfg: true });
       } else if (m.t === 'model.set' && runner instanceof Runner) {
         await runner.setModel(String(m.model || ''));
       } else if (m.t === 'effort.set' && runner instanceof Runner) {

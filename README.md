@@ -81,6 +81,7 @@ Claw 页底部（电脑上在 设置 → 宿主 → Claw 区）有「模型管�
 - **模型**：挂在供应商下面，填调用接口时用的模型 ID，可选显示名、上下文长度、能不能识图 / 推理。
 - 存在电脑的 `data/models.json`（权限 600）。key 只进不出：网页上只显示后 4 位，改 key 只能整个替换或清掉，日志里不写。删掉的供应商备份在 `data/trash/`，30 天后自动清。
 - **在会话里选**：dsh、OpenCode、OpenClaw 会话标题栏右边显示当前模型，点开「会话设置」就能换（不用打 `/model`），模型库里的排在前面，各 Claw 自带的在后面。这一轮回复完才能换，换了从下一条消息起生效。
+- **推理强度、权限**（DeepSeek、OpenCode、Kimi、Qwen、Codex）：会话设置里和 Claude 一样有「推理强度」「权限」两栏，agent 给什么档就列什么（推理强度跟着模型变：Kimi 只有思考开 / 关，Codex 只给它认识的 OpenAI 模型，OpenCode 看模型；DeepSeek 没有权限模式）。新建会话时也能先选好模型、推理强度、权限（选项是上次用这个 Claw 时记下的清单，存在 `data/acp-models.json`；「默认」= 用 agent 自己的）。Claude 的新建对话框也能选权限。
   - OpenCode：启动 `opencode acp` 时把模型库注入进去（`OPENCODE_CONFIG_CONTENT`，和你自己的配置合并，供应商名前面加 `claclaw-`；有 Anthropic 格式地址优先用它），key 只放在子进程的环境变量里。模型库改了以后，等没有 OpenCode 会话开着时自动重启它的进程，才看得到新的。
   - Kimi Code：kimi 只认 `~/.kimi-code/config.toml`，claclaw 把模型库写成里面 `claclaw-` 开头的供应商和模型（OpenAI 兼容地址优先），key 不写文件（`api_key_env` 指向环境变量，只在 claclaw 起的 `kimi acp` 里有）；你自己的配置原样保留，没设默认模型时设成模型库第一个。所以终端里直接跑 `kimi` 用不了这些模型（没有 key）。
   - Qwen Code：模型库写进 `~/.qwen/settings.json` 的 `modelProviders`（OpenAI 兼容地址优先），每条的 `envKey` 指向 `CLACLAW_KEY_<供应商>`，key 只在 claclaw 起的 `qwen --acp` 里有；你自己配的条目原样保留，没选过模型时设成模型库第一个。终端里直接跑 `qwen` 同样用不了这些模型。

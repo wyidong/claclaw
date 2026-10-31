@@ -69,6 +69,36 @@ export function stampTimes(items, recs) {
   return items;
 }
 
+// 推理强度 / 权限：agent 在 configOptions 里用 category 标（thought_level / mode），没标的按 id 认。
+// 有没有、有哪几档都看 agent 和当前模型（Codex 只给它认识的模型推理强度；OpenCode 看模型）
+const CFG_KINDS = { effort: { cat: 'thought_level', ids: ['reasoning_effort', 'effort', 'thinking'], name: '推理强度' }, mode: { cat: 'mode', ids: ['mode'], name: '权限' } };
+export const cfgFind = (cfg, kind) => Array.isArray(cfg) ? cfg.find(o => o.category === CFG_KINDS[kind].cat) || cfg.find(o => !o.category && CFG_KINDS[kind].ids.includes(o.id)) || null : null;
+export const cfgKindName = kind => CFG_KINDS[kind]?.name || kind;
+const EFFORT_ZH = {
+  off: ['不思考', '最快，适合简单问题'], none: ['不思考', '最快，适合简单问题'], on: ['思考', '先想再回答'],
+  minimal: ['最低', '几乎不思考'], low: ['低', '快、省用量'], medium: ['中', '速度和质量均衡'], high: ['高', '想得更仔细'],
+  xhigh: ['超高', '复杂编码、长任务'], max: ['最高', '最深入，也最耗用量'],
+};
+const MODE_ZH = {
+  default: ['每次询问', '改文件、跑命令前先问你'],
+  build: ['正常', '按 OpenCode 的权限设置执行'],
+  plan: ['只做计划', '只分析、出方案，不改文件'],
+  'auto-edit': ['自动改文件', '改文件不问，跑命令还会问'],
+  auto: ['自动判断', '安全的操作自动通过，有风险的才问'],
+  yolo: ['全部自动', '什么都不问'],
+  'read-only': ['只读', '改文件、上网前先问你'],
+  'workspace-write': ['工作区可写', '目录里随便改；写到外面或上网前先问'],
+  agent: ['自动审核', '只有看起来不安全的操作才问'],
+  'agent-full-access': ['完全访问', '任何文件、网络都不受限制，什么都不问'],
+};
+// 网页用的选项：{ id, current, items: [{ value, label, sub }] }
+export function cfgView(opt, kind, current = opt?.currentValue) {
+  if (!opt) return null;
+  const zh = kind === 'effort' ? EFFORT_ZH : MODE_ZH;
+  const items = flatOptions(opt).map(o => { const v = String(o.value), z = zh[v.toLowerCase()]; return { value: v, label: z ? z[0] : String(o.name || v), sub: z ? z[1] : String(o.description || '') }; });
+  return items.length ? { id: opt.id, current: current ?? null, items } : null;
+}
+
 export class AcpAgent {
   // name：日志和报错里的名字（dsh / opencode / kimi）
   // bin()：找程序，找不到返回 null；missing：找不到时的提示
@@ -165,11 +195,14 @@ export class AcpAgent {
     this.answer(m.id, null, { code: -32601, message: 'method not supported: ' + m.method });
   }
 
+  // 上次见到的模型 / 推理强度 / 权限清单（没接上时、新建对话框里先用它）
   cachedModels() { return modelsCached()[this.name] || null; }
-  saveModels(opt) {
+  cachedOpt(kind) { return modelsCached()[this.name + ':' + kind] || null; }
+  saveModels(opt, kind) {
+    const key = kind ? this.name + ':' + kind : this.name;
     const { currentValue, ...v } = opt, c = modelsCached();
-    if (JSON.stringify(c[this.name]) === JSON.stringify(v)) return;
-    c[this.name] = v;
+    if (JSON.stringify(c[key]) === JSON.stringify(v)) return;
+    c[key] = v;
     try { writeJsonAtomic(MODELS_FILE, c); } catch {}
   }
   // 打开会话时先把进程起好（起进程 + initialize 要 1~2 秒），换模型、发第一条时就不用等；没会话接上照常 10 分钟后关
@@ -278,6 +311,7 @@ export class AcpRunner {
     this.config = cfg;
     const mo = cfg.find(o => o.id === 'model');
     if (mo) this.agent.saveModels(mo);
+    for (const k of ['effort', 'mode']) { const o = cfgFind(cfg, k); if (o) this.agent.saveModels(o, k); }
     const name = this.modelNameOf(cfg);
     if (name && name !== this.model) { this.model = name; this.emit({ t: 'session.meta', cwdShort: this.metaLine() }); }
     this.emit({ t: 'xmodels', ...this.xmodels() });
@@ -289,15 +323,38 @@ export class AcpRunner {
     let opt = this.config?.find(o => o.id === 'model'), cached;
     if (!opt) {
       const c = this.agent.cachedModels();
-      if (!c) return { current: null, label: this.model || '', groups: null };
+      if (!c) return { current: null, label: this.model || '', groups: null, ...this.optViews() };
       const store = storeNow(), hits = this.model ? flatOptions(c).filter(o => this.ownModel(o, store).id === this.model || this.cleanName(this.modelNameOf([{ ...c, currentValue: o.value }])) === this.model) : [];
       opt = { ...c, currentValue: hits.length === 1 ? hits[0].value : null }; cached = true;
     }
     const store = storeNow(), list = flatOptions(opt);
     const own = list.map(o => this.ownModel(o, store));
     const cur = list.find(o => o.value === opt.currentValue);
-    return { current: opt.currentValue, label: cur ? this.cleanName(cur.name) : this.model, groups: splitGroups(store, this.constructor.group, own), cached };
+    return { current: opt.currentValue, label: cur ? this.cleanName(cur.name) : this.model, groups: splitGroups(store, this.constructor.group, own), cached, ...this.optViews() };
   }
+  // 推理强度 / 权限：接上了用当前的；没接上用上次记下的清单（不知道当前是哪个）。
+  // 推理强度跟着模型变：接上了却没有，就是这个模型没有
+  optViews() {
+    const out = {};
+    for (const k of ['effort', 'mode']) out[k] = this.config ? cfgView(cfgFind(this.config, k), k) : cfgView(this.agent.cachedOpt(k), k, null);
+    return out;
+  }
+  async setOption(kind, value) {
+    if (!CFG_KINDS[kind]) throw new Error('不能调这一项');
+    if (!this.attached) await this.attach();
+    const opt = cfgFind(this.config, kind);
+    if (!opt) throw new Error(this.constructor.label + (kind === 'effort' ? ' 当前模型没有推理强度可选' : ' 没有权限模式可选'));
+    const hit = flatOptions(opt).find(o => String(o.value) === value);
+    if (!hit) throw new Error('没有这个' + cfgKindName(kind) + '：' + value);
+    if (String(opt.currentValue) !== value) {
+      const r = await this.agent.rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value: hit.value });
+      this.setConfig(r?.configOptions);
+      this.log?.(this.agent.name + ' ' + kind, this.sid.slice(0, 16), '→', value);
+    }
+    return cfgView(opt, kind).items.find(x => x.value === value)?.label || value;
+  }
+  // 新建对话框用：还没有会话时按上次记下的清单给出可选的模型 / 推理强度 / 权限
+  static preview() { return new this(this.prefix + 'preview', {}).xmodels(); }
   // 打开会话设置时：还没接上就先接上（拿到模型清单）
   async loadXModels() {
     if (!this.attached) await this.attach();
