@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { storeMatch, opencodeInject, splitGroups, hostOf, kimiInject, kimiConfigMerge } from '../modelpick.mjs';
+import { storeMatch, opencodeInject, splitGroups, hostOf, kimiInject, kimiConfigMerge, qwenInject, qwenSettingsMerge } from '../modelpick.mjs';
 
 const store = { version: 1, providers: [
   { id: 'deepseek', name: 'DeepSeek', endpoints: { anthropic: 'https://api.deepseek.com/anthropic', openai: 'https://api.deepseek.com' }, key: 'sk-ds-1234',
@@ -78,4 +78,39 @@ test('Kimi config.toml 合并：只换 claclaw- 段落、可重复执行、defau
   // kimi 重写过文件（表头不带引号、带子表）也认得出
   const c = kimiConfigMerge('[providers.claclaw-old]\ntype = "openai"\n[providers.claclaw-old.env]\nX = "1"\n[models."claclaw-old/m".overrides]\nmax_context_size = 1\n[keep]\na = 1\n', none);
   assert.equal(c, '[keep]\na = 1\n');
+});
+
+test('Qwen 注入：按接口类型分组、envKey 指向环境变量、key 不进设置', () => {
+  const r = qwenInject(store);
+  assert.deepEqual(Object.keys(r.entries), ['openai']);
+  const [pro, flash, k2] = r.entries.openai;
+  assert.equal(pro.id, 'deepseek-v4-pro'); assert.equal(pro.baseUrl, 'https://api.deepseek.com'); assert.equal(pro.envKey, 'CLACLAW_KEY_DEEPSEEK');
+  assert.equal(pro.generationConfig.contextWindowSize, 1000000);
+  assert.equal(flash.generationConfig.modalities.image, true);
+  assert.equal(k2.envKey, 'CLACLAW_KEY_KIMI');
+  const key = store.providers[0].key;
+  assert.deepEqual(r.env, { CLACLAW_KEY_DEEPSEEK: key });
+  assert.ok(!JSON.stringify(r.entries).includes(key));
+  assert.equal(qwenInject({ providers: [] }).sig, '');
+});
+
+test('Qwen settings 合并：换掉旧的 claclaw 条目、保留用户的、没选模型时选第一个', () => {
+  const inj = qwenInject(store);
+  const cur = { theme: 'x', model: { name: 'gone' }, modelProviders: { openai: [{ id: 'mine', envKey: 'MY_KEY' }, { id: 'gone', envKey: 'CLACLAW_KEY_OLD' }], anthropic: [{ id: 'old', envKey: 'CLACLAW_KEY_OLD' }] } };
+  const s = qwenSettingsMerge(cur, inj);
+  assert.equal(s.theme, 'x');
+  assert.deepEqual(s.modelProviders.openai.map(e => e.id), ['mine', 'deepseek-v4-pro', 'deepseek-flash', 'kimi-k2']);
+  assert.equal(s.modelProviders.anthropic, undefined);
+  assert.equal(s.model.name, 'deepseek-v4-pro'); assert.equal(s.security.auth.selectedType, 'openai');
+  // 用户自己选的模型不动
+  const s2 = qwenSettingsMerge({ model: { name: 'mine' }, security: { auth: { selectedType: 'anthropic' } } }, inj);
+  assert.equal(s2.model.name, 'mine'); assert.equal(s2.security.auth.selectedType, 'anthropic');
+  // 模型库清空：claclaw 的条目都拿掉
+  const s3 = qwenSettingsMerge(s, qwenInject({ providers: [] }));
+  assert.deepEqual(s3.modelProviders.openai.map(e => e.id), ['mine']);
+});
+test('Qwen settings 合并：模型库清空时不留指向已删模型的 model.name', () => {
+  const s = qwenSettingsMerge({}, qwenInject(store));
+  const s2 = qwenSettingsMerge(s, qwenInject({ providers: [] }));
+  assert.equal(s2.model.name, undefined);
 });

@@ -131,3 +131,49 @@ export function kimiConfigMerge(text, inj) {
   }
   return (body ? body.trimEnd() + '\n' : '') + (inj.tables ? '\n' + KIMI_MARK + '\n' + inj.tables.trimEnd() + '\n' : '');
 }
+
+// Qwen Code 的注入：模型库写进 ~/.qwen/settings.json 的 modelProviders（按接口类型分组的数组），
+// 每条的 envKey 指向 CLACLAW_KEY_<供应商>（key 只在 claclaw 起 `qwen --acp` 时放进环境变量，不落盘），
+// 也拿 envKey 的前缀认出哪些是 claclaw 写的。modelProviders 在各层设置之间是整个替换，所以只能写在用户那层。
+// OpenAI 兼容地址优先，其次 Anthropic，再次 Gemini。返回 { entries: { openai: [...], ... }, list, env, sig }
+const QWEN_ENV = /^CLACLAW_KEY_/;
+export function qwenInject(store) {
+  const entries = {}, env = {}, list = [];
+  for (const p of store.providers) {
+    const ep = p.endpoints || {};
+    if (!p.models.length) continue;
+    const [type, base] = ep.openai ? ['openai', ep.openai] : ep.anthropic ? ['anthropic', ep.anthropic] : ep.gemini ? ['gemini', ep.gemini] : [];
+    if (!type) continue;
+    const ek = envName(p.id);
+    if (p.key) env[ek] = p.key;
+    for (const m of p.models) {
+      (entries[type] ||= []).push({
+        id: m.id, name: m.name || m.id, description: 'claclaw · ' + p.name, envKey: ek, baseUrl: base,
+        ...(m.context || m.vision ? { generationConfig: { ...(m.context ? { contextWindowSize: m.context } : {}), ...(m.vision ? { modalities: { image: true } } : {}) } } : {}),
+      });
+      list.push({ type, provider: p, model: m });
+    }
+  }
+  const body = JSON.stringify(entries);
+  const sig = list.length ? crypto.createHash('sha256').update(body + '\n' + JSON.stringify(env)).digest('hex').slice(0, 16) : '';
+  return { entries, list, env, sig };
+}
+// 把 settings.json（已解析的对象）里原来 claclaw 写的条目换成新的，用户自己的原样不动。
+// 没选过认证方式、没选过模型：用模型库第一个；原来选的是 claclaw 的模型、现在没了也换掉
+export function qwenSettingsMerge(cur, inj) {
+  const s = JSON.parse(JSON.stringify(cur || {}));
+  const mp = s.modelProviders && typeof s.modelProviders === 'object' ? s.modelProviders : {};
+  for (const k of Object.keys(mp)) if (Array.isArray(mp[k])) { mp[k] = mp[k].filter(e => !QWEN_ENV.test(e?.envKey || '')); if (!mp[k].length) delete mp[k]; }
+  for (const [k, arr] of Object.entries(inj.entries)) mp[k] = [...(mp[k] || []), ...arr];
+  if (Object.keys(mp).length) s.modelProviders = mp; else delete s.modelProviders;
+  const first = inj.list[0];
+  const ours = id => inj.list.some(x => x.model.id === id);
+  const wasOurs = id => Object.values(cur?.modelProviders || {}).some(a => Array.isArray(a) && a.some(e => e?.id === id && QWEN_ENV.test(e?.envKey || '')));
+  const name = s.model?.name;
+  if (first && (!name || (wasOurs(name) && !ours(name)))) {
+    s.model = { ...(s.model || {}), name: first.model.id };
+    s.security = { ...(s.security || {}), auth: { ...(s.security?.auth || {}), selectedType: first.type } };
+  } else if (first && !s.security?.auth?.selectedType) s.security = { ...(s.security || {}), auth: { ...(s.security?.auth || {}), selectedType: first.type } };
+  else if (!first && name && wasOurs(name)) { s.model = { ...s.model }; delete s.model.name; }   // 模型库清空了：别留着指向没了的模型
+  return s;
+}

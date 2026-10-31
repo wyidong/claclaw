@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { request as httpsRequest } from 'node:https';
 import { kmBin } from './kimi.mjs';
+import { qwBin } from './qwen.mjs';
 
 const run = (cmd, args, ms = 4000) => new Promise(ok => {
   execFile(cmd, args, { timeout: ms, env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin', '/opt/homebrew/bin'].join(':') } },
@@ -21,7 +22,7 @@ export function slowInfo(root) {   // server 启动时先跑一次，第一次�
 }
 async function readSlow(root) {
   const mac = process.platform === 'darwin';
-  const [name, osVer, model, claude, openclaw, gitLine, opencode, kimi] = await Promise.all([
+  const [name, osVer, model, claude, openclaw, gitLine, opencode, kimi, qwen] = await Promise.all([
     mac ? run('scutil', ['--get', 'ComputerName']) : Promise.resolve(os.hostname()),
     mac ? run('sw_vers', ['-productVersion']) : Promise.resolve(os.release()),
     mac ? run('sysctl', ['-n', 'hw.model']) : Promise.resolve(''),
@@ -30,6 +31,7 @@ async function readSlow(root) {
     run('git', ['-C', root, 'log', '-1', '--format=%h %ct']),
     run('opencode', ['--version'], 8000),
     kmBin() ? run(kmBin(), ['--version'], 8000) : Promise.resolve(''),
+    qwBin() ? run(qwBin(), ['--version'], 8000) : Promise.resolve(''),
   ]);
   let dsh = '';
   try { dsh = JSON.parse(fs.readFileSync('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json', 'utf8')).version; } catch {}
@@ -38,7 +40,7 @@ async function readSlow(root) {
     name: name || os.hostname(), os: (mac ? 'macOS ' : os.type() + ' ') + osVer, model,
     claude: (claude.match(/\d+\.\d+\.\d+\S*/) || [''])[0],
     openclaw: (openclaw.match(/\d{4}\.\d+\.\d+\S*|\d+\.\d+\.\d+\S*/) || [''])[0],
-    dsh, opencode: (opencode.match(/\d+\.\d+\.\d+\S*/) || [''])[0], kimi: (kimi.match(/\d+\.\d+\.\d+\S*/) || [''])[0], commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
+    dsh, opencode: (opencode.match(/\d+\.\d+\.\d+\S*/) || [''])[0], kimi: (kimi.match(/\d+\.\d+\.\d+\S*/) || [''])[0], qwen: (qwen.match(/\d+\.\d+\.\d+\S*/) || [''])[0], commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
   };
   slow.at = Date.now();
   return slow.data;
@@ -125,6 +127,7 @@ export async function hostInfo({ root, port, hosts, https, startedAt, sessions, 
       { id: 'deepseek', name: 'DeepSeek Harness', version: s.dsh, ...claws.deepseek },
       { id: 'opencode', name: 'OpenCode', version: s.opencode, ...claws.opencode },
       ...(claws.kimi ? [{ id: 'kimi', name: 'Kimi Code', version: s.kimi, ...claws.kimi }] : []),
+      ...(claws.qwen ? [{ id: 'qwen', name: 'Qwen Code', version: s.qwen, ...claws.qwen }] : []),
     ],
   };
 }

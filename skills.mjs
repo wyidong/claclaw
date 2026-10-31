@@ -1,7 +1,7 @@
 // claclaw 技能：仓库 skills/ 里预先准备好的 Agent Skills（SKILL.md + 脚本），用户用到相关场景时 claclaw 推荐安装。
 // 两个安装位置就覆盖五个 Claw：
 //   ~/.claude/skills  —— Claude Code（OpenCode 也读）
-//   ~/.agents/skills  —— DeepSeek Harness、OpenCode、Kimi、OpenClaw 共用的个人技能目录
+//   ~/.agents/skills  —— DeepSeek Harness、OpenCode、Kimi、Qwen Code、OpenClaw 共用的个人技能目录
 // 装的是复制件（有的 Claw 不跟软链接），里面放一个 .claclaw-skill 标记；claclaw 启动时把带标记的复制件同步成仓库里的最新版，
 // 卸载也只删带标记的，用户自己的同名技能不碰。
 // 另外每次启动写 ~/.claclaw/local.json（本机地址 + 令牌）和 ~/.claclaw/bin/ 下的命令，技能里的命令靠它们找到 claclaw。
@@ -20,7 +20,7 @@ const MARK = '.claclaw-skill';
 // 安装位置：claude 一处，其余 Claw 共用一处
 export const TARGETS = {
   claude: { dir: path.join(HOME, '.claude', 'skills'), claws: ['claude', 'opencode'], label: 'Claude Code' },
-  agents: { dir: path.join(HOME, '.agents', 'skills'), claws: ['deepseek', 'opencode', 'kimi', 'openclaw'], label: 'DeepSeek、OpenCode、Kimi、OpenClaw' },
+  agents: { dir: path.join(HOME, '.agents', 'skills'), claws: ['deepseek', 'opencode', 'kimi', 'qwen', 'openclaw'], label: 'DeepSeek、OpenCode、Kimi、Qwen、OpenClaw' },
 };
 export const targetOf = claw => claw === 'claude' ? 'claude' : 'agents';
 
