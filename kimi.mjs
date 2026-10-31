@@ -234,7 +234,10 @@ function toolLabel(name = '', kind = '') {
 }
 // kimi 的工具参数是流式的：in_progress 的 content 里是正在拼的参数 JSON，拼完整了才解析得出来
 const argsOf = u => { const t = u.content?.[0]?.content?.text; if (typeof t !== 'string' || t[0] !== '{') return null; try { return JSON.parse(t); } catch { return null; } };
-const stripReminder = t => String(t || '').replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '\n').trim();
+const stripReminder = t => String(t || '')
+  .replace(/^\s*Skill tool loaded instructions[^\n]*\n*/, '')   // Kimi 加载技能时插进来的「用户消息」，不是用户发的
+  .replace(/\s*<skill-loaded[\s\S]*?<\/skill-loaded>\s*/g, '\n')
+  .replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '\n').trim();
 const toolOutput = u => {
   let out = (u.content || []).map(c => c.type === 'content' && c.content?.type === 'text' ? c.content.text : c.type === 'diff' ? '改了 ' + (c.path || '') : '').filter(Boolean).join('\n');
   if (!out && u.rawOutput) out = typeof u.rawOutput === 'string' ? u.rawOutput : String(u.rawOutput.output ?? u.rawOutput.error ?? u.rawOutput.stdout ?? '');
