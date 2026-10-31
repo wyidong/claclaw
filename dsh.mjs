@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { DATA } from './auth.mjs';
-import { storeNow, splitGroups } from './modelpick.mjs';
+import { AcpAgent, AcpRunner, tilde, flatOptions } from './acp.mjs';
 
 const HOME = os.homedir();
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
@@ -28,7 +28,6 @@ export const dsUnsupportedReason = () => '当前 Node 没有 zstd（需要 Node 
 export const DS_PREFIX = 'ds:';
 export const isDs = id => typeof id === 'string' && id.startsWith(DS_PREFIX);
 const sidOf = id => id.slice(DS_PREFIX.length);
-const tilde = p => p === HOME ? '~' : p.startsWith(HOME + '/') ? '~' + p.slice(HOME.length) : p;
 
 // ---------- 读会话文件 ----------
 // 文件是一段段独立的 zstd 帧接在一起；Node 的 zstd 只解第一帧，所以按帧头（魔数）切开逐帧解。
@@ -271,101 +270,13 @@ function dshBin() {
   return null;
 }
 
-let proc = null, ready = null, rid = 0, idleTimer = null, caps = {};
-const pending = new Map();
-const owners = new Map();   // dsh 会话 id → DsRunner（收 session/update 和权限请求）
-// 正在关闭的会话：sid → 关闭用的 Promise。旧 runner 的关闭还没结束，同一个会话又被打开时，
-// 新 runner 刚登记的 owners 会被旧 runner 的 finally 删掉（回复不显示），所以要等它关完再 resume。
-const closing = new Map();
-
-function startAcp(log) {
-  if (ready) return ready;
-  const bin = dshBin();
-  if (!bin) return Promise.reject(new Error('没找到 dsh 命令，先装好 DeepSeek Harness'));
-  // bin.js 是 node 脚本：直接用当前 node 跑，不依赖 launchd 环境里的 PATH
-  const p = spawn(/\.m?js$/.test(bin) ? process.execPath : bin, /\.m?js$/.test(bin) ? [bin, '--profile', 'acp'] : ['--profile', 'acp'],
-    { stdio: ['pipe', 'pipe', 'pipe'], cwd: HOME, env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin'].join(':') } });
-  proc = p;
-  let buf = '', errTail = '';
-  p.stdout.on('data', d => {
-    buf += d;
-    let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, i); buf = buf.slice(i + 1);
-      if (!line.trim()) continue;
-      let m; try { m = JSON.parse(line); } catch { continue; }
-      if (m.method && m.id != null) onAgentRequest(m);
-      else if (m.method) onNotify(m);
-      else if (m.id != null && pending.has(m.id)) {
-        const q = pending.get(m.id); pending.delete(m.id);
-        m.error ? q.rej(new Error(m.error.data?.details || m.error.message || 'dsh 请求失败')) : q.res(m.result);
-      }
-    }
-  });
-  p.stderr.on('data', d => { errTail = (errTail + d).slice(-2000); });
-  const dead = why => {
-    if (proc !== p) return;
-    proc = null; ready = null;
-    const e = new Error(why);
-    for (const q of pending.values()) q.rej(e);
-    pending.clear();
-    for (const r of owners.values()) r.onAcpDead(why);
-    owners.clear();
-  };
-  p.on('error', e => dead('dsh 启动失败：' + e.message));
-  p.on('exit', code => { log?.('dsh acp exited', code, errTail.trim().split('\n').pop() || ''); dead('dsh 进程退出了（' + code + '）'); });
-  log?.('dsh acp starting', bin);
-  // initialize 最多等 15 秒：初始化失败或挂住时，ready 会永远停在 rejected/pending，
-  // 整个 DeepSeek 后端就永久不可用了。超时就杀掉子进程、把 proc/ready 置空，下次用时自动重新拉起。
-  let initTimer = null;
-  const init = rpc('initialize', { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'claclaw', version: '0.1' } });
-  const timeout = new Promise((_, rej) => {
-    initTimer = setTimeout(() => rej(new Error('initialize 45 秒没有应答')), 45000);   // 老电脑上几个会话同时启动时会超过 15 秒
-    initTimer.unref?.();
-  });
-  ready = Promise.race([init, timeout])
-    .then(r => { clearTimeout(initTimer); caps = r?.agentCapabilities || {}; log?.('dsh acp ready'); return p; })
-    .catch(e => {
-      clearTimeout(initTimer);
-      const last = errTail.trim().split('\n').pop() || '';
-      const why = 'dsh 初始化失败：' + (e?.message || e) + (last ? '（' + last + '）' : '');
-      try { p.kill(); } catch {}
-      // 和进程自己挂掉时一样：proc/ready 置空（下次用的时候自动重新拉起）、挂着的请求全部作废
-      dead(why);
-      throw new Error(why);
-    });
-  ready.catch(() => {});
-  return ready;
-}
-
-function rpc(method, params) {
-  if (!proc) return Promise.reject(new Error('dsh 没在运行'));
-  return new Promise((res, rej) => {
-    const id = ++rid;
-    pending.set(id, { res, rej });
-    proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-  });
-}
-function notifyAgent(method, params) { proc?.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n'); }
-function answer(id, result, error) { proc?.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, ...(error ? { error } : { result }) }) + '\n'); }
-
-function onNotify(m) {
-  if (m.method !== 'session/update') return;
-  owners.get(m.params?.sessionId)?.handle(m.params.update || {});
-}
-function onAgentRequest(m) {
-  const r = owners.get(m.params?.sessionId);
-  if (m.method === 'session/request_permission' && r) return r.askPermission(m.id, m.params);
-  if (m.method === 'session/request_permission') return answer(m.id, { outcome: { outcome: 'cancelled' } });
-  answer(m.id, null, { code: -32601, message: 'method not supported: ' + m.method });
-}
-// 没有会话接着时，过 10 分钟把 dsh 进程关掉
-function idleCheck() {
-  clearTimeout(idleTimer);
-  if (owners.size || !proc) return;
-  idleTimer = setTimeout(() => { if (!owners.size && proc) { try { proc.stdin.end(); } catch {} } }, 10 * 60 * 1000);
-}
-export function dsShutdown() { try { proc?.stdin.end(); } catch {} }
+// ACP 进程（底座见 acp.mjs）。bin.js 是 node 脚本：直接用当前 node 跑，不依赖 launchd 环境里的 PATH
+const agent = new AcpAgent({
+  name: 'dsh', bin: dshBin, missing: '没找到 dsh 命令，先装好 DeepSeek Harness',
+  command: bin => /\.m?js$/.test(bin) ? [process.execPath, [bin, '--profile', 'acp']] : [bin, ['--profile', 'acp']],
+  hardKill: false,   // 只关 stdin，让 dsh 自己收尾（释放 session.lock）
+});
+export const dsShutdown = () => agent.stop();
 
 // ---------- dsh 原生 /compact ----------
 // ACP 只暴露 session/new、resume、close、prompt 等，没有命令通道；/compact 是 dsh host 的
@@ -573,7 +484,6 @@ async function compactSessionNow(sid, { log } = {}) {
 }
 
 // 模型选项：value 是 JSON 字符串 ["provider","model"]
-const flatOptions = opt => (opt?.options || []).flatMap(o => o.options ? o.options : [o]);
 const modelName = (cfg) => {
   const m = cfg?.find(o => o.id === 'model');
   if (!m) return '';
@@ -593,35 +503,28 @@ export const COMMANDS = [
   { name: 'help', description: '列出可用命令', builtin: true },
 ];
 
-// ---------- 打开的 DeepSeek 会话：接口和 Claude 的 Runner 对齐 ----------
+// ---------- 打开的 DeepSeek 会话（通用部分见 acp.mjs 的 AcpRunner） ----------
 export const dsRunners = new Map();
 
-// 等某个会话的关闭结束（没有在关就直接返回）
-async function waitClosing(sid) {
-  const p = closing.get(sid);
-  if (!p) return;
-  try { await p; } catch {}
-}
+export class DsRunner extends AcpRunner {
+  static agent = agent; static prefix = DS_PREFIX; static runners = dsRunners;
+  static label = 'DeepSeek'; static group = 'dsh'; static permPrefix = 'ds-'; static commands = COMMANDS;
+  static cfgIds = { model: 'model', effort: 'reasoning_effort' };
+  static cfgNames = { model: '模型', effort: '思考强度' };
 
-export class DsRunner {
-  constructor(id, { log, onActivity, onTurnDone, onAsk, onCompacted, compact, info, usageEvery }) {
-    this.id = id; this.sid = sidOf(id);
-    this.log = log; this.onActivity = onActivity; this.onTurnDone = onTurnDone; this.onAsk = onAsk;
-    this.onCompacted = onCompacted;
-    this.compactFn = compact || dsCompactSession;
-    this.info = { sessionId: id, cwd: info?.cwd || '' };
-    this.cwd = info?.cwd || '';
-    this.title = info?.title || '';
+  constructor(id, opts = {}) {
+    super(id, opts);
     this.model = '';
-    this.mode = 'default'; this.allowedModes = ['default'];
-    this.busy = false; this.busySince = 0;
-    this.subs = new Set(); this.pending = new Map();
-    this.suggestion = null; this.commands = COMMANDS;
-    this.closed = false; this.attached = false; this.config = null;
+    this.onCompacted = opts.onCompacted;
+    this.compactFn = opts.compact || dsCompactSession;
     this.compacting = false;
-    this.usageEvery = usageEvery || USAGE_EVERY; this.usageTimer = null; this.usageKey = '';
-    this.msgId = null; this.textOpen = false;
-    this.queue = [];          // 回复中又发来的消息：这一轮结束（或被中断）后合成一条发出
+    this.usageEvery = opts.usageEvery || USAGE_EVERY; this.usageTimer = null; this.usageKey = '';
+  }
+  get imageError() {
+    // ACP 的 image 能力在 initialize 时按 llm.resolveModelInfo(provider,model).inputModalities 决定；
+    // 模型不在 dsh 默认目录里时会回退成 text-only。deepseek-v4-flash 需要
+    // ~/.dsh/profiles/acp/cordis.patch.yml 里补 inputModalities: [text, image] 才会被声明。
+    return '当前 DeepSeek 模型没有声明图片输入（ACP image=false）。在 dsh 里把模型目录补上 inputModalities: [text, image]（deepseek-v4-flash 本身支持图片），或把图片存到工作区后用 read_image 读；也可以改用 Claude / OpenClaw 发图。';
   }
 
   // 读文件拿历史（{items, total}，和 Claude 的 loadHistory 一样，server 用同一套分页）
@@ -636,83 +539,29 @@ export class DsRunner {
     const items = toItems(recs);
     return { items, total: items.length };
   }
-  metaLine() { return tilde(this.cwd || '') + (this.model ? ' · ' + this.model : ''); }
-
-  // 第一次发消息时才接上 dsh（接上就占了写入权，dsh 网页版那边就打不开这个会话了）
-  async attach() {
-    if (this.attached) return;
-    await startAcp(this.log);
-    clearTimeout(idleTimer);
-    await waitClosing(this.sid);   // 上一次关闭还没关完就先等它，否则会互相踩 owners
-    owners.set(this.sid, this);
-    try {
-      const r = await rpc('session/resume', { sessionId: this.sid, cwd: this.cwd, mcpServers: [] });
-      this.setConfig(r?.configOptions);
-      this.attached = true;
-    } catch (e) {
-      if (owners.get(this.sid) === this) owners.delete(this.sid);
-      idleCheck();
-      if (/already owned|write handle/i.test(e.message)) throw new Error('这个会话正在 DeepSeek Harness 别处打开着（比如 dsh 网页版），先在那边关掉再试');
-      throw e;
-    }
+  // 接上 dsh 就占了写入权，dsh 网页版那边就打不开这个会话了
+  attachError(e) {
+    return /already owned|write handle/i.test(e.message) ? new Error('这个会话正在 DeepSeek Harness 别处打开着（比如 dsh 网页版），先在那边关掉再试') : e;
   }
-  setConfig(cfg) {
-    if (!Array.isArray(cfg)) return;
-    this.config = cfg;
-    const name = modelName(cfg);
-    if (name && name !== this.model) { this.model = name; this.emit({ t: 'session.meta', cwdShort: this.metaLine() }); }
-    this.emit({ t: 'xmodels', ...this.xmodels() });
+  modelNameOf(cfg) { return modelName(cfg); }
+  // 模型选择：DeepSeek 官方的（deepseek-*）走 api.deepseek.com，和模型库里同地址、同 ID 的对上就归到「模型库」
+  ownModel(o) {
+    let prov = '', id = String(o.name || o.value);
+    try { [prov, id] = JSON.parse(o.value); } catch {}
+    return { value: o.value, label: String(o.name || id), sub: prov, id, base: /^deepseek/.test(prov) ? 'https://api.deepseek.com' : '' };
+  }
+  // dsh 的确认条：工具名当标题
+  permInfo(tc) {
+    const name = tc.title || '操作';
+    return { name, target: toolTarget(tc.rawInput), reason: '', ask: name, raw: tc.rawInput && typeof tc.rawInput === 'object' ? tc.rawInput : {} };
   }
 
-  // 会话设置里的模型选择：dsh 的选项值是 JSON 串 ["供应商","模型"]；DeepSeek 官方的（deepseek-*）走 api.deepseek.com，
-  // 和模型库里同地址、同 ID 的对上就归到「模型库」。还没接上 dsh 时只有当前模型名
-  xmodels() {
-    const opt = this.config?.find(o => o.id === 'model');
-    if (!opt) return { current: null, label: this.model || '', groups: null };
-    const list = flatOptions(opt);
-    const own = list.map(o => {
-      let prov = '', id = String(o.name || o.value);
-      try { [prov, id] = JSON.parse(o.value); } catch {}
-      return { value: o.value, label: String(o.name || id), sub: prov, id, base: /^deepseek/.test(prov) ? 'https://api.deepseek.com' : '' };
-    });
-    const cur = list.find(o => o.value === opt.currentValue);
-    return { current: opt.currentValue, label: cur ? cur.name : modelName(this.config), groups: splitGroups(storeNow(), 'dsh', own) };
-  }
-  async loadXModels() {
-    if (!this.attached) await this.attach();
-    this.emit({ t: 'xmodels', ...this.xmodels() });
-  }
-  async pickModel(value) {
-    if (this.busy) throw new Error('这一轮结束后再换模型');
-    if (!this.attached) await this.attach();
-    const opt = this.config?.find(o => o.id === 'model');
-    const hit = flatOptions(opt).find(o => o.value === value);
-    if (!opt || !hit) throw new Error('没有这个模型');
-    const r = await rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value });
-    this.setConfig(r?.configOptions);
-    this.log?.('dsh model', this.sid.slice(0, 8), '→', hit.name);
-    return hit.name;
-  }
-
-  emit(ev) {
-    const s = JSON.stringify({ ...ev, sessionId: this.id });
-    for (const w of this.subs) if (w.readyState === 1) w.send(s);
-  }
   setBusy(on) {
     if (this.busy === on) return;
-    this.busy = on; if (on) this.busySince = Date.now();
     if (on) this.startUsageTimer(); else this.stopUsageTimer();
-    this.emit({ t: 'busy', on });
-    this.onActivity?.(this.id, on ? '思考中' : null);
+    super.setBusy(on);
   }
   // 累计费用（标题栏 ID 后面那个 ≈¥）：每轮结束推一次；长回合里每 2.5 分钟再推一次（dsh 每一步都把 usage 写进日志）
-  // 上下文大小（标题栏的压缩提示）：每轮结束推一次；compacted = 这一轮是压缩
-  pushCtx(compacted) {
-    const c = dsCtx(this.id);
-    if (c === this.ctx && !compacted) return;
-    this.ctx = c;
-    this.emit({ t: 'ctx', tokens: c, ...(compacted ? { compacted: true } : {}) });
-  }
   pushUsage() {
     const u = dsUsage(this.id);
     if (!u) return;
@@ -727,65 +576,8 @@ export class DsRunner {
     this.usageTimer.unref?.();
   }
   stopUsageTimer() { clearInterval(this.usageTimer); this.usageTimer = null; }
-  closeText() { if (this.textOpen) { this.textOpen = false; this.emit({ t: 'ai.end' }); } this.msgId = null; }
-
-  handle(u) {
-    if (this.closed) return;
-    switch (u.sessionUpdate) {
-      case 'agent_message_chunk': {
-        const t = u.content?.type === 'text' ? u.content.text : '';
-        if (!t) return;
-        if (!this.textOpen || u.messageId !== this.msgId) { this.closeText(); this.textOpen = true; this.msgId = u.messageId; this.lastText = ''; this.emit({ t: 'ai.start' }); }
-        this.lastText += t;   // 这一轮最后一段回复：推送通知里显示开头
-        this.emit({ t: 'ai.delta', text: t });
-        this.onActivity?.(this.id, '回复中');
-        return;
-      }
-      case 'agent_thought_chunk':
-        this.onActivity?.(this.id, '思考中');
-        return;
-      case 'tool_call':
-        this.closeText();
-        this.emit({ t: 'tool.start', id: u.toolCallId, name: u.title || 'tool', target: toolTarget(u.rawInput) });
-        this.onActivity?.(this.id, toolLabel(u.title));
-        if (u.status === 'completed' || u.status === 'failed') this.toolDone(u);
-        return;
-      case 'tool_call_update':
-        if (u.status === 'completed' || u.status === 'failed') this.toolDone(u);
-        return;
-      case 'config_option_update':
-        this.setConfig(u.configOptions);
-        return;
-    }
-  }
-  toolDone(u) {
-    const out = (u.content || []).map(c => c.type === 'content' && c.content?.type === 'text' ? c.content.text : '').join('\n');
-    this.emit({ t: 'tool.result', id: u.toolCallId, output: out.slice(0, 4000), isError: u.status === 'failed' });
-  }
-
-  // dsh 要确认的操作：转成网页的确认条（和 Claude 的 perm.request 同一种）
-  askPermission(rpcId, p) {
-    const requestId = 'ds-' + rpcId;
-    const opts = p.options || [];
-    const tc = p.toolCall || {};
-    const req = {
-      t: 'perm.request', requestId, toolUseID: tc.toolCallId, name: tc.title || '操作',
-      title: null, displayName: tc.title || '操作', description: '', target: toolTarget(tc.rawInput),
-      reason: '', canAlways: opts.some(o => o.kind === 'allow_always'), defaultToNo: false,
-    };
-    this.pending.set(requestId, { rpcId, opts, req });
-    this.emit(req);
-    this.onAsk?.(this, '等你确认：' + req.displayName);
-  }
-  replyPermission(requestId, decision) {
-    const p = this.pending.get(requestId);
-    if (!p) return;
-    this.pending.delete(requestId);
-    const kind = decision === 'allow' ? 'allow_once' : decision === 'allow_session' ? 'allow_always' : 'reject_once';
-    const opt = p.opts.find(o => o.kind === kind) || (kind === 'reject_once' && p.opts.find(o => o.kind === 'reject_always'));
-    answer(p.rpcId, opt ? { outcome: { outcome: 'selected', optionId: opt.optionId } } : { outcome: { outcome: 'cancelled' } });
-    this.emit({ t: 'perm.done', requestId, toolUseID: p.req.toolUseID, decision });
-  }
+  onFinish() { this.stopUsageTimer(); this.pushUsage(); }
+  ctxNow() { return dsCtx(this.id); }   // 上下文大小：每轮结束读记录
 
   // 不需要 ACP 的本地命令：不会打断当前回合（busy 时用 sys 条显示）
   localCommand(name) {
@@ -848,99 +640,17 @@ export class DsRunner {
       this.localReply(() => this.localCommand(local[1]));
       return true;
     }
-    if (this.busy) {
-      // ACP 不支持插话：先排队。命令不排队（等这一轮结束再发），最多排 10 条
-      if (/^\/(model|effort)\b/.test(text) || this.queue.length >= 10) return false;
-      this.queue.push({ text, images });
-      return 'queued';
-    }
-    const cmd = text.match(/^\/(model|effort)(?:\s+(.*))?$/);
-    this.lastText = '';
-    this.setBusy(true);
-    (async () => {
-      try {
-        await this.attach();
-        if (cmd) return this.finish(await this.command(cmd[1], (cmd[2] || '').trim()));
-        // ACP 的 image 能力在 initialize 时按 llm.resolveModelInfo(provider,model).inputModalities 决定；
-        // 模型不在 dsh 默认目录里时会回退成 text-only。deepseek-v4-flash 需要
-        // ~/.dsh/profiles/acp/cordis.patch.yml 里补 inputModalities: [text, image] 才会被声明。
-        if (images.length && !caps.promptCapabilities?.image) throw new Error('当前 DeepSeek 模型没有声明图片输入（ACP image=false）。在 dsh 里把模型目录补上 inputModalities: [text, image]（deepseek-v4-flash 本身支持图片），或把图片存到工作区后用 read_image 读；也可以改用 Claude / OpenClaw 发图。');
-        const prompt = [
-          ...images.map(i => ({ type: 'image', mimeType: i.media_type, data: i.data })),
-          ...(text ? [{ type: 'text', text }] : []),
-        ];
-        const r = await rpc('session/prompt', { sessionId: this.sid, prompt });
-        this.finish({ reason: r?.stopReason || 'end_turn' });
-      } catch (e) {
-        this.finish({ error: e.message });
-      }
-    })();
-    return true;
+    return super.send(text, images);
   }
-  finish({ reason, error, text } = {}) {
-    if (this.closed) return;
-    this.closeText();
-    if (text) this.emit({ t: 'ai.full', text });
-    for (const id of [...this.pending.keys()]) this.replyPermission(id, 'deny');
-    const ok = !error && (reason === 'end_turn' || reason === 'command');
-    const subtype = error ? 'error' : reason === 'cancelled' ? 'aborted' : ok ? 'success' : reason;
-    if (error) this.emit({ t: 'error', message: error });
-    this.stopUsageTimer();
-    this.pushUsage();
-    this.pushCtx(reason === 'command' && this.justCompacted);
-    this.justCompacted = false;
-    this.busy = false;
-    this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
-    this.onActivity?.(this.id, null);
-    if (reason !== 'command') this.onTurnDone?.(this, ok, this.lastText);
-    if (this.queue.length && this.sendQueued()) return;   // 中断后也照发：通常就是「停下，改做这个」
-    if (!this.subs.size) this.dispose();
-  }
-
-  // 排队的消息：合成一条发出（中间空一行），图片按顺序带上
-  sendQueued() {
-    const q = this.queue.splice(0);
-    const text = q.map(x => x.text).filter(Boolean).join('\n\n');
-    const images = q.flatMap(x => x.images || []);
-    if (!text && !images.length) return false;
-    if (!this.send(text, images)) return false;
-    this.emit({ t: 'queue.sent' });
-    return true;
-  }
-
-  // /model、/effort：用 ACP 的 session/set_config_option
-  async command(name, arg) {
-    const id = name === 'model' ? 'model' : 'reasoning_effort';
-    const opt = this.config?.find(o => o.id === id);
-    if (!opt) return { reason: 'command', text: '当前会话没有可调的' + (name === 'model' ? '模型' : '思考强度') };
-    const list = flatOptions(opt);
-    const cur = list.find(o => o.value === opt.currentValue);
-    if (!arg) return { reason: 'command', text: '当前：' + (cur?.name || opt.currentValue) + '\n\n可选：\n' + list.map(o => '- `' + (name === 'model' ? o.name : o.value) + '`' + (o.description ? ' ' + o.description : '')).join('\n') };
-    const a = arg.toLowerCase();
-    const hit = list.find(o => o.value.toLowerCase() === a || o.name.toLowerCase() === a)
-      || list.filter(o => (o.name + ' ' + o.value).toLowerCase().includes(a)).sort((x, y) => x.name.length - y.name.length)[0];
-    if (!hit) return { reason: 'command', text: '没有匹配「' + arg + '」的选项' };
-    const r = await rpc('session/set_config_option', { sessionId: this.sid, configId: id, value: hit.value });
-    this.setConfig(r?.configOptions);
-    return { reason: 'command', text: '已切换为 ' + hit.name + '（下一条消息生效）' };
-  }
-
-  async interrupt() {
-    for (const id of [...this.pending.keys()]) this.replyPermission(id, 'deny');
-    if (this.attached) notifyAgent('session/cancel', { sessionId: this.sid });
-    this.emit({ t: 'sys', text: '已中断' });
-  }
-  async setMode() {}
 
   // 关掉当前 ACP 会话，释放 session.lock；不销毁 runner，压缩完还能 resume 回来
   async detach() {
     if (!this.attached) return;
     this.attached = false;
-    if (owners.get(this.sid) === this) owners.delete(this.sid);
-    idleCheck();
-    const p = rpc('session/close', { sessionId: this.sid }).catch(e => { this.log?.('dsh compact close failed', e.message); });
-    closing.set(this.sid, p);
-    try { await p; } finally { if (closing.get(this.sid) === p) closing.delete(this.sid); }
+    agent.release(this.sid, this);
+    const p = agent.rpc('session/close', { sessionId: this.sid }).catch(e => { this.log?.('dsh compact close failed', e.message); });
+    agent.closing.set(this.sid, p);
+    try { await p; } finally { if (agent.closing.get(this.sid) === p) agent.closing.delete(this.sid); }
   }
 
   // dsh web 刚退出时锁可能晚一点释放；已经 owned 时短暂重试
@@ -975,7 +685,7 @@ export class DsRunner {
       const reattach = wasAttached && this.subs.size > 0;
       if (reattach) await this.attachWithRetry();
       this.compacting = false;
-      this.justCompacted = true;
+      this.compactAsked = true;   // finish 推上下文大小时带上 compacted
       this.finish({ reason: 'command', text: '压缩完成：' + r.text + (reattach ? '' : '\n\n下次发消息会重新接上压缩后的会话。') });
       if (!this.busy) { try { this.onCompacted?.(this); } catch (e) { this.log?.('dsh compact refresh failed', e.message); } }
     } catch (e) {
@@ -989,57 +699,15 @@ export class DsRunner {
     }
   }
 
-  onAcpDead(why) {
-    this.attached = false;
-    if (this.busy) this.finish({ error: why });
-  }
-
-  subscribe(w) { this.subs.add(w); }
-  unsubscribe(w) { this.subs.delete(w); if (!this.subs.size && !this.busy) this.dispose(); }
-  watched() { return [...this.subs].some(w => w.visible !== false); }
   dispose() {
     if (this.closed) return;
-    this.closed = true;
     this.stopUsageTimer();
-    dsRunners.delete(this.id);
-    if (this.attached) {
-      this.attached = false;
-      // 记下这次关闭：owners 只在「现在这个 owner 还是我」时才删，避免删掉新 runner 的登记
-      const p = rpc('session/close', { sessionId: this.sid }).catch(() => {}).finally(() => {
-        if (owners.get(this.sid) === this) owners.delete(this.sid);
-        closing.delete(this.sid);
-        idleCheck();
-      });
-      closing.set(this.sid, p);
-    }
+    super.dispose();
   }
 }
 
 // 新建：在某个目录里开一个新的 dsh 会话
-export async function dsNewSession(cwd, opts) {
-  await startAcp(opts.log);
-  clearTimeout(idleTimer);
-  const r = await rpc('session/new', { cwd, mcpServers: [] });
-  await waitClosing(r.sessionId);
-  const id = DS_PREFIX + r.sessionId;
-  const runner = new DsRunner(id, { ...opts, info: { cwd, title: '新会话' } });
-  owners.set(r.sessionId, runner);
-  runner.attached = true;
-  runner.setConfig(r.configOptions);
-  dsRunners.set(id, runner);
-  return runner;
-}
-
-function toolLabel(name = '') {
-  if (/bash|pwsh|shell/i.test(name)) return '运行命令';
-  if (/^read/i.test(name)) return '读文件';
-  if (/edit|write|replace/i.test(name)) return '改文件';
-  if (/grep|glob|search|find/i.test(name)) return '查找中';
-  if (/web|fetch/i.test(name)) return '查网页';
-  if (/subagent/i.test(name)) return '派子任务';
-  if (/todo/i.test(name)) return '列计划';
-  return '用工具';
-}
+export const dsNewSession = (cwd, opts) => DsRunner.create(cwd, opts);
 
 // 改名：ACP 没有 title 能力，但 dsh 的会话记录本身就是追加式事件流（session/title 是最后一条生效）。
 // 这里在文件末尾追加一个 zstd 帧；追加前必须先拿到 dsh 自己的 session.lock（flock），
@@ -1206,4 +874,4 @@ export function dsSessionDir(id) {
 }
 
 // dsh 的 ACP 进程在不在跑（宿主页用）
-export const dsAcpRunning = () => !!proc;
+export const dsAcpRunning = () => agent.running;

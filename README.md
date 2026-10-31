@@ -218,6 +218,8 @@ server.mjs        HTTP + WebSocket 服务、会话列表、权限转发；Claude
 openclaw.mjs      OpenClaw 会话（通过本机 OpenClaw 网关）
 dsh.mjs           DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
 opencode.mjs      OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
+kimi.mjs          Kimi Code 会话（kimi ACP；历史靠 session/load 重放；模型库写进 ~/.kimi-code/config.toml）
+acp.mjs           ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面三个都继承它，只写各自的差异
 peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
 skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
 skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）
