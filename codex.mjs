@@ -11,6 +11,8 @@
 //   · Codex 自带：这台电脑上 Codex 自己的配置（~/.codex/config.toml 的服务商、登录状态），选 Codex 的模型清单
 //   · 模型库：claclaw 起 codex-acp 时用 CODEX_CONFIG 临时加一个 claclaw-<供应商> 服务商（Responses 接口，key 走环境变量），
 //     MODEL_PROVIDER 指过去；不改 ~/.codex/config.toml。选哪个记在 data/codex-route.json，换了要重启 codex-acp
+//   · 没选过、Codex 自己也没登录没配服务商：默认用模型库第一个（像 Qwen、Kimi 一样不用先登录）；
+//     明确选了 Codex 自带记成 { own: true }
 // 网页里 Codex 会话的 id = 'cx:' + Codex 会话 id。
 // 没做「终端里正开着」的检测：同一个会话别在终端和网页里同时发消息。
 import fs from 'node:fs';
@@ -132,10 +134,30 @@ export const cxExists = id => !!cxInfo(id);
 const ROUTE_FILE = path.join(DATA, 'codex-route.json');
 const LIB = 'lib:';   // 模型选择里模型库那组的 value：lib:<供应商 id>/<模型 id>
 const libModels = store => store.providers.filter(p => p.endpoints?.openai && p.models.length).flatMap(p => p.models.map(m => ({ p, m, value: LIB + p.id + '/' + m.id })));
-function routeNow(store = storeNow()) {   // 模型库那条还在才算，不然退回 Codex 自带
-  const r = readJson(ROUTE_FILE, {});
-  const hit = r.provider && libModels(store).find(x => x.p.id === r.provider && x.m.id === r.model);
-  return hit || null;
+// Codex 自己能不能用：登录过（auth.json）、config.toml 指了服务商、或环境里有 key
+function ownUsable() {
+  if (process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY || fs.existsSync(path.join(CHOME, 'auth.json'))) return true;
+  try { return /^\s*model_provider\s*=/m.test(fs.readFileSync(path.join(CHOME, 'config.toml'), 'utf8')); } catch { return false; }
+}
+function routeNow(store = storeNow()) {   // 模型库那条还在才算；没选过且 Codex 自己用不了 → 模型库第一个；不然 Codex 自带
+  const r = readJson(ROUTE_FILE, {}), lib = libModels(store);
+  const hit = r.provider && lib.find(x => x.p.id === r.provider && x.m.id === r.model);
+  if (hit) return hit;
+  return !r.own && lib.length && !ownUsable() ? lib[0] : null;
+}
+// codex-acp 自带的 Codex（codex-acp 不给 CODEX_PATH 时用的就是它）
+function codexJs() {
+  const bin = cxBin();
+  const f = bin && path.resolve(path.dirname(bin), '..', 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+  return f && fs.existsSync(f) ? f : '';
+}
+const WRAPPER = path.join(DATA, 'codex-app-server.sh');
+function appServerWrapper() {
+  const body = '#!/bin/sh\n# claclaw 生成：起 Codex 时带上模型库的服务商（值在环境变量里，见 codex.mjs）\nexec "$CLACLAW_CODEX_NODE" "$CLACLAW_CODEX_JS" "$@" -c "$CLACLAW_CODEX_C1" -c "$CLACLAW_CODEX_C2" -c "$CLACLAW_CODEX_C3"\n';
+  let cur = ''; try { cur = fs.readFileSync(WRAPPER, 'utf8'); } catch {}
+  if (cur !== body) fs.writeFileSync(WRAPPER, body);
+  fs.chmodSync(WRAPPER, 0o755);
+  return WRAPPER;
 }
 function routeEnv() {
   const hit = routeNow();
@@ -144,7 +166,18 @@ function routeEnv() {
     const pid = 'claclaw-' + hit.p.id, ek = 'CLACLAW_KEY_' + String(hit.p.id).toUpperCase().replace(/[^A-Z0-9]/g, '_');
     if (hit.p.key) env[ek] = hit.p.key;
     env.MODEL_PROVIDER = pid;
-    env.CODEX_CONFIG = JSON.stringify({ model_providers: { [pid]: { name: hit.p.name, base_url: hit.p.endpoints.openai, env_key: ek, wire_api: 'responses' } }, model: hit.m.id });
+    const prov = { name: hit.p.name, base_url: hit.p.endpoints.openai, env_key: ek, wire_api: 'responses' };
+    env.CODEX_CONFIG = JSON.stringify({ model_providers: { [pid]: prov }, model: hit.m.id });
+    // CODEX_CONFIG 只管会话；codex-acp 建会话前按 Codex 全局配置查「要不要登录」（没登录过、config.toml 也没服务商就拒绝）。
+    // 所以换一个启动脚本，起 codex app-server 时用 -c 把服务商也带上（不写 ~/.codex/config.toml）
+    const js = codexJs();
+    if (js) {
+      env.CODEX_PATH = appServerWrapper();
+      env.CLACLAW_CODEX_NODE = process.execPath; env.CLACLAW_CODEX_JS = js;
+      env.CLACLAW_CODEX_C1 = 'model_provider=' + JSON.stringify(pid);
+      env.CLACLAW_CODEX_C2 = 'model_providers.' + pid + '={ ' + Object.entries(prov).map(([k, v]) => k + ' = ' + JSON.stringify(v)).join(', ') + ' }';
+      env.CLACLAW_CODEX_C3 = 'model=' + JSON.stringify(hit.m.id);
+    }
   }
   const sig = crypto.createHash('sha256').update(JSON.stringify(env)).digest('hex').slice(0, 16);
   return { env, sig };
@@ -221,7 +254,7 @@ export class CxRunner extends AcpRunner {
     if (toLib && !next) throw new Error('没有这个模型');
     if ([...cxRunners.values()].some(r => r !== this && r.busy)) throw new Error('有别的 Codex 会话正在回复，等它结束再换（所有 Codex 会话共用一个模型服务商）');
     const empty = !cxInfo(this.id);
-    writeJsonAtomic(ROUTE_FILE, next ? { provider: next.p.id, model: next.m.id } : {});
+    writeJsonAtomic(ROUTE_FILE, next ? { provider: next.p.id, model: next.m.id } : { own: true });
     this.log?.('codex route →', next ? next.p.id + '/' + next.m.id : 'codex 自带');
     agent.stop();
     for (let i = 0; i < 50 && agent.running; i++) await new Promise(r => setTimeout(r, 100));   // 等旧进程退干净，再按新走法起

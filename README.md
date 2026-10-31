@@ -28,7 +28,7 @@ claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持七个：[Clau
 | OpenCode | 起 `opencode acp` 进程 | **22.13+**（会话在 SQLite 库里，用 Node 自带的 `node:sqlite`） | `/model`、`/effort`、`/mode`；按目录推断终端占用 |
 | Kimi Code | 起 `kimi acp` 进程 | 18+ | 不用登录 Kimi 账号：模型库里的模型自动配进去（也可以 `kimi login` 用 Kimi 会员）；`/model`、`/thinking`、`/mode` |
 | Qwen Code | 起 `qwen --acp` 进程 | 18+ | 模型库里的模型自动配进去（Qwen 账号登录已停，要用自己的 key）；`/model`、`/mode` |
-| Codex | 起 `codex-acp` 进程（官方 ACP 转接，`npm i -g @agentclientprotocol/codex-acp`，自带 Codex） | 18+ | 用 Codex 自己的配置 / 登录，或在会话设置里换成模型库的模型（要支持 Responses 接口，比如 DeepSeek；所有 Codex 会话一起换）；`/model`、`/mode` |
+| Codex | 起 `codex-acp` 进程（官方 ACP 转接，`npm i -g @agentclientprotocol/codex-acp`，自带 Codex） | 18+ | 用 Codex 自己的配置 / 登录，或在会话设置里换成模型库的模型（Codex 没登录、没配服务商时默认用模型库第一个，不用先登录）（要支持 Responses 接口，比如 DeepSeek；所有 Codex 会话一起换）；`/model`、`/mode` |
 | OpenClaw | 连本机 OpenClaw 网关 | 18+ | 网关要开着；改文件、跑命令的确认由 OpenClaw 自己处理，网页上不弹按钮 |
 
 - 怎么算「装了」：Claude Code 有 `~/.claude/projects`；DeepSeek 有 `~/.dsh` 或 `dsh` 命令；OpenCode 有 `opencode` 命令；Kimi Code 有 `kimi` 命令（默认装在 `~/.kimi-code/bin`）；Qwen Code 有 `qwen` 命令（`npm i -g @qwen-code/qwen-code`）；Codex 有 `codex` / `codex-acp` 命令或 `~/.codex/sessions`（要用还得装 `codex-acp`）；OpenClaw 有 `~/.openclaw/openclaw.json` 或 `openclaw` 命令
@@ -84,7 +84,7 @@ Claw 页底部（电脑上在 设置 → 宿主 → Claw 区）有「模型管�
   - OpenCode：启动 `opencode acp` 时把模型库注入进去（`OPENCODE_CONFIG_CONTENT`，和你自己的配置合并，供应商名前面加 `claclaw-`；有 Anthropic 格式地址优先用它），key 只放在子进程的环境变量里。模型库改了以后，等没有 OpenCode 会话开着时自动重启它的进程，才看得到新的。
   - Kimi Code：kimi 只认 `~/.kimi-code/config.toml`，claclaw 把模型库写成里面 `claclaw-` 开头的供应商和模型（OpenAI 兼容地址优先），key 不写文件（`api_key_env` 指向环境变量，只在 claclaw 起的 `kimi acp` 里有）；你自己的配置原样保留，没设默认模型时设成模型库第一个。所以终端里直接跑 `kimi` 用不了这些模型（没有 key）。
   - Qwen Code：模型库写进 `~/.qwen/settings.json` 的 `modelProviders`（OpenAI 兼容地址优先），每条的 `envKey` 指向 `CLACLAW_KEY_<供应商>`，key 只在 claclaw 起的 `qwen --acp` 里有；你自己配的条目原样保留，没选过模型时设成模型库第一个。终端里直接跑 `qwen` 同样用不了这些模型。
-  - Codex：codex-acp 一个进程只能用一个服务商，所以是「所有 Codex 会话一起换」：选模型库的模型时，claclaw 起 codex-acp 用 `CODEX_CONFIG` 临时加一个 `claclaw-<供应商>` 服务商（Responses 接口，key 走环境变量）、`MODEL_PROVIDER` 指过去，不改 `~/.codex/config.toml`；选回 Codex 自带的模型就用 Codex 自己的配置。选哪个记在 `data/codex-route.json`，换的时候重启 codex-acp（刚新建、还没发过消息的会话会在同目录重建一个）。
+  - Codex：codex-acp 一个进程只能用一个服务商，所以是「所有 Codex 会话一起换」：选模型库的模型时，claclaw 起 codex-acp 用 `CODEX_CONFIG` 临时加一个 `claclaw-<供应商>` 服务商（Responses 接口，key 走环境变量）、`MODEL_PROVIDER` 指过去，不改 `~/.codex/config.toml`；选回 Codex 自带的模型就用 Codex 自己的配置；没选过且 Codex 自己没登录、没配服务商时默认用模型库第一个。选哪个记在 `data/codex-route.json`，换的时候重启 codex-acp（刚新建、还没发过消息的会话会在同目录重建一个）。
   - dsh、OpenClaw：用它们自己配好的供应商，按「同一个接口地址 + 同一个模型 ID」认出哪些是模型库里的模型。
   - OpenClaw 只能换成它放行（`agents.defaults.models`）的模型；模型库里有、它没放行的会灰着显示。要放行得改 OpenClaw 自己的配置，并让网关重新加载。
   - Claude 会话还是用自己的模型选择（Claude 账号里的模型）。
