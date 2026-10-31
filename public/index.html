@@ -124,7 +124,7 @@ window.__sc=(function(){
   --strip:var(--bg);--rail-on:var(--surface);
 }
 /* 卡片、列表行、搜索框：白底细边（像 clarelay 的卡片）；列表 / 设置页的底换成淡紫 */
-:root[data-theme="ziwei"] #setPane .set-card,:root[data-theme="ziwei"] .h-card,:root[data-theme="ziwei"] .claw-card,:root[data-theme="ziwei"] .s-item,:root[data-theme="ziwei"] .s-row,:root[data-theme="ziwei"] #sSearch{background:#FFFFFF;border:1px solid var(--line)}
+:root[data-theme="ziwei"] #setPane .set-card,:root[data-theme="ziwei"] .h-card,:root[data-theme="ziwei"] .claw-card,:root[data-theme="ziwei"] .claw-tool,:root[data-theme="ziwei"] .s-item,:root[data-theme="ziwei"] .s-row,:root[data-theme="ziwei"] #sSearch{background:#FFFFFF;border:1px solid var(--line)}
 :root[data-theme="ziwei"] #sList .s-row.wx .s-item{border:0}
 :root[data-theme="ziwei"] #app #sheet,:root[data-theme="ziwei"] #app #sheet .sheet-p,:root[data-theme="ziwei"] #app #hostPane,:root[data-theme="ziwei"] #app #sTop,:root[data-theme="ziwei"] #app #setTop{background:var(--bg)}
 /* 字：标题、名字用紫 */
@@ -153,7 +153,7 @@ window.__sc=(function(){
 :root[data-theme="shichen"] header .sid,:root[data-theme="shichen"] header .where,:root[data-theme="shichen"] header #cfgBtn{color:var(--sc-m)}
 :root[data-theme="shichen"] #sSearch{background:#FFFFFF;border-color:transparent}
 /* 卡片、列表行：白底细边；列表 / 设置 / 宿主页的底换成地支淡色 */
-:root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row{background:#FFFFFF;border:1px solid var(--line)}
+:root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .claw-tool,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row{background:#FFFFFF;border:1px solid var(--line)}
 :root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg);border-color:var(--line)}
 :root[data-theme="shichen"] #sList .s-row.wx .s-item{border:0}
 :root[data-theme="shichen"] #app #sheet,:root[data-theme="shichen"] #app #sheet .sheet-p,:root[data-theme="shichen"] #app #hostPane{background:var(--bg)}
@@ -877,6 +877,8 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
+.pe-in.left,.pe-in.left::placeholder{text-align:left}
+.md-sub{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 .pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
 .pe-ta::placeholder{text-align:left}
 .pe-urlrow{align-items:flex-start}
@@ -1020,6 +1022,10 @@ select.pe-in{text-align-last:right}
      这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
      颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
   .claw-card[hidden]{display:none}
+  .claw-h2{margin-top:10px}
+  .claw-tool{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+  .claw-tool .claw-ic{width:34px;height:34px;margin:0 7px;color:var(--accent)}
+  .claw-tool .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-right:4px}
   .claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
   .claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
   .claw-tx b{font-size:17px}
@@ -1438,6 +1444,13 @@ select.pe-in{text-align-last:right}
           <svg class="claw-ic oc-mark" viewBox="128 96 256 320" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="var(--ink)"/><path d="M320 224V352H192V224H320Z" fill="var(--muted)"/></svg>
           <span class="claw-tx"><b>OpenCode</b><small>opencode 的会话：终端里开的都在这里</small></span>
           <span class="claw-st"></span>
+        </button>
+        <!-- 模型管理：登记各家模型（供应商、接口地址、key、模型）；以后各 Claw 新建会话、切模型时从这里选 -->
+        <div class="claw-h claw-h2">模型</div>
+        <button type="button" class="claw-tool" id="clawModels">
+          <svg class="claw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 2.8l8.2 4.6v9.2L12 21.2l-8.2-4.6V7.4z"/><path d="M3.8 7.4L12 12l8.2-4.6M12 12v9.2"/></svg>
+          <span class="claw-tx"><b>模型管理</b><small id="clawModelsSub">各家模型的接口地址、key 和模型列表</small></span>
+          <span class="chev" aria-hidden="true"></span>
         </button>
       </div>
       <!-- 宿主：跑 claclaw 的这台电脑的状态（打开时每 5 秒刷新） -->
@@ -3386,7 +3399,7 @@ function mTab(t){
   if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   if(t!=='host'){hostView='';peerWatch(false)}
-  hostLive(t==='host');if(t==='claw')loadClaws();if(t==='set')loadSetData();
+  hostLive(t==='host');if(t==='claw'){loadClaws();mdlPeek()}if(t==='set')loadSetData();
   $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
   $('.sheet-p').scrollTop=0;
@@ -3430,6 +3443,7 @@ function loadHost(){
   if(hostView)return;
   fetch('/api/peer').then(function(r){return r.json()}).then(function(j){peerSt=j}).catch(function(){});
   loadSkills();
+  mdlPeek();
   fetch('/api/host').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(x){
     if(!$('#app').classList.contains('host-on')||hostView)return;
     var c=x.computer,L=x.load,h='';
@@ -3455,7 +3469,8 @@ function loadHost(){
       var on=w.id==='claude'?w.open>0:w.up;
       return hRow(w.name,(w.version?esc(w.version):'版本未知'),(st?st+' · ':'')+'打开 '+w.open+(w.busy?' · 工作中 '+w.busy:''))
         .replace('<span class="k">','<span class="k"><i class="h-dot'+(on?' on':'')+'"></i>');
-    }).join('')+'<div class="h-row h-link" data-act="skills"><span class="k">技能</span><span class="v">'+skillsSum()+'</span><span class="chev" aria-hidden="true"></span></div>');
+    }).join('')+'<div class="h-row h-link" data-act="skills"><span class="k">技能</span><span class="v">'+skillsSum()+'</span><span class="chev" aria-hidden="true"></span></div>'+
+      '<div class="h-row h-link" data-act="models"><span class="k">模型管理</span><span class="v">'+modelsSum()+'</span><span class="chev" aria-hidden="true"></span></div>');
     $('#hostBody').innerHTML=h;crPaint();
   }).catch(function(e){if(!$('#hostBody .h-row'))$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
@@ -3508,6 +3523,108 @@ function renderSkills(){
   }).join('')+'<div class="pe-note">技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。</div>';
   $('#hostBody').innerHTML=h;
 }
+// ---------- 模型管理：登记各家模型（供应商 → 接口地址、key、模型），入口在 Claw 页底部和宿主页的 Claw 区 ----------
+// 这一版只管增删改，存在电脑的 data/models.json；接到各 Claw 上（新建会话 / 切模型时选用）在后续版本。
+// key 只进不出：服务器只回「有没有 key + 后 4 位」，改 key 只能整个替换或清掉
+var mdl=null,mdlSub='',mdlMsg={},mdlFrom='host';   // mdlSub：'' 列表 / 'p:<id>' 供应商（'p:' 新增）/ 'm:<供应商>:<模型>' 模型（'m:<供应商>:' 新增）
+var MDL_FMT={anthropic:'Anthropic 格式',openai:'OpenAI 格式',gemini:'Gemini 格式'};
+function modelsSum(){if(!mdl)return '';var n=0;mdl.providers.forEach(function(p){n+=p.models.length});return mdl.providers.length?mdl.providers.length+' 个供应商 · '+n+' 个模型':'还没有添加'}
+function loadModels(){
+  fetch('/api/models').then(function(r){return r.json()}).then(function(j){if(!j||!Array.isArray(j.providers))return;mdl=j;mdlClawSub();renderModels()}).catch(function(e){mdlMsg={err:'读取失败：'+e.message};renderModels()});
+}
+function mdlPeek(){if(!mdl)fetch('/api/models').then(function(r){return r.json()}).then(function(j){if(j&&Array.isArray(j.providers)&&!mdl){mdl=j;mdlClawSub()}}).catch(function(){})}
+function mdlClawSub(){var el=$('#clawModelsSub');if(el&&mdl&&mdl.providers.length)el.textContent=modelsSum()}
+function openModels(from){
+  mdlFrom=from;
+  if(from==='claw'){mTab('host');document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab==='claw')})}
+  hostView='models';mdlSub='';mdlMsg={};renderModels();loadModels();
+}
+function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
+function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');return a.join(' · ')}
+function mdlField(id,label,val,attrs,wide,mono){return '<div class="h-row'+(wide?' pe-urlrow':'')+'"><span class="k">'+label+'</span><input id="'+id+'" class="pe-in'+(wide?' left mono':mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}
+function renderModels(){
+  if(hostView!=='models')return;
+  var h='',err=mdlMsg.err?'<div class="pe-err">'+esc(mdlMsg.err)+'</div>':'';
+  var sub=mdlSub,pm=/^p:(.*)$/.exec(sub),mm=/^m:([^:]*):(.*)$/.exec(sub);
+  if(!mdl){$('#hostBody').innerHTML=pgHd('data-act="mdl-back"','返回','模型管理')+err+(err?'':'<div class="h-empty">加载中…</div>');return}
+  if(pm){
+    var p=pm[1]?mdlProv(pm[1]):null;
+    if(pm[1]&&!p){mdlSub='';return renderModels()}
+    h+=pgHd('data-act="mdl-back"','返回模型管理',p?p.name:'添加供应商')+err;
+    h+=hSec('供应商',mdlField('mdName','名字',p?p.name:'','maxlength="40" placeholder="比如 DeepSeek、Kimi"')+
+      (p?'<div class="h-row"><span class="k">ID</span><span class="v pe-mono">'+esc(p.id)+'</span></div>':mdlField('mdId','ID','','maxlength="32" placeholder="可不填，按名字生成"',false,true)));
+    h+=hSec('接口地址（至少填一个）',mdl.formats.map(function(f){return mdlField('mdEp-'+f,MDL_FMT[f]||f,p?p.endpoints[f]:'','maxlength="300" inputmode="url" placeholder="https://…"',true)}).join(''));
+    h+=hSec('密钥',mdlField('mdKey','Key','','type="password" maxlength="400" placeholder="'+(p&&p.hasKey?'已保存 …'+esc(p.keyLast4)+'，留空不改':'可不填')+'"',false,true)+
+      (p&&p.hasKey?'<div class="pe-ss"><label><input type="checkbox" id="mdKeyClear"><span>清除已保存的 key</span></label></div>':''));
+    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-save">'+(p?'保存':'添加')+'</button>'+(p?'<button type="button" class="pe-btn del" data-act="mdl-prov-del">删除供应商</button>':'')+'</div>';
+    if(p)h+=hSec('模型（'+p.models.length+'）',(p.models.map(function(m){
+      return '<div class="h-row h-link" data-act="mdl-model" data-id="'+esc(m.id)+'"><span class="k" style="flex:1;min-width:0">'+esc(m.name||m.id)+(m.name?'<span class="md-sub">'+esc(m.id)+'</span>':'')+'</span><span class="v" style="flex:none">'+esc(mdlCaps(m))+'</span><span class="chev" aria-hidden="true"></span></div>'}).join('')||'<div class="h-row"><span class="v" style="text-align:left">还没有模型</span></div>'))+
+      '<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-model-new">添加模型</button></div>';
+  }else if(mm){
+    var pp=mdlProv(mm[1]),m=pp&&mm[2]?pp.models.find(function(x){return x.id===mm[2]}):null;
+    if(!pp||(mm[2]&&!m)){mdlSub=pp?'p:'+pp.id:'';return renderModels()}
+    h+=pgHd('data-act="mdl-back"','返回 '+pp.name,m?(m.name||m.id):'添加模型')+err;
+    h+=hSec(pp.name,mdlField('mdMId','模型 ID',m?m.id:'','maxlength="120" placeholder="调用接口时用的名字，比如 deepseek-v4-pro"',true)+
+      mdlField('mdMName','显示名',m?m.name:'','maxlength="60" placeholder="可不填"')+
+      mdlField('mdMCtx','上下文（token）',m?m.context:'','type="number" inputmode="numeric" min="1000" placeholder="可不填，比如 128000"',false,true));
+    h+='<div><div class="h-h">能力</div><div class="h-card"><div class="pe-ss"><label><input type="checkbox" id="mdMVision"'+(m&&m.vision?' checked':'')+'><span>能识图</span></label><label><input type="checkbox" id="mdMReason"'+(m&&m.reasoning?' checked':'')+'><span>会推理（思考）</span></label></div></div></div>';
+    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-model-save">'+(m?'保存':'添加')+'</button>'+(m?'<button type="button" class="pe-btn del" data-act="mdl-model-del">删除模型</button>':'')+'</div>';
+  }else{
+    h+=pgHd('data-act="mdl-back"','返回','模型管理')+err;
+    h+=mdl.providers.length?hSec('供应商',mdl.providers.map(function(p){
+      return '<div class="h-row h-link" data-act="mdl-prov" data-id="'+esc(p.id)+'"><span class="k" style="flex:1;min-width:0">'+esc(p.name)+'<span class="md-sub">'+esc(Object.keys(p.endpoints).map(function(f){return (MDL_FMT[f]||f).replace(' 格式','')}).join(' · '))+'</span></span>'+
+        '<span class="v" style="flex:none">'+p.models.length+' 个模型<small>'+(p.hasKey?'key …'+esc(p.keyLast4):'没有 key')+'</small></span><span class="chev" aria-hidden="true"></span></div>'}).join('')):
+      '<div class="pe-note">还没有添加模型。先添加一个供应商（一家模型服务商的一个账号：接口地址 + key），再在它下面添加模型。</div>';
+    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-new">添加供应商</button></div>';
+    h+='<div class="pe-note">这里先把各家模型登记好；以后各 Claw 新建会话、切换模型时从这里选。key 只存在这台电脑上（data/models.json），网页上只显示后 4 位。</div>';
+  }
+  $('#hostBody').innerHTML=h;
+}
+function mdlPost(body,okMsg,then){
+  mdlMsg={};
+  fetch('/api/models',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(j){
+    if(j.error){mdlMsg={err:j.error};renderModels();return}
+    mdl=j;mdlClawSub();if(then)then(j);toast(okMsg);renderModels();
+  }).catch(function(e){mdlMsg={err:'没保存成功：'+e.message};renderModels()});
+}
+function mdlVal(id){var el=document.getElementById(id);return el?el.value.trim():''}
+function mdlAct(act,a){
+  var pm=/^p:(.*)$/.exec(mdlSub),mm=/^m:([^:]*):(.*)$/.exec(mdlSub);
+  if(act==='mdl-back'){
+    mdlMsg={};
+    if(mm){mdlSub='p:'+mm[1];renderModels();return}
+    if(pm){mdlSub='';renderModels();return}
+    if(mdlFrom==='claw'){mTab('claw');return}
+    hostView='';$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return;
+  }
+  if(act==='mdl-prov'){mdlSub='p:'+a.dataset.id;mdlMsg={};renderModels();return}
+  if(act==='mdl-prov-new'){mdlSub='p:';mdlMsg={};renderModels();return}
+  if(act==='mdl-model'&&pm){mdlSub='m:'+pm[1]+':'+a.dataset.id;mdlMsg={};renderModels();return}
+  if(act==='mdl-model-new'&&pm){mdlSub='m:'+pm[1]+':';mdlMsg={};renderModels();return}
+  if(act==='mdl-prov-save'&&pm){
+    var eps={};mdl.formats.forEach(function(f){eps[f]=mdlVal('mdEp-'+f)});
+    var kc=document.getElementById('mdKeyClear');
+    var b={op:'provider-save',name:mdlVal('mdName'),endpoints:eps,key:mdlVal('mdKey')};
+    if(pm[1])b.orig=pm[1];else b.id=mdlVal('mdId');
+    if(kc&&kc.checked){if(b.key){mdlMsg={err:'要么填新 key，要么勾「清除」，不要同时'};renderModels();return}b.clearKey=true}
+    mdlPost(b,pm[1]?'已保存':'已添加，接着添加它的模型',function(j){mdlSub='p:'+j.saved});return;
+  }
+  if(act==='mdl-prov-del'&&pm){
+    var p=mdlProv(pm[1]);if(!p)return;
+    if(!confirm('删除供应商「'+p.name+'」和它下面的 '+p.models.length+' 个模型？（电脑上会留一份备份，30 天后自动清掉）'))return;
+    mdlPost({op:'provider-delete',id:p.id},'已删除',function(){mdlSub=''});return;
+  }
+  if(act==='mdl-model-save'&&mm){
+    var b2={op:'model-save',provider:mm[1],id:mdlVal('mdMId'),name:mdlVal('mdMName'),context:mdlVal('mdMCtx'),vision:!!(document.getElementById('mdMVision')||{}).checked,reasoning:!!(document.getElementById('mdMReason')||{}).checked};
+    if(mm[2])b2.orig=mm[2];
+    mdlPost(b2,mm[2]?'已保存':'已添加',function(){mdlSub='p:'+mm[1]});return;
+  }
+  if(act==='mdl-model-del'&&mm){
+    if(!confirm('删除模型「'+mm[2]+'」？'))return;
+    mdlPost({op:'model-delete',provider:mm[1],id:mm[2]},'已删除',function(){mdlSub='p:'+mm[1]});return;
+  }
+}
+$('#clawModels').addEventListener('click',function(){openModels('claw')});
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
 // 登录了的网页（本机、手机、经中继）都能改全部协同设置；服务端 canAssign 恒为 true，下面 !canAssign 的分支只为兼容老服务端
 var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
@@ -3523,6 +3640,8 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='pool-del'){poolSave((peerCfg.sessions||[]).filter(function(x){return x!==a.dataset.id}));return}
   if(act==='peer-back'){hostView='';peerWatch(false);$('#railPeer').classList.remove('on');$('#railSet').classList.add('on');$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return}
   if(act==='skills'){hostView='skills';skillMsg={};renderSkills();loadSkills();return}
+  if(act==='models'){openModels('host');return}
+  if(/^mdl-/.test(act)){mdlAct(act,a);return}
   if(act==='skill-install'||act==='skill-remove'){skillPost(act==='skill-install'?'install':'uninstall',a.dataset.name,a.dataset.target);return}
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
   if(act==='peer-on'){if(!(peerCfg.sessions||[]).length){peerGo('pool');peerMsg={err:peerCfg.canAssign?'先勾选要加入协同的会话，再开启':'还没有加入协同的会话：要先在这台电脑上用 127.0.0.1 打开网页加'};paintPeerMsg();return}peerPost('',peerForm(true),'协同已开启')}

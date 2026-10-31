@@ -32,6 +32,7 @@ import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs'
 import { peerRisk, destructive, sensitiveRoots } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, BUSY_MAX, SEEN_TTL } from './peerqueue.mjs';
 import { peerJudge } from './peerjudge.mjs';
+import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic } from './modelstore.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 协同那一轮里不用确认的常规维护（npm run check / npm test / npm run restart）：只在本仓库、且没有没提交的改动时
 const PEER_OPTS = {
@@ -165,6 +166,7 @@ CHILD_ENV.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = 'true';
 // 配了长期令牌，claclaw 起的所有 Claude 进程（会话、协同审查）都用它，不再刷新；没配照旧用 claude.ai 登录。
 // 只存在 data/claude-token.json（600）：不写日志、不返回网页（只给后 4 位）、不经协同发出；只能在本机浏览器里设置
 const CLAUDE_TOKEN_FILE = path.join(DATA, 'claude-token.json');
+const MODELS_FILE = path.join(DATA, 'models.json');   // 模型库（modelstore.mjs）
 function claudeToken() {
   try { const j = JSON.parse(fs.readFileSync(CLAUDE_TOKEN_FILE, 'utf8')); return typeof j.token === 'string' && j.token ? j : null; } catch { return null; }
 }
@@ -2505,6 +2507,26 @@ const handler = async (req, res) => {
         return sendJson(res, 200, { ...claudeTokenPublic(req), ...rc });
       }
       return sendJson(res, 200, claudeTokenPublic(req), { 'cache-control': 'no-store' });
+    }
+    // 模型库（Claw 页 → 模型管理）：登录了的网页都能看、能改；key 只进不出（只给后 4 位），日志不写 key
+    if (url.pathname === '/api/models') {
+      if (req.method === 'POST') {
+        if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+        if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+        let body = {};
+        try { body = JSON.parse(await readBody(req, 16384)); } catch { return sendJson(res, 400, { error: '请求格式不对' }); }
+        const store = loadStore(MODELS_FILE);
+        let r;
+        try { r = modelOp(store, body); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
+        if (r.removed) {   // 删掉的供应商（连 key）备份进回收站，30 天后自动清
+          const f = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_model-provider-' + r.removed.id + '.json');
+          try { fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 }); fs.writeFileSync(f, JSON.stringify(r.removed, null, 2), { mode: 0o600 }); trimTrash(); } catch (e) { log('models trash failed', e.message); }
+        }
+        saveStore(MODELS_FILE, store);
+        log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : '');
+        return sendJson(res, 200, { ...modelsPublic(store), saved: r.saved || null });
+      }
+      return sendJson(res, 200, modelsPublic(loadStore(MODELS_FILE)));
     }
     if (url.pathname === '/api/settings/session') {
       if (req.method === 'POST') {
