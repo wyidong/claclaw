@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { storeNow, kimiInject, kimiConfigMerge } from './modelpick.mjs';
-import { AcpAgent, AcpRunner, toolTarget } from './acp.mjs';
+import { AcpAgent, AcpRunner, toolTarget, stampTimes } from './acp.mjs';
 import { HOME, tilde, oneLine, tms, findBin, runBin as run } from './util.mjs';
 
 export const KM_PREFIX = 'km:';
@@ -84,6 +84,27 @@ export async function kmSessionList({ busy = () => false } = {}) {
     openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
     claw: 'kimi', busy: busy(KM_PREFIX + s.id),
   }));
+}
+// 消息时间（重放历史不带时间）：sessions/<工作区>/<会话>/agents/main/wire.jsonl 里
+// turn.prompt / turn.steer（origin 是 user 的才是用户打的字）、content.part 的文字（回复）
+// 记录文件里一行行过（只解析含关键字的行，大文件也快）
+function eachRec(f, keys, fn) {
+  let txt; try { txt = fs.readFileSync(f, 'utf8'); } catch { return; }
+  for (const l of txt.split('\n')) { if (!l || !keys.some(k => l.includes(k))) continue; let o; try { o = JSON.parse(l); } catch { continue; } fn(o); }
+}
+function wireOf(sid) {
+  const root = path.join(KHOME, 'sessions');
+  let dirs = []; try { dirs = fs.readdirSync(root); } catch {}
+  for (const d of dirs) for (const s of [sid, 'session_' + sid]) { const f = path.join(root, d, s, 'agents', 'main', 'wire.jsonl'); if (fs.existsSync(f)) return f; }
+  return '';
+}
+function timesOf(sid) {
+  const recs = [], f = wireOf(sid);
+  if (f) eachRec(f, ['"turn.prompt"', '"turn.steer"', '"content.part"'], o => {
+    if ((o.type === 'turn.prompt' || o.type === 'turn.steer') && o.origin?.kind === 'user') recs.push({ kind: 'user', text: (o.input || []).map(x => x?.type === 'text' ? x.text : '').join(''), at: o.time });
+    else if (o.event?.type === 'content.part' && o.event.part?.type === 'text' && o.event.part.text?.trim()) recs.push({ kind: 'ai', at: o.time });
+  });
+  return recs;
 }
 export async function kmInfo(id) {
   if (!isKm(id)) return null;
@@ -161,6 +182,7 @@ export class KmRunner extends AcpRunner {
     if (!ok) return;
     for (const it of this.items) if (it.kind === 'user') it.text = stripReminder(it.text);
     this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
+    stampTimes(this.items, timesOf(sidOf(this.id)));
     if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Kimi 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }

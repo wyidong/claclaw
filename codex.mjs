@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { AcpAgent, AcpRunner } from './acp.mjs';
+import { AcpAgent, AcpRunner, stampTimes } from './acp.mjs';
 import { HOME, tilde, oneLine, findBin, readJson } from './util.mjs';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 import { storeNow, STORE_GROUP } from './modelpick.mjs';
@@ -126,6 +126,24 @@ export function cxSessionList({ busy = () => false } = {}) {
     claw: 'codex', busy: busy(CX_PREFIX + s.id),
   }));
 }
+// 消息时间（重放历史不带时间）：response_item 的 message（user / assistant）。新版 Codex 不再记 event_msg 的
+// user_message / agent_message，两种都记的旧版也有 response_item，只看它。<environment_context> 这类 Codex 自己塞的跳过
+// 记录文件里一行行过（只解析含关键字的行，大文件也快）
+function eachRec(f, keys, fn) {
+  let txt; try { txt = fs.readFileSync(f, 'utf8'); } catch { return; }
+  for (const l of txt.split('\n')) { if (!l || !keys.some(k => l.includes(k))) continue; let o; try { o = JSON.parse(l); } catch { continue; } fn(o); }
+}
+function timesOf(f) {
+  const recs = [];
+  eachRec(f, ['"response_item"'], o => {
+    const p = o.payload || {};
+    if (o.type !== 'response_item' || p.type !== 'message') return;
+    const at = Date.parse(o.timestamp) || 0, text = (p.content || []).map(c => typeof c?.text === 'string' ? c.text : '').join('');
+    if (p.role === 'user' && !/^\s*<[a-z_-]+>/i.test(text)) recs.push({ kind: 'user', text, at });
+    else if (p.role === 'assistant' && text.trim()) recs.push({ kind: 'ai', at });
+  });
+  return recs;
+}
 export const cxInfo = id => isCx(id) ? listRows().find(s => s.id === sidOf(id)) || null : null;
 export const cxExists = id => !!cxInfo(id);
 
@@ -228,6 +246,7 @@ export class CxRunner extends AcpRunner {
     this.replaying = false; this.replayOpen = null;
     if (!ok) return;
     this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
+    const f = cxInfo(this.id)?.file; if (f) stampTimes(this.items, timesOf(f));
     if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Codex 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }

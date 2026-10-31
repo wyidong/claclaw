@@ -46,6 +46,29 @@ let modelCache = null;
 const modelsCached = () => (modelCache ??= readJson(MODELS_FILE));
 
 // ---------- ACP 进程 ----------
+// 历史重放（session/load）不带时间：拿会话记录文件里的时间对回去。
+// recs：按顺序的 { kind: 'user' | 'ai', text?, at }（用户那条带文字，用来对齐）。
+// 用户消息按文字往后找；回复取这一轮（到下一条用户消息前）最后一条回复的时间（网页每轮只在最后一条回复上显示时间）
+const normText = s => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+export function stampTimes(items, recs) {
+  if (!recs?.length) return items;
+  let p = 0, lost = false;
+  for (const it of items) {
+    if (it.at) continue;
+    if (it.kind === 'user') {
+      const want = normText(it.text);
+      let i = p;
+      for (; i < recs.length; i++) if (recs[i].kind === 'user' && (!want || normText(recs[i].text).startsWith(want) || want.startsWith(normText(recs[i].text)))) break;
+      if (i < recs.length) { it.at = recs[i].at; p = i + 1; lost = false; } else lost = true;
+    } else if (it.kind === 'ai' && !lost) {
+      let at = 0;
+      for (let i = p; i < recs.length && recs[i].kind !== 'user'; i++) if (recs[i].kind === 'ai') at = recs[i].at;
+      if (at) it.at = at;
+    }
+  }
+  return items;
+}
+
 export class AcpAgent {
   // name：日志和报错里的名字（dsh / opencode / kimi）
   // bin()：找程序，找不到返回 null；missing：找不到时的提示

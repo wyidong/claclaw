@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { storeNow, qwenInject, qwenSettingsMerge } from './modelpick.mjs';
-import { AcpAgent, AcpRunner } from './acp.mjs';
+import { AcpAgent, AcpRunner, stampTimes } from './acp.mjs';
 import { HOME, tilde, oneLine, findBin } from './util.mjs';
 
 export const QW_PREFIX = 'qw:';
@@ -90,6 +90,21 @@ export function qwSessionList({ busy = () => false } = {}) {
     claw: 'qwen', busy: busy(QW_PREFIX + s.id),
   }));
 }
+// 消息时间（重放历史不带时间）：用户打的字（real_user）、回复（assistant 带文字）
+// 记录文件里一行行过（只解析含关键字的行，大文件也快）
+function eachRec(f, keys, fn) {
+  let txt; try { txt = fs.readFileSync(f, 'utf8'); } catch { return; }
+  for (const l of txt.split('\n')) { if (!l || !keys.some(k => l.includes(k))) continue; let o; try { o = JSON.parse(l); } catch { continue; } fn(o); }
+}
+function timesOf(f) {
+  const recs = [];
+  eachRec(f, ['"user"', '"assistant"'], o => {
+    const at = Date.parse(o.timestamp) || 0;
+    if (o.type === 'user' && o.provenance === 'real_user') recs.push({ kind: 'user', text: stripReminder(textOf(o.message)), at });
+    else if (o.type === 'assistant' && textOf(o.message).trim()) recs.push({ kind: 'ai', at });
+  });
+  return recs;
+}
 export const qwInfo = id => isQw(id) ? listRows().find(s => s.id === sidOf(id)) || null : null;
 export const qwExists = id => !!qwInfo(id);
 
@@ -159,6 +174,7 @@ export class QwRunner extends AcpRunner {
     if (!ok) return;
     for (const it of this.items) if (it.kind === 'user') it.text = stripReminder(it.text);
     this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
+    const f = qwInfo(this.id)?.file; if (f) stampTimes(this.items, timesOf(f));
     if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Qwen 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
