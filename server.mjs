@@ -15,7 +15,7 @@ import { query, listSessions, getSessionMessages, renameSession, createSdkMcpSer
 import { z } from 'zod';
 import * as push from './push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured } from './devnotify.mjs';
-import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged } from './kimi.mjs';
+import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './kimi.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
@@ -2342,7 +2342,12 @@ async function handleRename(req, res) {
     log('renamed deepseek session', body.id);
     return sendJson(res, 200, { ok: true, title: accepted });
   }
-  if (isKm(body.id)) return sendJson(res, 400, { error: 'Kimi 会话暂不支持在这里改名（可在终端里用 /title 改）' });
+  if (isKm(body.id)) {
+    try { await kmRename(body.id, title, log); } catch (e) { return sendJson(res, e.code || 502, { error: 'Kimi 改名失败：' + e.message }); }
+    const r = kmRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
+    log('renamed kimi session', body.id);
+    return sendJson(res, 200, { ok: true, title });
+  }
   if (isOp(body.id)) {
     try { await opRename(body.id, title, log); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 改名失败：' + e.message }); }
     const r = opRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }

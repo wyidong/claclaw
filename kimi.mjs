@@ -3,6 +3,9 @@
 // - 会话列表：`kimi session list --all --json`（kimi 自己的逻辑，不读它的内部文件）
 // - 历史：ACP session/load 会把整段历史用 session/update 重放一遍，收下来转成网页条目；接上之后的新消息也记进去
 // - 发消息 session/prompt、中断 session/cancel、删除 session/delete（删前 kimi export 存一份 zip 到回收站）
+// - 改名：ACP 里没有改名（/title 只在终端界面里有），按 kimi 自己 /title 的做法改会话目录里的 state.json：
+//   title + titleKind 'custom'（isCustomTitle: true），之后自动起的标题不会盖掉它。kimi 进程会拿内存里的元数据整个写回，
+//   所以 claclaw 自己的 kimi 接着这个会话时先 session/close，下次发消息再接上
 // - 模型：claclaw「模型管理」里的模型写进 ~/.kimi-code/config.toml（claclaw- 开头的供应商，key 只走环境变量），
 //   不登录 Kimi 账号也能用；登录过的 Kimi 自带模型照样在
 
@@ -52,6 +55,7 @@ function normRow(s) {
     cwd: String(pick(s, 'cwd', 'workDir', 'work_dir', 'workspace', 'directory') || ''),
     updated: tms(pick(s, 'updatedAt', 'updated_at', 'lastUpdated', 'mtime', 'createdAt', 'created_at')),
     model: String(pick(s, 'model', 'modelAlias') || ''),
+    dir: String(s.sessionDir || ''),
   };
 }
 async function listRows() {
@@ -586,4 +590,33 @@ export async function kmDelete(id, trashDir, log) {
   try { await rpc('session/delete', { sessionId: sid }); } finally { idleCheck(); }
   dropListCache();
   return file;
+}
+
+// 改名（见文件开头）。终端里正开着同一个会话的 kimi 之后写元数据时会把名字改回去，要在终端里重开
+export async function kmRename(id, title, log) {
+  const sid = sidOf(id);
+  const s = validSid(sid) ? await kmInfo(id).catch(() => null) : null;
+  if (!s?.dir) throw new Error('找不到这个会话');
+  const file = path.join(s.dir, 'state.json');
+  const root = path.join(process.env.KIMI_CODE_HOME || path.join(HOME, '.kimi-code'), 'sessions');
+  if (!fs.realpathSync(file).startsWith(fs.realpathSync(root) + path.sep)) throw new Error('会话目录不对');
+  const r = kmRunners.get(id);
+  if (r?.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
+  if (r?.attached || owners.has(sid)) {
+    // 先让 kimi 放下这个会话，免得它拿内存里的旧标题写回去；runner 留着（网页里照常显示），下次发消息再 session/load 接上
+    if (r) r.attached = false;
+    try { await rpc('session/close', { sessionId: sid }); } catch {}
+    if (owners.get(sid) === r || !r) owners.delete(sid);
+    idleCheck();
+  }
+  await waitClosing(sid);
+  const meta = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (meta?.id && meta.id !== sid) throw new Error('会话记录对不上');
+  const next = { ...meta, title, titleKind: 'custom', isCustomTitle: true };
+  const tmp = file + '.claclaw-' + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+  dropListCache();
+  log?.('kimi renamed', sid.slice(0, 16));
+  return title;
 }
