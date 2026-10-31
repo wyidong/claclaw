@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { dissectClaudeLines, dissectClaude, dissectDs, toolBrief, toolKind, userTextOf } from '../dissect.mjs';
+import { dissectClaudeLines, dissectClaude, dissectDs, dissectKimi, toolBrief, toolKind, userTextOf } from '../dissect.mjs';
 
 const T0 = Date.parse('2026-10-26T12:00:00Z');
 const iso = (ms) => new Date(T0 + ms).toISOString();
@@ -153,4 +153,35 @@ test('DeepSeek：dsh 记录分轮', () => {
   assert.equal(turns[1].interrupted, true);
   assert.equal(summary.model, 'deepseek-flash'); assert.equal(summary.steps, 3); assert.equal(summary.tools, 1);
   assert.equal(summary.crKnown, true); assert.equal(summary.cwKnown, false, 'dsh 没报过 cacheWriteTokens');
+});
+
+test('Kimi wire.jsonl：按轮拆、用量取 step.end、技能注入不算一轮', () => {
+  const L = (time, o) => ({ time, ...o });
+  const E = (time, event) => ({ time, type: 'context.append_loop_event', event });
+  const recs = [
+    L(1000, { type: 'turn.prompt', input: [{ type: 'text', text: '查一下' }], origin: { kind: 'user' } }),
+    E(1001, { type: 'step.begin', step: 1 }),
+    L(1002, { type: 'llm.request', model: 'deepseek-flash' }),
+    E(1500, { type: 'content.part', part: { type: 'think', think: 'x' } }),
+    E(1501, { type: 'tool.call', toolCallId: 'c1', name: 'Bash', args: { command: 'ls' } }),
+    E(1700, { type: 'tool.result', toolCallId: 'c1', result: { output: 'a\nb', durationMs: 150 } }),
+    E(1701, { type: 'step.end', usage: { inputOther: 100, output: 10, inputCacheRead: 50, inputCacheCreation: 0 }, llmFirstTokenLatencyMs: 200, llmStreamDurationMs: 300 }),
+    L(1702, { type: 'turn.steer', input: [{ type: 'text', text: 'Skill tool loaded instructions…' }], origin: { kind: 'skill_activation' } }),
+    E(1703, { type: 'step.begin', step: 2 }),
+    E(1900, { type: 'content.part', part: { type: 'text', text: '好了' } }),
+    E(1901, { type: 'step.end', usage: { inputOther: 20, output: 5, inputCacheRead: 150, inputCacheCreation: 0 } }),
+    L(1902, { type: 'turn.ended', reason: 'completed' }),
+    L(2000, { type: 'turn.prompt', input: [{ type: 'text', text: '再来' }], origin: { kind: 'user' } }),
+    E(2001, { type: 'step.begin', step: 1 }),
+    L(2500, { type: 'turn.ended', reason: 'cancelled' }),
+  ];
+  const r = dissectKimi(recs, '/w');
+  assert.equal(r.summary.turns, 2);
+  const [a, b] = r.turns;
+  assert.equal(a.text, '查一下'); assert.equal(a.nSteps, 2); assert.equal(a.nTools, 1);
+  assert.equal(a.steps[0].tools[0].brief, 'ls'); assert.equal(a.steps[0].tools[0].ms, 150);
+  assert.equal(a.steps[0].latMs, 500); assert.equal(a.steps[0].model, 'deepseek-flash');
+  assert.equal(a.inp, 120); assert.equal(a.cr, 200); assert.equal(a.out, 15);
+  assert.equal(a.reply, '好了'); assert.equal(a.durMs, 902);
+  assert.equal(b.interrupted, true);
 });

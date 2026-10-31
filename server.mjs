@@ -22,7 +22,7 @@ import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
-import { userTextOf, dissectClaude, dissectDs } from './dissect.mjs';
+import { userTextOf, dissectClaude, dissectDs, dissectKimi } from './dissect.mjs';
 import { opModelsChanged } from './opencode.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opCtx, opTokSum } from './opencode.mjs';
 const STARTED_AT = Date.now();
@@ -2629,6 +2629,15 @@ const handler = async (req, res) => {
           // dsh 的累计用量（含子代理）当作账单，给「对账」用
           if (k) r.summary.bill = { inp: k.uncachedInputTokens || 0, cr: k.cacheReadTokens || 0, cw: k.cacheWriteTokens || 0, out: k.outputTokens || 0, total: (k.uncachedInputTokens || 0) + (k.cacheReadTokens || 0) + (k.cacheWriteTokens || 0) + (k.outputTokens || 0), source: 'dsh 累计用量（含子代理 ' + (u.subagents || 0) + ' 个）' };
           return sendJson(res, 200, { claw: 'deepseek', id, ...r }, { 'cache-control': 'no-store' });
+        }
+        if (isKm(id)) {
+          const info = await kmInfo(id).catch(() => null);
+          const f = info?.dir && path.join(info.dir, 'agents', 'main', 'wire.jsonl');
+          if (!f || !fs.existsSync(f)) return sendJson(res, 404, { error: '找不到这个会话的记录' });
+          const recs = [];
+          for (const ln of fs.readFileSync(f, 'utf8').split('\n')) { if (ln) try { recs.push(JSON.parse(ln)); } catch {} }
+          const r = dissectKimi(recs, info.cwd || '');
+          return sendJson(res, 200, { claw: 'kimi', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r }, { 'cache-control': 'no-store' });
         }
         if (/^(op|oc):/.test(id)) return sendJson(res, 501, { error: '这个 Claw 还不支持解剖' });
         if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(res, 400, { error: '会话 ID 不对' });

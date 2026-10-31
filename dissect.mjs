@@ -41,7 +41,7 @@ export function toolBrief(name, input) {
   else if (/^(read|write|edit|multiedit|notebookedit)$/i.test(n)) s = pick('file_path', 'path', 'notebook_path');
   else if (/^(glob|grep)$/i.test(n)) s = pick('pattern') + (o.path ? '  ' + o.path : '');
   else if (/^(agent|task)$/i.test(n)) s = pick('description', 'prompt');
-  else if (/^(webfetch|websearch|toolsearch)$/i.test(n)) s = pick('url', 'query');
+  else if (/^(webfetch|websearch|toolsearch|fetchurl)$/i.test(n)) s = pick('url', 'query');
   else if (/^(skill)$/i.test(n)) s = pick('skill', 'name');
   if (!s) { for (const k of Object.keys(o)) { const v = o[k]; if (typeof v === 'string' && v.trim()) { s = v; break; } } }
   if (!s && Object.keys(o).length) { try { s = JSON.stringify(o); } catch {} }
@@ -293,4 +293,76 @@ export function dissectDs(recs) {
     st.prevTs = ts || st.prevTs;
   }
   return finish(st.turns, { model }, cwd);
+}
+
+// ---------- Kimi：读会话目录下 agents/main/wire.jsonl ----------
+// 一轮从 turn.prompt（origin user）开始；一步 = step.begin…step.end，用量在 step.end.usage；
+// 技能加载插进来的 turn.steer 不算用户说的话
+export function dissectKimi(recs, cwd) {
+  const st = { turns: [], cur: null, step: null, lastTs: 0, pending: new Map() };
+  let model = '', reqAt = 0;
+  const txt = (c) => (Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join(' ') : '');
+  for (const r of recs || []) {
+    if (!r || typeof r !== 'object') continue;
+    const ts = Number(r.time) || 0;
+    if (ts) st.lastTs = Math.max(st.lastTs, ts);
+    const ev = r.type === 'context.append_loop_event' ? r.event || {} : null;
+    if (!ev) {
+      if (r.type === 'turn.prompt') {
+        if (r.origin && r.origin.kind && r.origin.kind !== 'user') continue;
+        const text = txt(r.input).replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+        const images = Array.isArray(r.input) ? r.input.filter((x) => x && /image/.test(x.type || '')).length : 0;
+        if (!text && !images) continue;
+        const tr = startTurn(st, ts, text || '[图片]', {}); tr.images = images;
+      } else if (r.type === 'llm.request') { reqAt = ts; if (r.model) { model = r.model; if (st.step) st.step.model = model; } }
+      else if (r.type === 'turn.ended' && st.cur) {
+        if (r.reason && r.reason !== 'completed') st.cur.interrupted = true;
+        st.cur.endAt = Math.max(st.cur.endAt, ts);
+      } else if (/compact/i.test(r.type || '') && !/token_counting/.test(r.type)) {
+        if (!st.cur) startTurn(st, ts, '', { implicit: true });
+        if (!st.cur.compact) st.cur.compact = { pre: 0, post: 0, trigger: '' };
+      }
+      continue;
+    }
+    switch (ev.type) {
+      case 'step.begin': {
+        if (!st.cur) startTurn(st, ts, '', { implicit: true });
+        st.step = newStep(ts, model); st.cur.steps.push(st.step);
+        break;
+      }
+      case 'content.part': {
+        const p = ev.part || {};
+        if (st.step && p.type === 'text' && p.text) { st.step.text += (st.step.text ? ' ' : '') + p.text; st.step.chars += p.text.length; }
+        break;
+      }
+      case 'tool.call': {
+        if (!st.step) break;
+        const tool = { name: ev.name || '?', brief: toolBrief(ev.name, ev.args), ms: 0, size: 0, err: false, at: ts };
+        st.step.tools.push(tool); if (ev.toolCallId) st.pending.set(ev.toolCallId, tool);
+        break;
+      }
+      case 'tool.result': {
+        const u = ev.toolCallId && st.pending.get(ev.toolCallId); if (!u) break;
+        const res = ev.result || {};
+        u.size = sizeOf(res.output != null ? res.output : res.content);
+        u.err = !!(res.isError || res.is_error || res.error);
+        u.ms = Number(res.durationMs) || (ts && u.at ? Math.max(0, ts - u.at) : 0); delete u.at;
+        st.pending.delete(ev.toolCallId);
+        if (st.cur) st.cur.endAt = Math.max(st.cur.endAt, ts);
+        break;
+      }
+      case 'step.end': {
+        const s = st.step; if (!s) break;
+        const u = ev.usage || {};
+        s.inp = Number(u.inputOther) || 0; s.cr = num(u.inputCacheRead); s.cw = num(u.inputCacheCreation); s.out = Number(u.output) || 0;
+        s.latMs = (Number(ev.llmFirstTokenLatencyMs) || 0) + (Number(ev.llmStreamDurationMs) || 0) || (reqAt && ts ? Math.max(0, ts - reqAt) : 0);
+        s.stop = ev.finishReason || '';
+        if (st.cur) st.cur.endAt = Math.max(st.cur.endAt, ts);
+        st.step = null;
+        break;
+      }
+      default: break;
+    }
+  }
+  return finish(st.turns, { model }, cwd || '');
 }
