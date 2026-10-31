@@ -139,12 +139,15 @@ function ownUsable() {
   if (process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY || fs.existsSync(path.join(CHOME, 'auth.json'))) return true;
   try { return /^\s*model_provider\s*=/m.test(fs.readFileSync(path.join(CHOME, 'config.toml'), 'utf8')); } catch { return false; }
 }
-function routeNow(store = storeNow()) {   // 模型库那条还在才算；没选过且 Codex 自己用不了 → 模型库第一个；不然 Codex 自带
+// 模型库那条还在才算；Codex 自己用不了（没登录没配服务商）→ 模型库第一个，选过 Codex 自带也一样（不然所有 Codex 会话都打不开）；
+// 不然 Codex 自带
+function routeNow(store = storeNow()) {
   const r = readJson(ROUTE_FILE, {}), lib = libModels(store);
   const hit = r.provider && lib.find(x => x.p.id === r.provider && x.m.id === r.model);
   if (hit) return hit;
-  return !r.own && lib.length && !ownUsable() ? lib[0] : null;
+  return lib.length && !ownUsable() ? lib[0] : null;
 }
+const OWN_LOGIN = 'Codex 自带的模型要先登录：在电脑终端运行 codex 登录（或在 ~/.codex/config.toml 配好服务商）';
 // codex-acp 自带的 Codex（codex-acp 不给 CODEX_PATH 时用的就是它）
 function codexJs() {
   const bin = cxBin();
@@ -239,7 +242,8 @@ export class CxRunner extends AcpRunner {
   xmodels() {
     const base = super.xmodels(), store = storeNow(), lib = libModels(store), hit = routeNow(store);
     const libGroup = lib.length ? [{ name: STORE_GROUP, items: lib.map(x => ({ value: x.value, label: x.m.name || x.m.id, sub: x.p.name + ' · ' + x.m.id + (hit ? '' : '（所有 Codex 会话一起换）') })) }] : [];
-    const own = (base.groups || []).filter(g => g.name !== STORE_GROUP).map(g => ({ ...g, items: g.items.map(it => hit ? { ...it, sub: (it.sub ? it.sub + ' · ' : '') + '用 Codex 自己的配置' } : it) }));
+    const usable = ownUsable();
+    const own = (base.groups || []).filter(g => g.name !== STORE_GROUP).map(g => ({ ...g, items: g.items.map(it => !usable ? { ...it, disabled: true, sub: '要先在电脑上 codex 登录' } : hit ? { ...it, sub: (it.sub ? it.sub + ' · ' : '') + '用 Codex 自己的配置' } : it) }));
     if (!base.groups && !libGroup.length) return base;
     return { ...base, current: hit ? hit.value : base.current, label: hit ? (hit.m.name || hit.m.id) : base.label, groups: [...libGroup, ...own] };
   }
@@ -247,6 +251,7 @@ export class CxRunner extends AcpRunner {
   // 刚新建、还没发过消息的会话 Codex 还没存下来，新进程里接不上：在同一个目录重建一个，返回 { runner, label } 让网页换过去
   async pickModel(value) {
     const hit = routeNow(), toLib = value.startsWith(LIB);
+    if (!toLib && !ownUsable()) throw new Error(OWN_LOGIN);
     if (!toLib && !hit) return super.pickModel(value);
     if (this.busy) throw new Error('这一轮结束后再换模型');
     if (toLib && hit?.value === value) return hit.m.name || hit.m.id;
