@@ -1,4 +1,4 @@
-// claclaw —— 用手机浏览器接管本机的 AI 编程会话（Claude Code / OpenClaw / OpenCode / DeepSeek Harness / Kimi Code / Qwen Code）。
+// claclaw —— 用手机浏览器接管本机的 AI 编程会话（Claude Code / OpenClaw / OpenCode / DeepSeek Harness / Kimi Code / Qwen Code / Codex）。
 // 网页服务默认只监听 127.0.0.1 和本机的 Tailscale IP；登录要密码（初始账号 + 最近一次设置，两者都有效）。
 // 会话用 Claude Agent SDK 驱动：改文件、跑命令前会问一次，等网页上点「允许 / 拒绝」；
 // 原处（终端 / VS Code）闲置够久，网页端才能接管，接管时会核对进程启动时间，避免误杀别的进程。
@@ -18,6 +18,7 @@ import * as push from './push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured } from './devnotify.mjs';
 import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './kimi.mjs';
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './qwen.mjs';
+import { isCx, CxRunner, cxRunners, cxSessionList, cxNewSession, cxShutdown, cxAcpRunning, cxInfo, cxExists, cxDelete, cxInstalled, cxSupported, cxUnsupportedReason, cxRename, cxModelsChanged } from './codex.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
@@ -754,7 +755,7 @@ function claclawMcp(sessionId) {
       // claclaw 协同：本机会话之间都能用；跨电脑只能找对方开放的会话（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
-        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
+        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / Codex / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
         '只在用户要你和「别的会话 / 对方 / 另一台电脑的会话」沟通时使用。peer 填「本机」只列本机，填对方名字只列那个对方，不填两边都列。',
         { peer: z.string().optional().describe('「本机」或对方名字，可省略') },
         async ({ peer }) => {
@@ -869,6 +870,18 @@ const CLAWS = [
     short: shortKeep(/^qw:/),
     // qwen 的会话：先把会话文件复制一份到回收站，再让 qwen 删
     del: id => qwDelete(id, TRASH, log), rename: (id, title) => qwRename(id, title, log),
+  },
+  {
+    id: 'codex', label: 'Codex', logName: 'codex', prefix: 'cx:', is: isCx, runners: cxRunners, acp: true, attachOnOpen: true,
+    installed: cxInstalled, supported: cxSupported, reason: cxUnsupportedReason,
+    running: cxAcpRunning, shutdown: cxShutdown, modelsChanged: cxModelsChanged, exists: cxExists,
+    list: () => cxSessionList({ busy: x => !!cxRunners.get(x)?.busy }),
+    make: id => { const s = cxInfo(id); return s ? new CxRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => cxInfo(id)?.cwd,
+    newSession: cwd => cxNewSession(cwd, dsOpts()),
+    short: shortKeep(/^cx:/),
+    // Codex 的删除是归档（~/.codex/archived_sessions），能找回
+    del: id => cxDelete(id, log), rename: (id, title) => cxRename(id, title, log),
   },
 ];
 const clawOf = id => typeof id === 'string' ? CLAWS.find(c => c.is(id)) : undefined;   // undefined = Claude
@@ -1888,7 +1901,7 @@ function ocTurnDone(r, ok, text) {
   const badge = markUnread(r.id), title = r.title || clawOf(r.id)?.label || '会话';
   alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
-// ACP 的 Claw（DeepSeek / OpenCode / Kimi / Qwen）会话要你确认操作：没人看着就推送
+// ACP 的 Claw（DeepSeek / OpenCode / Kimi / Qwen / Codex）会话要你确认操作：没人看着就推送
 function dsAsk(r, body) {
   const w = r.watched();
   if (w && !PUSH_ALWAYS) return;
@@ -1966,7 +1979,7 @@ function saveUnread(u) {
 function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveUnread(u); return unreadTotal(u); }
 function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); devRead(id); }
 // 兜底：会话已经不在了（别处删的、删除时没清到的）还挂着未读，红点和角标会一直亮着却找不到是哪个。
-// 启动时查一遍：Claude 看 ~/.claude/projects/*/<id>.jsonl 在不在，DeepSeek / OpenCode / Qwen 问各自的 exists；Kimi / OpenClaw 不好查，不动
+// 启动时查一遍：Claude 看 ~/.claude/projects/*/<id>.jsonl 在不在，DeepSeek / OpenCode / Qwen / Codex 问各自的 exists；Kimi / OpenClaw 不好查，不动
 function pruneUnread() {
   const u = unreadMap(), ids = Object.keys(u);
   if (!ids.length) return;
@@ -3174,8 +3187,18 @@ wss.on('connection', (ws, req) => {
         // dsh / OpenCode / OpenClaw：打开会话设置时取模型清单（ACP 还没接上的先接上）
         await runner.loadXModels();
       } else if (m.t === 'xmodel.set' && runner?.pickModel) {
-        const label = await runner.pickModel(String(m.value || ''));
-        runner.emit({ t: 'sys', text: '已切换为 ' + label + '（下一条消息生效）', cfg: true });
+        const res = await runner.pickModel(String(m.value || ''));
+        if (res?.runner) {   // Codex：换了模型来源，还没开始的新会话只能重建一个，网页换到新的那个
+          const r = res.runner, c = clawOf(r.id);
+          runner.unsubscribe(ws); runner = r; r.subscribe(ws);
+          log('new ' + c.logName + ' session', r.sid, 'in', r.cwd, '(换模型来源重建)');
+          send({
+            t: 'session.opened', id: r.id, title: '新会话', cwd: r.cwd, cwdShort: r.metaLine(), claw: c.id, xmodels: r.xmodels(),
+            mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
+            commands: r.commands, isNew: true, ...(c.newExtra?.(r) || {}),
+          });
+          r.emit({ t: 'sys', text: '已切换为 ' + res.label + '（下一条消息生效）', cfg: true });
+        } else runner.emit({ t: 'sys', text: '已切换为 ' + res + '（下一条消息生效）', cfg: true });
       } else if (m.t === 'model.set' && runner instanceof Runner) {
         await runner.setModel(String(m.model || ''));
       } else if (m.t === 'effort.set' && runner instanceof Runner) {
