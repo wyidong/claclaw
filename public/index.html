@@ -1012,9 +1012,9 @@ select.pe-in{text-align-last:right}
 @media (max-width:999px){
   /* Claw 页：三张大卡片，选了哪个，会话页就显示哪一种的会话（现在只有 Claude） */
   #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
-  /* Claw 页：整页不滚，只有 Claw 列表那一块滚；底部留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），保证始终看得到、点得到 */
-  #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow:hidden;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
-  #clawList{flex:0 1 auto;min-height:0;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  /* Claw 页：整页滚动；底部多留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），内容多时圈被盖住，滚到底就露出来、点得到 */
+  #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
+  #clawList{flex:none;display:flex;flex-direction:column;gap:12px}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
@@ -1445,7 +1445,7 @@ select.pe-in{text-align-last:right}
           <span class="chev" aria-hidden="true"></span>
         </button>
         <div class="claw-h claw-h2">选择 Claw</div>
-        <!-- Claw 多了就在这一块里滚动：整页不滚，底下背景里的「更新客户端」圈始终露出来、点得到 -->
+        <!-- Claw 列表：跟整页一起滚；背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
         <div id="clawList">
           <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code 中任意一个后再来。</div>
           <button type="button" class="claw-card" data-claw="claude">
