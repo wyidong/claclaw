@@ -204,6 +204,22 @@ export function destructive(name, input) {
 const INTENT_WORDS = /删|清空|清理|清掉|移除|去掉.{0,4}(目录|文件|库|表|数据)|销毁|丢弃|重置|覆盖|回滚|还原|强推|推送|推上去|部署|上线|发布|重启|停掉|停止服务|杀掉|关掉进程|格式化|改权限|drop|delete|remove|truncate|reset|deploy|publish|release|kill|restart|force|wipe|purge|rm\s/i;
 export function peerIntent(text) { return INTENT_WORDS.test(String(text || '')); }
 
+// 读环境变量：Claude 进程的环境里有 CLAUDE_CODE_OAUTH_TOKEN（长期令牌）等钥匙，回复会传回对方，
+// 按「读敏感内容」算——一律确认，不交给小模型审查（对方点名要 printenv 也一样）
+const ENV_CMDS = new Set(['env', 'printenv', 'set', 'export', 'declare', 'typeset', 'compgen', 'launchctl']);
+export function readsEnv(cmd) {
+  const s = String(cmd || '');
+  if (/process\.env|os\.environ|getenv|\/environ\b|\$ENV\b|\bENV\[|CLAUDE_CODE_OAUTH_TOKEN/.test(s)) return true;
+  for (const m of unquoted(s, true).matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)) if (!SAFE_VARS.has(m[1])) return true;
+  for (const seg of segments(s)) {
+    const w = words(seg), c = String(w[0] || '').split('/').pop(), args = w.slice(1);
+    if (ENV_CMDS.has(c) && (c !== 'launchctl' || args[0] === 'getenv')) return true;
+    if (c === 'ps' && (args.some(a => /^-[a-zA-Z]*E/.test(a)) || /^[a-zA-Z]*e[a-zA-Z]*$/.test(args[0] || ''))) return true;   // ps -E / ps eww 带出别的进程的环境
+    if (c === 'jq' && args.some(a => /\benv\b/.test(a))) return true;
+  }
+  return false;
+}
+
 // 工具调用的风险：null = 直接放行；否则返回 { key（「本轮同类都允许」按它记）, reason }
 export function peerRisk(name, input, cwd, roots, opts) {
   input = input || {};
@@ -220,6 +236,7 @@ export function peerRisk(name, input, cwd, roots, opts) {
     return null;
   }
   if (name === 'Bash') {
+    if (readsEnv(input.command)) return { key: 'read-sensitive', reason: '读取环境变量（里面有登录令牌等钥匙）' };
     const r = bashRisk(input.command, cwd, roots, opts);
     if (!r) return null;
     const first = words(String(input.command || '').trim())[0] || '';

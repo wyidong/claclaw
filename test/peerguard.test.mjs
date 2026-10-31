@@ -132,3 +132,11 @@ test('git grep / ls-tree / cat-file 只读放行，读提交过的钥匙文件�
   for (const c of ['git grep -n "app-key" production -- public/v3', 'git ls-tree -r HEAD', 'git cat-file -p HEAD:server.mjs', 'git show HEAD:server.mjs']) assert.equal(bash(c), null, c);
   for (const c of ['git grep -O"sh -c id" x', 'git show HEAD:.env', 'git cat-file -p HEAD:config/secret.yml']) assert.ok(bash(c), c);
 });
+test('读环境变量算「读敏感内容」：一律确认，不交给小模型（环境里有 Claude 长期令牌）', () => {
+  for (const c of ['env', 'printenv', 'printenv CLAUDE_CODE_OAUTH_TOKEN', 'echo $CLAUDE_CODE_OAUTH_TOKEN', 'export', 'set', 'declare -p',
+    'node -e "console.log(process.env)"', "python3 -c 'import os; print(os.environ)'", 'ps eww 123', 'ps -E -p 1', 'launchctl getenv FOO',
+    "jq -n 'env'", 'cat /proc/1/environ', 'git status && env | grep CLAUDE'])
+    assert.equal(risk('Bash', { command: c })?.key, 'read-sensitive', c);
+  for (const c of ['git status', 'npm test', 'echo $HOME', 'ps aux', 'ps -ef', 'ps -o user -p 1', "grep -n 'environment' README.md", 'ls'])
+    assert.notEqual(risk('Bash', { command: c })?.key, 'read-sensitive', c);
+});

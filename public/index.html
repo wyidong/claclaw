@@ -1506,6 +1506,14 @@ select.pe-in{text-align-last:right}
         </div>
       </div>
       <div class="set-sec">
+        <div class="set-h">Claude 登录</div>
+        <div class="set-card">
+          <button type="button" class="set-item" id="setCtok"><span class="lb">长期令牌<small id="setCtokSub">读取中…</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setCtokClear" hidden><span class="lb">清除长期令牌<small>恢复用 claude.ai 登录</small></span></button>
+        </div>
+        <div class="set-note" id="setCtokTip">所有 Claude 会话共用一个长期令牌（在电脑终端运行 claude setup-token 生成，一年有效），不再各自刷新登录。只能在这台电脑的浏览器（127.0.0.1）里设置。</div>
+      </div>
+      <div class="set-sec">
         <div class="set-h">通知</div>
         <div class="set-card">
           <button type="button" class="set-item" id="pushBtn" hidden><span class="lb">推送通知<small id="pushSub">回复完、要确认时提醒</small></span><span class="sw" aria-hidden="true"></span></button>
@@ -5605,7 +5613,35 @@ $('#soundSel').addEventListener('change',function(e){
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+(SOUND_CN[j.name]||j.name)+'」')});
 });
 // 设置页里的数据（提示音、会话设置、电脑合成的声音）进设置页再拉，启动时少几个请求
-function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
+function loadSetData(){showVidUse();syncSound();loadCtok();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
+// Claude 长期令牌：只显示「已配置 · 后 4 位 · 配置时间」；设置 / 替换 / 清除只能在本机浏览器里做（服务器也会拦）
+var ctok=null;
+function showCtok(j){
+  ctok=j;
+  $('#setCtokSub').textContent=j.set?'已配置 · …'+j.last4+(j.at?' · '+new Date(j.at).toLocaleString('zh-CN',{hour12:false}):''):'未配置 · 用 claude.ai 登录';
+  $('#setCtokClear').hidden=!(j.set&&j.canEdit);
+}
+function loadCtok(){fetch('/api/claude-token').then(function(r){return r.json()}).then(showCtok).catch(function(){})}
+function postCtok(body,busy){
+  toast(busy);
+  return fetch('/api/claude-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(function(j){
+      if(j.error){alert(j.error);return}
+      showCtok(j);
+      toast((body.clear?'已清除，恢复用 claude.ai 登录':'已保存')+(j.left?'；正打开着的 '+j.left+' 个会话关掉重开后生效':''));
+    }).catch(function(e){alert('没保存成功：'+e.message)});
+}
+$('#setCtok').addEventListener('click',function(){
+  if(!ctok)return;
+  if(!ctok.canEdit){alert('长期令牌只能在运行 claclaw 的电脑上，用浏览器打开 http://127.0.0.1:'+(ctok.port||8787)+' 设置');return}
+  var v=prompt((ctok.set?'换一个长期令牌':'设置长期令牌')+'：在电脑终端运行 claude setup-token，把输出的 sk-ant-oat01-… 整串粘贴到这里');
+  if(v==null||!v.trim())return;
+  postCtok({token:v.trim()},'正在验证令牌…');
+});
+$('#setCtokClear').addEventListener('click',function(){
+  if(!confirm('清除长期令牌？之后 Claude 会话恢复用 claude.ai 登录。'))return;
+  postCtok({clear:true},'正在清除…');
+});
 // 会话相关设置：空闲关闭时间、接管等待时间（存在服务器，所有设备共用）
 function showSessSet(j){
   var cp=j.clarelayPush,pv=$('#pushViaRow');pv.hidden=!cp;

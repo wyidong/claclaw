@@ -160,6 +160,50 @@ const CHILD_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) =>
 // 额度接近上限时 Claude Code 默认不出建议回复；这个开关让它在「接近上限」时也照常出（到上限仍然不出）
 CHILD_ENV.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = 'true';
 
+// ---------- Claude 长期令牌（`claude setup-token` 生成，一年有效）----------
+// 多个会话各自刷新 claude.ai 的 OAuth，会把刷新令牌换坏（「OAuth session expired and could not be refreshed」）。
+// 配了长期令牌，claclaw 起的所有 Claude 进程（会话、协同审查）都用它，不再刷新；没配照旧用 claude.ai 登录。
+// 只存在 data/claude-token.json（600）：不写日志、不返回网页（只给后 4 位）、不经协同发出；只能在本机浏览器里设置
+const CLAUDE_TOKEN_FILE = path.join(DATA, 'claude-token.json');
+function claudeToken() {
+  try { const j = JSON.parse(fs.readFileSync(CLAUDE_TOKEN_FILE, 'utf8')); return typeof j.token === 'string' && j.token ? j : null; } catch { return null; }
+}
+// 上面过滤掉了 CLAUDE* 变量，令牌要在过滤之后加回去；每次起进程现读，换令牌不用重启 claclaw
+const childEnv = () => { const t = claudeToken(); return t ? { ...CHILD_ENV, CLAUDE_CODE_OAUTH_TOKEN: t.token } : CHILD_ENV; };
+const CLAUDE_TOKEN_RE = /^sk-ant-oat\d{2}-[A-Za-z0-9_-]{20,400}$/;
+function claudeTokenPublic(req) {
+  const t = claudeToken();
+  return { set: !!t, last4: t ? t.token.slice(-4) : '', at: t?.at || null, canEdit: isLocalReq(req), port: PORT };
+}
+function saveClaudeToken(tok) {
+  if (!tok) return fs.rmSync(CLAUDE_TOKEN_FILE, { force: true });
+  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
+  const tmp = CLAUDE_TOKEN_FILE + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify({ token: tok, at: Date.now() }), { mode: 0o600 });
+  fs.renameSync(tmp, CLAUDE_TOKEN_FILE);
+}
+// 保存前用它真发一句（haiku），确认令牌能用；返回空串 = 能用，否则是错误说明（去掉了令牌本身）
+async function probeClaudeToken(tok) {
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 60_000);
+  const clean = s => String(s || '').split(tok).join('…').slice(0, 200);
+  try {
+    const q = query({ prompt: 'Reply with OK only.', options: { model: 'haiku', tools: [], maxTurns: 1, persistSession: false, settingSources: [],
+      cwd: os.tmpdir(), abortController: ac, env: { ...CHILD_ENV, CLAUDE_CODE_OAUTH_TOKEN: tok } } });
+    for await (const m of q) if (m.type === 'result') return m.is_error ? clean(m.result || m.subtype) || '验证失败' : '';
+    return '没拿到验证结果';
+  } catch (e) {
+    return ac.signal.aborted ? '验证超时（60 秒）' : clean(e?.message || e);
+  } finally { clearTimeout(timer); }
+}
+// 换了登录方式：没人看、也没在干活的 Claude 进程直接关掉（下次打开用新的）；正打开着的，关掉重开后生效
+function recycleClaudeRunners() {
+  let closed = 0, left = 0;
+  for (const r of [...runners.values()]) {
+    if (!r.subs.size && !r.busy && !r.pending.size && !r.unsent()) { r.dispose('login'); closed++; } else left++;
+  }
+  return { closed, left };
+}
+
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 // ---------- 会话登记表：判断某个会话是不是正被终端 / VS Code 占用 ----------
@@ -1359,7 +1403,7 @@ class Runner {
         // 每轮结束后由 Claude Code 生成一条「下一句可能要说的话」，在网页输入框里做成提示
         promptSuggestions: true,
         // 不传 settingSources = 和 CLI 一样加载 user + project + local，网页会话与原会话的权限完全一致
-        env: CHILD_ENV,
+        env: childEnv(),
         mcpServers: { claclaw: claclawMcp(this.id) },
         canUseTool: (name, input, o) => this.askPermission(name, input, o),
         // 协同消息触发的那一轮：不管什么权限模式（包括跳过确认），有风险的操作都要用户确认（钩子在跳过确认模式下也会跑）
@@ -1587,7 +1631,7 @@ class Runner {
     let why = '';
     if (risk.key !== 'read-sensitive') {
       const t0 = Date.now();
-      const j = await peerJudge({ need: pt.text, plan: this.lastSaid || '', tool: inp.tool_name, input: inp.tool_input, cwd, reason: risk.reason, destructive: des, env: CHILD_ENV });
+      const j = await peerJudge({ need: pt.text, plan: this.lastSaid || '', tool: inp.tool_name, input: inp.tool_input, cwd, reason: risk.reason, destructive: des, env: childEnv() });
       log('peer-guard judge', j.allow ? 'allow' : 'ask', this.id.slice(0, 8), inp.tool_name, risk.reason, '·', j.why, (Date.now() - t0) + 'ms');
       if (j.allow) return {};
       why = j.why;
@@ -2436,6 +2480,31 @@ const handler = async (req, res) => {
       }
       saveSettings({ clientPrefs: next });
       return sendJson(res, 200, { ok: true });
+    }
+    // Claude 长期令牌：谁都能看是否已配置（只给后 4 位）；设置、替换、清除只能在本机浏览器里做
+    if (url.pathname === '/api/claude-token') {
+      if (req.method === 'POST') {
+        if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+        if (!isLocalReq(req)) { log('claude-token refused from', realIp(req)); return sendJson(res, 403, { error: '长期令牌只能在这台电脑的浏览器里设置（http://127.0.0.1:' + PORT + '）' }); }
+        if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+        let body = {};
+        try { body = JSON.parse(await readBody(req, 4096)); } catch {}
+        if (body.clear === true) {
+          saveClaudeToken('');
+          const rc = recycleClaudeRunners();
+          log('claude-token cleared', JSON.stringify(rc));
+          return sendJson(res, 200, { ...claudeTokenPublic(req), ...rc });
+        }
+        const tok = String(body.token || '').replace(/\s+/g, '');
+        if (!CLAUDE_TOKEN_RE.test(tok)) return sendJson(res, 400, { error: '格式不对：应该是 claude setup-token 输出的 sk-ant-oat01-… 那一整串' });
+        const bad = await probeClaudeToken(tok);
+        if (bad) { log('claude-token probe failed'); return sendJson(res, 400, { error: '令牌用不了：' + bad }); }
+        saveClaudeToken(tok);
+        const rc = recycleClaudeRunners();
+        log('claude-token set …' + tok.slice(-4), JSON.stringify(rc));
+        return sendJson(res, 200, { ...claudeTokenPublic(req), ...rc });
+      }
+      return sendJson(res, 200, claudeTokenPublic(req), { 'cache-control': 'no-store' });
     }
     if (url.pathname === '/api/settings/session') {
       if (req.method === 'POST') {
