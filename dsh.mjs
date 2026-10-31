@@ -5,7 +5,6 @@
 // 网页里 DeepSeek 会话的 id = 'ds:' + dsh 会话 id，和 Claude 的 UUID、OpenClaw 的 oc: 区分开。
 // 注意：同一个会话同时只能有一个写入方。dsh 网页版开着这个会话时这里接不上（反过来也一样），所以空闲就关掉。
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
@@ -13,9 +12,9 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { DATA } from './auth.mjs';
-import { AcpAgent, AcpRunner, tilde, flatOptions } from './acp.mjs';
+import { AcpAgent, AcpRunner, flatOptions } from './acp.mjs';
+import { HOME, tilde, tms, sleep, findBin } from './util.mjs';
 
-const HOME = os.homedir();
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
 const ROOT = path.join(DSH_HOME, 'sessions');
 const ATTACH = path.join(DSH_HOME, 'attachments', 'v1', 'objects');
@@ -133,7 +132,6 @@ function readImage(att) {
   catch { return null; }
 }
 
-const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : undefined; };   // 时间统一成毫秒（秒 / ISO 字符串都认）
 
 // 费用估算：只用 dsh 日志里 provider 上报的 usage 桶，乘 DeepSeek 公开价。
 // 缓存写入按未命中输入价；法定节假日、账号折扣/赠金不算，这是给用户“心里有数”的近似值。
@@ -261,14 +259,7 @@ function toItems(recs) {
 }
 
 // ---------- ACP 进程（单例，多个会话共用；挂了下次用时再起） ----------
-function dshBin() {
-  const dirs = new Set([...(process.env.PATH || '').split(':'), '/usr/local/bin', '/opt/homebrew/bin', path.join(HOME, '.local', 'bin')]);
-  for (const d of dirs) {
-    const p = d && path.join(d, 'dsh');
-    if (p && fs.existsSync(p)) { try { return fs.realpathSync(p); } catch { return p; } }
-  }
-  return null;
-}
+const dshBin = () => findBin('dsh');
 
 // ACP 进程（底座见 acp.mjs）。bin.js 是 node 脚本：直接用当前 node 跑，不依赖 launchd 环境里的 PATH
 const agent = new AcpAgent({
@@ -296,7 +287,6 @@ export function parseDshWebUrl(text) {
   return m ? m[1] : '';
 }
 
-const sleep = ms => new Promise(r => { const t = setTimeout(r, ms); t.unref?.(); });
 
 function startDshWeb(log) {
   const bin = dshBin();

@@ -4,15 +4,12 @@
 // 数字纪律：只用记录里实报的数；拿不到的不补 0、不估、不摊（缓存读 / 缓存写全程没上报过就标 known=false，页面显示 --）。
 // 四桶：inp 未命中输入 · cr 缓存读 · cw 缓存写 · out 输出（含思考 think）。合计 = 四桶相加；上下文大小 = inp + cr + cw。
 import fs from 'node:fs';
-import os from 'node:os';
 import readline from 'node:readline';
+import { relPath } from './util.mjs';
 
 const TEXT_MAX = 3000, SNIP = 400, BRIEF = 110, FILES_MAX = 30, WAIT_MS = 30 * 60e3;
 const snip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const num = (v) => (v == null || v === '' ? null : Number(v) || 0);
-const HOME = os.homedir();
-// 文件路径显示：会话目录下的给相对路径，家目录下的 ~/…
-const relPath = (p, cwd) => { p = String(p || ''); if (cwd && p.startsWith(cwd + '/')) return p.slice(cwd.length + 1); if (p === HOME) return '~'; if (p.startsWith(HOME + '/')) return '~' + p.slice(HOME.length); return p; };
 
 // jsonl 一行用户记录 → 用户真正发的那句话；工具结果、系统注入、斜杠命令（/compact 等）及其输出、打断提示都不算（返回空）
 export function userTextOf(e) {

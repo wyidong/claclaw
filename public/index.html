@@ -88,7 +88,7 @@ window.__sc=(function(){
 :root{
   --gl-a:rgba(255,255,255,.62);--gl-b:rgba(255,255,255,.22);--gl-hi:rgba(255,255,255,.9);--gl-rim:rgba(255,255,255,.55);--gl-sh:rgba(0,0,0,.10);   /* 标题栏圆按钮的 iOS 玻璃：上亮下透、顶边高光、细亮边、轻投影 */
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
-  --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;--peer:#C4B5F4;
+  --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;
   --allow:#17794A;--on-allow:#FFFFFF;--deny:#B23A2E;--warn:#A86200;
   --add-bg:#E2F3E8;--del-bg:#FBE5E2;--code-bg:#E9ECEF;--banner-bg:#FFF4DC;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -101,7 +101,7 @@ window.__sc=(function(){
   :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
     --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
     --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
-    --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
+    --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
     --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
     --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
@@ -110,7 +110,7 @@ window.__sc=(function(){
 :root[data-theme="dark"]{
     --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
-  --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;--peer:#7C6BC4;
+  --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
   --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
   --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
   --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
@@ -118,7 +118,7 @@ window.__sc=(function(){
 /* 九紫离火：照 clarelay 外壳的样子——淡紫底、白卡片带细边；字是重点：标题 / 名字用 clarelay 紫，说明用石板灰，正文近黑；离火的暖橙只做点缀（提醒、协同） */
 :root[data-theme="ziwei"]{
   --bg:#F2F0F8;--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--line:#E4E0EE;
-  --accent:#5B21B6;--accent-ink:#FFFFFF;--user-bg:#EDE7FB;--peer:#FDBA8C;--zw-t:#4C1D95;
+  --accent:#5B21B6;--accent-ink:#FFFFFF;--user-bg:#EDE7FB;--zw-t:#4C1D95;
   --allow:#5B21B6;--on-allow:#FFFFFF;--deny:#D93636;--warn:#C2410C;
   --add-bg:#E6F4EA;--del-bg:#FCE7E4;--code-bg:#F1EEF8;--banner-bg:#FFF0E3;
   --strip:var(--bg);--rail-on:var(--surface);
@@ -141,7 +141,7 @@ window.__sc=(function(){
    标题、名字、分组标题用天干色（--sc-t）。变量都由 window.__sc 按时辰算好：
    --sc-b 地支色 / --sc-f 地支底上的字色 / --sc-m 没选中的字色 / --sc-on 选中格的底 / --sc-t 天干色 / --bg --line --user-bg 地支淡色 */
 :root[data-theme="shichen"] #app.m-list #mtabs,:root[data-theme="shichen"] #rail,:root[data-theme="shichen"] header,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app.m-list.set-on #setTop,:root[data-theme="shichen"] #app.m-list.host-on #hostPane .pg-hd{background:var(--sc-b);border-color:transparent}
-:root[data-theme="shichen"]{--strip:var(--sc-b);--strip-line:transparent;--rail-line:transparent}
+:root[data-theme="shichen"]{--strip:var(--sc-b);--strip-line:transparent}
 /* 时辰背景选「图片」：列表 / Claw / 设置 / 宿主页整页铺这个时辰的图（聊天内容区不铺）；中间几层底变透明，顶栏 / 底栏 / 左栏变半透明毛玻璃浮在图上，卡片仍是白底 */
 :root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
 :root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
@@ -203,7 +203,6 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .where{display:block;font-family:var(--mono);font-size:12px;line-height:1.3;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
 #sessBtn .where:empty{display:none}
 #sessBtn .where bdi{direction:ltr;unicode-bidi:isolate}
-/* 会话模式：右上角下拉选择；标题后面显示模式的英文名（无边框，颜色跟模式走） */
 /* 会话设置按钮：标题栏右边，两行——上「模型 · 推理强度」、下权限模式（颜色跟模式走）；点开是底部面板 */
 #hdAct{flex:none;display:flex;align-items:flex-end;gap:6px;min-width:0;max-width:60%}
 #cfgBtn{flex:0 1 auto;display:flex;align-items:center;align-self:center;min-width:0;color:var(--muted);text-align:right;cursor:default}
@@ -214,7 +213,6 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* 标题栏功能按钮：和浮动朗读键一样大的圆圈，底透明；底边和第二行对齐、往上伸进第一行（第一行没有可点的，透明底不挡字） */
 .hd-ic{flex:none;display:grid;place-items:center;width:42px;height:42px;margin-top:-20px;padding:0;border:1px solid transparent;border-radius:50%;background:color-mix(in srgb,var(--muted) 12%,transparent);color:color-mix(in srgb,var(--muted) 60%,var(--line));font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s}   /* 平时淡淡的底色、没有边框；暂时不能点（压缩中、刚点过）才出现边框，颜色和字一样 */
 .hd-ic.lock,.hd-ctx.busy{border-color:currentColor}
-.hd-ic[hidden]{display:none}
 .hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .hd-ic:active{opacity:.5}
 @media (max-width:999px){.hd-ic{touch-action:none;position:relative;z-index:3;opacity:.5;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.hd-ic:active{opacity:1}}   /* 手机上圆球能左右拖，拖到标题上要盖在字上；平时半透明，按住/拖动时不透明 */
@@ -249,7 +247,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #feed>*{flex-shrink:0}   /* 消息多了也不许被压扁（工具卡片 overflow:hidden，以前会被压成 0 高，只剩两条边框）*/
 .msg{white-space:pre-wrap;word-break:break-word;max-width:100%}
 .msg.user.pending{opacity:.55}
-/* DeepSeek / OpenCode 回复中又发的消息：排队，这一轮结束后自动发出 */
+/* ACP 的 Claw（DeepSeek / OpenCode / Kimi）回复中又发的消息：排队，这一轮结束后自动发出 */
 .msg.user.queued{opacity:.7}
 .msg.user.queued::after{content:'排队中 · 这一轮结束后自动发出';display:block;margin-top:4px;font-size:11.5px;opacity:.8}
 .upeer{font-size:12px;opacity:.6;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -312,7 +310,6 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
 @keyframes rlspin{to{transform:rotate(360deg)}}
 #bgReload{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-22px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 不仔细看看不出来 */
-#bgReload[hidden]{display:none}
 #bgReload:active{opacity:.4}
 #bgReload.new{color:var(--accent);opacity:.35}   /* 服务器有新版本：显眼一点 */
 #bgReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
@@ -435,14 +432,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #attachBtn,#send{position:absolute;top:2px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1}
 #attachBtn{left:-8px;color:var(--muted)}
 #micBtn{position:absolute;top:2px;left:26px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--muted);-webkit-tap-highlight-color:transparent}   /* 语音输入（试验）：一键开始听，再点停止 */
-#micBtn[hidden]{display:none}
 #micBtn.on{color:var(--deny);animation:pulse 1.2s infinite}
 #composer.mic #ta{padding-left:68px}
 #send{right:2px;color:var(--accent)}
 #send:disabled,#send.sugfill{color:var(--muted);opacity:.45;cursor:default}
 #send.sugfill{cursor:pointer}
 #stopBtn{position:absolute;top:2px;right:42px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--deny)}
-#stopBtn[hidden]{display:none}
 #composer.busy #ta{padding-right:88px}
 #composer.nosend #send{display:none}
 #composer.nosend #ta{padding-right:12px}
@@ -531,7 +526,6 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-tb .no.err{color:var(--deny);font-weight:600}
 .ds-tb .col-inp{color:var(--ds-inp)}.ds-tb .col-cr{color:var(--ds-cr)}.ds-tb .col-cw{color:var(--ds-cw)}.ds-tb .col-out{color:var(--ds-out)}
 .ds-tb tr.d td{white-space:normal;text-align:left;padding:6px 6px 10px;background:var(--surface);border-bottom:1px solid var(--line)}
-.ds-tb tr.d[hidden]{display:none}
 @media (hover:hover){.ds-tb tr.r:hover td,.ds-tb tr.q:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 .ds-rec{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
 .ds-rec b{color:var(--ink);font-weight:600}
@@ -611,7 +605,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #sList .s-grp:first-child{margin-top:0}
 #sList .s-grp .chev{flex:none;transition:transform .15s}
 #sList .s-grp[aria-expanded="false"] .chev{transform:rotate(-90deg)}
-#sList .s-gbox[hidden]{display:none}
 #sList .s-grp .gn{flex:0 1 auto;min-width:0;font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-gpath{margin:-2px 2px 4px 22px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
@@ -642,7 +635,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #setPane .set-sec:not(:has(.set-card > :not([hidden]))):not(:has(.set-note:not([hidden]))){display:none}
 #setPane #setScImgRow{display:none}:root[data-theme="shichen"] #setPane #setScImgRow{display:flex}   /* 「时辰背景」只在流变时辰主题下出现 */
 #setPane .set-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:54px;margin:0;padding:11px 14px;border:0;background:none;text-align:left;font:inherit;font-size:15px;color:var(--ink);cursor:pointer;box-sizing:border-box}
-#setPane .set-item[hidden]{display:none}
 #setPane .set-item:not([hidden]) ~ .set-item:not([hidden])::before{content:'';position:absolute;top:0;left:14px;right:0;border-top:1px solid var(--line)}
 #setPane .set-item:active{background:var(--surface)}
 #setPane .lb{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;line-height:1.35}
@@ -652,7 +644,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #setPane .set-num{flex:none;display:flex;align-items:center;gap:2px;color:var(--muted);font-size:14.5px}
 #setPane .set-num input{width:64px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;text-align:right;padding:4px 6px}
 #setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
-/* 开关 */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
    没在念：播放三角，点了念最后一条回复；在念：方块（外圈呼吸），点了停；被 iPhone 拦住：绿色播放键 */
 #ttsStop{position:fixed;right:14px;bottom:calc(var(--dockTop,96px) + 10px);z-index:30;width:42px;height:42px;padding:0;border:.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:pointer;opacity:.92}
@@ -661,7 +652,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #ttsStop.on{animation:ttsw 1.4s ease-in-out infinite}
 @keyframes ttsw{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent)}}
 @media (min-width:1000px){#ttsStop{right:26px}}
-#ttsStop[hidden]{display:none}
 #pairBanner{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:60;transform:translate(-50%,-150%);max-width:min(92vw,520px);padding:11px 16px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:14.5px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.22);cursor:pointer;transition:transform .25s ease;text-align:center}
 #pairBanner.on{transform:translate(-50%,0)}
 #setPane .tts-rate{flex-wrap:wrap;cursor:default}
@@ -690,7 +680,7 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #railChats.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
 #sessBtn{position:relative}
 #sessBtn.unr::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
-#soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}#soundPick[hidden]{display:none}
+#soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}
 #soundSel{font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
 .s-row{position:relative;margin-top:8px}
 .s-row .s-item{margin-top:0;padding-right:52px;overflow:hidden}
@@ -776,7 +766,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #sessBtn .dot.off:empty{background:var(--muted);filter:none;opacity:1}
 /* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
 #workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
-#workBar[hidden]{display:none}
 /* 干活时：这个会话所属 Claw 的图标一闪一闪（代替原来的绿点和「XXX 正在工作」） */
 #workBar .wlogo{flex:none;display:grid;place-items:center;width:18px;height:18px;animation:wpulse 1.8s ease-in-out infinite}
 @keyframes wpulse{0%,100%{opacity:1}50%{opacity:.6}}   /* 轻一点：看得出在闪就行 */
@@ -792,7 +781,7 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #bannerT.link{cursor:pointer;text-decoration:underline}
 
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
-#rail,.d-only,.d-only-b{display:none}
+#rail{display:none}
 #sheetGrip{display:none}
 @media (min-width:1000px){
   /* 会话列表右边缘：拖动改宽度（像微信：往左有最窄限制，往右可以拉宽） */
@@ -802,11 +791,26 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 }
 /* ---------- 手机：像微信，首页是会话列表，点进去是聊天页，左上角返回 ---------- */
 #backBtn{display:none}
+/* 标题栏两行网格：手机、电脑一样（第一行 ● 会话名；第二行 ID ······ 模型 · 推理强度 · 权限 ›）。
+   会话名、ID 嵌在 #sessBtn 里：把外层拆掉（display:contents），直接排进 #hdCard 的网格；目录、右箭头、未读红点不在标题栏显示 */
+#sessBtn>svg{display:none}
+#sessBtn.unr::after{display:none}
+#hdCard{display:grid;grid-template-columns:20px minmax(78px,1fr) auto;gap:0 8px;align-items:center;min-height:0}   /* ID 至少留够 8 位 */
+#hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
+#sessBtn .dot{grid-column:1;grid-row:1}
+#sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
+#sessBtn .where{display:none}
+#sid{grid-column:2;grid-row:2;align-self:stretch;display:flex;align-items:center;min-width:0;font-size:13px;line-height:22px}
+#sid .hid{margin-left:0;line-height:22px}
+#hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
+#cfgBtn .c1{font-size:13px;line-height:22px}
+#cfgBtn .c2{font-size:13px;line-height:22px}
+#cfgBtn .c1:not(:empty)+.c2{margin-left:10px}   /* 权限名左右留一样的空：右边到 > 约 10px */
+#cfgBtn>span{flex:0 1 auto;min-width:0}
+.sheet-p>h2:first-child{display:none}   /* 会话列表顶部不要「会话」标题，搜索栏直接在最上面（手机、电脑都一样） */
 @media (max-width:999px){
   #backBtn{position:relative;display:grid;place-items:center;flex:none;width:36px;height:44px;margin-left:-6px;border:0;background:none;color:var(--ink)}
   #backBtn.unr::after{content:'';position:absolute;top:9px;right:3px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
-  #sessBtn>svg{display:none}
-  #sessBtn.unr::after{display:none}
   /* 聊天页顶栏（手机）：两行，往状态栏下面的空白里贴——
      第一行  ‹  ● 会话名称（整行都给名字）
      第二行       ID（点一下复制） ······ 模型 · 推理强度 · 权限 ›（点开会话设置）
@@ -814,18 +818,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
      会话名、ID 嵌在 #sessBtn 里（电脑端是一行）：手机上把外层拆掉（display:contents），直接排进 #hdCard 的网格 */
   header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
   #backBtn{align-self:stretch;height:auto;place-items:center;padding:0}   /* 返回键独占左边一栏（占满两行），箭头在这一栏里上下左右居中 */
-  #hdCard{display:grid;grid-template-columns:20px minmax(78px,1fr) auto;gap:0 8px;align-items:center;min-height:0}   /* ID 至少留够 8 位 */
-  #hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
-  #sessBtn .dot{grid-column:1;grid-row:1}
-  #sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
-  #sessBtn .where{display:none}
-  #sid{grid-column:2;grid-row:2;align-self:stretch;display:flex;align-items:center;min-width:0;font-size:13px;line-height:22px}
-  #sid .hid{margin-left:0;line-height:22px}
-  #hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
-  #cfgBtn .c1{font-size:13px;line-height:22px}
-  #cfgBtn .c2{font-size:13px;line-height:22px}
-  #cfgBtn .c1:not(:empty)+.c2{margin-left:10px}   /* 权限名左右留一样的空：右边到 > 约 10px */
-  #cfgBtn>span{flex:0 1 auto;min-width:0}
   #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
   #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
   /* 列表页：搜索栏是固定的顶栏，只有下面的列表滚动。
@@ -833,7 +825,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
   #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
   #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--strip)}
   #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
-  .sheet-p>h2:first-child{display:none}   /* 会话列表顶部不要「会话」标题，搜索栏直接在最上面 */
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
     padding:4px max(6px,env(safe-area-inset-right)) calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px))) max(6px,env(safe-area-inset-left))}
@@ -872,8 +863,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #clawPane{display:none}
 #hostPane{display:none}
 #hostPane:has(#hostBody .pg-hd) #hostHd{display:none}   /* 协同、技能子页面有自己的标题栏 */
-/* 选择宿主：卡片（手机和电脑共用，手机上更大） */
-.hs-h{margin:16px 6px 8px;font-size:12.5px;color:var(--muted)}
 /* 宿主页的分组卡片（手机和电脑共用） */
 .h-link{cursor:pointer}
 .h-link:active{background:var(--surface)}
@@ -943,8 +932,6 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .pe-allow label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pe-allow-dir{margin:6px 0 2px;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .pe-allow-dir:first-child{margin-top:0}
-.h-row.pe-ro{display:block}
-.pe-ro-s{padding:2px 0 2px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pe-allow label{padding-left:2px}
 .pe-ss-list li{margin:1px 0}
 .pe-ss-list em{font-style:normal;font-size:12px;color:var(--allow)}
@@ -989,7 +976,6 @@ select.pe-in{text-align-last:right}
 .sk-row .k{flex:1;min-width:0}
 .pe-err{margin:8px 14px 0;font-size:13px;color:var(--deny)}
 .pe-ok{margin:8px 14px 0;font-size:13px;color:var(--allow)}
-.pe-url{display:block;padding:10px 14px;font-family:var(--mono);font-size:13px;word-break:break-all;user-select:all}
 #hostBody{display:flex;flex-direction:column;gap:18px}
 .h-empty{padding:40px 16px;text-align:center;color:var(--muted)}
 .h-h{margin:0 14px 7px;font-size:12.5px;color:var(--muted)}
@@ -1006,11 +992,10 @@ select.pe-in{text-align-last:right}
 .h-dot.on{background:var(--allow)}
 /* 已配对列表：底色是对方的颜色，点要更醒目——在线 = 亮绿实心 + 白圈，离线 = 空心圈 */
 .pe-peer .h-dot{flex:none;width:11px;height:11px;margin:0 8px 0 0;background:transparent;border:2px solid var(--muted);box-sizing:border-box}
-.pe-peer .h-dot.wait{border-style:dotted;animation:pdotw 1s linear infinite}
-@keyframes pdotw{to{transform:rotate(360deg)}}
+.pe-peer .h-dot.wait{border-style:dotted;animation:rlspin 1s linear infinite}
 .pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
 @media (max-width:999px){
-  /* Claw 页：三张大卡片，选了哪个，会话页就显示哪一种的会话（现在只有 Claude） */
+  /* Claw 页：每个 Claw 一张大卡片，选了哪个，会话页就显示哪一种的会话 */
   #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
   /* Claw 页：整页滚动；底部多留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），内容多时圈被盖住，滚到底就露出来、点得到 */
   #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
@@ -1029,12 +1014,11 @@ select.pe-in{text-align-last:right}
   .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
   .claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
   /* Claude Code：用 Claude 的花瓣标记（LobeHub 图标库 claude-color.svg，MIT），无底板，颜色 #D97757 */
-  /* DeepSeek：官方 icon.png 是蓝底方块，这里换成透明底的蓝鲸标记（LobeHub 图标库 deepseek-color.svg，MIT），和另外三个一样没有底板 */
-  /* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比另外三个重得多也小得多。
+  /* DeepSeek：官方 icon.png 是蓝底方块，这里换成透明底的蓝鲸标记（LobeHub 图标库 deepseek-color.svg，MIT），和其它几个一样没有底板 */
+  /* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比其它几个重得多也小得多。
      这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
      颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
   /* Kimi：用 Kimi Code 自带网页界面里的吉祥物（KimiMascotPeek：蓝色半圆探头 + 两只白眼睛 + 右上角蓝点），上下居中；干活时眨眼，不跟别的图标一起闪 */
-  .claw-card[hidden]{display:none}
   .claw-h2{margin-top:10px}
   .claw-tool{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
   .claw-tool .claw-ic{width:34px;height:34px;margin:0 7px;color:var(--accent)}
@@ -1120,7 +1104,6 @@ select.pe-in{text-align-last:right}
 }
 #setPane .set-foot{padding-top:18px}
 @media (min-width:1000px){
-  .d-only{display:inline}.d-only-b{display:block}.m-only{display:none}
   #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px var(--listW,300px) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto}
   header,#banner,#feed,#dock{grid-column:3}
   header{grid-row:1}#banner{grid-row:2}#feed{grid-row:3}#dock{grid-row:5}
@@ -1165,7 +1148,6 @@ select.pe-in{text-align-last:right}
   #rclaws.open #rclawMore svg{transform:rotate(180deg)}
   #rail .rclaw{position:relative}
   #rail .rclaw.busy svg,#rail .rclaw.busy img{animation:wpulse 1.8s ease-in-out infinite}   /* 别的 Claw 有会话在干活：左栏图标轻闪 */
-  #rail .rclaw[hidden]{display:none}
   #rail .rclaw img,#rail .rclaw svg{width:26px;height:26px;object-fit:contain}
   #rail .rclaw img.tile{border-radius:22.5%}
   #rail .rclaw.on{background:var(--user-bg)}
@@ -1178,7 +1160,6 @@ select.pe-in{text-align-last:right}
   #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:relative;display:block;background:var(--surface);border-right:0;min-height:0;z-index:auto}
   .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:0 10px 16px;overflow-y:auto}
   #sList{--lpad:10px}
-  .sheet-p>h2:first-child{display:none}
   #sTop{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:2;margin:0 -10px 4px;padding:14px 12px 10px;background:var(--surface)}
   #sTop{box-sizing:border-box;min-height:var(--hd-h,56px);margin-bottom:0;padding-top:0;padding-bottom:0;border-bottom:1px solid var(--strip-line);background:var(--strip)}   /* 和右边聊天标头一样高、底线对齐（--hd-h 由脚本量标头得来） */
   #sSearch{flex:1;min-width:0;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
@@ -1231,7 +1212,6 @@ select.pe-in{text-align-last:right}
   .s-del{right:4px}
   .s-row.rec .s-item .t{padding-right:0}
   .s-row.rec:hover .rdir,.s-row.rec:focus-within .rdir{visibility:hidden}   /* 鼠标移上去：目录让位给「编辑」 */
-  #sList .s-row[hidden],#sList .s-grp[hidden]{display:none}
 
   /* 聊天区标题：像微信，只有名字加粗，没有框 */
   header{padding:0 20px;min-height:56px;border-bottom:1px solid var(--strip-line);background:var(--strip)}
@@ -1241,20 +1221,6 @@ select.pe-in{text-align-last:right}
      电脑端没有返回键；别的会话有未读看左边列表，这里不放红点 */
   header{gap:12px;padding:6px 20px}
   #sessBtn{border:0;background:none;padding:0;cursor:pointer}   /* 点会话名进解剖页：鼠标显示手型 */
-  #sessBtn>svg{display:none}
-  #sessBtn.unr::after{display:none}
-  #hdCard{display:grid;grid-template-columns:20px minmax(78px,1fr) auto;gap:0 8px;align-items:center;min-height:0}   /* ID 至少留够 8 位 */
-  #hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
-  #sessBtn .dot{grid-column:1;grid-row:1}
-  #sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
-  #sessBtn .where{display:none}
-  #sid{grid-column:2;grid-row:2;align-self:stretch;display:flex;align-items:center;min-width:0;font-size:13px;line-height:22px}
-  #sid .hid{margin-left:0;line-height:22px}
-  #hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
-  #cfgBtn .c1{font-size:13px;line-height:22px}
-  #cfgBtn .c2{font-size:13px;line-height:22px}
-  #cfgBtn .c1:not(:empty)+.c2{margin-left:10px}   /* 权限名左右留一样的空：右边到 > 约 10px */
-  #cfgBtn>span{flex:0 1 auto;min-width:0}
   #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
 
   /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
@@ -1307,7 +1273,7 @@ select.pe-in{text-align-last:right}
     <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
     <button type="button" id="railPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button>
-    <button type="button" id="railHost" aria-label="宿主" title="宿主（点开切换）"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
+    <button type="button" id="railHost" aria-label="宿主" title="宿主"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
   <header>
@@ -1477,7 +1443,6 @@ select.pe-in{text-align-last:right}
       </div>
       <!-- 宿主：跑 claclaw 的这台电脑的状态（打开时每 5 秒刷新） -->
       <div id="hostPane"><div class="pg-hd" id="hostHd"><button type="button" class="pe-back" id="hostBack" aria-label="返回设置"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><div class="pg-t" id="hostTitle">宿主</div></div><div id="hostBody"><div class="h-empty">加载中…</div></div></div>
-      <!-- 选择宿主：像选 Claw 一样，点哪台，会话、Claw、设置里的「宿主」就都是那台电脑的 -->
       <div id="setPane">
       <div id="setTop"><button type="button" id="setBack" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span>设置</span></div>
       <div id="setBody">
@@ -1945,6 +1910,8 @@ function openFile(id,name){
   vidStore('readonly',function(st){return st.get(id)}).then(function(rec){if(rec&&rec.blob)showFile(rec.blob,name);else fromServer()}).catch(fromServer);
 }
 // 点聊天里的文件路径：电脑上直接开的（本机网页）由服务器用默认 App 打开；别的设备把文件读回来，在页面里预览
+function showDlg(d,on){d.classList.toggle('on',on);d.setAttribute('aria-hidden',String(!on))}   // 弹窗 / 面板开关
+function needLogin(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r}   // 登录过期：回登录页
 function postJson(u,body){return fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})}
 function httpErr(r){return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status))},function(){throw new Error('HTTP '+r.status)})}
 function openPath(p){
@@ -1983,7 +1950,7 @@ function openDissect(){
   b.innerHTML='<div class="ds-empty">解剖中…</div>';
   var id=dissFor=session.id;dissData=null;
   fetch('/api/dissect?id='+encodeURIComponent(id)).then(function(r){
-    if(r.status===401){location.replace('/login');throw new Error('需要登录')}
+    needLogin(r);
     if(r.status===404&&!(r.headers.get('content-type')||'').match(/json/))throw new Error('服务端还没更新，重启 claclaw 后可用');
     return r.json().then(function(j){if(!r.ok)throw new Error((j&&j.error)||('HTTP '+r.status));return j});
   }).then(function(j){
@@ -3417,8 +3384,8 @@ function renderCfg(){
     mb.appendChild(b);
   });
 }
-function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');d.classList.add('on');d.setAttribute('aria-hidden','false');renderCfg()}
-function closeCfg(){var d=$('#cfgDlg');d.classList.remove('on');d.setAttribute('aria-hidden','true')}
+function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg()}
+function closeCfg(){var d=$('#cfgDlg');showDlg(d,false)}
 $('#cfgGo').addEventListener('click',openCfg);
 $('#cfgX').addEventListener('click',closeCfg);
 $('#cfgDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeCfg()});
@@ -3500,7 +3467,7 @@ function loadHost(){
   fetch('/api/peer').then(function(r){return r.json()}).then(function(j){peerSt=j}).catch(function(){});
   loadSkills();
   mdlPeek();
-  fetch('/api/host').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(function(x){
+  fetch('/api/host').then(function(r){needLogin(r);return r.json()}).then(function(x){
     if(!$('#app').classList.contains('host-on')||hostView)return;
     var c=x.computer,L=x.load,h='';
     h+=hSec('电脑',hRow('名称',esc(c.name))+hRow('系统',esc(c.os),c.model)+hRow('处理器',esc(c.cpu),c.cores+' 核')+hRow('已开机',fmtDur(c.uptime)));
@@ -3550,10 +3517,9 @@ function loadSkills(){
     if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
   }).catch(function(){});
 }
-function skillState(name,target){var s=(skillsSt||[]).find(function(x){return x.name===name});var t=s&&s.targets.find(function(x){return x.id===target});return t?t.state:'none'}
 function skillsSum(){if(!skillsSt)return '';var n=0;skillsSt.forEach(function(s){if(s.targets.some(function(t){return t.state!=='none'}))n++});return n?'已装 '+n+' 个':skillsSt.length+' 个可装'}
 function skillPost(op,name,target){
-  fetch('/api/skills/'+op,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:name,target:target})}).then(function(r){return r.json()}).then(function(j){
+  postJson('/api/skills/'+op,{name:name,target:target}).then(function(r){return r.json()}).then(function(j){
     if(!Array.isArray(j)){skillMsg={err:j.error||'操作失败'};toast(j.error||'操作失败')}
     else{skillsSt=j;skillMsg={ok:op==='install'?'已安装':'已卸载'};toast(skillMsg.ok)}
     if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
@@ -3638,7 +3604,7 @@ function renderModels(){
 }
 function mdlPost(body,okMsg,then){
   mdlMsg={};
-  fetch('/api/models',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(j){
+  postJson('/api/models',body).then(function(r){return r.json()}).then(function(j){
     if(j.error){mdlMsg={err:j.error};renderModels();return}
     mdl=j;mdlClawSub();if(then)then(j);toast(okMsg);renderModels();
   }).catch(function(e){mdlMsg={err:'没保存成功：'+e.message};renderModels()});
@@ -3745,7 +3711,7 @@ function peerForm(enabled){
 var pePairT=null;
 function pePairPoll(sec){clearTimeout(pePairT);pePairT=setTimeout(function(){pePairT=null;peerPost('/pair-finish',{code:''},'')},Math.min(Math.max(sec||5,3),30)*1000)}
 function peerPost(path,body,okText){
-  fetch('/api/peer'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+  postJson('/api/peer'+path,body).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x.ok||(x.j.error&&!x.j.local)){clearTimeout(pePairT);pePairT=null;peerMsg={err:x.j.error||'操作失败'};if(path==='/pair-finish'&&peerCfg){peerCfg.outPair=null;renderPeer()}else paintPeerMsg();return}
     var keepPI=peerCfg&&peerCfg.poolInfo;peerCfg=peNormCfg(x.j);if(!peerCfg.poolInfo)peerCfg.poolInfo=keepPI;peerSt=x.j;
     if(x.j.retryIn)pePairPoll(x.j.retryIn+1);
@@ -3768,7 +3734,7 @@ function peerCheckNow(){
   if(!peerCfg||!peerCfg.peers.length)return;
   // 每个对方单独查：离线的那个要等超时（最多十几秒），不拖着在线的一起显示「离线」
   peerCfg.peers.forEach(function(p){
-    fetch('/api/peer/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:p.id})}).then(function(r){return r.json()}).then(function(list){
+    postJson('/api/peer/check',{id:p.id}).then(function(r){return r.json()}).then(function(list){
       (list||[]).forEach(function(x){peerOnline[x.id]=x});paintPeerLive();
     }).catch(function(){});
   });
@@ -4046,7 +4012,7 @@ function peerPoolHtml(c){
 // 改会话池：马上提交，只重画受影响的几块（不整页重画，搜索框里的字和滚动位置都不动）
 function poolSave(arr){
   var prev=peerCfg.sessions;peerCfg.sessions=arr;poolPaint();
-  fetch('/api/peer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessions:arr})}).then(function(r){return r.json()}).then(function(j){
+  postJson('/api/peer',{sessions:arr}).then(function(r){return r.json()}).then(function(j){
     if(j.error){peerCfg.sessions=prev;peerMsg={err:j.error};paintPeerMsg();poolPaint();return}
     var keep={dir:peerCfg.dir,poolInfo:peerCfg.poolInfo};peerCfg=j;peerCfg.dir=keep.dir;peerCfg.poolInfo=keep.poolInfo;peerMsg={};paintPeerMsg();poolPaint();
   }).catch(function(e){peerCfg.sessions=prev;peerMsg={err:e.message};paintPeerMsg();poolPaint()});
@@ -4115,8 +4081,8 @@ function renderPeer(){
   h+=p?peerDetailHtml(c,p):peerSub==='add'?peerAddHtml(c):peerSub==='pool'?peerPoolHtml(c):peerSub==='net'?peerNetHtml(c):peerMainHtml(c);
   $('#hostBody').innerHTML=h;paintPeerMsg();
 }
-// 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
-var clawSel=null;try{clawSel=localStorage.getItem(hk('claw'))||localStorage.getItem('claclaw.claw')}catch(_){}   // 新切到的宿主：先沿用首连宿主选的 Claw
+// 选了 Claw 就回到会话页并加载它的会话；手机上首次使用要先选
+var clawSel=null;try{clawSel=localStorage.getItem(hk('claw'))}catch(_){}
 if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek'&&clawSel!=='opencode'&&clawSel!=='kimi')clawSel=null;
 // 会话列表显示什么：recent = 「最近」（所有 Claw 的会话按活跃时间排，像微信聊天列表）；claw = 选中 Claw 的会话（按目录分组）
 var listMode='recent';try{if(localStorage.getItem('claclaw.listMode')==='claw')listMode='claw'}catch(_){}
@@ -4167,7 +4133,7 @@ function loadClaws(){
 if(Date.now()-clawsAt<3000)return;clawsAt=Date.now();
 fetch('/api/claws').then(function(r){return r.json()}).then(function(list){try{localStorage.setItem(hk('claws'),JSON.stringify(list))}catch(_){}applyClaws(list)}).catch(function(){});
 }
-// 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部 4 个、再少一个），服务器的结果到了再更新
+// 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部、再少几个），服务器的结果到了再更新
 function applyClaws(list){
   if(!Array.isArray(list))return;
   var any=false,ok=[];
@@ -4207,7 +4173,7 @@ $('#setBack').addEventListener('click',function(){if(history.state&&history.stat
 $('#railChats').addEventListener('click',function(){var ch=listMode!=='recent';mTab('recent');if(ch)openSheet()});
 $('#setRecentClear').addEventListener('click',function(){
   if(!confirm('清空「最近」列表？\n只清空列表，不会删除任何会话。'))return;
-  fetch('/api/recent/clear',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){
+  postJson('/api/recent/clear',{}).then(function(r){return r.json()}).then(function(j){
     if(!j.ok){alert(j.error||'清空失败');return}
     toast('已清空最近');if(listMode==='recent'){lastList=null;$('#sList').innerHTML='';if(DESKTOP.matches)openSheet()}
   }).catch(function(e){alert('清空失败：'+e.message)});
@@ -4311,7 +4277,7 @@ function wxTime(ms){
 var recentTimer=null;
 function loadRecent(){
   var list=$('#sList');
-  fetch('/api/recent').then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(whenNotPressing).then(function(arr){
+  fetch('/api/recent').then(function(r){needLogin(r);if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(whenNotPressing).then(function(arr){
     if(listMode!=='recent')return;
     if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
     lastList=arr;
@@ -4343,7 +4309,7 @@ function loadRecent(){
       // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
       var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
       var hideIt=function(){
-        fetch('/api/recent/hide',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:s.id})}).then(function(r){return r.json()}).then(function(j){
+        postJson('/api/recent/hide',{id:s.id}).then(function(r){return r.json()}).then(function(j){
           if(!j.ok){toast(j.error||'删除失败');return}
           row.remove();if(lastList)lastList=lastList.filter(function(x){return x.id!==s.id});toast('已从最近里删除');
         }).catch(function(){toast('删除失败')});
@@ -4400,11 +4366,11 @@ function openSheet(silent){
     return;
   }
   if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载中…</div>';
-  if(!silent&&DESKTOP.matches){sheet.classList.add('on');sheet.setAttribute('aria-hidden','false')}   // 手机列表页本身就是列表，不用弹出面板
+  if(!silent&&DESKTOP.matches){showDlg(sheet,true)}   // 手机列表页本身就是列表，不用弹出面板
   syncPushBtn();
   if(rec){loadRecent();return}
   var claw=clawSel;
-  fetch('/api/sessions'+(clawSel==='openclaw'||clawSel==='deepseek'||clawSel==='opencode'||clawSel==='kimi'?'?claw='+clawSel:'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
+  fetch('/api/sessions'+(clawSel&&clawSel!=='claude'?'?claw='+clawSel:'')).then(function(r){needLogin(r);return r.json()}).then(whenNotPressing).then(function(arr){
     if(claw!==clawSel)return;   // 加载途中换了 Claw
     if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
     lastList=arr;
@@ -4709,7 +4675,7 @@ document.addEventListener('mousedown',function(e){if(ctxEl&&!ctxEl.contains(e.ta
 document.addEventListener('keydown',function(e){if(e.key==='Escape')ctxClose()});
 document.addEventListener('scroll',ctxClose,true);window.addEventListener('blur',ctxClose);
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
-function closeSheet(){sheet.classList.remove('on');sheet.setAttribute('aria-hidden','true')}
+function closeSheet(){showDlg(sheet,false)}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 // 电脑上会话列表常驻，点标题栏不用做什么（留给拖选复制）；手机上点标题栏回会话列表，刚选了字就不跳
 $('#sid').addEventListener('click',function(e){var h=e.target.closest('.hid');if(!h||!session)return;e.stopPropagation();copyText(session.id)});
@@ -5075,7 +5041,7 @@ var srvQ=[],srvBusy=false,srvBlocked=false,srvGen=0,srvLogAt=0,srvCur=null;
 var srvEls=[new Audio(),new Audio()],srvTurn=0;
 srvEls.forEach(function(a){a.preload='auto';a.addEventListener('ended',function(){if(a===srvCur){srvCur=null;srvBusy=false;srvNext()}})});
 function srvFetch(it){
-  if(!it.p)it.p=fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:tts.rate})})
+  if(!it.p)it.p=postJson('/api/tts',{text:it.text,voice:it.voice,rate:tts.rate})
     .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
     .then(function(b){it.url=URL.createObjectURL(b);return it});
   return it.p;
@@ -5577,7 +5543,7 @@ $('#ttsStop').addEventListener('click',function(){
 setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
 // 朗读出问题时把手机这边的情况记到电脑的日志里（没声音时好查是哪一步）
 var ttsDbgAt=0;
-function ttsDbg(m){if(Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();fetch('/api/tts/log',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({m:String(m).slice(0,200)})}).catch(function(){})}
+function ttsDbg(m){if(Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();postJson('/api/tts/log',{m:String(m).slice(0,200)}).catch(function(){})}
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){
     if(narration&&narration.onHidden)narration.onHidden();
@@ -5784,11 +5750,11 @@ function showSound(j){
 }
 function syncSound(){fetch('/api/sound').then(function(r){return r.json()}).then(showSound).catch(function(){})}
 soundBtn.addEventListener('click',function(){
-  fetch('/api/sound',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:!soundBtn.dataset.on})})
+  postJson('/api/sound',{on:!soundBtn.dataset.on})
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast(j.on?'已开启，刚才应该响了一声':'已关闭电脑提示音')});
 });
 $('#soundSel').addEventListener('change',function(e){
-  fetch('/api/sound',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:e.target.value})})
+  postJson('/api/sound',{name:e.target.value})
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+(SOUND_CN[j.name]||j.name)+'」')});
 });
 // 设置页里的数据（提示音、会话设置、电脑合成的声音）进设置页再拉，启动时少几个请求
@@ -5803,7 +5769,7 @@ function showCtok(j){
 function loadCtok(){fetch('/api/claude-token').then(function(r){return r.json()}).then(showCtok).catch(function(){})}
 function postCtok(body,busy){
   toast(busy);
-  return fetch('/api/claude-token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
+  return postJson('/api/claude-token',body)
     .then(function(r){return r.json()}).then(function(j){
       if(j.error){alert(j.error);return}
       showCtok(j);
@@ -5833,13 +5799,13 @@ function showSessSet(j){
   });
 }
 $('#setPushVia').addEventListener('change',function(){
-  fetch('/api/settings/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pushVia:this.value})})
+  postJson('/api/settings/session',{pushVia:this.value})
     .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
 });
 ['#setIdle','#setTake','#setUpKeep'].forEach(function(id){
   $(id).addEventListener('change',function(){
     var body={};body[id==='#setIdle'?'idleCloseMin':id==='#setUpKeep'?'uploadKeepDays':'takeoverMin']=Number(this.value);
-    fetch('/api/settings/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
+    postJson('/api/settings/session',body)
       .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
   });
 });
@@ -5854,7 +5820,7 @@ pushBtn.addEventListener('click',function(){
   if(pushBtn.dataset.on){
     navigator.serviceWorker.ready.then(function(r){return r.pushManager.getSubscription()}).then(function(sub){
       if(!sub)return;
-      return fetch('/api/push/unsubscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint})}).then(function(){return sub.unsubscribe()});
+      return postJson('/api/push/unsubscribe',{endpoint:sub.endpoint}).then(function(){return sub.unsubscribe()});
     }).then(syncPushBtn);
     return;
   }
@@ -5869,7 +5835,7 @@ pushBtn.addEventListener('click',function(){
     return step('正在准备…',Promise.all([navigator.serviceWorker.ready,fetch('/api/push/key').then(function(r){return r.json()})]),15).then(function(x){
       return step('正在向推送服务登记…',x[0].pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(x[1].publicKey)}),20);
     }).then(function(sub){
-      return fetch('/api/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({subscription:sub.toJSON()})})
+      return postJson('/api/push/subscribe',{subscription:sub.toJSON()})
     }).then(function(r){
       if(!r.ok)throw new Error('保存订阅失败');
       return fetch('/api/push/test',{method:'POST'});
@@ -5909,10 +5875,10 @@ function newSibling(s){
     pickChips($('#newModels'),[{value:null,label:keepM}].concat(ms.map(function(m){return {value:m.value,label:m.value==='default'?'默认':modelShort(m.resolved||m.value)}})),null,function(v){newPick.model=v});
     pickChips($('#newEfforts'),[{value:null,label:keepE}].concat(EFFORTS.map(function(e){return {value:e.key,label:e.label}})),null,function(v){newPick.effort=v});
   }
-  newDlg.classList.add('on');newDlg.setAttribute('aria-hidden','false');
+  showDlg(newDlg,true);
   $('#newName').focus();
 }
-function closeNew(){newDlg.classList.remove('on');newDlg.setAttribute('aria-hidden','true');newFrom=null}
+function closeNew(){showDlg(newDlg,false);newFrom=null}
 $('#newDir').addEventListener('input',function(e){e.target.style.width=Math.max(8,e.target.value.length+1)+'ch'});
 $('#newNo').addEventListener('click',closeNew);
 newDlg.addEventListener('click',function(e){if(e.target===newDlg)closeNew()});
@@ -5936,8 +5902,8 @@ function renameSess(s){
   if(t===null)return;
   t=t.replace(/\s+/g,' ').trim();
   if(!t||t===s.title)return;
-  fetch('/api/sessions/rename',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:s.id,title:t})})
-    .then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json().then(function(j){return {ok:r.ok,j:j}})})
+  postJson('/api/sessions/rename',{id:s.id,title:t})
+    .then(function(r){needLogin(r);return r.json().then(function(j){return {ok:r.ok,j:j}})})
     .then(function(x){if(!x.ok){alert(x.j.error||'改名失败');return}openSheet()})
     .catch(function(e){alert('改名失败：'+e.message)});
 }
@@ -5949,17 +5915,16 @@ function openDel(s){
   delTarget=s;
   $('#delTitle').textContent='删除「'+s.title+'」？';
   $('#delU').value='';$('#delP').value='';$('#delErr').textContent='';$('#delGo').disabled=false;
-  delDlg.classList.add('on');delDlg.setAttribute('aria-hidden','false');
+  showDlg(delDlg,true);
   $('#delU').focus();
 }
-function closeDel(){delDlg.classList.remove('on');delDlg.setAttribute('aria-hidden','true');delTarget=null}
+function closeDel(){showDlg(delDlg,false);delTarget=null}
 $('#delNo').addEventListener('click',closeDel);
 delDlg.addEventListener('click',function(e){if(e.target===delDlg)closeDel()});
 $('#delForm').addEventListener('submit',function(e){
   e.preventDefault();if(!delTarget)return;
   var t=delTarget;$('#delErr').textContent='';$('#delGo').disabled=true;
-  fetch('/api/sessions/delete',{method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify({id:t.id,username:$('#delU').value,password:$('#delP').value})})
+  postJson('/api/sessions/delete',{id:t.id,username:$('#delU').value,password:$('#delP').value})
   .then(function(r){if(r.status===401&&!r.headers.get('content-type'))location.replace('/login');return r.json().then(function(j){return {ok:r.ok,j:j}})})
   .then(function(x){
     if(!x.ok){$('#delErr').textContent=x.j.error||'删除失败';$('#delGo').disabled=false;return}

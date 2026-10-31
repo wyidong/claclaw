@@ -7,6 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { WebSocket } from 'ws';
 import { storeNow, splitGroups, hostOf } from './modelpick.mjs';
+import { tms } from './util.mjs';
 
 const CFG = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 export const OC_PREFIX = 'oc:';
@@ -121,7 +122,6 @@ const toolTarget = (name, a) => {
   return String(v).replace(/\s+/g, ' ').slice(0, 160);
 };
 
-const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : undefined; };   // 时间统一成毫秒（秒 / ISO 字符串都认）
 function toItems(msgs) {
   const items = [], toolIdx = new Map();
   for (const m of msgs) {

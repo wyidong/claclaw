@@ -3,15 +3,9 @@
 //   stdin/stdout 一行一条 JSON-RPC。收到的 session/update、权限请求按 sessionId 交给对应的 runner。
 // - AcpRunner：网页里打开的一个会话（接口和 Claude 的 Runner 对齐：send / interrupt / replyPermission / subscribe …）。
 //   各家只写差异：怎么接上会话、历史从哪读、模型名怎么显示、上下文大小从哪来、确认条怎么显示。
-import os from 'node:os';
-import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { storeNow, splitGroups } from './modelpick.mjs';
-
-export const HOME = os.homedir();
-export const tilde = p => p === HOME ? '~' : String(p || '').startsWith(HOME + '/') ? '~' + p.slice(HOME.length) : String(p || '');
-export const oneLine = t => String(t || '').replace(/\s+/g, ' ').trim();
-export const binEnv = () => ({ ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin'].join(':') });
+import { HOME, tilde, oneLine, binEnv } from './util.mjs';
 export const flatOptions = opt => (opt?.options || []).flatMap(o => o.options ? o.options : [o]);
 export const optName = (cfg, id) => {
   const o = cfg?.find(x => x.id === id);

@@ -7,11 +7,11 @@
 // 这个目录里在它启动之后有过改动的会话中最新的那个（claclaw 自己写的不算），就当作正在终端里用着。
 // 和 Claude 会话一样：原处闲置满「接管等待」的分钟数才能接管，接管会结束终端里的那个 opencode。
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { storeNow, opencodeInject } from './modelpick.mjs';
-import { AcpAgent, AcpRunner, HOME, tilde, oneLine, binEnv, optName, toolTarget } from './acp.mjs';
+import { AcpAgent, AcpRunner, optName, toolTarget } from './acp.mjs';
+import { HOME, tilde, oneLine, tms, findBin, runBin as run } from './util.mjs';
 
 const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(HOME, '.local', 'share'), 'opencode');
 const DB = path.join(DATA_DIR, 'opencode.db');
@@ -198,7 +198,6 @@ function toItems(msgs, parts) {
     if (!byMsg.has(p.message_id)) byMsg.set(p.message_id, []);
     byMsg.get(p.message_id).push(d);
   }
-  const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : undefined; };   // 时间统一成毫秒（秒 / ISO 字符串都认）
   const items = [];
   for (const m of msgs) {
     const md = parse(m.data);
@@ -223,14 +222,7 @@ function toItems(msgs, parts) {
 }
 
 // ---------- ACP 进程（底座见 acp.mjs） ----------
-function opBin() {
-  const dirs = new Set([path.dirname(process.execPath), ...(process.env.PATH || '').split(':'), path.join(HOME, '.opencode', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', path.join(HOME, '.local', 'bin')]);
-  for (const d of dirs) {
-    const p = d && path.join(d, 'opencode');
-    if (p && fs.existsSync(p)) { try { return fs.realpathSync(p); } catch { return p; } }
-  }
-  return null;
-}
+function opBin() { return findBin('opencode', [path.dirname(process.execPath), path.join(HOME, '.opencode', 'bin')]); }
 const agent = new AcpAgent({
   name: 'opencode', bin: opBin, missing: '没找到 opencode 命令，先装好 OpenCode',
   command: bin => [bin, ['acp']],
@@ -310,12 +302,7 @@ export class OpRunner extends AcpRunner {
 export const opNewSession = (cwd, opts) => OpRunner.create(cwd, opts);
 
 // 删除：先 opencode export 存一份到 claclaw 回收站（能用 opencode import 找回），再 opencode session delete
-const runBin = (args, ms) => new Promise((ok, fail) => {
-  const bin = opBin();
-  if (!bin) return fail(new Error('没找到 opencode 命令'));
-  execFile(bin, args, { cwd: HOME, env: binEnv(), timeout: ms, maxBuffer: 256 * 1024 * 1024 }, (e, out, err) =>
-    e ? fail(new Error(String(err || e.message).trim().split('\n').pop())) : ok(out));
-});
+const runBin = (args, ms) => run(opBin(), args, ms, { maxBuffer: 256 * 1024 * 1024, missing: '没找到 opencode 命令' });
 export async function opDelete(id, trashDir) {
   const sid = sidOf(id);
   if (!validSid(sid) || !opExists(id)) throw new Error('找不到这个会话');

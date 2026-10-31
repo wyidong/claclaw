@@ -291,7 +291,6 @@ var I18N={dict:{
 "完成配对":"Finish pairing",
 "审查结果看不懂":"review result unreadable",
 "宿主":"Host",
-"宿主（点开切换）":"Host (tap to switch)",
 "寅时":"Yin (shichen)",
 "密码":"Password",
 "密码不能全是空格":"Password can't be all spaces",

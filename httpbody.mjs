@@ -14,3 +14,7 @@ export function readBody(req, max = 4096) {
     req.on('error', reject);
   });
 }
+// 读 JSON 请求体：读不到、太大或不是 JSON 都返回 fallback（默认空对象）
+export async function jsonBody(req, max = 4096, fallback = {}) {
+  try { return JSON.parse(await readBody(req, max)); } catch { return fallback; }
+}

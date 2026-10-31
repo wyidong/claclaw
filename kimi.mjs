@@ -13,31 +13,18 @@
 // 没做「终端里正开着」的检测：同一个会话别在终端和网页里同时发消息。
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
 import { storeNow, kimiInject, kimiConfigMerge } from './modelpick.mjs';
-import { AcpAgent, AcpRunner, HOME, tilde, oneLine, binEnv, toolTarget } from './acp.mjs';
+import { AcpAgent, AcpRunner, toolTarget } from './acp.mjs';
+import { HOME, tilde, oneLine, tms, findBin, runBin as run } from './util.mjs';
 
 export const KM_PREFIX = 'km:';
 export const isKm = id => typeof id === 'string' && id.startsWith(KM_PREFIX);
 const sidOf = id => id.slice(KM_PREFIX.length);
 const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
-const tms = v => { const n = typeof v === 'string' ? (/^\d+$/.test(v) ? +v : Date.parse(v)) : +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : 0; };
 
-export function kmBin() {
-  const dirs = new Set([process.env.KIMI_CODE_HOME && path.join(process.env.KIMI_CODE_HOME, 'bin'), path.join(HOME, '.kimi-code', 'bin'), ...(process.env.PATH || '').split(':'), path.dirname(process.execPath), '/opt/homebrew/bin', '/usr/local/bin', path.join(HOME, '.local', 'bin')]);
-  for (const d of dirs) {
-    const p = d && path.join(d, 'kimi');
-    if (p && fs.existsSync(p)) { try { return fs.realpathSync(p); } catch { return p; } }
-  }
-  return null;
-}
+export const kmBin = () => findBin('kimi', [process.env.KIMI_CODE_HOME && path.join(process.env.KIMI_CODE_HOME, 'bin'), path.join(HOME, '.kimi-code', 'bin')]);
 export const kmInstalled = () => !!kmBin();
-const runBin = (args, ms) => new Promise((ok, fail) => {
-  const bin = kmBin();
-  if (!bin) return fail(new Error('没找到 kimi 命令，先装好 Kimi Code CLI'));
-  execFile(bin, args, { cwd: HOME, env: binEnv(), timeout: ms, maxBuffer: 64 * 1024 * 1024 }, (e, out, err) =>
-    e ? fail(new Error(String(err || e.message).trim().split('\n').pop())) : ok(out));
-});
+const runBin = (args, ms) => run(kmBin(), args, ms, { missing: '没找到 kimi 命令，先装好 Kimi Code CLI' });
 
 // ---------- 会话列表 ----------
 let listCache = { at: 0, rows: null, p: null };
@@ -49,7 +36,7 @@ function normRow(s) {
     id,
     title: oneLine(pick(s, 'title', 'name', 'summary', 'lastPrompt') || '').slice(0, 100),
     cwd: String(pick(s, 'cwd', 'workDir', 'work_dir', 'workspace', 'directory') || ''),
-    updated: tms(pick(s, 'updatedAt', 'updated_at', 'lastUpdated', 'mtime', 'createdAt', 'created_at')),
+    updated: tms(pick(s, 'updatedAt', 'updated_at', 'lastUpdated', 'mtime', 'createdAt', 'created_at'), 0),
     model: String(pick(s, 'model', 'modelAlias') || ''),
     dir: String(s.sessionDir || ''),
   };

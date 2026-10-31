@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { findBin as bin } from './util.mjs';
 
 export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
 export const VIDEO_FRAMES = 12;
@@ -11,14 +12,6 @@ export const KEEP_DAYS_DEFAULT = 60;
 const EXT = { 'video/quicktime': 'mov', 'video/mp4': 'mp4', 'video/x-m4v': 'm4v', 'video/webm': 'webm', 'video/3gpp': '3gp' };
 const ID_RE = /^(v[0-9a-f]{16}\.(mov|mp4|m4v|webm|3gp)|f[0-9a-f]{16}\.[a-z0-9]{1,8})$/;   // v = 视频，f = 其他文件
 
-const BIN_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'];
-function bin(name) {
-  for (const d of (process.env.PATH || '').split(':').concat(BIN_DIRS)) {
-    const p = path.join(d, name);
-    try { fs.accessSync(p, fs.constants.X_OK); return p; } catch {}
-  }
-  return null;
-}
 const run = (cmd, args, opts = {}) => new Promise((resolve, reject) =>
   execFile(cmd, args, { maxBuffer: 20 * 1024 * 1024, timeout: 60000, ...opts }, (e, out) => e ? reject(e) : resolve(out)));
 

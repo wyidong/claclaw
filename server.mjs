@@ -1,4 +1,4 @@
-// claclaw —— 用手机浏览器接管本机的 AI 编程会话（Claude Code / OpenClaw / OpenCode / DeepSeek Harness）。
+// claclaw —— 用手机浏览器接管本机的 AI 编程会话（Claude Code / OpenClaw / OpenCode / DeepSeek Harness / Kimi Code）。
 // 网页服务默认只监听 127.0.0.1 和本机的 Tailscale IP；登录要密码（初始账号 + 最近一次设置，两者都有效）。
 // 会话用 Claude Agent SDK 驱动：改文件、跑命令前会问一次，等网页上点「允许 / 拒绝」；
 // 原处（终端 / VS Code）闲置够久，网页端才能接管，接管时会核对进程启动时间，避免误杀别的进程。
@@ -29,7 +29,8 @@ const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
-import { readBody } from './httpbody.mjs';
+import { readBody, jsonBody } from './httpbody.mjs';
+import { relPath, findBin, readJson } from './util.mjs';
 import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, BUSY_MAX, SEEN_TTL } from './peerqueue.mjs';
@@ -181,10 +182,7 @@ function claudeTokenPublic(req) {
 }
 function saveClaudeToken(tok) {
   if (!tok) return fs.rmSync(CLAUDE_TOKEN_FILE, { force: true });
-  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
-  const tmp = CLAUDE_TOKEN_FILE + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify({ token: tok, at: Date.now() }), { mode: 0o600 });
-  fs.renameSync(tmp, CLAUDE_TOKEN_FILE);
+  writeJsonAtomic(CLAUDE_TOKEN_FILE, { token: tok, at: Date.now() });
 }
 // 保存前用它真发一句（haiku），确认令牌能用；返回空串 = 能用，否则是错误说明（去掉了令牌本身）
 async function probeClaudeToken(tok) {
@@ -388,13 +386,6 @@ function jsonlPathOf(info) {
 
 // ---------- 把工具调用整理成卡片要显示的东西 ----------
 
-function relPath(p, cwd) {
-  if (typeof p !== 'string') return '';
-  if (cwd && p.startsWith(cwd + '/')) return p.slice(cwd.length + 1);
-  if (p === HOME) return '~';
-  if (p.startsWith(HOME + '/')) return '~' + p.slice(HOME.length);
-  return p;
-}
 
 const LOGIN_TOOL = 'mcp__claclaw__set_web_login';
 
@@ -756,7 +747,7 @@ function claclawMcp(sessionId) {
         },
         { alwaysLoad: true },
       ),
-      // claclaw 协同：只有加入协同的会话能用（每次调用时检查，设置改了立刻生效）
+      // claclaw 协同：本机会话之间都能用；跨电脑只能找对方开放的会话（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
         '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
@@ -799,7 +790,7 @@ const peerAllowed = (c, p) => Array.isArray(p?.allow) ? c.sessions.filter(id => 
 const PEER_SID = /^([0-9a-f-]{36}|(ds|op|oc|km):\S{1,200})$/;
 const clawOfId = id => isDs(id) ? 'deepseek' : isOp(id) ? 'opencode' : isKm(id) ? 'kimi' : isOc(id) ? 'openclaw' : 'claude';
 const runnerOf = id => (isDs(id) ? dsRunners : isOp(id) ? opRunners : isKm(id) ? kmRunners : isOc(id) ? ocRunners : runners).get(id);
-// 给对方看的短 ID（对方用它的开头匹配会话）：Claude 取前 8 位；DeepSeek / OpenCode 保留前缀再取 8 位；OpenClaw 的 key 本来就短，原样给
+// 给对方看的短 ID（对方用它的开头匹配会话）：Claude 取前 8 位；DeepSeek / OpenCode / Kimi 保留前缀再取 8 位；OpenClaw 的 key 本来就短，原样给
 const peerShortId = id => { const m = id.match(/^(ds:(?:session-)?|op:(?:ses_)?|km:(?:session_)?)/); return m ? id.slice(0, m[0].length + 8) : isOc(id) ? id : id.slice(0, 8); };
 // 某个对方能看到的会话（统一成 {sessionId, claw, title, cwd}；Claude 的还带着 SDK 原来的字段，送消息时要用）
 async function peerSessionInfos(c, p) {
@@ -830,7 +821,7 @@ function quotaHit(text) {
 }
 // 把对方的消息送进会话，收集这一轮的回复
 // 找到（没有就拉起）接收协同消息的会话进程；各 Claw 的进程对外接口一样：subscribe / send / emit / turn.done
-// ---------- 会话找会话：本机四个 Claw 之间、以及跨电脑（协同）----------
+// ---------- 会话找会话：本机各个 Claw 之间、以及跨电脑（协同）----------
 // Claude 会话的 peer_sessions / peer_send 工具、本机命令 claclaw-peer 共用这一套。
 // 发起方必须认得出是哪个会话（fromId）：本机命令没带 --from 时，按「命令在哪个目录跑 + 哪个会话正在回复」自动认；认不出就拒绝。
 // 规矩：本机的会话之间都能互相找；找另一台电脑，发起的会话要在协同池里，且只能找开放了它的对方。
@@ -969,7 +960,6 @@ async function waitJob(job, sec) {
   return res;
 }
 async function handleLocal(req, res, url) {
-  const ip = req.socket.remoteAddress || '';
   if (!isDirectLocal(req) || req.headers['x-forwarded-proto'] || req.headers.forwarded || !skills.checkLocal(req.headers['x-claclaw-local'])) return sendJson(res, 403, { ok: false, error: '只接受本机带令牌的请求' });
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
@@ -986,7 +976,7 @@ async function handleLocal(req, res, url) {
     return sendJson(res, 200, await peerListCore({ fromId: f.id, to: q.get('to') || '' }));
   }
   if (url.pathname === '/api/local/peer/send' && req.method === 'POST') {
-    let b = {}; try { b = JSON.parse(await readBody(req, 64 * 1024)); } catch {}
+    let b = await jsonBody(req, 64 * 1024);
     const f = await resolveFrom(String(b.from || '').trim(), String(b.cwd || ''));
     if (!f.id) return sendJson(res, 200, { ok: false, error: f.error });
     const job = crypto.randomBytes(4).toString('hex');
@@ -1175,7 +1165,7 @@ const peerSeenDisk = new DiskMap(path.join(DATA, 'peer-seen.json'), { ttl: SEEN_
 const seenRecord = (code, obj) => ({ at: Date.now(), code, obj: { ...obj, reply: obj?.reply ? String(obj.reply).slice(0, 8000) : obj?.reply, partial: undefined } });
 const cleanIp = ip => String(ip || '').replace(/^::ffff:/, '');
 async function peerHandler(req, res) {
-  const out = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const out = (code, obj) => sendJson(res, code, obj);
   const c = loadPeer();
   const u = new URL(req.url, 'http://x');
   const sub = u.pathname.replace(/\/+$/, '');
@@ -1184,7 +1174,7 @@ async function peerHandler(req, res) {
   // 经中继隧道进来的请求：隧道就跑在本机（来源是本机地址），真正的来源 IP 在 x-forwarded-for 里（中继填的）
   const sockIp = cleanIp(req.socket.remoteAddress), fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   const ip = fwd && /^[\d.:a-f]+$/i.test(fwd) && (sockIp === '127.0.0.1' || sockIp === '::1' || sockIp === lanIp()) ? cleanIp(fwd) : sockIp;
-  const readJson = async () => { try { return JSON.parse(await readBody(req, 64 * 1024)); } catch { return null; } };
+  const readJson = () => jsonBody(req, 64 * 1024, null);
   try {
     // 1. 配对申请：谁都可以申请，但要我们这边的人把两位数配对码告诉对方才能完成
     if (route === '/pair') {
@@ -1750,7 +1740,7 @@ class Runner {
   }
   unsubscribe(ws) { this.subs.delete(ws); this.maybeScheduleClose(); }
 
-  // 没人看、也没在跑 → 一分钟后关掉进程，把会话还给终端
+  // 没人看、也没在跑 → 过一会儿（设置里的空闲关闭时间）关掉进程，把会话还给终端
   // 新建的、还没有会话文件（= 一条消息都没发过）
   unsent() { return this.isNew && !fs.existsSync(jsonlPathOf(this.info)); }
 
@@ -1797,7 +1787,7 @@ const WEB_SESSIONS = path.join(DATA, 'web-sessions.json');
 // 所以推送时可以顺便用系统直接响一声（只在 macOS 上有效）。开关存在 data/settings.json，网页上可开关。
 const SETTINGS = path.join(DATA, 'settings.json');
 const SOUND_OK = process.platform === 'darwin';
-function settings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
+function settings() { return readJson(SETTINGS); }
 function saveSettings(patch) {
   const next = { ...settings(), ...patch };
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
@@ -1836,7 +1826,7 @@ function ocTurnDone(r, ok, text) {
   const badge = markUnread(r.id), title = r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : isKm(r.id) ? 'Kimi' : 'OpenClaw');
   alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
-// DeepSeek / OpenCode 会话要你确认操作：没人看着就推送
+// ACP 的 Claw（DeepSeek / OpenCode / Kimi）会话要你确认操作：没人看着就推送
 function dsAsk(r, body) {
   const w = r.watched();
   if (w && !PUSH_ALWAYS) return;
@@ -1886,11 +1876,7 @@ function toolActivity(name = '') {
 }
 
 // ---------- 这台电脑装了哪些 Claw（没装的不在网页上列出来）----------
-function inPath(name) {
-  const dirs = new Set([...(process.env.PATH || '').split(':'), '/usr/local/bin', '/opt/homebrew/bin', path.join(HOME, '.local', 'bin')]);
-  for (const d of dirs) if (d && fs.existsSync(path.join(d, name))) return true;
-  return false;
-}
+const inPath = name => !!findBin(name);
 function detectClaws() {
   // 有些 Claw 要新一点的 Node 才读得了它的会话（DeepSeek 要 zstd，OpenCode 要 node:sqlite）。
   // 这种情况不是「即将支持」，而是「这台机器的 Node 版本不够」，要把原因说清楚。
@@ -1908,7 +1894,7 @@ function detectClaws() {
 // 推送通知（回复完了 / 等你确认）时记一条未读；任何设备打开并正在看这个会话时清掉。
 // 服务器统一记，手机和电脑看到的红点、角标是同一份；存在 data/unread.json，重启不丢。
 const UNREAD_FILE = path.join(DATA, 'unread.json');
-function unreadMap() { try { return JSON.parse(fs.readFileSync(UNREAD_FILE, 'utf8')) || {}; } catch { return {}; } }
+function unreadMap() { return readJson(UNREAD_FILE); }
 const unreadTotal = u => Object.values(u).reduce((a, n) => a + (n || 0), 0);
 function saveUnread(u) {
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
@@ -1956,7 +1942,7 @@ startDevNotify({ log, onOnline: async () => {
 // ---------- 在 claclaw 里的最近活动 ----------
 // 网页里打开、发消息、一轮结束都算「在 claclaw 活跃」；会话列表的「最近活跃」只看这个（不看终端 / VS Code）
 const WEB_ACTIVE_FILE = path.join(DATA, 'web-active.json');
-let webActive = (() => { try { return JSON.parse(fs.readFileSync(WEB_ACTIVE_FILE, 'utf8')) || {}; } catch { return {}; } })();
+let webActive = readJson(WEB_ACTIVE_FILE);
 let webActiveTimer = null;
 function touchWeb(id) {
   if (!id) return;
@@ -1972,9 +1958,10 @@ function touchWeb(id) {
 // 「最近」：所有 Claw 的会话按活跃时间排成一个列表（像微信聊天列表）。清空只是记下清空的时间，
 // 之后有新动静的会话才回到列表里；会话本身不删
 const RECENT_FILE = path.join(DATA, 'recent.json');
-let recentCleared = (() => { try { return Number(JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).clearedAt) || 0; } catch { return 0; } })();
+const recentSaved = readJson(RECENT_FILE);
+let recentCleared = Number(recentSaved.clearedAt) || 0;
 // 单条从「最近」里移除：记下移除时间，之后有新消息才回来（会话本身不删）
-let recentHidden = (() => { try { const h = JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')).hidden; return h && typeof h === 'object' ? h : {}; } catch { return {}; } })();
+let recentHidden = recentSaved.hidden && typeof recentSaved.hidden === 'object' ? recentSaved.hidden : {};
 const saveRecent = () => writeJsonAtomic(RECENT_FILE, { clearedAt: recentCleared, hidden: recentHidden });
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 async function recentList() {
@@ -2028,12 +2015,7 @@ function rememberPick(id, patch) {
   all[id] = e;
   saveWebSessions(all);
 }
-function saveWebSessions(all) {
-  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
-  const tmp = WEB_SESSIONS + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(all, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, WEB_SESSIONS);
-}
+function saveWebSessions(all) { writeJsonAtomic(WEB_SESSIONS, all); }
 // 切到「跳过确认」：换一个允许跳过确认的进程（会话内容不变，接着 resume），看着它的网页都转到新进程上
 function switchToBypass(old) {
   rememberWebSession(old.id, 'bypassPermissions', true);
@@ -2183,8 +2165,7 @@ async function handleSetup(req, res) {
   // 首次设置只认 127.0.0.1 直连（本机浏览器，或 SSH 隧道 ssh -L 8787:127.0.0.1:8787）：
   // 不然谁先打开网页谁就能设置初始账号
   if (!isLocalReq(req)) { log('setup refused from', realIp(req)); return sendJson(res, 403, { error: '首次设置只能用 http://127.0.0.1:' + PORT + ' 打开（本机浏览器，或 SSH 隧道）' }); }
-  let body = {};
-  try { body = JSON.parse(await readBody(req)); } catch {}
+  let body = await jsonBody(req);
   try {
     setupMaster(body.username, body.password);
   } catch (e) {
@@ -2200,8 +2181,7 @@ async function handleLogin(req, res) {
   if (globalLocked(req)) return sendJson(res, 429, { error: globalLockMsg() });
   const f = lockedFor(ip);
   if (f) return sendJson(res, 429, { error: tooManyTries(f) });
-  let body = {};
-  try { body = JSON.parse(await readBody(req)); } catch {}
+  let body = await jsonBody(req);
   const via = verify(body.username, body.password);
   if (!via) {
     const { n } = noteFail(ip);
@@ -2218,6 +2198,7 @@ async function handleLogin(req, res) {
 // ---------- 删除会话：要求再次输入初始账号；文件挪进 data/trash/，不直接删 ----------
 
 const TRASH = path.join(DATA, 'trash');
+const trashPath = name => path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_' + name);   // 回收站里的文件名：时间_名字
 // 回收站里的备份保留 30 天：启动时和每次删除之后清一次（目录和文件都清）
 const TRASH_KEEP_DAYS = 30;
 function trimTrash() {
@@ -2236,8 +2217,7 @@ async function handleDelete(req, res) {
   const f = lockedFor(ip);
   if (f) return sendJson(res, 429, { error: tooManyTries(f) });
   if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-  let body = {};
-  try { body = JSON.parse(await readBody(req)); } catch {}
+  let body = await jsonBody(req);
   if (!verifyMaster(body.username, body.password)) {
     const { n } = noteFail(ip);
     noteGlobalFail(req);
@@ -2280,7 +2260,7 @@ async function handleDelete(req, res) {
       const dir = dsSessionDir(body.id);
       if (!dir) return sendJson(res, 404, { error: '找不到这个会话' });
       if (r) await new Promise(ok => setTimeout(ok, 500));   // 等 dsh 关掉会话、写完收尾
-      const dest = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_dsh_' + path.basename(dir));
+      const dest = trashPath('dsh_' + path.basename(dir));
       fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 });
       try { trimTrash(); } catch {}
       fs.renameSync(dir, dest);
@@ -2308,7 +2288,7 @@ async function handleDelete(req, res) {
     for (let i = 0; i < 50 && liveRegistry().get(info.sessionId)?.length; i++) await new Promise(ok => setTimeout(ok, 100));
     await new Promise(ok => setTimeout(ok, 200));
   }
-  const dest = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_' + info.sessionId);
+  const dest = trashPath(info.sessionId);
   fs.mkdirSync(dest, { recursive: true, mode: 0o700 });
   try { trimTrash(); } catch {}
   fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: info.sessionId, title: info.customTitle || info.summary, cwd: info.cwd, from: path.dirname(file), deletedAt: new Date().toISOString() }, null, 2));
@@ -2324,8 +2304,7 @@ async function handleDelete(req, res) {
 
 async function handleRename(req, res) {
   if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-  let body = {};
-  try { body = JSON.parse(await readBody(req)); } catch {}
+  let body = await jsonBody(req);
   const title = String(body.title ?? '').replace(/\s+/g, ' ').trim();
   if (!title) return sendJson(res, 400, { error: '名字不能为空' });
   if (title.length > 100) return sendJson(res, 400, { error: '名字太长了（最多 100 个字）' });
@@ -2388,7 +2367,7 @@ const handler = async (req, res) => {
     const scBg = url.pathname.match(/^\/sc-bg\/(\d{1,2})\.jpg$/);
     if (scBg && +scBg[1] < 12) {
       const f = path.join(DATA, 'sc-bg', scBg[1] + '.jpg');
-      if (!fs.existsSync(f)) { res.writeHead(404, { 'cache-control': 'no-store' }); return res.end(); }
+      if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
       return fs.createReadStream(f).pipe(res);
     }
@@ -2410,7 +2389,7 @@ const handler = async (req, res) => {
     // 「这个端口上是不是 claclaw」—— 免登录，只回电脑名、版本（页面标题里的宿主名也用它）
     if (url.pathname === '/api/claclaw/hello') {
       const si = await slowInfo(ROOT).catch(() => ({}));
-      return sendJson(res, 200, { app: 'claclaw', name: si.name || os.hostname(), version: si.commit || '' }, { 'cache-control': 'no-store' });
+      return sendJson(res, 200, { app: 'claclaw', name: si.name || os.hostname(), version: si.commit || '' });
     }
     // 本机命令（技能里的 claclaw-peer 等）：只认本机 + ~/.claclaw/local.json 里的令牌，不走登录
     if (url.pathname.startsWith('/api/local/')) return handleLocal(req, res, url);
@@ -2450,8 +2429,7 @@ const handler = async (req, res) => {
     if ((url.pathname === '/api/fs/open' || url.pathname === '/api/fs/read') && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-      let body = {};
-      try { body = JSON.parse(await readBody(req, 8192)); } catch {}
+      let body = await jsonBody(req, 8192);
       if (url.pathname === '/api/fs/read') {
         const abs = String(body.path || '');
         let st = null; try { st = path.isAbsolute(abs) && fs.statSync(abs); } catch {}
@@ -2493,8 +2471,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/push/status') return sendJson(res, 200, { subscribed: push.hasSubscription(url.searchParams.get('endpoint') || '') });
     if ((url.pathname === '/api/push/subscribe' || url.pathname === '/api/push/unsubscribe') && req.method === 'POST') {
       if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-      let body = {};
-      try { body = JSON.parse(await readBody(req, 8192)); } catch {}
+      let body = await jsonBody(req, 8192);
       try {
         if (url.pathname === '/api/push/subscribe') { push.subscribe(body.subscription, req.headers['user-agent']); log('push subscribed', push.subscriptionCount(), 'device(s)'); }
         else push.unsubscribe(String(body.endpoint || ''));
@@ -2503,8 +2480,7 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/prefs' && req.method === 'POST') {   // 手机网页的个人设置备份（见 clientPrefs）
       if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-      let body = null;
-      try { body = JSON.parse(await readBody(req, 32 * 1024)); } catch {}
+      const body = await jsonBody(req, 32 * 1024, null);
       if (!body || typeof body !== 'object' || Array.isArray(body)) return sendJson(res, 400, { error: 'bad request' });
       const next = clientPrefs();
       for (const [k, v] of Object.entries(body)) {
@@ -2521,8 +2497,7 @@ const handler = async (req, res) => {
         if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
         if (!isLocalReq(req)) { log('claude-token refused from', realIp(req)); return sendJson(res, 403, { error: '长期令牌只能在这台电脑的浏览器里设置（http://127.0.0.1:' + PORT + '）' }); }
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-        let body = {};
-        try { body = JSON.parse(await readBody(req, 4096)); } catch {}
+        let body = await jsonBody(req, 4096);
         if (body.clear === true) {
           saveClaudeToken('');
           const rc = recycleClaudeRunners();
@@ -2538,7 +2513,7 @@ const handler = async (req, res) => {
         log('claude-token set …' + tok.slice(-4), JSON.stringify(rc));
         return sendJson(res, 200, { ...claudeTokenPublic(req), ...rc });
       }
-      return sendJson(res, 200, claudeTokenPublic(req), { 'cache-control': 'no-store' });
+      return sendJson(res, 200, claudeTokenPublic(req));
     }
     // 模型库（Claw 页 → 模型管理）：登录了的网页都能看、能改；key 只进不出（只给后 4 位），日志不写 key
     if (url.pathname === '/api/models') {
@@ -2551,7 +2526,7 @@ const handler = async (req, res) => {
         let r;
         try { r = modelOp(store, body); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
         if (r.removed) {   // 删掉的供应商（连 key）备份进回收站，30 天后自动清
-          const f = path.join(TRASH, new Date().toISOString().replace(/[:.]/g, '-') + '_model-provider-' + r.removed.id + '.json');
+          const f = trashPath('model-provider-' + r.removed.id + '.json');
           try { fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 }); fs.writeFileSync(f, JSON.stringify(r.removed, null, 2), { mode: 0o600 }); trimTrash(); } catch (e) { log('models trash failed', e.message); }
         }
         saveStore(MODELS_FILE, store);
@@ -2566,8 +2541,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/settings/session') {
       if (req.method === 'POST') {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-        let body = {};
-        try { body = JSON.parse(await readBody(req, 1024)); } catch {}
+        let body = await jsonBody(req, 1024);
         const patch = {};
         if (body.idleCloseMin != null) patch.idleCloseMin = Math.min(1440, Math.max(1, Math.round(Number(body.idleCloseMin) || 10)));
         if (body.takeoverMin != null) patch.takeoverMin = Math.min(1440, Math.max(0, Math.round(Number(body.takeoverMin) || 0)));
@@ -2582,8 +2556,8 @@ const handler = async (req, res) => {
     // 技能：列表（每个技能在各安装位置的状态）、安装、卸载
     if (url.pathname === '/api/skills' || url.pathname.startsWith('/api/skills/')) {
       const installed = detectClaws().filter(c => c.installed).map(c => c.id);
-      if (req.method === 'GET' && url.pathname === '/api/skills') return sendJson(res, 200, skills.list(installed), { 'cache-control': 'no-store' });
-      let b = {}; try { b = JSON.parse(await readBody(req, 4096)); } catch {}
+      if (req.method === 'GET' && url.pathname === '/api/skills') return sendJson(res, 200, skills.list(installed));
+      let b = await jsonBody(req, 4096);
       const target = b.target || (b.claw ? skills.targetOf(b.claw) : '');
       try {
         if (url.pathname === '/api/skills/install' && req.method === 'POST') { skills.install(String(b.name || ''), target); log('skill installed', b.name, '→', target); }
@@ -2601,8 +2575,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/sound') {
       if (req.method === 'POST') {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
-        let body = {};
-        try { body = JSON.parse(await readBody(req, 1024)); } catch {}
+        let body = await jsonBody(req, 1024);
         if (typeof body.name === 'string' && SOUNDS.includes(body.name)) { saveSettings({ soundName: body.name }); localSound(true); } // 换声音：试听
         if (typeof body.on === 'boolean') {
           saveSettings({ localSound: body.on });
@@ -2629,7 +2602,7 @@ const handler = async (req, res) => {
           const r = dissectDs(recs), u = dsUsage(id), k = u && u.tokens;
           // dsh 的累计用量（含子代理）当作账单，给「对账」用
           if (k) r.summary.bill = { inp: k.uncachedInputTokens || 0, cr: k.cacheReadTokens || 0, cw: k.cacheWriteTokens || 0, out: k.outputTokens || 0, total: (k.uncachedInputTokens || 0) + (k.cacheReadTokens || 0) + (k.cacheWriteTokens || 0) + (k.outputTokens || 0), source: 'dsh 累计用量（含子代理 ' + (u.subagents || 0) + ' 个）' };
-          return sendJson(res, 200, { claw: 'deepseek', id, ...r }, { 'cache-control': 'no-store' });
+          return sendJson(res, 200, { claw: 'deepseek', id, ...r });
         }
         if (isKm(id)) {
           const info = await kmInfo(id).catch(() => null);
@@ -2638,7 +2611,7 @@ const handler = async (req, res) => {
           const recs = [];
           for (const ln of fs.readFileSync(f, 'utf8').split('\n')) { if (ln) try { recs.push(JSON.parse(ln)); } catch {} }
           const r = dissectKimi(recs, info.cwd || '');
-          return sendJson(res, 200, { claw: 'kimi', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r }, { 'cache-control': 'no-store' });
+          return sendJson(res, 200, { claw: 'kimi', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r });
         }
         if (/^(op|oc):/.test(id)) return sendJson(res, 501, { error: '这个 Claw 还不支持解剖' });
         if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(res, 400, { error: '会话 ID 不对' });
@@ -2650,11 +2623,11 @@ const handler = async (req, res) => {
         const t0 = Date.now();
         const r = await dissectClaude(f, info.cwd || '');
         log('dissect', id.slice(0, 8), r.summary.turns + ' turns', (Date.now() - t0) + 'ms');
-        return sendJson(res, 200, { claw: 'claude', id, title: info.customTitle || info.summary || '', cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', ...r }, { 'cache-control': 'no-store' });
+        return sendJson(res, 200, { claw: 'claude', id, title: info.customTitle || info.summary || '', cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', ...r });
       } catch (e) { log('dissect error', id.slice(0, 8), e && e.message); return sendJson(res, 500, { error: '解剖失败：' + String((e && e.message) || e) }); }
     }
     if (url.pathname === '/api/recent' && req.method === 'GET') {
-      return sendJson(res, 200, await recentList(), { 'cache-control': 'no-store' });
+      return sendJson(res, 200, await recentList());
     }
     if (url.pathname === '/api/recent/clear' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
@@ -2664,7 +2637,7 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/recent/hide' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
-      let b = {}; try { b = JSON.parse(await readBody(req, 1024)); } catch {}
+      let b = await jsonBody(req, 1024);
       const id = String(b.id || '').slice(0, 200);
       if (!id) return sendJson(res, 400, { error: '缺会话 id' });
       recentHidden[id] = Date.now();
@@ -2673,7 +2646,7 @@ const handler = async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'openclaw') {
-      try { return sendJson(res, 200, peerMark(await ocSessionList(log)), { 'cache-control': 'no-store' }); }
+      try { return sendJson(res, 200, peerMark(await ocSessionList(log))); }
       catch (e) { return sendJson(res, 502, { error: e.message }); }
     }
     if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
@@ -2686,7 +2659,7 @@ const handler = async (req, res) => {
         const poolInfo = c.sessions.map(id => { const s = all.find(x => x.sessionId === id); return s ? { id, title: String(s.title || '').replace(/\s+/g, ' ').slice(0, 80), cwd: s.cwd || '', claw: s.claw } : { id }; });
         return sendJson(res, 200, { ...pub(c), poolInfo });
       }
-      let b = {}; try { b = JSON.parse(await readBody(req, 16 * 1024) || '{}'); } catch {}
+      let b = await jsonBody(req, 16 * 1024);
       const act = url.pathname.slice('/api/peer'.length);
       // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
       // 手机、经中继打开的网页也能做全部操作，包括「开放哪些会话」（协同池、给某个对方开放哪些）
@@ -2826,9 +2799,9 @@ const handler = async (req, res) => {
     // 电脑合成语音：手机网页拿去播放（登录后才能用）
     if (url.pathname === '/api/tts/voices') return sendJson(res, 200, await ttsVoices());
     if (url.pathname === '/api/tts/warm' && req.method === 'POST') { ttsWarm(); return sendJson(res, 200, { ok: true }); }
-    if (url.pathname === '/api/tts/log' && req.method === 'POST') { let b = {}; try { b = JSON.parse(await readBody(req, 1024)); } catch {} log('tts client', String(b.m || '').replace(/\s+/g, ' ').slice(0, 200)); return sendJson(res, 200, { ok: true }); }
+    if (url.pathname === '/api/tts/log' && req.method === 'POST') { let b = await jsonBody(req, 1024); log('tts client', String(b.m || '').replace(/\s+/g, ' ').slice(0, 200)); return sendJson(res, 200, { ok: true }); }
     if (url.pathname === '/api/tts' && req.method === 'POST') {
-      let b = {}; try { b = JSON.parse(await readBody(req, 8192)); } catch {}
+      let b = await jsonBody(req, 8192);
       try {
         const t0 = Date.now();
         const { buf, type } = await ttsSynth(b.text, String(b.voice || ''), b.rate);
@@ -2850,24 +2823,23 @@ const handler = async (req, res) => {
         sessions: { claude: count(runners), openclaw: count(ocRunners), deepseek: count(dsRunners), opencode: count(opRunners), kimi: count(kmRunners), push: push.subscriptionCount() },
         claws: { claude: { ...claws.claude, ...count(runners) }, openclaw: { ...claws.openclaw, ...count(ocRunners) }, deepseek: { ...claws.deepseek, ...count(dsRunners) }, opencode: { ...claws.opencode, ...count(opRunners) }, kimi: { ...claws.kimi, ...count(kmRunners) } },
       });
-      return sendJson(res, 200, info, { 'cache-control': 'no-store' });
+      return sendJson(res, 200, info);
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'kimi') {
-      try { return sendJson(res, 200, peerMark(await kmSessionList({ busy: id => !!kmRunners.get(id)?.busy })), { 'cache-control': 'no-store' }); }
+      try { return sendJson(res, 200, peerMark(await kmSessionList({ busy: id => !!kmRunners.get(id)?.busy }))); }
       catch (e) { return sendJson(res, 500, { error: 'Kimi 会话列表读取失败：' + e.message }); }
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'opencode') {
-      try { return sendJson(res, 200, peerMark(opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() })), { 'cache-control': 'no-store' }); }
+      try { return sendJson(res, 200, peerMark(opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() }))); }
       catch (e) { return sendJson(res, 500, { error: e.message }); }
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'deepseek') {
-      try { return sendJson(res, 200, peerMark(dsSessionList({ busy: id => !!dsRunners.get(id)?.busy })), { 'cache-control': 'no-store' }); }
+      try { return sendJson(res, 200, peerMark(dsSessionList({ busy: id => !!dsRunners.get(id)?.busy }))); }
       catch (e) { return sendJson(res, 500, { error: e.message }); }
     }
     if (url.pathname === '/api/sessions') {
       const list = await sessionList();
-      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(JSON.stringify(list));
+      sendJson(res, 200, list);
       setTimeout(() => prewarmHistory(list), 50);   // 回到列表后点进去就快
       return;
     }
