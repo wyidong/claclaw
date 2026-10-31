@@ -20,11 +20,12 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
+import { AcpRunner } from './acp.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { userTextOf, dissectClaude, dissectDs, dissectKimi } from './dissect.mjs';
 import { opModelsChanged } from './opencode.mjs';
-import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opCtx, opTokSum } from './opencode.mjs';
+import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opTokSum } from './opencode.mjs';
 const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
@@ -786,22 +787,88 @@ function isLocalReq(req) {
 }
 // 某个对方能看到的会话：协同会话池 ∩ 开放给它的（没单独设过 = 全部开放）
 const peerAllowed = (c, p) => Array.isArray(p?.allow) ? c.sessions.filter(id => p.allow.includes(id)) : c.sessions;
-// 协同会话可以是任意 Claw 的：Claude（UUID）、DeepSeek（ds:）、OpenCode（op:）、OpenClaw（oc:）
-const PEER_SID = /^([0-9a-f-]{36}|(ds|op|oc|km):\S{1,200})$/;
-const clawOfId = id => isDs(id) ? 'deepseek' : isOp(id) ? 'opencode' : isKm(id) ? 'kimi' : isOc(id) ? 'openclaw' : 'claude';
-const runnerOf = id => (isDs(id) ? dsRunners : isOp(id) ? opRunners : isKm(id) ? kmRunners : isOc(id) ? ocRunners : runners).get(id);
-// 给对方看的短 ID（对方用它的开头匹配会话）：Claude 取前 8 位；DeepSeek / OpenCode / Kimi 保留前缀再取 8 位；OpenClaw 的 key 本来就短，原样给
-const peerShortId = id => { const m = id.match(/^(ds:(?:session-)?|op:(?:ses_)?|km:(?:session_)?)/); return m ? id.slice(0, m[0].length + 8) : isOc(id) ? id : id.slice(0, 8); };
+// ---------- Claw 登记表：Claude 以外的每个 Claw 一行，server 里按会话 ID 前缀查表，不再一家写一段 ----------
+// id / label：网页和日志里的名字；prefix：会话 ID 前缀；runners：开着的会话；logName：日志里的叫法
+// installed / supported / reason：装了没、这台机器能不能用（不能用的原因）；ready：现在能列会话（OpenClaw 还要网关开着）
+// running：宿主页「在跑」；list：会话列表；make(id)：为已有会话建 runner（会话不存在返回 null）
+// acp：走 ACP 底座（AcpRunner）；attachOnOpen：打开时先接上（Kimi 的历史靠 session/load 重放）
+// takeover(id)：终端里正占着它的信息（OpenCode）；refCwd(id)：参照会话的目录；newSession(cwd)：新建
+// openExtra / newExtra：session.opened 里各家多给的字段；del(id, r)：删除（前面的占用检查是公共的）；rename：返回最终用的名字
+// short(id)：给协同对方看的短 ID（对方用它的开头匹配会话）——格式对方在用，不能变
+const shortKeep = re => id => { const m = id.match(re); return m ? id.slice(0, m[0].length + 8) : id.slice(0, 8); };
+const ocOpts = () => ({ log, onActivity: setActivity, onTurnDone: ocTurnDone });
+const CLAWS = [
+  {
+    id: 'openclaw', label: 'OpenClaw', logName: 'openclaw', prefix: 'oc:', is: isOc, runners: ocRunners,
+    installed: () => fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: () => true,
+    ready: () => ocGatewayUp(log), running: () => ocGatewayUp(log),
+    list: () => ocSessionList(log), make: id => new OcRunner(id, ocOpts()), short: id => id,   // OpenClaw 的 key 本来就短，原样给
+    del: id => ocDelete(id, log), rename: async (id, title) => { await ocRename(id, title, log); return title; },
+  },
+  {
+    id: 'deepseek', label: 'DeepSeek', logName: 'dsh', prefix: 'ds:', is: isDs, runners: dsRunners, acp: true,
+    installed: () => fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: dsSupported, reason: dsUnsupportedReason,
+    running: dsAcpRunning, shutdown: dsShutdown, exists: dsExists,
+    list: () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy }),
+    make: id => dsExists(id) ? new DsRunner(id, dsOpts()) : null,
+    refCwd: id => dsSessionList().find(s => s.id === id)?.cwd,
+    newSession: cwd => dsNewSession(cwd, dsOpts()),
+    openExtra: r => ({ usage: dsUsage(r.id) }), newExtra: r => ({ usage: dsUsage(r.id) }),
+    short: shortKeep(/^ds:(?:session-)?/),
+    rename: async (id, title) => (await dsRename(id, title)).title,
+    // dsh：整个会话目录挪进 claclaw 的回收站（和 Claude 会话一样能找回）
+    del: async (id, r) => {
+      const dir = dsSessionDir(id);
+      if (!dir) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
+      if (r) await new Promise(ok => setTimeout(ok, 500));   // 等 dsh 关掉会话、写完收尾
+      const dest = trashPath('dsh_' + path.basename(dir));
+      fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 });
+      try { trimTrash(); } catch {}
+      fs.renameSync(dir, dest);
+      fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: id, from: dir, deletedAt: new Date().toISOString() }, null, 2));
+    },
+  },
+  {
+    id: 'opencode', label: 'OpenCode', logName: 'opencode', prefix: 'op:', is: isOp, runners: opRunners, acp: true,
+    installed: opInstalled, supported: opSupported, reason: opUnsupportedReason,
+    running: opAcpRunning, shutdown: opShutdown, modelsChanged: opModelsChanged, exists: opExists,
+    list: () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() }),
+    make: id => opExists(id) ? new OpRunner(id, dsOpts()) : null,
+    // 终端里的 opencode 正开着它：和 Claude 会话一样，闲置够久才能接管，接管会结束终端里的 opencode
+    takeover: id => opTakeoverInfo(id, takeoverMin()), endHolders: opEndHolders,
+    refCwd: id => opSessionList().find(s => s.id === id)?.cwd,
+    newSession: cwd => opNewSession(cwd, dsOpts()),
+    openExtra: r => ({ tokSum: opTokSum(r.id) }),
+    short: shortKeep(/^op:(?:ses_)?/),
+    // opencode 的会话在它的数据库里：先导出一份 JSON 到回收站（opencode import 能找回），再删
+    del: id => opDelete(id, TRASH), rename: async (id, title) => { await opRename(id, title, log); return title; },
+  },
+  {
+    id: 'kimi', label: 'Kimi', logName: 'kimi', prefix: 'km:', is: isKm, runners: kmRunners, acp: true, attachOnOpen: true,
+    installed: kmInstalled, supported: () => true,
+    running: kmAcpRunning, shutdown: kmShutdown, modelsChanged: kmModelsChanged,
+    list: () => kmSessionList({ busy: x => !!kmRunners.get(x)?.busy }),
+    make: async id => { const s = await kmInfo(id).catch(() => null); return s ? new KmRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: async id => (await kmInfo(id).catch(() => null))?.cwd,
+    newSession: cwd => kmNewSession(cwd, dsOpts()),
+    short: shortKeep(/^km:(?:session_)?/),
+    // kimi 的会话：先 kimi export 一份 zip 到回收站，再删
+    del: id => kmDelete(id, TRASH, log), rename: async (id, title) => { await kmRename(id, title, log); return title; },
+  },
+];
+const clawOf = id => typeof id === 'string' ? CLAWS.find(c => c.is(id)) : undefined;   // undefined = Claude
+const clawById = name => CLAWS.find(c => c.id === name);
+const clawReady = async c => c.installed() && c.supported() && (c.ready ? await c.ready() : true);
+// 协同会话可以是任意 Claw 的：Claude（UUID）或带前缀的（ds: / op: / km: / oc:）
+const PEER_SID = new RegExp('^([0-9a-f-]{36}|(' + CLAWS.map(c => c.prefix.slice(0, -1)).join('|') + '):\\S{1,200})$');
+const clawOfId = id => clawOf(id)?.id || 'claude';
+const runnerOf = id => (clawOf(id)?.runners || runners).get(id);
+// 给对方看的短 ID：Claude 取前 8 位；其它按各自规则（见登记表 short）
+const peerShortId = id => { const c = clawOf(id); return c ? c.short(id) : id.slice(0, 8); };
 // 某个对方能看到的会话（统一成 {sessionId, claw, title, cwd}；Claude 的还带着 SDK 原来的字段，送消息时要用）
 async function peerSessionInfos(c, p) {
   const ids = peerAllowed(c, p), lists = {};
-  const load = {
-    claude: () => listSessions({ includeProgrammatic: true, limit: 2000 }),
-    deepseek: () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy }),
-    opencode: () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() }),
-    kimi: () => kmSessionList({ busy: x => !!kmRunners.get(x)?.busy }),
-    openclaw: () => ocSessionList(log),
-  };
+  const load = { claude: () => listSessions({ includeProgrammatic: true, limit: 2000 }), ...Object.fromEntries(CLAWS.map(c => [c.id, c.list])) };
   const out = [];
   for (const id of ids) {
     const claw = clawOfId(id);
@@ -828,10 +895,10 @@ function quotaHit(text) {
 // （这是用法上的规矩，不是安全边界：本机以你的身份运行的程序本来就读得到 claclaw 的数据。）
 const LOCAL_NAMES = ['本机', 'local'];
 const isLocalTo = to => LOCAL_NAMES.includes(String(to || '').trim().toLowerCase());
-const CLAW_LABEL = { claude: 'Claude', deepseek: 'DeepSeek', opencode: 'OpenCode', kimi: 'Kimi', openclaw: 'OpenClaw' };
+const CLAW_LABEL = { claude: 'Claude', ...Object.fromEntries(CLAWS.map(c => [c.id, c.label])) };
 const realp = p => { try { return fs.realpathSync(p); } catch { return p; } };
 function allRunners() {
-  return [[runners, 'claude'], [dsRunners, 'deepseek'], [opRunners, 'opencode'], [kmRunners, 'kimi'], [ocRunners, 'openclaw']]
+  return [[runners, 'claude'], ...CLAWS.map(c => [c.runners, c.id])]
     .flatMap(([m, claw]) => [...m.values()].filter(r => !r.closed).map(r => ({ r, claw })));
 }
 // 本机所有会话（统一成 {sessionId, claw, title, cwd}；Claude 的带着 SDK 原字段）
@@ -839,9 +906,9 @@ async function localSessions() {
   const out = [];
   const add = async (claw, load) => { let l = []; try { l = await load(); } catch {} return l; };
   for (const s of await add('claude', () => listSessions({ includeProgrammatic: true, limit: 2000 }))) out.push({ ...s, claw: 'claude', title: s.customTitle || s.summary || s.firstPrompt || '' });
-  for (const [claw, load] of [['deepseek', () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy })], ['opencode', () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() })], ['kimi', () => kmSessionList({ busy: x => !!kmRunners.get(x)?.busy })], ['openclaw', () => ocSessionList(log)]]) {
-    if (!detectClaws().some(c => c.id === claw && c.installed && c.supported)) continue;
-    for (const s of await add(claw, load)) out.push({ sessionId: s.id, claw, title: s.title || '', cwd: claw === 'openclaw' ? '' : s.cwd || '', lastModified: s.lastModified || 0 });
+  for (const c of CLAWS) {
+    if (!(await clawReady(c).catch(() => false))) continue;
+    for (const s of await add(c.id, c.list)) out.push({ sessionId: s.id, claw: c.id, title: s.title || '', cwd: c.id === 'openclaw' ? '' : s.cwd || '', lastModified: s.lastModified || 0 });
   }
   return out;
 }
@@ -994,36 +1061,16 @@ function peerMark(list) {
   });
 }
 async function peerRunner(info) {
-  const id = info.sessionId;
-  if (isDs(id)) {
-    let r = dsRunners.get(id);
-    if (!r) { if (!dsExists(id)) return [404, { ok: false, error: '会话不存在' }]; r = new DsRunner(id, dsOpts()); dsRunners.set(id, r); r.history(); }   // history() 顺带读出会话目录，发消息要用
-    return r;
-  }
-  if (isOp(id)) {
-    let r = opRunners.get(id);
-    if (!r) {
-      if (opTakeoverInfo(id, takeoverMin())) return [409, { ok: false, error: '这个会话正在对方电脑的终端里使用，暂时收不了消息' }];
-      if (!opExists(id)) return [404, { ok: false, error: '会话不存在' }];
-      r = new OpRunner(id, dsOpts()); opRunners.set(id, r); r.history();
-    }
-    return r;
-  }
-  if (isKm(id)) {
-    let r = kmRunners.get(id);
-    if (!r) {
-      const s = await kmInfo(id).catch(() => null);
-      if (!s) return [404, { ok: false, error: '会话不存在' }];
-      r = new KmRunner(id, { ...dsOpts(), info: s }); kmRunners.set(id, r);
-    }
-    return r;
-  }
-  if (isOc(id)) {
-    let r = ocRunners.get(id);
-    if (!r) {
-      r = new OcRunner(id, { log, onActivity: setActivity, onTurnDone: ocTurnDone }); ocRunners.set(id, r);
-      try { await r.open(); } catch (e) { r.dispose(); return [502, { ok: false, error: '连不上 OpenClaw 网关：' + e.message }]; }
-    }
+  const id = info.sessionId, c = clawOf(id);
+  if (c) {
+    let r = c.runners.get(id);
+    if (r) return r;
+    if (c.takeover?.(id)) return [409, { ok: false, error: '这个会话正在对方电脑的终端里使用，暂时收不了消息' }];
+    r = await c.make(id);
+    if (!r) return [404, { ok: false, error: '会话不存在' }];
+    c.runners.set(id, r);
+    if (c.id === 'openclaw') { try { await r.open(); } catch (e) { r.dispose(); return [502, { ok: false, error: '连不上 OpenClaw 网关：' + e.message }]; } }
+    else if (!c.attachOnOpen) r.history();   // history() 顺带读出会话目录，发消息要用
     return r;
   }
   if (!runners.has(id)) {
@@ -1823,7 +1870,7 @@ function ocTurnDone(r, ok, text) {
   const w = r.watched();
   if (w && !PUSH_ALWAYS) return;
   if (!w) localSound();
-  const badge = markUnread(r.id), title = r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : isKm(r.id) ? 'Kimi' : 'OpenClaw');
+  const badge = markUnread(r.id), title = r.title || clawOf(r.id)?.label || '会话';
   alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
 // ACP 的 Claw（DeepSeek / OpenCode / Kimi）会话要你确认操作：没人看着就推送
@@ -1831,7 +1878,7 @@ function dsAsk(r, body) {
   const w = r.watched();
   if (w && !PUSH_ALWAYS) return;
   if (!w) localSound();
-  const badge = markUnread(r.id), title = r.title || (isOp(r.id) ? 'OpenCode' : isKm(r.id) ? 'Kimi' : 'DeepSeek');
+  const badge = markUnread(r.id), title = r.title || clawOf(r.id)?.label || '会话';
   alertOut(r.id, 'ask', title, { title, body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
 // DS 压缩完：给还开着的页面重发一份 session.opened，让历史按压缩后的记录重画。
@@ -1877,16 +1924,15 @@ function toolActivity(name = '') {
 
 // ---------- 这台电脑装了哪些 Claw（没装的不在网页上列出来）----------
 const inPath = name => !!findBin(name);
+// 新建会话时填的目录：~ 展开成家目录；不是绝对路径返回 null
+const resolveDir = d => { d = String(d || '').trim(); if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1); return path.isAbsolute(d) ? path.resolve(d) : null; };
+const isDir = d => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
 function detectClaws() {
   // 有些 Claw 要新一点的 Node 才读得了它的会话（DeepSeek 要 zstd，OpenCode 要 node:sqlite）。
   // 这种情况不是「即将支持」，而是「这台机器的 Node 版本不够」，要把原因说清楚。
-  const dsOk = dsSupported(), opOk = opSupported();
   return [
     { id: 'claude', installed: fs.existsSync(path.join(HOME, '.claude', 'projects')), supported: true },
-    { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: true },
-    { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: dsOk, reason: dsOk ? undefined : dsUnsupportedReason() },
-    { id: 'opencode', installed: opInstalled(), supported: opOk, reason: opOk ? undefined : opUnsupportedReason() },
-    { id: 'kimi', installed: kmInstalled(), supported: true },
+    ...CLAWS.map(c => { const ok = c.supported(); return { id: c.id, installed: c.installed(), supported: ok, reason: ok ? undefined : c.reason?.() }; }),
   ];
 }
 
@@ -1905,7 +1951,7 @@ function saveUnread(u) {
 function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveUnread(u); return unreadTotal(u); }
 function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); devRead(id); }
 // 兜底：会话已经不在了（别处删的、删除时没清到的）还挂着未读，红点和角标会一直亮着却找不到是哪个。
-// 启动时查一遍：Claude 看 ~/.claude/projects/*/<id>.jsonl 在不在，DeepSeek 看 dsh 的会话文件；OpenCode / OpenClaw 不好查，不动
+// 启动时查一遍：Claude 看 ~/.claude/projects/*/<id>.jsonl 在不在，DeepSeek / OpenCode 问各自的 exists；Kimi / OpenClaw 不好查，不动
 function pruneUnread() {
   const u = unreadMap(), ids = Object.keys(u);
   if (!ids.length) return;
@@ -1913,7 +1959,8 @@ function pruneUnread() {
   try { dirs = fs.readdirSync(path.join(HOME, '.claude', 'projects')); } catch { return; }
   for (const id of ids) {
     let gone = false;
-    if (isDs(id)) gone = !dsExists(id);
+    const c = clawOf(id);
+    if (c) { try { gone = !!c.exists && c.supported() && !c.exists(id); } catch {} }
     else if (/^[0-9a-f-]{36}$/i.test(id)) gone = !dirs.some(d => fs.existsSync(path.join(HOME, '.claude', 'projects', d, id + '.jsonl')));
     if (gone) { clearUnread(id); log('unread pruned', id.slice(0, 11)); }
   }
@@ -1966,15 +2013,9 @@ const saveRecent = () => writeJsonAtomic(RECENT_FILE, { clearedAt: recentCleared
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 async function recentList() {
   const safe = p => withTimeout(Promise.resolve().then(p), 8000).catch(() => []);
-  const [cl, ds, op, oc, km] = await Promise.all([
-    safe(() => sessionList(100000)),
-    safe(() => dsSessionList({ busy: id => !!dsRunners.get(id)?.busy })),
-    safe(() => opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() })),
-    safe(async () => (await ocGatewayUp(log)) ? ocSessionList(log) : []),
-    safe(() => kmInstalled() ? kmSessionList({ busy: id => !!kmRunners.get(id)?.busy }) : []),
-  ]);
+  const lists = await Promise.all([safe(() => sessionList(100000)), ...CLAWS.map(c => safe(async () => (await clawReady(c)) ? c.list() : []))]);
   const out = [];
-  for (const [claw, arr] of [['claude', cl], ['deepseek', ds], ['opencode', op], ['kimi', km], ['openclaw', oc]]) {
+  for (const [claw, arr] of lists.map((l, i) => [i ? CLAWS[i - 1].id : 'claude', l])) {
     for (const x of Array.isArray(arr) ? arr : []) {
       // 只按会话里最后一条消息的时间排（像微信）；点开、切换、重启不算
       const at = claw === 'claude' && !x.unsent ? (lastMsgAt(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || x.lastModified || 0) : (x.lastModified || 0);
@@ -2225,47 +2266,14 @@ async function handleDelete(req, res) {
     return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '初始用户名或密码不对' });
   }
   clearFails(ip);
-  if (isKm(body.id)) {
-    const r = kmRunners.get(body.id);
+  const c = clawOf(body.id);
+  if (c) {
+    const r = c.runners.get(body.id);
     if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
     if (r?.busy) return sendJson(res, 409, { error: '这个会话还在回复，等它结束再删' });
+    if (c.takeover?.(body.id)) return sendJson(res, 409, { error: '这个会话正在终端的 ' + c.logName + ' 里打开，先关掉再删' });
     r?.dispose();
-    // kimi 的会话：先 kimi export 一份 zip 到回收站，再删
-    try { await kmDelete(body.id, TRASH, log); } catch (e) { return sendJson(res, 502, { error: 'Kimi 删除失败：' + e.message }); }
-    clearUnread(body.id);
-    log('deleted session', body.id);
-    return sendJson(res, 200, { ok: true });
-  }
-  if (isOp(body.id)) {
-    const r = opRunners.get(body.id);
-    if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
-    if (r?.busy) return sendJson(res, 409, { error: '这个会话还在回复，等它结束再删' });
-    if (opTakeoverInfo(body.id, takeoverMin())) return sendJson(res, 409, { error: '这个会话正在终端的 opencode 里打开，先关掉再删' });
-    r?.dispose();
-    // opencode 的会话在它的数据库里：先导出一份 JSON 到回收站（opencode import 能找回），再删
-    try { await opDelete(body.id, TRASH); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 删除失败：' + e.message }); }
-    clearUnread(body.id);   // 会话没了，它的未读也要清，不然红点和 App 角标一直亮着却找不到是哪个会话
-    log('deleted session', body.id);
-    return sendJson(res, 200, { ok: true });
-  }
-  if (isOc(body.id) || isDs(body.id)) {
-    const r = (isOc(body.id) ? ocRunners : dsRunners).get(body.id);
-    if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
-    if (r?.busy) return sendJson(res, 409, { error: '这个会话还在回复，等它结束再删' });
-    r?.dispose();
-    if (isOc(body.id)) {
-      try { await ocDelete(body.id, log); } catch (e) { return sendJson(res, 502, { error: 'OpenClaw 删除失败：' + e.message }); }
-    } else {
-      // dsh：整个会话目录挪进 claclaw 的回收站（和 Claude 会话一样能找回）
-      const dir = dsSessionDir(body.id);
-      if (!dir) return sendJson(res, 404, { error: '找不到这个会话' });
-      if (r) await new Promise(ok => setTimeout(ok, 500));   // 等 dsh 关掉会话、写完收尾
-      const dest = trashPath('dsh_' + path.basename(dir));
-      fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 });
-      try { trimTrash(); } catch {}
-      fs.renameSync(dir, dest);
-      fs.writeFileSync(path.join(dest, 'origin.json'), JSON.stringify({ sessionId: body.id, from: dir, deletedAt: new Date().toISOString() }, null, 2));
-    }
+    try { await c.del(body.id, r); } catch (e) { return sendJson(res, e.code || 502, { error: e.code === 404 ? e.message : c.label + ' 删除失败：' + e.message }); }
     clearUnread(body.id);   // 会话没了，它的未读也要清，不然红点和 App 角标一直亮着却找不到是哪个会话
     log('deleted session', body.id);
     return sendJson(res, 200, { ok: true });
@@ -2308,30 +2316,13 @@ async function handleRename(req, res) {
   const title = String(body.title ?? '').replace(/\s+/g, ' ').trim();
   if (!title) return sendJson(res, 400, { error: '名字不能为空' });
   if (title.length > 100) return sendJson(res, 400, { error: '名字太长了（最多 100 个字）' });
-  if (isOc(body.id)) {
-    try { await ocRename(body.id, title, log); } catch (e) { return sendJson(res, 502, { error: 'OpenClaw 改名失败：' + e.message }); }
-    const r = ocRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
-    log('renamed openclaw session', body.id);
-    return sendJson(res, 200, { ok: true, title });
-  }
-  if (isDs(body.id)) {
+  const c = clawOf(body.id);
+  if (c) {
     let accepted;
-    try { accepted = (await dsRename(body.id, title)).title; } catch (e) { return sendJson(res, e.code || 502, { error: 'DeepSeek 改名失败：' + e.message }); }
-    const r = dsRunners.get(body.id); if (r) { r.title = accepted; r.emit({ t: 'session.renamed', title: accepted }); }
-    log('renamed deepseek session', body.id);
+    try { accepted = await c.rename(body.id, title); } catch (e) { return sendJson(res, e.code || 502, { error: c.label + ' 改名失败：' + e.message }); }
+    const r = c.runners.get(body.id); if (r) { r.title = accepted; r.emit({ t: 'session.renamed', title: accepted }); }
+    log('renamed ' + c.id + ' session', body.id);
     return sendJson(res, 200, { ok: true, title: accepted });
-  }
-  if (isKm(body.id)) {
-    try { await kmRename(body.id, title, log); } catch (e) { return sendJson(res, e.code || 502, { error: 'Kimi 改名失败：' + e.message }); }
-    const r = kmRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
-    log('renamed kimi session', body.id);
-    return sendJson(res, 200, { ok: true, title });
-  }
-  if (isOp(body.id)) {
-    try { await opRename(body.id, title, log); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 改名失败：' + e.message }); }
-    const r = opRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
-    log('renamed opencode session', body.id);
-    return sendJson(res, 200, { ok: true, title });
   }
   const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
   const info = list.find(s => s.sessionId === body.id);
@@ -2530,9 +2521,8 @@ const handler = async (req, res) => {
           try { fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 }); fs.writeFileSync(f, JSON.stringify(r.removed, null, 2), { mode: 0o600 }); trimTrash(); } catch (e) { log('models trash failed', e.message); }
         }
         saveStore(MODELS_FILE, store);
-        opModelsChanged(log);
-        kmModelsChanged(log);
-        for (const m of [dsRunners, opRunners, ocRunners, kmRunners]) for (const r of m.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
+        for (const c of CLAWS) c.modelsChanged?.(log);
+        for (const c of CLAWS) for (const r of c.runners.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
         log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : '');
         return sendJson(res, 200, { ...modelsPublic(store), saved: r.saved || null });
       }
@@ -2569,7 +2559,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/claws') {
       // running：装了但没启动的（OpenClaw 网关没开）手机上灰着显示、电脑上不显示；其他 Claw 用的时候才拉起进程，装了就算可用
       const list = detectClaws();
-      for (const c of list) c.running = c.installed && c.supported ? (c.id === 'openclaw' ? await ocGatewayUp(log) : true) : false;
+      for (const c of list) c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false;
       return sendJson(res, 200, list);
     }
     if (url.pathname === '/api/sound') {
@@ -2644,10 +2634,6 @@ const handler = async (req, res) => {
       for (const [k, t] of Object.entries(recentHidden)) if (t <= recentCleared) delete recentHidden[k];
       try { saveRecent(); } catch (e) { return sendJson(res, 500, { error: e.message }); }
       return sendJson(res, 200, { ok: true });
-    }
-    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'openclaw') {
-      try { return sendJson(res, 200, peerMark(await ocSessionList(log))); }
-      catch (e) { return sendJson(res, 502, { error: e.message }); }
     }
     if (url.pathname === '/api/peer' || url.pathname.startsWith('/api/peer/')) {
       const c = loadPeer();
@@ -2814,28 +2800,19 @@ const handler = async (req, res) => {
       const live = m => [...m.values()].filter(r => !r.closed);
       const count = m => ({ open: live(m).length, busy: live(m).filter(r => r.busy).length });
       const claws = Object.fromEntries(detectClaws().map(c => [c.id, { installed: c.installed }]));
-      claws.openclaw.up = claws.openclaw.installed ? await ocGatewayUp(log) : false;
-      claws.deepseek.up = dsAcpRunning();
-      claws.opencode.up = opAcpRunning();
-      claws.kimi.up = kmAcpRunning();
+      for (const c of CLAWS) claws[c.id].up = claws[c.id].installed ? !!(await c.running()) : false;
+      const maps = { claude: runners, ...Object.fromEntries(CLAWS.map(c => [c.id, c.runners])) };
       const info = await hostInfo({
         root: ROOT, port: PORT, hosts: HOSTS, https: getHttpsUrl(), startedAt: STARTED_AT,
-        sessions: { claude: count(runners), openclaw: count(ocRunners), deepseek: count(dsRunners), opencode: count(opRunners), kimi: count(kmRunners), push: push.subscriptionCount() },
-        claws: { claude: { ...claws.claude, ...count(runners) }, openclaw: { ...claws.openclaw, ...count(ocRunners) }, deepseek: { ...claws.deepseek, ...count(dsRunners) }, opencode: { ...claws.opencode, ...count(opRunners) }, kimi: { ...claws.kimi, ...count(kmRunners) } },
+        sessions: { ...Object.fromEntries(Object.entries(maps).map(([k, m]) => [k, count(m)])), push: push.subscriptionCount() },
+        claws: Object.fromEntries(Object.entries(maps).map(([k, m]) => [k, { ...claws[k], ...count(m) }])),
       });
       return sendJson(res, 200, info);
     }
-    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'kimi') {
-      try { return sendJson(res, 200, peerMark(await kmSessionList({ busy: id => !!kmRunners.get(id)?.busy }))); }
-      catch (e) { return sendJson(res, 500, { error: 'Kimi 会话列表读取失败：' + e.message }); }
-    }
-    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'opencode') {
-      try { return sendJson(res, 200, peerMark(opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() }))); }
-      catch (e) { return sendJson(res, 500, { error: e.message }); }
-    }
-    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'deepseek') {
-      try { return sendJson(res, 200, peerMark(dsSessionList({ busy: id => !!dsRunners.get(id)?.busy }))); }
-      catch (e) { return sendJson(res, 500, { error: e.message }); }
+    const listClaw = url.pathname === '/api/sessions' && clawById(url.searchParams.get('claw'));
+    if (listClaw) {
+      try { return sendJson(res, 200, peerMark(await listClaw.list())); }
+      catch (e) { return sendJson(res, listClaw.id === 'openclaw' ? 502 : 500, { error: listClaw.label + ' 会话列表读取失败：' + e.message }); }
     }
     if (url.pathname === '/api/sessions') {
       const list = await sessionList();
@@ -2915,7 +2892,7 @@ wss.on('connection', (ws, req) => {
       // 往上滑：要 before（绝对序号）之前的一页
       if (m.t === 'history.more') {
         if (!runner) return;
-        if (runner instanceof DsRunner || runner instanceof OpRunner || runner instanceof KmRunner) {
+        if (runner instanceof AcpRunner) {
           const pg = historyPage(runner.history(), Number(m.before) || 0, HISTORY_MORE);
           return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
         }
@@ -2935,7 +2912,7 @@ wss.on('connection', (ws, req) => {
         let id;
         try { id = await ocCreate(title, log); } catch (e) { return send({ t: 'error', message: 'OpenClaw 新建会话失败：' + e.message }); }
         runner?.unsubscribe(ws);
-        const r = new OcRunner(id, { log, onActivity: setActivity, onTurnDone: ocTurnDone });
+        const r = new OcRunner(id, ocOpts());
         ocRunners.set(id, r);
         runner = r;
         r.subscribe(ws);
@@ -2948,78 +2925,29 @@ wss.on('connection', (ws, req) => {
           pending: [], suggestion: null, isNew: true,
         });
       }
-      if (m.t === 'session.new' && (isKm(m.from) || m.claw === 'kimi')) {
-        ensureSkill('kimi');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
-        // Kimi：用 kimi 的 ACP 在目录里新建会话；目录默认用参照会话的
-        let cwd = isKm(m.from) ? (kmRunners.get(m.from)?.cwd || (await kmInfo(m.from).catch(() => null))?.cwd) : '';
+      const newClaw = m.t === 'session.new' ? (m.claw ? clawById(m.claw) : clawOf(m.from)) : null;
+      if (newClaw?.acp) {
+        const c = newClaw;
+        ensureSkill(c.id);   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
+        // 用这个 Claw 的 ACP 在目录里新建会话；目录默认用参照会话的
+        let cwd = c.is(m.from) ? (c.runners.get(m.from)?.cwd || await c.refCwd(m.from)) : '';
         if (typeof m.cwd === 'string' && m.cwd.trim()) {
-          let d = m.cwd.trim();
-          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
-          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
-          cwd = path.resolve(d);
+          const d = resolveDir(m.cwd);
+          if (!d) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
+          cwd = d;
         }
         if (!cwd) cwd = HOME;
-        let st = null; try { st = fs.statSync(cwd); } catch {}
-        if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + cwd });
+        if (!isDir(cwd)) return send({ t: 'error', message: '目录不存在：' + cwd });
         let r;
-        try { r = await kmNewSession(cwd, dsOpts()); } catch (e) { return send({ t: 'error', message: 'Kimi 新建会话失败：' + e.message }); }
+        try { r = await c.newSession(cwd); } catch (e) { return send({ t: 'error', message: c.label + ' 新建会话失败：' + e.message }); }
         runner?.unsubscribe(ws);
         runner = r;
         r.subscribe(ws);
-        log('new kimi session', r.sid, 'in', cwd);
+        log('new ' + c.logName + ' session', r.sid, 'in', cwd);
         return send({
-          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'kimi', xmodels: r.xmodels(),
+          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: c.id, xmodels: r.xmodels(),
           mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
-          commands: r.commands, isNew: true,
-        });
-      }
-      if (m.t === 'session.new' && (isOp(m.from) || m.claw === 'opencode')) {
-        ensureSkill('opencode');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
-        // OpenCode：用 opencode 的 ACP 在目录里新建会话；目录默认用参照会话的
-        let cwd = isOp(m.from) ? (opRunners.get(m.from)?.cwd || opSessionList().find(s => s.id === m.from)?.cwd) : '';
-        if (typeof m.cwd === 'string' && m.cwd.trim()) {
-          let d = m.cwd.trim();
-          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
-          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
-          cwd = path.resolve(d);
-        }
-        if (!cwd) cwd = HOME;
-        let st = null; try { st = fs.statSync(cwd); } catch {}
-        if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + cwd });
-        let r;
-        try { r = await opNewSession(cwd, dsOpts()); } catch (e) { return send({ t: 'error', message: 'OpenCode 新建会话失败：' + e.message }); }
-        runner?.unsubscribe(ws);
-        runner = r;
-        r.subscribe(ws);
-        log('new opencode session', r.sid, 'in', cwd);
-        return send({
-          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'opencode', xmodels: r.xmodels(),
-          mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
-          commands: r.commands, isNew: true,
-        });
-      }
-      if (m.t === 'session.new' && (isDs(m.from) || m.claw === 'deepseek')) {
-        ensureSkill('deepseek');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
-        // DeepSeek：用 dsh 的 ACP 在目录里新建会话；目录默认用参照会话的
-        let cwd = isDs(m.from) ? (dsRunners.get(m.from)?.cwd || dsSessionList().find(s => s.id === m.from)?.cwd) : '';
-        if (typeof m.cwd === 'string' && m.cwd.trim()) {
-          let d = m.cwd.trim();
-          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
-          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
-          cwd = path.resolve(d);
-        }
-        if (!cwd) cwd = HOME;
-        let st = null; try { st = fs.statSync(cwd); } catch {}
-        if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + cwd });
-        const r = await dsNewSession(cwd, dsOpts());
-        runner?.unsubscribe(ws);
-        runner = r;
-        r.subscribe(ws);
-        log('new dsh session', r.sid, 'in', cwd);
-        return send({
-          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'deepseek', xmodels: r.xmodels(),
-          mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
-          commands: r.commands, isNew: true, usage: dsUsage(r.id),
+          commands: r.commands, isNew: true, ...(c.newExtra?.(r) || {}),
         });
       }
       if (m.t === 'session.new') {
@@ -3029,12 +2957,9 @@ wss.on('connection', (ws, req) => {
         // 目录：默认用参照会话的目录；也可以指定别的目录（新建对话框里点目录可以改）
         let cwd = from?.cwd;
         if (typeof m.cwd === 'string' && m.cwd.trim()) {
-          let d = m.cwd.trim();
-          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
-          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
-          d = path.resolve(d);
-          let st = null; try { st = fs.statSync(d); } catch {}
-          if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + d });
+          const d = resolveDir(m.cwd);
+          if (!d) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
+          if (!isDir(d)) return send({ t: 'error', message: '目录不存在：' + d });
           cwd = d;
         }
         if (!cwd) return send({ t: 'error', message: '找不到要参照的会话' });
@@ -3061,87 +2986,49 @@ wss.on('connection', (ws, req) => {
           mode: runner.mode, modes: runner.allowedModes, busy: false, history: [], pending: [], suggestion: null,
           commands: runner.commands || null, isNew: true,
         });
-      } else if (m.t === 'session.open' && isDs(m.id)) {
-        ensureSkill('deepseek');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
-        runner?.unsubscribe(ws);
-        let r = dsRunners.get(m.id);
-        if (!r) { r = new DsRunner(m.id, dsOpts()); dsRunners.set(m.id, r); }
-        const hist = r.history();
-        if (!hist.total && !r.attached && !dsExists(m.id)) { dsRunners.delete(m.id); runner = null; return send({ t: 'error', message: '找不到这个会话' }); }   // 空会话（新建后还没发消息）文件在就能打开
-        runner = r;
-        r.subscribe(ws);
-        if (ws.visible !== false) clearUnread(m.id);
-        const pg = historyPage(hist, hist.total, HISTORY_PAGE);
-        for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });   // 排着队、还没发出的
-        log('open dsh', r.sid, hist.total, 'items');
-        send({
-          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek', xmodels: r.xmodels(),
-          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = dsCtx(m.id)),
-          history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
-          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
-          pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(m.id),
-        });
-      } else if (m.t === 'session.open' && isKm(m.id)) {
-        ensureSkill('kimi');
-        runner?.unsubscribe(ws);
-        runner = null;
-        let r = kmRunners.get(m.id);
-        if (!r) {
-          const s = await kmInfo(m.id).catch(() => null);
-          if (!s) return send({ t: 'error', message: '找不到这个会话' });
-          r = new KmRunner(m.id, { ...dsOpts(), info: s }); kmRunners.set(m.id, r);
-        }
-        // 接上 kimi（session/load 顺带把历史重放过来）
-        try { await r.attach(); } catch (e) { if (!r.busy && !r.subs.size) r.dispose(); return send({ t: 'error', message: 'Kimi 打开会话失败：' + e.message }); }
-        if (r.closed) return send({ t: 'error', message: '会话已关闭，再点一次' });
-        runner = r;
-        r.subscribe(ws);
-        if (ws.visible !== false) clearUnread(m.id);
-        const hist = r.history();
-        const pg = historyPage(hist, hist.total, HISTORY_PAGE);
-        for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });
-        log('open kimi', r.sid, hist.total, 'items');
-        send({
-          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'kimi', xmodels: r.xmodels(),
-          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: r.ctx ?? null,
-          history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
-          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
-          pending: [...r.pending.values()].map(p => p.req), suggestion: null,
-        });
-      } else if (m.t === 'session.open' && isOp(m.id)) {
-        ensureSkill('opencode');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
-        let r = opRunners.get(m.id);
-        if (!r) {
-          // 终端里的 opencode 正开着它：和 Claude 会话一样，闲置够久才能接管，接管会结束终端里的 opencode
-          const el = opTakeoverInfo(m.id, takeoverMin());
+      } else if (m.t === 'session.open' && clawOf(m.id)?.acp) {
+        const c = clawOf(m.id);
+        ensureSkill(c.id);   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
+        if (!c.runners.has(m.id) && c.takeover) {
+          // 终端里正开着它：闲置够久才能接管，接管会结束终端里的那个进程
+          const el = c.takeover(m.id);
           if (el) {
             if (!m.takeover || !el.canTakeover) return send({ t: 'session.busy', id: m.id, ...el });
-            if (!(await opEndHolders(el))) return send({ t: 'error', message: '没能结束终端里的 opencode，未接管' });
-            log('takeover opencode done', m.id);
+            if (!(await c.endHolders(el))) return send({ t: 'error', message: '没能结束终端里的 ' + c.logName + '，未接管' });
+            log('takeover ' + c.logName + ' done', m.id);
           }
         }
-        runner?.unsubscribe(ws);
-        if (!r) { r = new OpRunner(m.id, dsOpts()); opRunners.set(m.id, r); }
+        runner?.unsubscribe(ws);   // 先放下手上的（重开同一个会话时，旧的 runner 可能就此关掉，下面拿到的是新的）
+        runner = null;
+        let r = c.runners.get(m.id);
+        if (!r) {
+          r = await c.make(m.id);
+          if (!r) return send({ t: 'error', message: '找不到这个会话' });
+          c.runners.set(m.id, r);
+        }
+        if (c.attachOnOpen) {   // 先接上（Kimi：session/load 顺带把历史重放过来）
+          try { await r.attach(); } catch (e) { if (!r.busy && !r.subs.size) r.dispose(); return send({ t: 'error', message: c.label + ' 打开会话失败：' + e.message }); }
+          if (r.closed) return send({ t: 'error', message: '会话已关闭，再点一次' });
+        }
         const hist = r.history();
-        if (!hist.total && !r.attached && !opExists(m.id)) { opRunners.delete(m.id); runner = null; return send({ t: 'error', message: '找不到这个会话' }); }
         runner = r;
         r.subscribe(ws);
         if (ws.visible !== false) clearUnread(m.id);
         const pg = historyPage(hist, hist.total, HISTORY_PAGE);
         for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });   // 排着队、还没发出的
-        log('open opencode', r.sid, hist.total, 'items');
+        log('open ' + c.logName, r.sid, hist.total, 'items');
         send({
-          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'opencode', xmodels: r.xmodels(),
-          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: (r.ctx = opCtx(m.id)), tokSum: opTokSum(m.id),
+          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: c.id, xmodels: r.xmodels(),
+          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: r.ctxNow() ?? null,
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
-          pending: [...r.pending.values()].map(p => p.req), suggestion: null,
+          pending: [...r.pending.values()].map(p => p.req), suggestion: null, ...(c.openExtra?.(r) || {}),
         });
       } else if (m.t === 'session.open' && isOc(m.id)) {
         ensureSkill('openclaw');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         runner?.unsubscribe(ws);
         let r = ocRunners.get(m.id);
-        if (!r) { r = new OcRunner(m.id, { log, onActivity: setActivity, onTurnDone: ocTurnDone }); ocRunners.set(m.id, r); }
+        if (!r) { r = new OcRunner(m.id, ocOpts()); ocRunners.set(m.id, r); }
         runner = r;
         r.subscribe(ws);
         if (ws.visible !== false) clearUnread(m.id);
@@ -3245,7 +3132,7 @@ wss.on('connection', (ws, req) => {
           log('file', path.basename(file), kb.toFixed(1) + 'KB');
         }
         if (!text && !images.length) return;
-        const acp = runner instanceof DsRunner || runner instanceof OpRunner || runner instanceof KmRunner;
+        const acp = runner instanceof AcpRunner;
         const sent = runner.send(text, images);
         if (!sent) send({ t: 'error', busy: runner.busy || undefined, message: acp && runner.busy ? '这一轮结束前只能排队普通消息（命令要等这一轮结束，最多排 10 条）' : '上一条还在处理中' });
         else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data), queued: sent === 'queued' || undefined });
@@ -3336,12 +3223,8 @@ for (const host of HOSTS) {
 function shutdown() {
   log('shutting down');
   for (const r of [...runners.values()]) r.dispose();
-  for (const r of [...dsRunners.values()]) r.dispose();
-  for (const r of [...opRunners.values()]) r.dispose();
-  for (const r of [...kmRunners.values()]) r.dispose();
-  setTimeout(dsShutdown, 300);
-  setTimeout(opShutdown, 300);
-  setTimeout(kmShutdown, 300);
+  for (const c of CLAWS) for (const r of [...c.runners.values()]) { try { r.dispose(); } catch {} }
+  for (const c of CLAWS) if (c.shutdown) setTimeout(c.shutdown, 300);
   setTimeout(() => process.exit(0), 500);
 }
 process.on('SIGINT', shutdown);
