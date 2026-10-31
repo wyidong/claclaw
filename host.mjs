@@ -12,9 +12,14 @@ const run = (cmd, args, ms = 4000) => new Promise(ok => {
     (e, out) => ok(e ? '' : String(out).trim()));
 });
 
-const slow = { at: 0, data: null };
-export async function slowInfo(root) {   // server 启动时先跑一次，第一次打开宿主页不用等
-  if (slow.data && Date.now() - slow.at < 10 * 60 * 1000) return slow.data;
+// 过期了先给旧的、后台再刷新（kimi --version 一个就要近 1 秒，不让打开宿主页等它）
+const slow = { at: 0, data: null, p: null };
+export function slowInfo(root) {   // server 启动时先跑一次，第一次打开宿主页不用等
+  if (slow.data && Date.now() - slow.at < 10 * 60 * 1000) return Promise.resolve(slow.data);
+  if (!slow.p) { slow.p = readSlow(root).finally(() => { slow.p = null; }); slow.p.catch(() => {}); }
+  return slow.data ? Promise.resolve(slow.data) : slow.p;
+}
+async function readSlow(root) {
   const mac = process.platform === 'darwin';
   const [name, osVer, model, claude, openclaw, gitLine, opencode, kimi] = await Promise.all([
     mac ? run('scutil', ['--get', 'ComputerName']) : Promise.resolve(os.hostname()),

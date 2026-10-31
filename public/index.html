@@ -3000,7 +3000,7 @@ function onEvent(m){
     break;
   case 'xmodels':
     if(!xcfg||!session||m.sessionId!==session.id)break;
-    xcfg={current:m.current,label:m.label||'',groups:m.groups||null};
+    xcfg={current:m.current,label:m.label||'',groups:m.groups||null,cached:m.cached};
     if(/^xmodel:/.test(String(cfgBusy)))cfgBusy=null;
     renderCfgBtn();renderCfg();
     break;
@@ -3337,6 +3337,7 @@ function renderXCfg(){
     if(!xcfgAsked){xcfgAsked=true;wsSend({t:'xmodels.load'})}
     return;
   }
+  if(xcfg.cached&&!xcfgAsked){xcfgAsked=true;wsSend({t:'xmodels.load'})}   // 先显示上次记下的清单，后台接上再换成真的
   if(!xcfg.groups.length){box.innerHTML='<div class="cfg-empty">没有可选的模型</div>';return}
   xcfg.groups.forEach(function(g){
     var h=document.createElement('div');h.className='cfg-g';h.textContent=g.name;box.appendChild(h);

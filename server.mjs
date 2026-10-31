@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { execFileSync, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -2403,8 +2404,7 @@ const handler = async (req, res) => {
       const ver = crypto.createHash('sha1').update(html).digest('hex').slice(0, 7) +
         ' · ' + pad(mt.getMonth() + 1) + '-' + pad(mt.getDate()) + ' ' + pad(mt.getHours()) + ':' + pad(mt.getMinutes());
       const prefs = JSON.stringify(clientPrefs()).replace(/</g, '\\u003c').replace(/\u2028|\u2029/g, c => '\\u' + c.charCodeAt(0).toString(16));
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(html.replace('__PAGE_VERSION__', ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
+      return sendPage(req, res, html.replace('__PAGE_VERSION__', ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
     }
     if (url.pathname === '/api/upload/file') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));
@@ -2800,7 +2800,7 @@ const handler = async (req, res) => {
       const live = m => [...m.values()].filter(r => !r.closed);
       const count = m => ({ open: live(m).length, busy: live(m).filter(r => r.busy).length });
       const claws = Object.fromEntries(detectClaws().map(c => [c.id, { installed: c.installed }]));
-      for (const c of CLAWS) claws[c.id].up = claws[c.id].installed ? !!(await c.running()) : false;
+      await Promise.all(CLAWS.map(async c => { claws[c.id].up = claws[c.id].installed ? !!(await c.running()) : false; }));
       const maps = { claude: runners, ...Object.fromEntries(CLAWS.map(c => [c.id, c.runners])) };
       const info = await hostInfo({
         root: ROOT, port: PORT, hosts: HOSTS, https: getHttpsUrl(), startedAt: STARTED_AT,
@@ -2826,6 +2826,21 @@ const handler = async (req, res) => {
     res.writeHead(500).end('error');
   }
 };
+
+// 页面（近 500KB）：压缩后发（brotli 约 140KB），带 ETag——没改过手机就用自己存的（304），改了马上拿新的。
+// 压缩结果按 ETag 记一份，同一版页面只压一次
+let pageZ = { tag: '', br: null, gz: null };
+function sendPage(req, res, body) {
+  const tag = '"' + crypto.createHash('sha1').update(body).digest('base64url').slice(0, 20) + '"';
+  const hdr = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', etag: tag, vary: 'accept-encoding' };
+  if (String(req.headers['if-none-match'] || '').split(/\s*,\s*/).includes(tag)) { res.writeHead(304, hdr); return res.end(); }
+  const ae = String(req.headers['accept-encoding'] || ''), enc = /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gz' : '';
+  if (!enc) { res.writeHead(200, hdr); return res.end(body); }
+  if (pageZ.tag !== tag) pageZ = { tag, br: null, gz: null };
+  const z = pageZ[enc] ??= enc === 'br' ? zlib.brotliCompressSync(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } }) : zlib.gzipSync(body);
+  res.writeHead(200, { ...hdr, 'content-encoding': enc === 'br' ? 'br' : 'gzip', 'content-length': z.length });
+  res.end(z);
+}
 
 // ---------- WebSocket ----------
 
@@ -3024,6 +3039,7 @@ wss.on('connection', (ws, req) => {
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
           pending: [...r.pending.values()].map(p => p.req), suggestion: null, ...(c.openExtra?.(r) || {}),
         });
+        if (!r.attached) r.agent.warm(log);   // 先把 agent 进程起好：打开会话设置、发第一条时少等 1~2 秒
       } else if (m.t === 'session.open' && isOc(m.id)) {
         ensureSkill('openclaw');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         runner?.unsubscribe(ws);

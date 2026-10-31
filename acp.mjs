@@ -4,8 +4,10 @@
 // - AcpRunner：网页里打开的一个会话（接口和 Claude 的 Runner 对齐：send / interrupt / replyPermission / subscribe …）。
 //   各家只写差异：怎么接上会话、历史从哪读、模型名怎么显示、上下文大小从哪来、确认条怎么显示。
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { storeNow, splitGroups } from './modelpick.mjs';
-import { HOME, tilde, oneLine, binEnv } from './util.mjs';
+import { HOME, tilde, oneLine, binEnv, readJson } from './util.mjs';
+import { DATA, writeJsonAtomic } from './auth.mjs';
 export const flatOptions = opt => (opt?.options || []).flatMap(o => o.options ? o.options : [o]);
 export const optName = (cfg, id) => {
   const o = cfg?.find(x => x.id === id);
@@ -37,6 +39,11 @@ export const toolOutput = u => {
   if (!out && u.rawOutput) out = typeof u.rawOutput === 'string' ? u.rawOutput : String(u.rawOutput.output ?? u.rawOutput.error ?? u.rawOutput.stdout ?? '');
   return out.slice(0, 4000);
 };
+
+// 各家上次拿到的模型清单（agent 名 → model 配置项，不含当前值）：会话还没接上时，会话设置先拿它显示，不用等起进程
+const MODELS_FILE = path.join(DATA, 'acp-models.json');
+let modelCache = null;
+const modelsCached = () => (modelCache ??= readJson(MODELS_FILE));
 
 // ---------- ACP 进程 ----------
 export class AcpAgent {
@@ -135,6 +142,18 @@ export class AcpAgent {
     this.answer(m.id, null, { code: -32601, message: 'method not supported: ' + m.method });
   }
 
+  cachedModels() { return modelsCached()[this.name] || null; }
+  saveModels(opt) {
+    const { currentValue, ...v } = opt, c = modelsCached();
+    if (JSON.stringify(c[this.name]) === JSON.stringify(v)) return;
+    c[this.name] = v;
+    try { writeJsonAtomic(MODELS_FILE, c); } catch {}
+  }
+  // 打开会话时先把进程起好（起进程 + initialize 要 1~2 秒），换模型、发第一条时就不用等；没会话接上照常 10 分钟后关
+  warm(log) {
+    if (this.proc || !this.findBin()) return;
+    this.start(log).then(() => this.idleCheck(), () => {});
+  }
   // 要用了：起好进程，取消空闲关闭
   async use(log) { await this.start(log); clearTimeout(this.idleTimer); }
   stop() { try { this.proc?.stdin.end(); if (this.hardKill) this.proc?.kill(); } catch {} }
@@ -234,19 +253,27 @@ export class AcpRunner {
   setConfig(cfg) {
     if (!Array.isArray(cfg)) return;
     this.config = cfg;
+    const mo = cfg.find(o => o.id === 'model');
+    if (mo) this.agent.saveModels(mo);
     const name = this.modelNameOf(cfg);
     if (name && name !== this.model) { this.model = name; this.emit({ t: 'session.meta', cwdShort: this.metaLine() }); }
     this.emit({ t: 'xmodels', ...this.xmodels() });
   }
 
-  // 会话设置里的模型选择：模型库注入的（claclaw-*）一组，agent 自带的一组。还没接上时只有当前模型名
+  // 会话设置里的模型选择：模型库注入的（claclaw-*）一组，agent 自带的一组。
+  // 还没接上时用上次记下的清单（cached，网页随后再要一次真的），当前项按模型 ID / 名字对（对上不止一个就不打勾）；一次都没接过就只有当前模型名
   xmodels() {
-    const opt = this.config?.find(o => o.id === 'model');
-    if (!opt) return { current: null, label: this.model || '', groups: null };
+    let opt = this.config?.find(o => o.id === 'model'), cached;
+    if (!opt) {
+      const c = this.agent.cachedModels();
+      if (!c) return { current: null, label: this.model || '', groups: null };
+      const store = storeNow(), hits = this.model ? flatOptions(c).filter(o => this.ownModel(o, store).id === this.model || this.cleanName(this.modelNameOf([{ ...c, currentValue: o.value }])) === this.model) : [];
+      opt = { ...c, currentValue: hits.length === 1 ? hits[0].value : null }; cached = true;
+    }
     const store = storeNow(), list = flatOptions(opt);
     const own = list.map(o => this.ownModel(o, store));
     const cur = list.find(o => o.value === opt.currentValue);
-    return { current: opt.currentValue, label: cur ? this.cleanName(cur.name) : this.model, groups: splitGroups(store, this.constructor.group, own) };
+    return { current: opt.currentValue, label: cur ? this.cleanName(cur.name) : this.model, groups: splitGroups(store, this.constructor.group, own), cached };
   }
   // 打开会话设置时：还没接上就先接上（拿到模型清单）
   async loadXModels() {
