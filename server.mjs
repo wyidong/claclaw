@@ -41,7 +41,7 @@ const PEER_OPTS = {
   repos: [path.dirname(fileURLToPath(import.meta.url))],
   clean: dir => { try { return execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8', timeout: 5000 }).trim() === ''; } catch { return false; } },
 };
-import { saveVideo, videoFile, videoDuration, videoThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
+import { saveVideo, videoFile, videoDuration, videoThumb, imageThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
 const uploadKeepDays = () => { const d = Math.round(Number(settings().uploadKeepDays)); return d >= 1 && d <= 3650 ? d : KEEP_DAYS_DEFAULT; };
 setTimeout(() => { try { cleanUploads(uploadsDir(DATA), uploadKeepDays()); } catch {} }, 15000);   // 启动后清一次过期附件
 // 推送走哪：auto = clarelay 设备在线就交给它（推到外壳），不在线 claclaw 自己推；clarelay = 只走它；self = 只自己推；both = 都推
@@ -2443,6 +2443,7 @@ const handler = async (req, res) => {
       const nm = url.searchParams.get('name') || '';
       if (url.searchParams.get('dl') === '1') { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
       if (/\.(html?|svg|xhtml|xml)$/i.test(f)) { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
+      if (url.searchParams.get('thumb') === '1') return serveVideo(req, res, await imageThumb(f), nm);   // 聊天里的小图
       return serveVideo(req, res, f, nm);
     }
     // 聊天里点文件路径：本机网页（127.0.0.1 直连）用电脑上的 App 打开；别的设备返回文件信息，再用 /api/fs/read 读回去预览

@@ -92,6 +92,27 @@ export function serveVideo(req, res, file, name = '') {
   fs.createReadStream(file, { start, end }).pipe(res);
 }
 
+// 聊天里图片的缩略图：大于 THUMB_MIN 的图，用 macOS 自带 sips 把长边缩到 THUMB_PX（聊天里最大显示 180，三倍屏够清楚），存在原图旁边（<id>.t.jpg / .t.png，随附件一起过期清理）。
+// 只给聊天里的小图用；点开看大图、保存还是原图。不是 macOS、不是图片、缩失败 → 原图
+const THUMB_MIN = 300 * 1024, THUMB_PX = 540, thumbJobs = new Map();
+export async function imageThumb(file) {
+  const ext = path.extname(file).slice(1).toLowerCase();
+  if (process.platform !== 'darwin' || !/^(png|jpe?g|heic|heif|webp|tiff?|bmp)$/.test(ext)) return file;
+  let st; try { st = fs.statSync(file); } catch { return file; }
+  if (st.size <= THUMB_MIN) return file;
+  const fmt = /^(jpe?g|heic|heif)$/.test(ext) ? 'jpeg' : 'png';   // 可能带透明的转 png，免得透明处变黑
+  const out = file + '.t.' + (fmt === 'jpeg' ? 'jpg' : 'png');
+  try { if (fs.statSync(out).mtimeMs >= st.mtimeMs) return out; } catch {}
+  if (!thumbJobs.has(out)) {
+    const tmp = out + '.' + process.pid + '.tmp';
+    thumbJobs.set(out, run('/usr/bin/sips', ['-s', 'format', fmt, ...(fmt === 'jpeg' ? ['-s', 'formatOptions', '80'] : []), '-Z', String(THUMB_PX), file, '--out', tmp], { timeout: 20000 })
+      .then(() => { const t = fs.statSync(tmp); if (!t.size || t.size >= st.size) throw new Error('缩略图没更小'); fs.renameSync(tmp, out); return out; })
+      .catch(() => { fs.rm(tmp, { force: true }, () => {}); return file; })
+      .finally(() => thumbJobs.delete(out)));
+  }
+  return thumbJobs.get(out);
+}
+
 // 时长（不截帧，很快）
 export async function videoDuration(file) {
   const ffprobe = bin('ffprobe');
