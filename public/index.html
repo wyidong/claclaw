@@ -1024,6 +1024,7 @@ select.pe-in{text-align-last:right}
   /* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比另外三个重得多也小得多。
      这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
      颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
+  /* Kimi：LobeHub 图标库 kimi-color.svg（MIT），蓝点保留官方色 #1783FF，字母 K 用 --ink，深浅主题都看得清 */
   .claw-card[hidden]{display:none}
   .claw-h2{margin-top:10px}
   .claw-tool{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
@@ -1276,7 +1277,7 @@ select.pe-in{text-align-last:right}
   var onClaw=window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   var rt=ss.getItem('claclaw.reloadTo')||'';   // 刷新前在哪一页（见主脚本 railReload）：直接画那一页
   if(rt){app.className={set:'m-list set-on',host:'m-list host-on',claw:'m-list claw-on',recent:'m-list',chats:'m-list',chat:''}[rt]||'';return}
-  if(onClaw||!/^(claude|openclaw|deepseek|opencode)$/.test(claw||''))app.className='m-list claw-on';
+  if(onClaw||!/^(claude|openclaw|deepseek|opencode|kimi)$/.test(claw||''))app.className='m-list claw-on';
   else if(view!=='chat'||!sess)app.className='m-list';
 }catch(e){}})();
 </script>
@@ -1292,6 +1293,7 @@ select.pe-in{text-align-last:right}
     <button type="button" class="rclaw" data-claw="openclaw" aria-label="OpenClaw" title="OpenClaw"><img src="https://openclaw.ai/apple-touch-icon.png" alt=""></button>
     <button type="button" class="rclaw" data-claw="deepseek" aria-label="DeepSeek Harness" title="DeepSeek Harness"><svg class="ds-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" fill="#4D6BFE"/></svg></button>
     <button type="button" class="rclaw" data-claw="opencode" aria-label="OpenCode" title="OpenCode"><svg class="oc-mark" viewBox="128 96 256 320" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="var(--ink)"/><path d="M320 224V352H192V224H320Z" fill="var(--muted)"/></svg></button>
+    <button type="button" class="rclaw" data-claw="kimi" aria-label="Kimi Code" title="Kimi Code"><svg class="km-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0z" fill="#1783FF"/><path d="M11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z" fill="var(--ink)"/></svg></button>
     </div>
     <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
@@ -1427,7 +1429,7 @@ select.pe-in{text-align-last:right}
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
       <div id="clawPane">
         <div class="claw-h">选择 Claw</div>
-        <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode 中任意一个后再来。</div>
+        <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code 中任意一个后再来。</div>
         <button type="button" class="claw-card" data-claw="claude">
           <svg class="claw-ic cc-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fill-rule="nonzero"></path></svg>
           <span class="claw-tx"><b>Claude Code</b><small>终端、VS Code、网页里开的会话都在这里</small></span>
@@ -1446,6 +1448,11 @@ select.pe-in{text-align-last:right}
         <button type="button" class="claw-card" data-claw="opencode">
           <svg class="claw-ic oc-mark" viewBox="128 96 256 320" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="var(--ink)"/><path d="M320 224V352H192V224H320Z" fill="var(--muted)"/></svg>
           <span class="claw-tx"><b>OpenCode</b><small>opencode 的会话：终端里开的都在这里</small></span>
+          <span class="claw-st"></span>
+        </button>
+        <button type="button" class="claw-card" data-claw="kimi">
+          <svg class="claw-ic km-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0z" fill="#1783FF"/><path d="M11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z" fill="var(--ink)"/></svg>
+          <span class="claw-tx"><b>Kimi Code</b><small>kimi 的会话：终端里开的都在这里</small></span>
           <span class="claw-st"></span>
         </button>
         <!-- 模型管理：登记各家模型（供应商、接口地址、key、模型）；以后各 Claw 新建会话、切模型时从这里选 -->
@@ -2261,8 +2268,8 @@ function addPeer(from,t){
   return e;
 }
 // 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
-function clawName(id){return /^oc:/.test(id||'')?'OpenClaw':/^ds:/.test(id||'')?'DeepSeek':/^op:/.test(id||'')?'OpenCode':'Claude'}
-function shortId(id){id=String(id||'');if(/^ds:/.test(id))return id.replace(/^ds:(session-)?/,'').slice(0,8);if(/^op:/.test(id))return id.replace(/^op:(ses_)?/,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':'),q=p[p.length-1]||p[0];return /^[0-9a-f]{8}-/i.test(q)?q.slice(0,8):q}return id.slice(0,8)}
+function clawName(id){return /^oc:/.test(id||'')?'OpenClaw':/^ds:/.test(id||'')?'DeepSeek':/^op:/.test(id||'')?'OpenCode':/^km:/.test(id||'')?'Kimi':'Claude'}
+function shortId(id){id=String(id||'');if(/^ds:/.test(id))return id.replace(/^ds:(session-)?/,'').slice(0,8);if(/^op:/.test(id))return id.replace(/^op:(ses_)?/,'').slice(0,8);if(/^km:/.test(id))return id.replace(/^km:(session_)?/,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':'),q=p[p.length-1]||p[0];return /^[0-9a-f]{8}-/i.test(q)?q.slice(0,8):q}return id.slice(0,8)}
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
 // 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
@@ -2869,7 +2876,7 @@ function onEvent(m){
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan','auto','dontAsk'];
     // dsh / OpenCode / OpenClaw：会话设置里只有模型（从模型库 + 各 Claw 自带的里选），没有推理强度和权限模式
-    xcfg=/^(oc|ds|op):/.test(m.id)?(m.xmodels||{current:null,label:'',groups:null}):null;xcfgAsked=false;xcfgErr='';
+    xcfg=/^(oc|ds|op|km):/.test(m.id)?(m.xmodels||{current:null,label:'',groups:null}):null;xcfgAsked=false;xcfgErr='';
     $('#cfgMode').hidden=!!xcfg;$('#cfgBtn').style.display='';
     cfg={models:null,model:null,effort:null,pick:'default'};cfgBusy=null;applyModel(m);
     setMode(m.mode,false);
@@ -3311,7 +3318,7 @@ function modelShort(id){
   if(r&&r.resolved&&r.resolved!==id)return modelShort(r.resolved);
   return String(id).charAt(0).toUpperCase()+String(id).slice(1);
 }
-function claudeSess(){return !!(session&&!/^(ds|op|oc):/.test(session.id))}
+function claudeSess(){return !!(session&&!/^(ds|op|oc|km):/.test(session.id))}
 function curModelRow(){var ms=cfg.models||[];return ms.find(function(m){return m.value===cfg.pick})||ms.find(function(m){return m.value==='default'})||null}
 function curModelLabel(){if(cfg.model)return modelShort(cfg.model);var r=curModelRow();return r?modelShort(r.resolved||r.value):''}
 function effortLabel(k){var e=EFFORTS.find(function(x){return x.key===k});return e?e.label:''}
@@ -3498,11 +3505,11 @@ function loadHost(){
     h+=hSec('claclaw',
       hRow('版本',esc(k.commit||'未知'),k.commitAt?new Date(k.commitAt).toLocaleString():'')+
       hRow('服务已运行',fmtDur(Date.now()-k.startedAt))+
-      hRow('打开的会话',String(k.sessions.claude.open+k.sessions.openclaw.open+k.sessions.deepseek.open+(k.sessions.opencode?k.sessions.opencode.open:0)),'工作中 '+(k.sessions.claude.busy+k.sessions.openclaw.busy+k.sessions.deepseek.busy+(k.sessions.opencode?k.sessions.opencode.busy:0)))+
+      hRow('打开的会话',String(k.sessions.claude.open+k.sessions.openclaw.open+k.sessions.deepseek.open+(k.sessions.opencode?k.sessions.opencode.open:0)+(k.sessions.kimi?k.sessions.kimi.open:0)),'工作中 '+(k.sessions.claude.busy+k.sessions.openclaw.busy+k.sessions.deepseek.busy+(k.sessions.opencode?k.sessions.opencode.busy:0)+(k.sessions.kimi?k.sessions.kimi.busy:0)))+
       hRow('推送设备',String(k.sessions.push))+
       hRow('Node.js',esc(k.node)));
     h+=hSec('Claw',x.claws.filter(function(w){return w.installed}).map(function(w){
-      var st=w.id==='openclaw'?(w.up?'网关在线':'网关连不上'):w.id==='deepseek'||w.id==='opencode'?(w.up?'ACP 进程运行中':'空闲（发消息时启动）'):'';
+      var st=w.id==='openclaw'?(w.up?'网关在线':'网关连不上'):w.id==='deepseek'||w.id==='opencode'||w.id==='kimi'?(w.up?'ACP 进程运行中':'空闲（发消息时启动）'):'';
       var on=w.id==='claude'?w.open>0:w.up;
       return hRow(w.name,(w.version?esc(w.version):'版本未知'),(st?st+' · ':'')+'打开 '+w.open+(w.busy?' · 工作中 '+w.busy:''))
         .replace('<span class="k">','<span class="k"><i class="h-dot'+(on?' on':'')+'"></i>');
@@ -3856,7 +3863,7 @@ function peerPc(p){var c=p&&p.color;if(!(c>=0&&c<7)){var h=0,id=String(p&&p.id||
 function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div class="pe-err">'+esc(peerMsg.err)+'</div>':'')+(peerMsg.ok?'<div class="pe-ok">'+esc(peerMsg.ok)+'</div>':'')}
 // 会话池摘要：加入了几个会话、分布在几个目录
 function poolTitle(id){var s=poolInfo(id);return s?(s.title||'(无标题)'):shortId(id)}
-var CLAW_NAMES={claude:'Claude Code',openclaw:'OpenClaw',deepseek:'DeepSeek',opencode:'OpenCode'};
+var CLAW_NAMES={claude:'Claude Code',openclaw:'OpenClaw',deepseek:'DeepSeek',opencode:'OpenCode',kimi:'Kimi Code'};
 function peNormCfg(c){if(c&&c.dir&&c.dir.indexOf('|')<0)c.dir='claude|'+c.dir;return c}   // 旧配置只存了目录（没有「Claw|」前缀）：初次载入、每次操作后服务端回的配置都要转
 function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':(s.cwd||''))}   // OpenClaw 没有目录，全部归一组
 function peDirLabel(k){var i=k.indexOf('|'),cl=k.slice(0,i),d=k.slice(i+1).replace(/^\/(Users|home)\/[^\/]+/,'~');return cl==='claude'?(d||'(未知目录)'):CLAW_NAMES[cl]+(d?' · '+d:'')}
@@ -3983,9 +3990,9 @@ function peerAddHtml(c){
 // 协同会话：上面「已加入」（按 Claw 分组，一眼看出开放了哪些 Claw 的会话，点「移出」马上生效）；
 // 下面「添加会话」：先选 Claw，再搜 / 按目录勾选，勾上马上加入。不用再点保存
 var peerPoolClaw='',peerPoolQ='';
-var CLAW_ORDER=['claude','deepseek','opencode','openclaw'];
+var CLAW_ORDER=['claude','deepseek','opencode','kimi','openclaw'];
 // Claw 的图标：和左边栏用同一份（左边栏的按钮里就是图标）
-function clawKeyOf(id){id=id||'';return /^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':/^oc:/.test(id)?'openclaw':'claude'}
+function clawKeyOf(id){id=id||'';return /^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':/^km:/.test(id)?'kimi':/^oc:/.test(id)?'openclaw':'claude'}
 function clawIcon(k){var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:esc(CLAW_NAMES[k])}
 function clawSegBtn(k,n,on){return '<button type="button" data-act="pool-claw" data-claw="'+k+'" title="'+esc(CLAW_NAMES[k])+'" aria-label="'+esc(CLAW_NAMES[k])+'"'+(on?' class="on"':'')+'>'+clawIcon(k)+(n?'<i>'+n+'</i>':'')+'</button>'}
 function poolInfo(id){return (peerList||[]).find(function(x){return x.id===id})||((peerCfg&&peerCfg.poolInfo)||[]).find(function(x){return x.id===id&&x.title})}
@@ -4098,7 +4105,7 @@ function renderPeer(){
 }
 // 选了 Claw 就回到会话页并加载它的会话（目前只有 Claude 可选）；手机上首次使用要先选
 var clawSel=null;try{clawSel=localStorage.getItem(hk('claw'))||localStorage.getItem('claclaw.claw')}catch(_){}   // 新切到的宿主：先沿用首连宿主选的 Claw
-if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek'&&clawSel!=='opencode')clawSel=null;
+if(clawSel!=='claude'&&clawSel!=='openclaw'&&clawSel!=='deepseek'&&clawSel!=='opencode'&&clawSel!=='kimi')clawSel=null;
 // 会话列表显示什么：recent = 「最近」（所有 Claw 的会话按活跃时间排，像微信聊天列表）；claw = 选中 Claw 的会话（按目录分组）
 var listMode='recent';try{if(localStorage.getItem('claclaw.listMode')==='claw')listMode='claw'}catch(_){}
 // 左栏的 Claw：活跃的常显，其余收起来；全都活跃就没有「更多」
@@ -4360,6 +4367,10 @@ $('#sNew').addEventListener('click',function(){
     ref=(session&&/^op:/.test(session.id))?session:(lastList||[]).find(function(x){return /^op:/.test(x.id)&&x.cwd});
     newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:'opencode'}:{id:'',cwd:'~',claw:'opencode'});return;
   }
+  if(clawSel==='kimi'){   // Kimi：同上
+    ref=(session&&/^km:/.test(session.id))?session:(lastList||[]).find(function(x){return /^km:/.test(x.id)&&x.cwd});
+    newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:'kimi'}:{id:'',cwd:'~',claw:'kimi'});return;
+  }
   if(ref&&ref.cwd){newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});return}
   // 一个会话都没有（新装的宿主）：第一个会话建在主目录；有会话之后照旧参照已有会话的目录
   var firstOrAlert=function(arr){if(Array.isArray(arr)&&!arr.length)newSibling({id:'',cwd:'~'});else alert('先打开一个会话，新会话会默认建在它的目录里')};
@@ -4381,7 +4392,7 @@ function openSheet(silent){
   syncPushBtn();
   if(rec){loadRecent();return}
   var claw=clawSel;
-  fetch('/api/sessions'+(clawSel==='openclaw'||clawSel==='deepseek'||clawSel==='opencode'?'?claw='+clawSel:'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
+  fetch('/api/sessions'+(clawSel==='openclaw'||clawSel==='deepseek'||clawSel==='opencode'||clawSel==='kimi'?'?claw='+clawSel:'')).then(function(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r.json()}).then(whenNotPressing).then(function(arr){
     if(claw!==clawSel)return;   // 加载途中换了 Claw
     if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
     lastList=arr;
@@ -4527,7 +4538,7 @@ function syncWorkMarks(){
 }
 // Claw 页卡片的 logo 包一层，好在右上角挂红点
 document.querySelectorAll('.claw-card .claw-ic').forEach(function(ic){var w=document.createElement('span');w.className='claw-icw';ic.parentNode.insertBefore(w,ic);w.appendChild(ic)});
-function clawOf(id){return /^oc:/.test(id)?'openclaw':/^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':'claude'}
+function clawOf(id){return /^oc:/.test(id)?'openclaw':/^ds:/.test(id)?'deepseek':/^op:/.test(id)?'opencode':/^km:/.test(id)?'kimi':'claude'}
 function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false,byClaw={};
   ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id){other=true;byClaw[clawOf(id)]=true}});
@@ -5877,7 +5888,7 @@ function newSibling(s){
   d.style.width=Math.max(8,d.value.length+1)+'ch';
   $('#newName').value='';$('#newErr').textContent='';
   // Claude 会话：可以选模型 / 推理强度；默认「沿用」= 用参照会话的
-  var isClaude=!/^(ds|op|oc):/.test(s.id||'')&&(!s.claw||s.claw==='claude');
+  var isClaude=!/^(ds|op|oc|km):/.test(s.id||'')&&(!s.claw||s.claw==='claude');
   var ms=isClaude?(cfg.models&&cfg.models.length?cfg.models:lastModels):null;
   newPick={model:null,effort:null};$('#newPick').hidden=!ms;
   if(ms){

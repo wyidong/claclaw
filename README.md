@@ -4,7 +4,7 @@
 
 在手机浏览器里接管本机的 AI 编程会话。
 
-claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持四个：[Claude Code](https://docs.claude.com/en/docs/claude-code)、DeepSeek Harness（dsh）、[OpenCode](https://opencode.ai)、[OpenClaw](https://openclaw.ai)。**装了其中任意一个就能用**，不一定要有 Claude；装了几个，「Claw」页就列几个，随时切换。
+claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持五个：[Claude Code](https://docs.claude.com/en/docs/claude-code)、DeepSeek Harness（dsh）、[OpenCode](https://opencode.ai)、[Kimi Code](https://github.com/MoonshotAI/kimi-code)、[OpenClaw](https://openclaw.ai)。**装了其中任意一个就能用**，不一定要有 Claude；装了几个，「Claw」页就列几个，随时切换。
 
 手机上用 SSH 进终端操作这些工具很难受：没有方向键、容易断线、排版乱。claclaw 在开发机上起一个小网页服务，用手机浏览器打开就能：
 
@@ -26,9 +26,10 @@ claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持四个：[Clau
 | Claude Code | [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)（自带 Claude Code，要先登录过） | 18+ | 可切换权限模式（默认 / 自动改文件 / 计划）；占用检测和接管最完整 |
 | DeepSeek Harness | 起 `dsh` 的 ACP 进程 | **22.15+**（会话记录是 zstd 压缩的） | `/model`、`/effort` 切模型和思考强度 |
 | OpenCode | 起 `opencode acp` 进程 | **22.13+**（会话在 SQLite 库里，用 Node 自带的 `node:sqlite`） | `/model`、`/effort`、`/mode`；按目录推断终端占用 |
+| Kimi Code | 起 `kimi acp` 进程 | 18+ | 不用登录 Kimi 账号：模型库里的模型自动配进去（也可以 `kimi login` 用 Kimi 会员）；`/model`、`/thinking`、`/mode` |
 | OpenClaw | 连本机 OpenClaw 网关 | 18+ | 网关要开着；改文件、跑命令的确认由 OpenClaw 自己处理，网页上不弹按钮 |
 
-- 怎么算「装了」：Claude Code 有 `~/.claude/projects`；DeepSeek 有 `~/.dsh` 或 `dsh` 命令；OpenCode 有 `opencode` 命令；OpenClaw 有 `~/.openclaw/openclaw.json` 或 `openclaw` 命令
+- 怎么算「装了」：Claude Code 有 `~/.claude/projects`；DeepSeek 有 `~/.dsh` 或 `dsh` 命令；OpenCode 有 `opencode` 命令；Kimi Code 有 `kimi` 命令（默认装在 `~/.kimi-code/bin`）；OpenClaw 有 `~/.openclaw/openclaw.json` 或 `openclaw` 命令
 - Node 版本不够时，Claw 页上那个 Claw 会写明原因；一个都没检测到时，Claw 页会提示先装一个
 - 电脑上打开时默认选 Claude Code；这台电脑没有可用的 Claude Code，就自动选第一个能用的 Claw
 
@@ -79,6 +80,7 @@ Claw 页底部（电脑上在 设置 → 宿主 → Claw 区）有「模型管�
 - 存在电脑的 `data/models.json`（权限 600）。key 只进不出：网页上只显示后 4 位，改 key 只能整个替换或清掉，日志里不写。删掉的供应商备份在 `data/trash/`，30 天后自动清。
 - **在会话里选**：dsh、OpenCode、OpenClaw 会话标题栏右边显示当前模型，点开「会话设置」就能换（不用打 `/model`），模型库里的排在前面，各 Claw 自带的在后面。这一轮回复完才能换，换了从下一条消息起生效。
   - OpenCode：启动 `opencode acp` 时把模型库注入进去（`OPENCODE_CONFIG_CONTENT`，和你自己的配置合并，供应商名前面加 `claclaw-`；有 Anthropic 格式地址优先用它），key 只放在子进程的环境变量里。模型库改了以后，等没有 OpenCode 会话开着时自动重启它的进程，才看得到新的。
+  - Kimi Code：kimi 只认 `~/.kimi-code/config.toml`，claclaw 把模型库写成里面 `claclaw-` 开头的供应商和模型（OpenAI 兼容地址优先），key 不写文件（`api_key_env` 指向环境变量，只在 claclaw 起的 `kimi acp` 里有）；你自己的配置原样保留，没设默认模型时设成模型库第一个。所以终端里直接跑 `kimi` 用不了这些模型（没有 key）。
   - dsh、OpenClaw：用它们自己配好的供应商，按「同一个接口地址 + 同一个模型 ID」认出哪些是模型库里的模型。
   - OpenClaw 只能换成它放行（`agents.defaults.models`）的模型；模型库里有、它没放行的会灰着显示。要放行得改 OpenClaw 自己的配置，并让网关重新加载。
   - Claude 会话还是用自己的模型选择（Claude 账号里的模型）。
@@ -192,13 +194,14 @@ Claw 页底部（电脑上在 设置 → 宿主 → Claw 区）有「模型管�
 - 过程播报/自动朗读需要页面保持在前台（屏幕可以常亮）。锁屏或切到后台后语音会停止，重要节点改用系统推送通知。
 - 其他会话通过 Claude Code 内置的跨会话消息发来的消息，如果因权限模式不同被扣住，网页上只显示提示，暂不能批准
 - DeepSeek 改名：需要先关闭这个会话在 dsh web / 终端里的写入方；网页里打开的会话要先切走（claclaw 会先关掉网页里的 runner，再拿 dsh 的 `session.lock`）。改名前的日志备份在 `data/trash/`。
+- Kimi Code 会话：不检测终端占用，别在终端和网页里同时给同一个会话发消息；网页里不能改名（终端里 `/title`）；删除前先 `kimi export` 成 zip 放到 data/trash
 - OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。改名走 opencode 自己的本机接口（终端里开着同一会话的要重开才看到新名）；删除前先导出到 data/trash（`opencode import` 可找回）
 
 ## 技能
 
 仓库的 `skills/` 里预先准备了一些 [Agent Skills](https://agentskills.io)（`SKILL.md` + 脚本），平时不用管：用到相关功能时 claclaw 自动装好，不用你点。全部技能在 设置 › 宿主 › 技能 里能看、能装、能卸。
 
-- 装到两个位置就覆盖四个 Claw：`~/.claude/skills`（Claude Code，OpenCode 也读）和 `~/.agents/skills`（DeepSeek、OpenCode、OpenClaw 共用）。
+- 装到两个位置就覆盖四个 Claw：`~/.claude/skills`（Claude Code，OpenCode 也读）和 `~/.agents/skills`（DeepSeek、OpenCode、Kimi、OpenClaw 共用）。
 - 装的是复制件，带 `.claclaw-skill` 标记；claclaw 启动时会把它们同步成仓库里的最新版。卸载只删带标记的，你自己的同名技能不会被覆盖或删除。
 - 技能里的命令只和本机 claclaw 通信：地址和本机令牌在 `~/.claclaw/local.json`（只有本人可读），本地接口只接受 127.0.0.1 带令牌的请求；配对的钥匙始终只在 claclaw 里。
 

@@ -1,6 +1,6 @@
 ---
 name: claclaw-peer
-description: 和其他 AI 会话对话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / OpenClaw），或另一台电脑上已配对的会话（claclaw 协同）。用户让你「问问 / 告诉 / 交给别的会话、另一个 Claw、另一台电脑」时使用。
+description: 和其他 AI 会话对话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / OpenClaw），或另一台电脑上已配对的会话（claclaw 协同）。用户让你「问问 / 告诉 / 交给别的会话、另一个 Claw、另一台电脑」时使用。
 ---
 
 # claclaw 会话互找

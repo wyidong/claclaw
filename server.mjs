@@ -15,6 +15,7 @@ import { query, listSessions, getSessionMessages, renameSession, createSdkMcpSer
 import { z } from 'zod';
 import * as push from './push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured } from './devnotify.mjs';
+import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged } from './kimi.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
@@ -758,7 +759,7 @@ function claclawMcp(sessionId) {
       // claclaw 协同：只有加入协同的会话能用（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
-        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
+        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
         '只在用户要你和「别的会话 / 对方 / 另一台电脑的会话」沟通时使用。peer 填「本机」只列本机，填对方名字只列那个对方，不填两边都列。',
         { peer: z.string().optional().describe('「本机」或对方名字，可省略') },
         async ({ peer }) => {
@@ -795,11 +796,11 @@ function isLocalReq(req) {
 // 某个对方能看到的会话：协同会话池 ∩ 开放给它的（没单独设过 = 全部开放）
 const peerAllowed = (c, p) => Array.isArray(p?.allow) ? c.sessions.filter(id => p.allow.includes(id)) : c.sessions;
 // 协同会话可以是任意 Claw 的：Claude（UUID）、DeepSeek（ds:）、OpenCode（op:）、OpenClaw（oc:）
-const PEER_SID = /^([0-9a-f-]{36}|(ds|op|oc):\S{1,200})$/;
-const clawOfId = id => isDs(id) ? 'deepseek' : isOp(id) ? 'opencode' : isOc(id) ? 'openclaw' : 'claude';
-const runnerOf = id => (isDs(id) ? dsRunners : isOp(id) ? opRunners : isOc(id) ? ocRunners : runners).get(id);
+const PEER_SID = /^([0-9a-f-]{36}|(ds|op|oc|km):\S{1,200})$/;
+const clawOfId = id => isDs(id) ? 'deepseek' : isOp(id) ? 'opencode' : isKm(id) ? 'kimi' : isOc(id) ? 'openclaw' : 'claude';
+const runnerOf = id => (isDs(id) ? dsRunners : isOp(id) ? opRunners : isKm(id) ? kmRunners : isOc(id) ? ocRunners : runners).get(id);
 // 给对方看的短 ID（对方用它的开头匹配会话）：Claude 取前 8 位；DeepSeek / OpenCode 保留前缀再取 8 位；OpenClaw 的 key 本来就短，原样给
-const peerShortId = id => { const m = id.match(/^(ds:(?:session-)?|op:(?:ses_)?)/); return m ? id.slice(0, m[0].length + 8) : isOc(id) ? id : id.slice(0, 8); };
+const peerShortId = id => { const m = id.match(/^(ds:(?:session-)?|op:(?:ses_)?|km:(?:session_)?)/); return m ? id.slice(0, m[0].length + 8) : isOc(id) ? id : id.slice(0, 8); };
 // 某个对方能看到的会话（统一成 {sessionId, claw, title, cwd}；Claude 的还带着 SDK 原来的字段，送消息时要用）
 async function peerSessionInfos(c, p) {
   const ids = peerAllowed(c, p), lists = {};
@@ -807,6 +808,7 @@ async function peerSessionInfos(c, p) {
     claude: () => listSessions({ includeProgrammatic: true, limit: 2000 }),
     deepseek: () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy }),
     opencode: () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() }),
+    kimi: () => kmSessionList({ busy: x => !!kmRunners.get(x)?.busy }),
     openclaw: () => ocSessionList(log),
   };
   const out = [];
@@ -835,10 +837,10 @@ function quotaHit(text) {
 // （这是用法上的规矩，不是安全边界：本机以你的身份运行的程序本来就读得到 claclaw 的数据。）
 const LOCAL_NAMES = ['本机', 'local'];
 const isLocalTo = to => LOCAL_NAMES.includes(String(to || '').trim().toLowerCase());
-const CLAW_LABEL = { claude: 'Claude', deepseek: 'DeepSeek', opencode: 'OpenCode', openclaw: 'OpenClaw' };
+const CLAW_LABEL = { claude: 'Claude', deepseek: 'DeepSeek', opencode: 'OpenCode', kimi: 'Kimi', openclaw: 'OpenClaw' };
 const realp = p => { try { return fs.realpathSync(p); } catch { return p; } };
 function allRunners() {
-  return [[runners, 'claude'], [dsRunners, 'deepseek'], [opRunners, 'opencode'], [ocRunners, 'openclaw']]
+  return [[runners, 'claude'], [dsRunners, 'deepseek'], [opRunners, 'opencode'], [kmRunners, 'kimi'], [ocRunners, 'openclaw']]
     .flatMap(([m, claw]) => [...m.values()].filter(r => !r.closed).map(r => ({ r, claw })));
 }
 // 本机所有会话（统一成 {sessionId, claw, title, cwd}；Claude 的带着 SDK 原字段）
@@ -846,7 +848,7 @@ async function localSessions() {
   const out = [];
   const add = async (claw, load) => { let l = []; try { l = await load(); } catch {} return l; };
   for (const s of await add('claude', () => listSessions({ includeProgrammatic: true, limit: 2000 }))) out.push({ ...s, claw: 'claude', title: s.customTitle || s.summary || s.firstPrompt || '' });
-  for (const [claw, load] of [['deepseek', () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy })], ['opencode', () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() })], ['openclaw', () => ocSessionList(log)]]) {
+  for (const [claw, load] of [['deepseek', () => dsSessionList({ busy: x => !!dsRunners.get(x)?.busy })], ['opencode', () => opSessionList({ busy: x => !!opRunners.get(x)?.busy, takeoverMin: takeoverMin() })], ['kimi', () => kmSessionList({ busy: x => !!kmRunners.get(x)?.busy })], ['openclaw', () => ocSessionList(log)]]) {
     if (!detectClaws().some(c => c.id === claw && c.installed && c.supported)) continue;
     for (const s of await add(claw, load)) out.push({ sessionId: s.id, claw, title: s.title || '', cwd: claw === 'openclaw' ? '' : s.cwd || '', lastModified: s.lastModified || 0 });
   }
@@ -1014,6 +1016,15 @@ async function peerRunner(info) {
       if (opTakeoverInfo(id, takeoverMin())) return [409, { ok: false, error: '这个会话正在对方电脑的终端里使用，暂时收不了消息' }];
       if (!opExists(id)) return [404, { ok: false, error: '会话不存在' }];
       r = new OpRunner(id, dsOpts()); opRunners.set(id, r); r.history();
+    }
+    return r;
+  }
+  if (isKm(id)) {
+    let r = kmRunners.get(id);
+    if (!r) {
+      const s = await kmInfo(id).catch(() => null);
+      if (!s) return [404, { ok: false, error: '会话不存在' }];
+      r = new KmRunner(id, { ...dsOpts(), info: s }); kmRunners.set(id, r);
     }
     return r;
   }
@@ -1822,7 +1833,7 @@ function ocTurnDone(r, ok, text) {
   const w = r.watched();
   if (w && !PUSH_ALWAYS) return;
   if (!w) localSound();
-  const badge = markUnread(r.id), title = r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : 'OpenClaw');
+  const badge = markUnread(r.id), title = r.title || (isDs(r.id) ? 'DeepSeek' : isOp(r.id) ? 'OpenCode' : isKm(r.id) ? 'Kimi' : 'OpenClaw');
   alertOut(r.id, ok ? 'reply' : 'error', title, { title, body: ok ? snippet(text, '回复完了') : '这一轮出错结束了', tag: 'done-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
 // DeepSeek / OpenCode 会话要你确认操作：没人看着就推送
@@ -1830,7 +1841,7 @@ function dsAsk(r, body) {
   const w = r.watched();
   if (w && !PUSH_ALWAYS) return;
   if (!w) localSound();
-  const badge = markUnread(r.id), title = r.title || (isOp(r.id) ? 'OpenCode' : 'DeepSeek');
+  const badge = markUnread(r.id), title = r.title || (isOp(r.id) ? 'OpenCode' : isKm(r.id) ? 'Kimi' : 'DeepSeek');
   alertOut(r.id, 'ask', title, { title, body, tag: 'perm-' + r.id, url: '/?s=' + encodeURIComponent(r.id), badge }, undefined, w);
 }
 // DS 压缩完：给还开着的页面重发一份 session.opened，让历史按压缩后的记录重画。
@@ -1889,6 +1900,7 @@ function detectClaws() {
     { id: 'openclaw', installed: fs.existsSync(path.join(HOME, '.openclaw', 'openclaw.json')) || inPath('openclaw'), supported: true },
     { id: 'deepseek', installed: fs.existsSync(path.join(HOME, '.dsh')) || inPath('dsh'), supported: dsOk, reason: dsOk ? undefined : dsUnsupportedReason() },
     { id: 'opencode', installed: opInstalled(), supported: opOk, reason: opOk ? undefined : opUnsupportedReason() },
+    { id: 'kimi', installed: kmInstalled(), supported: true },
   ];
 }
 
@@ -1967,14 +1979,15 @@ const saveRecent = () => writeJsonAtomic(RECENT_FILE, { clearedAt: recentCleared
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 async function recentList() {
   const safe = p => withTimeout(Promise.resolve().then(p), 8000).catch(() => []);
-  const [cl, ds, op, oc] = await Promise.all([
+  const [cl, ds, op, oc, km] = await Promise.all([
     safe(() => sessionList(100000)),
     safe(() => dsSessionList({ busy: id => !!dsRunners.get(id)?.busy })),
     safe(() => opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() })),
     safe(async () => (await ocGatewayUp(log)) ? ocSessionList(log) : []),
+    safe(() => kmInstalled() ? kmSessionList({ busy: id => !!kmRunners.get(id)?.busy }) : []),
   ]);
   const out = [];
-  for (const [claw, arr] of [['claude', cl], ['deepseek', ds], ['opencode', op], ['openclaw', oc]]) {
+  for (const [claw, arr] of [['claude', cl], ['deepseek', ds], ['opencode', op], ['kimi', km], ['openclaw', oc]]) {
     for (const x of Array.isArray(arr) ? arr : []) {
       // 只按会话里最后一条消息的时间排（像微信）；点开、切换、重启不算
       const at = claw === 'claude' && !x.unsent ? (lastMsgAt(jsonlPathOf({ sessionId: x.id, cwd: x.cwd })) || x.lastModified || 0) : (x.lastModified || 0);
@@ -2232,6 +2245,17 @@ async function handleDelete(req, res) {
     return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '初始用户名或密码不对' });
   }
   clearFails(ip);
+  if (isKm(body.id)) {
+    const r = kmRunners.get(body.id);
+    if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
+    if (r?.busy) return sendJson(res, 409, { error: '这个会话还在回复，等它结束再删' });
+    r?.dispose();
+    // kimi 的会话：先 kimi export 一份 zip 到回收站，再删
+    try { await kmDelete(body.id, TRASH, log); } catch (e) { return sendJson(res, 502, { error: 'Kimi 删除失败：' + e.message }); }
+    clearUnread(body.id);
+    log('deleted session', body.id);
+    return sendJson(res, 200, { ok: true });
+  }
   if (isOp(body.id)) {
     const r = opRunners.get(body.id);
     if (r && !r.closed && r.subs.size) return sendJson(res, 409, { error: '当前会话不支持删除：它正在网页里打开着，先切到别的会话再删' });
@@ -2318,6 +2342,7 @@ async function handleRename(req, res) {
     log('renamed deepseek session', body.id);
     return sendJson(res, 200, { ok: true, title: accepted });
   }
+  if (isKm(body.id)) return sendJson(res, 400, { error: 'Kimi 会话暂不支持在这里改名（可在终端里用 /title 改）' });
   if (isOp(body.id)) {
     try { await opRename(body.id, title, log); } catch (e) { return sendJson(res, 502, { error: 'OpenCode 改名失败：' + e.message }); }
     const r = opRunners.get(body.id); if (r) { r.title = title; r.emit({ t: 'session.renamed', title }); }
@@ -2525,7 +2550,8 @@ const handler = async (req, res) => {
         }
         saveStore(MODELS_FILE, store);
         opModelsChanged(log);
-        for (const m of [dsRunners, opRunners, ocRunners]) for (const r of m.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
+        kmModelsChanged(log);
+        for (const m of [dsRunners, opRunners, ocRunners, kmRunners]) for (const r of m.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
         log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : '');
         return sendJson(res, 200, { ...modelsPublic(store), saved: r.saved || null });
       }
@@ -2803,12 +2829,17 @@ const handler = async (req, res) => {
       claws.openclaw.up = claws.openclaw.installed ? await ocGatewayUp(log) : false;
       claws.deepseek.up = dsAcpRunning();
       claws.opencode.up = opAcpRunning();
+      claws.kimi.up = kmAcpRunning();
       const info = await hostInfo({
         root: ROOT, port: PORT, hosts: HOSTS, https: getHttpsUrl(), startedAt: STARTED_AT,
-        sessions: { claude: count(runners), openclaw: count(ocRunners), deepseek: count(dsRunners), opencode: count(opRunners), push: push.subscriptionCount() },
-        claws: { claude: { ...claws.claude, ...count(runners) }, openclaw: { ...claws.openclaw, ...count(ocRunners) }, deepseek: { ...claws.deepseek, ...count(dsRunners) }, opencode: { ...claws.opencode, ...count(opRunners) } },
+        sessions: { claude: count(runners), openclaw: count(ocRunners), deepseek: count(dsRunners), opencode: count(opRunners), kimi: count(kmRunners), push: push.subscriptionCount() },
+        claws: { claude: { ...claws.claude, ...count(runners) }, openclaw: { ...claws.openclaw, ...count(ocRunners) }, deepseek: { ...claws.deepseek, ...count(dsRunners) }, opencode: { ...claws.opencode, ...count(opRunners) }, kimi: { ...claws.kimi, ...count(kmRunners) } },
       });
       return sendJson(res, 200, info, { 'cache-control': 'no-store' });
+    }
+    if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'kimi') {
+      try { return sendJson(res, 200, peerMark(await kmSessionList({ busy: id => !!kmRunners.get(id)?.busy })), { 'cache-control': 'no-store' }); }
+      catch (e) { return sendJson(res, 500, { error: 'Kimi 会话列表读取失败：' + e.message }); }
     }
     if (url.pathname === '/api/sessions' && url.searchParams.get('claw') === 'opencode') {
       try { return sendJson(res, 200, peerMark(opSessionList({ busy: id => !!opRunners.get(id)?.busy, takeoverMin: takeoverMin() })), { 'cache-control': 'no-store' }); }
@@ -2897,7 +2928,7 @@ wss.on('connection', (ws, req) => {
       // 往上滑：要 before（绝对序号）之前的一页
       if (m.t === 'history.more') {
         if (!runner) return;
-        if (runner instanceof DsRunner || runner instanceof OpRunner) {
+        if (runner instanceof DsRunner || runner instanceof OpRunner || runner instanceof KmRunner) {
           const pg = historyPage(runner.history(), Number(m.before) || 0, HISTORY_MORE);
           return send({ t: 'history.page', id: runner.id, items: pg.items, start: pg.start, more: pg.more });
         }
@@ -2928,6 +2959,31 @@ wss.on('connection', (ws, req) => {
           mode: 'default', modes: ['default'], busy: false, claw: 'openclaw', xmodels: r.xmodels(), commands: r.commands || [],
           history: pg.items, historyStart: 100000 - pg.items.length, historyTotal: 100000, historyMore: pg.more,
           pending: [], suggestion: null, isNew: true,
+        });
+      }
+      if (m.t === 'session.new' && (isKm(m.from) || m.claw === 'kimi')) {
+        ensureSkill('kimi');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
+        // Kimi：用 kimi 的 ACP 在目录里新建会话；目录默认用参照会话的
+        let cwd = isKm(m.from) ? (kmRunners.get(m.from)?.cwd || (await kmInfo(m.from).catch(() => null))?.cwd) : '';
+        if (typeof m.cwd === 'string' && m.cwd.trim()) {
+          let d = m.cwd.trim();
+          if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1);
+          if (!path.isAbsolute(d)) return send({ t: 'error', message: '目录要写完整路径（/ 或 ~ 开头）：' + m.cwd });
+          cwd = path.resolve(d);
+        }
+        if (!cwd) cwd = HOME;
+        let st = null; try { st = fs.statSync(cwd); } catch {}
+        if (!st?.isDirectory()) return send({ t: 'error', message: '目录不存在：' + cwd });
+        let r;
+        try { r = await kmNewSession(cwd, dsOpts()); } catch (e) { return send({ t: 'error', message: 'Kimi 新建会话失败：' + e.message }); }
+        runner?.unsubscribe(ws);
+        runner = r;
+        r.subscribe(ws);
+        log('new kimi session', r.sid, 'in', cwd);
+        return send({
+          t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: 'kimi', xmodels: r.xmodels(),
+          mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
+          commands: r.commands, isNew: true,
         });
       }
       if (m.t === 'session.new' && (isOp(m.from) || m.claw === 'opencode')) {
@@ -3037,6 +3093,33 @@ wss.on('connection', (ws, req) => {
           history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
           pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(m.id),
+        });
+      } else if (m.t === 'session.open' && isKm(m.id)) {
+        ensureSkill('kimi');
+        runner?.unsubscribe(ws);
+        runner = null;
+        let r = kmRunners.get(m.id);
+        if (!r) {
+          const s = await kmInfo(m.id).catch(() => null);
+          if (!s) return send({ t: 'error', message: '找不到这个会话' });
+          r = new KmRunner(m.id, { ...dsOpts(), info: s }); kmRunners.set(m.id, r);
+        }
+        // 接上 kimi（session/load 顺带把历史重放过来）
+        try { await r.attach(); } catch (e) { if (!r.busy && !r.subs.size) r.dispose(); return send({ t: 'error', message: 'Kimi 打开会话失败：' + e.message }); }
+        if (r.closed) return send({ t: 'error', message: '会话已关闭，再点一次' });
+        runner = r;
+        r.subscribe(ws);
+        if (ws.visible !== false) clearUnread(m.id);
+        const hist = r.history();
+        const pg = historyPage(hist, hist.total, HISTORY_PAGE);
+        for (const q of r.queue) pg.items.push({ kind: 'user', text: q.text, waiting: true });
+        log('open kimi', r.sid, hist.total, 'items');
+        send({
+          t: 'session.opened', id: m.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'kimi', xmodels: r.xmodels(),
+          mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, ctx: r.ctx ?? null,
+          history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
+          busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
+          pending: [...r.pending.values()].map(p => p.req), suggestion: null,
         });
       } else if (m.t === 'session.open' && isOp(m.id)) {
         ensureSkill('opencode');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
@@ -3175,7 +3258,7 @@ wss.on('connection', (ws, req) => {
           log('file', path.basename(file), kb.toFixed(1) + 'KB');
         }
         if (!text && !images.length) return;
-        const acp = runner instanceof DsRunner || runner instanceof OpRunner;
+        const acp = runner instanceof DsRunner || runner instanceof OpRunner || runner instanceof KmRunner;
         const sent = runner.send(text, images);
         if (!sent) send({ t: 'error', busy: runner.busy || undefined, message: acp && runner.busy ? '这一轮结束前只能排队普通消息（命令要等这一轮结束，最多排 10 条）' : '上一条还在处理中' });
         else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data), queued: sent === 'queued' || undefined });
@@ -3268,8 +3351,10 @@ function shutdown() {
   for (const r of [...runners.values()]) r.dispose();
   for (const r of [...dsRunners.values()]) r.dispose();
   for (const r of [...opRunners.values()]) r.dispose();
+  for (const r of [...kmRunners.values()]) r.dispose();
   setTimeout(dsShutdown, 300);
   setTimeout(opShutdown, 300);
+  setTimeout(kmShutdown, 300);
   setTimeout(() => process.exit(0), 500);
 }
 process.on('SIGINT', shutdown);

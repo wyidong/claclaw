@@ -74,3 +74,60 @@ export function splitGroups(store, ownName, own, extra = []) {
     ...(rest.length ? [{ name: ownName + ' 自带', items: rest }] : []),
   ];
 }
+
+// Kimi Code 的注入：kimi 只认 ~/.kimi-code/config.toml 里的供应商，没有内联配置的环境变量。
+// 所以把模型库写成 config.toml 里 claclaw- 开头的供应商 / 模型别名（claclaw-<供应商>/<模型 ID>），
+// key 不写文件：用 api_key_env 指向 CLACLAW_KEY_<供应商>，claclaw 起 `kimi acp` 时放进环境变量。
+// 返回 { tables（要写进 config.toml 的那几段）, aliases（模型别名，按模型库顺序）, env, sig }
+// OpenAI 兼容地址优先（kimi 对 DeepSeek 等推理模型的 openai 接法开箱即用），其次 Anthropic，再次 Gemini
+const tomlStr = s => JSON.stringify(String(s));
+export function kimiInject(store) {
+  const out = [], env = {}, aliases = [];
+  for (const p of store.providers) {
+    const ep = p.endpoints || {};
+    if (!p.models.length) continue;
+    const [type, base] = ep.openai ? ['openai', ep.openai] : ep.anthropic ? ['anthropic', ep.anthropic] : ep.gemini ? ['google-genai', ep.gemini] : [];
+    if (!type) continue;
+    const pid = 'claclaw-' + p.id;
+    out.push(`[providers.${tomlStr(pid)}]`, `type = ${tomlStr(type)}`, `base_url = ${tomlStr(base)}`);
+    if (p.key) { out.push(`api_key_env = ${tomlStr(envName(p.id))}`); env[envName(p.id)] = p.key; }
+    out.push('');
+    for (const m of p.models) {
+      const alias = pid + '/' + m.id;
+      const caps = ['tool_use', ...(m.reasoning ? ['thinking'] : []), ...(m.vision ? ['image_in'] : [])];
+      out.push(`[models.${tomlStr(alias)}]`, `provider = ${tomlStr(pid)}`, `model = ${tomlStr(m.id)}`,
+        `max_context_size = ${Math.max(1, Number(m.context) || 131072)}`, `capabilities = ${JSON.stringify(caps)}`,
+        `display_name = ${tomlStr(m.name || m.id)}`, '');
+      aliases.push({ alias, provider: p, model: m });
+    }
+  }
+  const tables = out.join('\n');
+  const sig = tables ? crypto.createHash('sha256').update(tables + '\n' + JSON.stringify(env)).digest('hex').slice(0, 16) : '';
+  return { tables, aliases, env, sig };
+}
+
+// 把 config.toml 里原来的 claclaw- 段落换成新的（用户自己的配置原样不动）。
+// 段落按表头认：[providers."claclaw-…"]、[providers.claclaw-…]（含 .env 子表）、[models."claclaw-…"]（含 .overrides）。
+// 没有 default_model（没登录过、也没配过模型）就设成模型库第一个；原来指向的 claclaw 模型被删了也换掉
+const KIMI_MARK = '# —— 以下由 claclaw 按「模型管理」自动生成，改模型请在 claclaw 里改 ——';
+export function kimiConfigMerge(text, inj) {
+  const lines = String(text || '').split('\n'), keep = [];
+  let skip = false;
+  for (const l of lines) {
+    const h = l.match(/^\s*\[\s*([^\]]+?)\s*\]\s*(#.*)?$/);
+    if (h) skip = /^(providers|models)\.("?)claclaw-/.test(h[1]);
+    if (!skip && l.trim() !== KIMI_MARK) keep.push(l);
+  }
+  let body = keep.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+  const dm = body.match(/^default_model\s*=\s*"([^"]*)"\s*$/m);
+  const has = a => inj.aliases.some(x => x.alias === a);
+  const first = inj.aliases[0]?.alias;
+  if (dm && dm[1].startsWith('claclaw-') && !has(dm[1])) body = first ? body.replace(dm[0], 'default_model = ' + tomlStr(first)) : body.replace(dm[0] + '\n', '').replace(dm[0], '');
+  else if (!dm && first) {
+    // 顶层键要写在第一个表头之前
+    const i = body.search(/^[ \t]*\[/m);
+    const line = 'default_model = ' + tomlStr(first);
+    body = i < 0 ? (body ? body + '\n' : '') + line : (body.slice(0, i).trimEnd() ? body.slice(0, i).trimEnd() + '\n' : '') + line + '\n\n' + body.slice(i);
+  }
+  return (body ? body.trimEnd() + '\n' : '') + (inj.tables ? '\n' + KIMI_MARK + '\n' + inj.tables.trimEnd() + '\n' : '');
+}
