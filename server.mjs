@@ -30,6 +30,7 @@ import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opA
 const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
+setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
 import { relPath, findBin, readJson } from './util.mjs';

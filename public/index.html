@@ -3113,10 +3113,13 @@ function setHeader(){
 }
 function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 // 排查日志写进电脑上的 claclaw.log；连接没好就先攒着，连上补发
+// 首屏计时（临时排查「加载中」慢）：页面下载、脚本跑完、ws 连上、第一次列表请求的起止，写进服务端日志
+var wsOpenAt=0,perfSent=false;function perfMark(what,tq){if(perfSent)return;perfSent=true;var n=(performance.getEntriesByType&&performance.getEntriesByType('navigation')[0])||{},r=Math.round;clog('perf 页面 '+r(n.responseStart||0)+'→'+r(n.responseEnd||0)+'ms '+r((n.transferSize||0)/1024)+'KB(解压 '+r((n.decodedBodySize||0)/1024)+'KB) dom '+r(n.domContentLoadedEventEnd||0)+' ws '+wsOpenAt+' '+what+' '+r(tq)+'→'+r(performance.now())+' 路线 '+(CR?CR.route:'无'))}
 var clogQ=[];function clog(t){t=new Date().toTimeString().slice(0,8)+' '+t;if(ws&&ws.readyState===1)wsSend({t:'clog',text:t});else clogQ.push(t)}
 function connect(){
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
   ws.onopen=function(){
+    if(!wsOpenAt)wsOpenAt=Math.round(performance.now());
     setTimeout(function(){var q=clogQ;clogQ=[];q.forEach(function(t){wsSend({t:'clog',text:t})})},0);
     retry=0;banner(null);
     if(!connectedOnce){document.documentElement.classList.remove('fog');try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'connected'},'*')}catch(_){}}   // 只在首次连上时
@@ -4282,9 +4285,21 @@ function wxTime(ms){
   return (d.getFullYear()===n.getFullYear()?'':d.getFullYear()+'/')+(d.getMonth()+1)+'/'+d.getDate();
 }
 var recentTimer=null;
+// 列表在手机上记一份：重开页面（点通知、外壳重新载入）时先画上次的，取到新的再换，不用对着「加载中」等
+function listSaved(k){try{var v=JSON.parse(localStorage.getItem(hk('list.'+k))||'null');return Array.isArray(v)?v:null}catch(_){return null}}
+function listSave(k,arr){try{localStorage.setItem(hk('list.'+k),JSON.stringify(arr))}catch(_){}}
 function loadRecent(){
   var list=$('#sList');
+  var tq=performance.now();
+  if(!list.querySelector('.s-row')){var old=listSaved('recent');if(old)drawRecent(old)}
   fetch('/api/recent').then(function(r){needLogin(r);if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(whenNotPressing).then(function(arr){
+    perfMark('最近',tq);
+    if(Array.isArray(arr))listSave('recent',arr);
+    drawRecent(arr);
+  }).catch(function(e){if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
+}
+function drawRecent(arr){
+    var list=$('#sList');
     if(listMode!=='recent')return;
     if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
     lastList=arr;
@@ -4328,7 +4343,6 @@ function loadRecent(){
       list.appendChild(row);
     });
     applySearch();renderUnread();renderActivity();
-  }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
 function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
@@ -4370,8 +4384,16 @@ function openSheet(silent){
   if(!silent&&DESKTOP.matches){showDlg(sheet,true)}   // 手机列表页本身就是列表，不用弹出面板
   syncPushBtn();
   if(rec){loadRecent();return}
-  var claw=clawSel;
+  var claw=clawSel,tq=performance.now();
+  if(!list.querySelector('.s-row')){var old=listSaved(claw||'claude');if(old)drawList(old,claw)}
   fetch('/api/sessions'+(clawSel&&clawSel!=='claude'?'?claw='+clawSel:'')).then(function(r){needLogin(r);return r.json()}).then(whenNotPressing).then(function(arr){
+    perfMark('列表',tq);
+    if(Array.isArray(arr))listSave(claw||'claude',arr);
+    drawList(arr,claw);
+  }).catch(function(e){if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
+}
+function drawList(arr,claw){
+    var list=$('#sList');
     if(claw!==clawSel)return;   // 加载途中换了 Claw
     if(!Array.isArray(arr)){list.innerHTML='<div class="s-empty"></div>';list.firstChild.textContent=(arr&&arr.error)||'加载失败';return}
     lastList=arr;
@@ -4482,7 +4504,6 @@ function openSheet(silent){
       cur.appendChild(row);
     });
     applySearch();renderUnread();renderActivity();
-  }).catch(function(e){list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
 // ---------- 未读红点 + 应用角标 ----------
 // 服务器推来未读表（会话 ID → 条数）：会话行红点、图标栏「会话」红点、手机顶部红点、Dock/主屏幕图标角标

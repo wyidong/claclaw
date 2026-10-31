@@ -27,7 +27,7 @@ export const kmInstalled = () => !!kmBin();
 const runBin = (args, ms) => run(kmBin(), args, ms, { missing: '没找到 kimi 命令，先装好 Kimi Code CLI' });
 
 // ---------- 会话列表 ----------
-let listCache = { at: 0, rows: null, p: null };
+let listCache = { sig: '', rows: null, p: null };
 const pick = (o, ...ks) => { for (const k of ks) if (o?.[k] != null && o[k] !== '') return o[k]; return undefined; };
 function normRow(s) {
   const id = String(pick(s, 'id', 'sessionId', 'session_id') || '');
@@ -41,19 +41,38 @@ function normRow(s) {
     dir: String(s.sessionDir || ''),
   };
 }
+// 列表要跑 kimi session list（起一次 CLI 将近 1 秒），「最近」每次都要它。列表内容都来自各会话的 state.json，
+// 所以按「索引文件 + 各目录 + 各 state.json 的修改时间」做签名：没变就用上次的结果，几个 stat 而已
+const KHOME = process.env.KIMI_CODE_HOME || path.join(HOME, '.kimi-code');
+function listSig() {
+  const st = f => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
+  const root = path.join(KHOME, 'sessions'), parts = [st(path.join(KHOME, 'session_index.jsonl')), st(root)];
+  let wds = [];
+  try { wds = fs.readdirSync(root); } catch {}
+  for (const wd of wds) {
+    if (wd === '.index-cache') continue;   // kimi 自己列会话时会重写它，算进去签名就永远对不上
+    const d = path.join(root, wd);
+    parts.push(wd, st(d));
+    let ss = [];
+    try { ss = fs.readdirSync(d); } catch {}
+    for (const x of ss) parts.push(x, st(path.join(d, x, 'state.json')));
+  }
+  return parts.join(',');
+}
 async function listRows() {
-  if (listCache.rows && Date.now() - listCache.at < 3000) return listCache.rows;
+  const sig = listSig();
+  if (listCache.rows && listCache.sig === sig) return listCache.rows;
   if (listCache.p) return listCache.p;
   listCache.p = runBin(['session', 'list', '--all', '--json'], 20000).then(out => {
     let arr = [];
     try { const j = JSON.parse(out.slice(Math.max(0, out.indexOf('[')))); arr = Array.isArray(j) ? j : j?.sessions || []; } catch {}
     const rows = arr.map(normRow).filter(Boolean).sort((a, b) => b.updated - a.updated);
-    listCache = { at: Date.now(), rows, p: null };
+    listCache = { sig, rows, p: null };
     return rows;
   }).catch(e => { listCache.p = null; throw e; });
   return listCache.p;
 }
-const dropListCache = () => { listCache.at = 0; };
+const dropListCache = () => { listCache.sig = ''; };
 
 export async function kmSessionList({ busy = () => false } = {}) {
   const rows = await listRows();
@@ -72,7 +91,7 @@ export async function kmInfo(id) {
 }
 
 // ---------- 模型库 → config.toml ----------
-const CONFIG = path.join(process.env.KIMI_CODE_HOME || path.join(HOME, '.kimi-code'), 'config.toml');
+const CONFIG = path.join(KHOME, 'config.toml');
 // 把模型库同步进 config.toml（内容没变就不写）；返回要给 kimi 进程的环境变量（key）
 function syncConfig(log) {
   const inj = kimiInject(storeNow());
@@ -186,7 +205,7 @@ export async function kmRename(id, title, log) {
   const s = validSid(sid) ? await kmInfo(id).catch(() => null) : null;
   if (!s?.dir) throw new Error('找不到这个会话');
   const file = path.join(s.dir, 'state.json');
-  const root = path.join(process.env.KIMI_CODE_HOME || path.join(HOME, '.kimi-code'), 'sessions');
+  const root = path.join(KHOME, 'sessions');
   if (!fs.realpathSync(file).startsWith(fs.realpathSync(root) + path.sep)) throw new Error('会话目录不对');
   const r = kmRunners.get(id);
   if (r?.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
