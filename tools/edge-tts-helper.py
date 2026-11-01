@@ -78,7 +78,10 @@ class Conn:
         return bytes(buf)
 
 
-POOL = [Conn(), Conn()]
+# 连接（和它们的锁）在 main() 里建：Python 3.9 的 asyncio.Lock() 一建就绑定当时的事件循环，
+# 放在模块顶层会绑到 asyncio.run 之外的另一个循环，同一条连接上两句排队等锁时报
+# "got Future attached to a different loop"（边写边念一次并发 3～4 句，正好撞上，自动朗读整段失败）
+POOL = []
 _next = 0
 
 
@@ -133,6 +136,7 @@ async def handle(line, out_lock):
 
 
 async def main():
+    POOL[:] = [Conn(), Conn()]
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader(limit=1 << 20)
     await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)

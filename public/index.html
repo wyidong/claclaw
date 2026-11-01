@@ -2979,6 +2979,7 @@ function onEvent(m){
     feed.querySelectorAll('.msg.user.queued').forEach(function(e){e.classList.remove('queued')});
     break;
   case 'tts.off':   // 别的页面在念：这边停下（同一时间只一个页面出声）
+    if(ttsSpeaking())ttsDbg('stop: tts.off');
     ttsStop();ttsHush=!!busy;
     break;
   case 'peer.pair':   // 有人申请协同配对：页面顶部提醒，点了直接去协同页
@@ -3170,9 +3171,17 @@ function wsSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 // 首屏计时（临时排查「加载中」慢）：页面下载、脚本跑完、ws 连上、第一次列表请求的起止，写进服务端日志
 var wsOpenAt=0,perfSent=false;function perfMark(what,tq){if(perfSent)return;perfSent=true;var n=(performance.getEntriesByType&&performance.getEntriesByType('navigation')[0])||{},r=Math.round;clog('perf 页面 '+r(n.responseStart||0)+'→'+r(n.responseEnd||0)+'ms '+r((n.transferSize||0)/1024)+'KB(解压 '+r((n.decodedBodySize||0)/1024)+'KB) dom '+r(n.domContentLoadedEventEnd||0)+' ws '+wsOpenAt+' '+what+' '+r(tq)+'→'+r(performance.now())+' 路线 '+(CR?CR.route:'无'))}
 var clogQ=[];function clog(t){t=new Date().toTimeString().slice(0,8)+' '+t;if(ws&&ws.readyState===1)wsSend({t:'clog',text:t});else clogQ.push(t)}
+// 同一时间只留一条连接：再连之前把旧的关掉、摘掉回调；各回调先认是不是当前这条，旧连接晚到的事件一律不理。
+// 以前会漏出两条：断线的重连计时还没到，「从通知打开」又 reconnectNow 了一次 → 计时到了再连一条，前一条成了没人管的孤儿，
+// 照样收消息、还会再触发重连。孤儿连接上收到服务器给「别的页面」的 tts.off，就把自己刚开始的朗读停了（只念出一两个字）
+var wsRetryT=0;
 function connect(){
-  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+  clearTimeout(wsRetryT);wsRetryT=0;
+  var old=ws;if(old){old.onopen=old.onclose=old.onmessage=null;if(old.readyState<2)try{old.close()}catch(_){}}
+  var me=ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
+  var again=function(){if(me!==ws)return;connBanner('连接已断开，正在重连…');clearTimeout(wsRetryT);wsRetryT=setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)))};
   ws.onopen=function(){
+    if(me!==ws)return;
     if(!wsOpenAt)wsOpenAt=Math.round(performance.now());
     setTimeout(function(){var q=clogQ;clogQ=[];q.forEach(function(t){wsSend({t:'clog',text:t})})},0);
     retry=0;banner(null);
@@ -3192,19 +3201,16 @@ function connect(){
     if(last)wsSend({t:'session.open',id:last,mode:mode});
     if(!last||DESKTOP.matches)openSheet();   // 电脑端会话列表常驻：连上就加载，不管上次的会话能不能打开
   };
-  ws.onmessage=function(e){try{onEvent(JSON.parse(e.data))}catch(err){console.error(err)}};
+  ws.onmessage=function(e){if(me!==ws)return;try{onEvent(JSON.parse(e.data))}catch(err){console.error(err)}};
   ws.onclose=function(){
+    if(me!==ws)return;
     // 断线：顶部小圆点变灰、不再闪，和「正在工作」区分开
     var dot=$('#sessBtn .dot');dot.classList.add('off');dot.classList.remove('busy');
     // 连不上可能是登录过期：先问一下，401 就回登录页
     fetch('/api/sessions',{method:'HEAD'}).then(function(r){
       if(r.status===401){location.replace('/login');return}
-      connBanner('连接已断开，正在重连…');
-      setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)));
-    }).catch(function(){
-      connBanner('连接已断开，正在重连…');
-      setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)));
-    });
+      again();
+    }).catch(again);
   };
 }
 
@@ -3261,11 +3267,9 @@ if(CR)setInterval(function(){if(!document.hidden)crPaint()},10000);
 if(CR&&CR.addEventListener)CR.addEventListener('route',function(e){
   crPaint();
   var was=crLast;crLast=e&&e.detail&&e.detail.route;
-  if(crLast==='direct'&&was!=='direct'&&ws&&ws.readyState===1){var old=ws;ws=null;old.onclose=null;old.onmessage=null;try{old.close()}catch(_){}connect()}
+  if(crLast==='direct'&&was!=='direct'&&ws&&ws.readyState===1)connect();   // connect 会先关掉旧连接
 });
 function reconnectNow(){
-  var old=ws;ws=null;
-  if(old){old.onclose=null;old.onmessage=null;try{old.close()}catch(_){}}
   banner('连接似乎断了，正在重连…');connect();
 }
 // 输入框还空着就把没送出的文字放回去，免得丢
