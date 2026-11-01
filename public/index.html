@@ -2975,6 +2975,9 @@ function onEvent(m){
     if(outbox&&m.text===outbox.text)outboxDone();
     var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');stamp(ue,Date.now());think(true);
     break;
+  case 'send.dup':   // 重发的这份服务器早就收到了（卡住的那份后来送到了）：不再处理，当作已送达
+    if(outbox&&m.cid===outbox.cid){if(outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');stamp(outbox.el,Date.now())}outboxDone()}
+    break;
   case 'queue.sent':   // 排队的消息发出去了（合成一条）
     feed.querySelectorAll('.msg.user.queued').forEach(function(e){e.classList.remove('queued')});
     break;
@@ -3242,7 +3245,8 @@ function trySend(){
   clearTimeout(outboxTimer);
   if(outbox.video&&!outbox.video.id)return;   // 视频还在上传：传完会再调
   if(!ws||ws.readyState!==1){banner('连接已断开，恢复后会自动发送刚才那条消息');return}
-  ws.send(JSON.stringify({t:'message.send',text:outbox.text,images:outbox.images,video:outbox.video&&outbox.video.kind!=='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,file:outbox.video&&outbox.video.kind==='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined,filePending:outbox.filePending||undefined}));
+  if(!outbox.cid)outbox.cid=Math.random().toString(36).slice(2,10)+Date.now().toString(36);   // 这条消息的编号：自动重发时不变，服务器据此去掉重复的那份
+  ws.send(JSON.stringify({t:'message.send',cid:outbox.cid,text:outbox.text,images:outbox.images,video:outbox.video&&outbox.video.kind!=='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,file:outbox.video&&outbox.video.kind==='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined,filePending:outbox.filePending||undefined}));
   outboxTimer=setTimeout(function(){if(outbox&&Date.now()-lastEvt>8000)reconnectNow()},8000);   // 8 秒没回显、期间也没收到任何消息才判定连接已死
 }
 function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideoJob,0)}

@@ -146,6 +146,13 @@ function originalMode(file) {
 const OUT_MAX = 4000;
 // 发图：前端会先压缩到长边 2000px 以内；这里再兜底限制张数和单张大小（base64 字符数）
 const MAX_IMAGES = 5;
+// 收下过的消息编号（网页的 cid）：10 分钟内同一个编号再来就是重发的重复，不再交给 AI
+const sentCids = new Map();
+function noteCid(cid) {
+  const now = Date.now();
+  sentCids.set(cid, now);
+  for (const [k, t] of sentCids) { if (sentCids.size <= 500 && now - t < 600000) break; sentCids.delete(k); }
+}
 const MAX_IMAGE_B64 = 7 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 // 历史分页：打开时只发最后一页（约一屏），往上滑再按页要更早的；服务器最多保留最近 HISTORY_KEEP 条
@@ -3189,17 +3196,22 @@ wss.on('connection', (ws, req) => {
       } else if (!runner) {
         send({ t: 'error', message: '还没有打开会话' });
       } else if (m.t === 'message.send') {
+        // 网页每条消息带一个编号 cid，重发时不变：连接卡住时网页会重连再发一遍，卡住的那份晚点又送到，同一条就进了两次（一份开新一轮、一份成了插话）
+        const cid = typeof m.cid === 'string' && /^[a-z0-9]{8,40}$/.test(m.cid) ? m.cid : '';
+        if (cid && sentCids.has(cid)) { log('send dup dropped', String(runner.id || '').slice(0, 12)); return send({ t: 'send.dup', cid }); }
+        if (cid) noteCid(cid);   // 先占上（视频要等截帧信息，两份可能交错）；没收下就删掉，重发还能进来
+        const fail = o => { if (cid) sentCids.delete(cid); return send(o); };
         let text = String(m.text || '').trim();
         const images = Array.isArray(m.images) ? m.images.slice() : [];
-        if (images.length > MAX_IMAGES) return send({ t: 'error', message: '一次最多 ' + MAX_IMAGES + ' 张图片' });
+        if (images.length > MAX_IMAGES) return fail({ t: 'error', message: '一次最多 ' + MAX_IMAGES + ' 张图片' });
         for (const i of images) {
-          if (!IMAGE_TYPES.includes(i?.media_type) || typeof i.data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(i.data)) return send({ t: 'error', message: '图片格式不支持（只支持 JPEG / PNG / GIF / WebP）' });
-          if (i.data.length > MAX_IMAGE_B64) return send({ t: 'error', message: '图片太大了' });
+          if (!IMAGE_TYPES.includes(i?.media_type) || typeof i.data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(i.data)) return fail({ t: 'error', message: '图片格式不支持（只支持 JPEG / PNG / GIF / WebP）' });
+          if (i.data.length > MAX_IMAGE_B64) return fail({ t: 'error', message: '图片太大了' });
         }
         if (m.video) {
           // 视频：原文件已经传到 data/uploads/；这里截帧当图片，并把原文件路径告诉 AI
           const file = videoFile(UPLOADS, m.video.id);
-          if (!file) return send({ t: 'error', message: '视频找不到了（超过保留时间会清掉），请重新发' });
+          if (!file) return fail({ t: 'error', message: '视频找不到了（超过保留时间会清掉），请重新发' });
           // 默认不截帧（省时间、省 token）：只告诉 AI 文件在哪、多长，要不要看画面由它按用户的话决定
           const dur = await videoDuration(file);
           const name = vidName(m.video.name);
@@ -3217,16 +3229,16 @@ wss.on('connection', (ws, req) => {
         if (m.file) {
           // 文件：原文件已在 data/uploads/；只告诉 AI 路径和大小，要不要读由它按用户的话决定
           const file = videoFile(UPLOADS, m.file.id);
-          if (!file) return send({ t: 'error', message: '文件找不到了（超过保留时间会清掉），请重新发' });
+          if (!file) return fail({ t: 'error', message: '文件找不到了（超过保留时间会清掉），请重新发' });
           const kb = fs.statSync(file).size / 1024;
           text = '[文件「' + vidName(m.file.name) + '」 ' + (kb >= 1024 ? (kb / 1024).toFixed(1) + 'MB' : kb >= 1 ? kb.toFixed(1) + 'KB' : Math.round(kb * 1024) + 'B') + '，原文件：' + file +
             '（已收到）。用户的话需要看内容时再读这个文件；不需要就不用处理，简短确认收到即可]' + (text ? '\n' + text : '');
           log('file', path.basename(file), kb.toFixed(1) + 'KB');
         }
-        if (!text && !images.length) return;
+        if (!text && !images.length) { if (cid) sentCids.delete(cid); return; }
         const acp = runner instanceof AcpRunner;
         const sent = runner.send(text, images);
-        if (!sent) send({ t: 'error', busy: runner.busy || undefined, message: acp && runner.busy ? '这一轮结束前只能排队普通消息（命令要等这一轮结束，最多排 10 条）' : '上一条还在处理中' });
+        if (!sent) fail({ t: 'error', busy: runner.busy || undefined, message: acp && runner.busy ? '这一轮结束前只能排队普通消息（命令要等这一轮结束，最多排 10 条）' : '上一条还在处理中' });
         else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data), queued: sent === 'queued' || undefined });
       } else if (m.t === 'permission.reply') {
         runner.replyPermission(m.requestId, m.decision, m.answers);
