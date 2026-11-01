@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import { emptyStore, applyOp, publicView, loadStore, saveStore, revealKey, providerName, displayName, parseModels, fetchModels } from '../modelstore.mjs';
 
 const KEY = 'sk-test-0123456789abcdefWXYZ';
@@ -143,8 +144,8 @@ test('从接口读模型：几种格式的返回、按顺序试、错误信息�
   assert.deepEqual(parseModels({ data: [{ id: 'deepseek-chat', object: 'model' }, { id: 'deepseek-chat' }, { id: 'bad id' }, { id: 'or/x', name: 'X 模型', context_length: 200000 }] }),
     [{ id: 'deepseek-chat' }, { id: 'or/x', name: 'X 模型', context: 200000 }]);
   assert.deepEqual(parseModels({ data: [{ id: 'claude-x', display_name: 'Claude X' }] }), [{ id: 'claude-x', name: 'Claude X' }]);
-  assert.deepEqual(parseModels({ models: [{ name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', inputTokenLimit: 1048576, supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-001', supportedGenerationMethods: ['embedContent'] }] }),
-    [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', context: 1048576 }]);
+  assert.deepEqual(parseModels({ models: [{ name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', inputTokenLimit: 1048576, thinking: true, supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-001', supportedGenerationMethods: ['embedContent'] }] }),
+    [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', context: 1048576, reasoning: true }]);
   assert.equal(parseModels({ error: 'x' }), null);
   const seen = [];
   const fake = map => async (url, o) => { seen.push([url, o.headers]); const r = map[url]; if (!r) return { ok: false, status: 404, json: async () => ({}) }; return { ok: true, status: 200, json: async () => r }; };
@@ -159,4 +160,23 @@ test('从接口读模型：几种格式的返回、按顺序试、错误信息�
   await assert.rejects(fetchModels(p, { fetchImpl: fake({}) }), e => e.user && /没读到模型列表（Anthropic 接口回 404）/.test(e.message) && !e.message.includes(KEY));
   await assert.rejects(fetchModels(p, { fetchImpl: async () => { throw new Error('boom ' + KEY); } }), e => e.user && /连不上/.test(e.message) && !e.message.includes(KEY));
   await assert.rejects(fetchModels({ endpoints: { openai: 'https://x' } }), /先填 Key/);
+});
+
+test('从接口读模型：服务端请求按 HTTP_PROXY / NO_PROXY 走代理（Node 自带 fetch 不读这些变量）', async () => {
+  const hits = [];
+  const proxy = http.createServer((q, s) => { hits.push(q.url); s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ data: [{ id: 'via-proxy' }] })); });
+  await new Promise(r => proxy.listen(0, '127.0.0.1', r));
+  const names = ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy'], old = Object.fromEntries(names.map(k => [k, process.env[k]]));
+  try {
+    for (const k of names) delete process.env[k];
+    process.env.HTTP_PROXY = process.env.http_proxy = 'http://127.0.0.1:' + proxy.address().port;
+    assert.deepEqual(await fetchModels({ key: 'k', endpoints: { openai: 'http://models.invalid/v1' } }), [{ id: 'via-proxy' }]);
+    assert.equal(hits[0], 'http://models.invalid/v1/models', '经代理发出（.invalid 直连解析不了）');
+    process.env.NO_PROXY = process.env.no_proxy = 'models.invalid';
+    await assert.rejects(fetchModels({ key: 'k', endpoints: { openai: 'http://models.invalid/v1' } }, { timeout: 3000 }), /连不上/);
+    assert.equal(hits.length, 1, 'NO_PROXY 里的不走代理');
+  } finally {
+    for (const k of names) { if (old[k] == null) delete process.env[k]; else process.env[k] = old[k]; }
+    proxy.close();
+  }
 });

@@ -5,6 +5,8 @@
 // 改 key 只能整个替换；key 必填，不能清掉（不用了就删掉这一条）。
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
+import https from 'node:https';
 import crypto from 'node:crypto';
 
 export const FORMATS = ['anthropic', 'openai', 'gemini'];   // 一家可能同时有几种接口格式，每种一个地址
@@ -195,9 +197,25 @@ export function revealKey(store, id) {
   return p.key;
 }
 
+// 服务端发的请求按 HTTP(S)_PROXY / NO_PROXY 走代理（Node 自带的 fetch 不读这些变量，国外的接口直连会卡到超时）。
+// 只给「从接口读模型」用，不动全局：局域网协同、中继、本机设备客户端照旧直连。不跟随跳转（key 在请求头里，不能被带到别处）。
+export function envFetch(url, { headers = {}, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url), mod = u.protocol === 'http:' ? http : https;
+    const q = mod.request(u, { headers, signal, agent: new mod.Agent({ proxyEnv: process.env }) }, r => {
+      const chunks = []; let n = 0;
+      r.on('data', c => { n += c.length; if (n > 8e6) q.destroy(new Error('回的内容太大')); else chunks.push(c); });
+      r.on('end', () => { const body = Buffer.concat(chunks).toString('utf8'); resolve({ ok: r.statusCode >= 200 && r.statusCode < 300, status: r.statusCode, json: async () => JSON.parse(body) }); });
+      r.on('error', reject);
+    });
+    q.on('error', reject);
+    q.end();
+  });
+}
+
 // 从接口读模型列表（不存）：OpenAI 格式 GET /models（再试 /v1/models），Anthropic 格式 GET /v1/models，Gemini 格式 GET /v1beta/models。
 // 返回 [{id, name?, context?}]；都读不到抛 e.user 错误。错误信息里不带 key（key 只在请求头里）。
-export async function fetchModels(p, { timeout = 8000, fetchImpl = globalThis.fetch } = {}) {
+export async function fetchModels(p, { timeout = 8000, fetchImpl = envFetch } = {}) {
   if (!p?.key) fail('先填 Key');
   const eps = p.endpoints || {}, tries = [];
   if (eps.openai) {
@@ -215,7 +233,7 @@ export async function fetchModels(p, { timeout = 8000, fetchImpl = globalThis.fe
       const list = parseModels(await r.json().catch(() => null));
       if (list) return list;
       last = fmt + ' 接口回的不是模型列表';
-    } catch (e) { last = fmt + ' 接口连不上' + (e?.name === 'TimeoutError' ? '（超时）' : ''); }
+    } catch (e) { last = fmt + ' 接口连不上' + (e?.name === 'TimeoutError' || e?.cause?.name === 'TimeoutError' || e?.code === 'ABORT_ERR' ? '（超时）' : ''); }
   }
   fail('没读到模型列表（' + (last || '没有接口地址') + '），可以手动添加');
 }
@@ -235,6 +253,7 @@ export function parseModels(j) {
     if (name && name !== id) x.name = name;
     const ctx = Math.round(Number(m.context_length || m.context_window || m.inputTokenLimit || m.max_context_length || 0));
     if (ctx >= 1000 && ctx <= 100_000_000) x.context = ctx;
+    if (m.thinking === true) x.reasoning = true;   // Gemini 会标会不会思考
     out.push(x);
     if (out.length >= MAX_MODELS) break;
   }
