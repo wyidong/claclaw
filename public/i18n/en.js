@@ -988,6 +988,9 @@ var I18N={dict:{
 "没拿到 Key":"Couldn't get the key",
 },
 pat:[
+["^本轮结束：模型报错：([\\s\\S]*)\\n重试也没用，已停下这一轮；换个模型再发。$","Turn ended: model error: $1\nRetrying won't help, so this turn was stopped; switch models and send again."],
+["^模型报错：([\\s\\S]*)\\nOpenCode 会自己重试（第 (\\d+) 次，(.+) 再试）；不想等就点停止，换个模型再发。$","Model error: $1\nOpenCode will retry on its own (attempt $2, next at $3); tap Stop and switch models if you don't want to wait."],
+["^模型报错：([\\s\\S]*)\\nOpenCode 会自己重试（第 (\\d+) 次）；不想等就点停止，换个模型再发。$","Model error: $1\nOpenCode will retry on its own (attempt $2); tap Stop and switch models if you don't want to wait."],
 ["^(\\d+) 个 Key · (\\d+) 个模型$","$1 keys · $2 models"],
 ["^＋ 再加一个 (.+) 的 Key$","+ Add another $1 key"],
 ["^再加一个 (.+) 的 Key$","Add another $1 key"],

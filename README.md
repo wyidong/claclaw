@@ -205,6 +205,7 @@ Claw 页顶部（电脑上在 设置 → 宿主 → Claw 区）有「模型管�
 - Codex 会话：同样不检测终端占用；列表读 `~/.codex/sessions`（只列终端 / IDE / 桌面版里开的，不列 `codex exec` 和子代理），名字看 `~/.codex/session_index.jsonl`；删除是 Codex 的归档（`~/.codex/archived_sessions`，能找回）；改名往 `session_index.jsonl` 追加一行
 - Qwen Code 会话：同样不检测终端占用；列表读 `~/.qwen/projects/*/chats/*.jsonl`；改名、删除用 qwen 自己的 ACP 扩展方法（删除前把会话文件复制到 data/trash）
 - OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。改名走 opencode 自己的本机接口（终端里开着同一会话的要重开才看到新名）；删除前先导出到 data/trash（`opencode import` 可找回）
+- OpenCode 模型报错（额度用完、超时、过载……）时会自己等着重试，ACP 里不说，网页原本只看到一直「工作中」。现在 claclaw 在一轮进行中每 5 秒问一次它的 `/session/status`：在重试就在会话里显示报错原文、第几次、几点再试（不想等就点停止换模型）；OpenCode 免费额度用完（重试也没用）直接停下这一轮并显示报错。
 
 ## 技能
 

@@ -245,6 +245,8 @@ const noProv = n => String(n || '').replace(/^[^/]+\//, '');   // 「OpenCode/Mi
 // ---------- 打开的 OpenCode 会话 ----------
 export const opRunners = new Map();
 
+// 重试也没用的模型报错：OpenCode 免费额度用完（要等额度恢复或订阅），碰到就直接停下这一轮
+const OP_GIVE_UP = /free usage limit reached/i;
 export class OpRunner extends AcpRunner {
   static agent = agent; static prefix = OP_PREFIX; static runners = opRunners;
   static label = 'OpenCode'; static group = 'OpenCode'; static permPrefix = 'op-'; static commands = COMMANDS;
@@ -285,8 +287,40 @@ export class OpRunner extends AcpRunner {
     return { value: v, label: noProv(name), sub: name.includes('/') ? name.split('/')[0] : prov, id, base: sp ? Object.values(sp.endpoints)[0] : '' };
   }
   ctxNow() { return opCtx(this.id); }   // 上下文大小：每轮结束读库
-  beforePrompt() { touch(this.sid); }
-  onFinish() { touch(this.sid); }
+  beforePrompt() { touch(this.sid); this.watchRetry(); }
+  onFinish() { touch(this.sid); this.unwatchRetry(); }
+  finish(o = {}) {   // 自动停掉的（免费额度用完之类）：按出错收尾（opencode 被 cancel 后 stopReason 照样回 end_turn，不能按 cancelled 认）
+    if (this.stopWhy && !o.error) o = { error: this.stopWhy };
+    this.stopWhy = '';
+    return super.finish(o);
+  }
+  // 模型报错（额度用完、超时、过载……）时 OpenCode 自己等着重试，ACP 里一声不吭，网页只看到一直「工作中」。
+  // 这一轮进行中每 5 秒问一次 /session/status：在重试就把报错和下次重试时间告诉网页；免费额度用完这种重试也没用的，直接停掉这一轮
+  watchRetry() {
+    this.unwatchRetry();
+    let last = '';
+    const tick = async () => {
+      if (!this.busy || this.closed) return this.unwatchRetry();
+      let st = null;
+      try { st = await opStatus(this.sid, this.cwd); } catch {}
+      if (st?.type !== 'retry' || !this.busy) return;
+      const msg = String(st.message || '模型没有回应').trim().slice(0, 400), key = st.attempt + '|' + msg;
+      if (key === last) return;
+      last = key;
+      this.log?.('opencode retry', this.sid.slice(0, 16), 'attempt=' + st.attempt, msg.slice(0, 120));
+      if (OP_GIVE_UP.test(msg)) {
+        this.stopWhy = '模型报错：' + msg + '\n重试也没用，已停下这一轮；换个模型再发。';
+        this.agent.notify('session/cancel', { sessionId: this.sid });
+        return this.unwatchRetry();
+      }
+      const next = Number(st.next) || 0, at = next ? new Date(next > 1e12 ? next : Date.now() + next).toLocaleTimeString('zh-CN', { hour12: false }) : '';
+      this.emit({ t: 'sys', text: '模型报错：' + msg + '\nOpenCode 会自己重试（第 ' + st.attempt + ' 次' + (at ? '，' + at + ' 再试' : '') + '）；不想等就点停止，换个模型再发。' });
+      this.activity('等重试');
+    };
+    this.retryT = setInterval(tick, 5000);
+    this.retryT.unref?.();
+  }
+  unwatchRetry() { clearInterval(this.retryT); this.retryT = null; }
   // external_directory：要碰工作目录外的路径（opencode 默认对这个要确认）
   permInfo(tc, known) {
     const r = super.permInfo(tc, known);
@@ -331,14 +365,25 @@ async function acpApiPort() {
   }
   throw new Error('找不到 opencode 的本机接口');
 }
+function apiHeaders() {
+  const headers = { 'content-type': 'application/json' };
+  if (process.env.OPENCODE_SERVER_PASSWORD) headers.authorization = 'Basic ' + Buffer.from((process.env.OPENCODE_SERVER_USERNAME || 'opencode') + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
+  return headers;
+}
+// 会话现在的状态（GET /session/status）：{ type: 'idle' | 'busy' | 'retry', attempt, message, next, action }，没有返回 null
+async function opStatus(sid, dir) {
+  if (!agent.proc) return null;
+  const port = await acpApiPort();
+  const r = await fetch(`http://127.0.0.1:${port}/session/status` + (dir ? '?directory=' + encodeURIComponent(dir) : ''), { headers: apiHeaders(), signal: AbortSignal.timeout(4000) });
+  return r.ok ? (await r.json())?.[sid] || null : null;
+}
 export async function opRename(id, title, log) {
   const sid = sidOf(id);
   const dir = validSid(sid) && query(db => db.prepare('select directory from session where id = ?').get(sid))?.directory;
   if (!dir) throw new Error('找不到这个会话');
   await agent.start(log);
   const port = await acpApiPort();
-  const headers = { 'content-type': 'application/json' };
-  if (process.env.OPENCODE_SERVER_PASSWORD) headers.authorization = 'Basic ' + Buffer.from((process.env.OPENCODE_SERVER_USERNAME || 'opencode') + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
+  const headers = apiHeaders();
   try {
     const r = await fetch(`http://127.0.0.1:${port}/session/${sid}?directory=${encodeURIComponent(dir)}`,
       { method: 'PATCH', headers, body: JSON.stringify({ title }), signal: AbortSignal.timeout(15000) });
