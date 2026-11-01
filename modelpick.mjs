@@ -6,10 +6,11 @@
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DATA } from './auth.mjs';
-import { loadStore } from './modelstore.mjs';
+import { loadStore, displayName } from './modelstore.mjs';
 
 export const MODELS_FILE = path.join(DATA, 'models.json');
-export const storeNow = () => loadStore(MODELS_FILE);
+// 给各 Claw 用的模型库：name 换成显示名（同一家几个 Key 时带备注 / key 后 4 位）
+export const storeNow = () => { const s = loadStore(MODELS_FILE); return { ...s, providers: s.providers.map(p => ({ ...p, name: displayName(p, s.providers) })) }; };
 export const STORE_GROUP = '模型库';
 
 export const hostOf = u => { try { return new URL(u).host.toLowerCase(); } catch { return ''; } };

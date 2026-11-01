@@ -702,8 +702,8 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .ctxm button.danger{color:#E5484D}
 .s-del{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 .s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
-#delDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
-#delDlg.on{display:flex}
+#delDlg,#keyDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
+#delDlg.on,#keyDlg.on{display:flex}
 #newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #newDlg.on{display:flex}
 #newDlg .newIn{margin:4px 0 8px;font-size:14px;color:var(--muted);line-height:1.6}
@@ -879,6 +879,26 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .pe-in::placeholder{text-align:right}
 .pe-in.left,.pe-in.left::placeholder{text-align:left}
 .md-sub{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
+/* 模型管理：Key 列表、Key 详情、接口格式下拉、「更多」、从接口读到的模型 */
+.md-key{font-family:var(--mono);font-size:14px;letter-spacing:.3px;overflow-wrap:anywhere}
+.h-row .k.md-kk{flex:1;min-width:0}
+.md-kk .md-key{display:block}
+.md-keyrow .md-key{flex:1;min-width:0}
+.md-key.on{-webkit-user-select:all;user-select:all}
+.md-kbtns{flex:none;display:flex;gap:8px}
+.md-kbtns .pe-btn{height:30px;padding:0 12px;font-size:13px}
+.md-fk{display:flex;align-items:center}
+.md-fk::after{content:'▾';margin-left:4px;font-size:12px;color:var(--muted);pointer-events:none}
+.md-fmt{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;cursor:pointer}
+.md-addk .k{color:var(--muted);font-size:14px}
+.md-more>summary{list-style:none;display:flex;align-items:center;gap:7px;margin:0 14px;padding:2px 0;font-size:14px;color:var(--muted);cursor:pointer}
+.md-more>summary::-webkit-details-marker{display:none}
+.md-more>summary::before{content:'';width:6px;height:6px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+.md-more[open]>summary{margin-bottom:10px}
+.md-more[open]>summary::before{transform:rotate(45deg)}
+.md-h2{margin-top:16px}
+.md-pick{max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.md-pid{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
 .pe-ta::placeholder{text-align:left}
 .pe-urlrow{align-items:flex-start}
@@ -1399,6 +1419,22 @@ select.pe-in{text-align-last:right}
     </form>
   </div>
 
+  <div id="keyDlg" aria-hidden="true">
+    <form class="dlg" id="keyForm" role="dialog" aria-label="查看 Key">
+      <h3 id="keyTitle"></h3>
+      <p>完整的 Key 要再输一次 claclaw 的用户名和密码（登录这个网页用的那组）。</p>
+      <label for="keyU">用户名</label>
+      <input id="keyU" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label for="keyP">密码</label>
+      <input id="keyP" type="password" autocomplete="off">
+      <div class="row">
+        <button type="button" class="btn cancel" id="keyNo">取消</button>
+        <button type="submit" class="btn allow" id="keyGo">查看</button>
+      </div>
+      <div class="err" id="keyErr" role="alert"></div>
+    </form>
+  </div>
+
   <div id="sheet" aria-hidden="true">
     <div id="sheetGrip" title="拖动调整宽度，双击恢复默认" aria-hidden="true"></div>
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
@@ -1408,11 +1444,11 @@ select.pe-in{text-align-last:right}
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
       <div id="clawPane">
-        <!-- 模型管理：登记各家模型（供应商、接口地址、key、模型）；以后各 Claw 新建会话、切模型时从这里选 -->
+        <!-- 模型管理：以 Key 为单位登记各家模型（Key、接口地址、模型），按供应商分组；各 Claw 选模型时从这里选 -->
         <div class="claw-h">模型</div>
         <button type="button" class="claw-tool" id="clawModels">
           <svg class="claw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 2.8l8.2 4.6v9.2L12 21.2l-8.2-4.6V7.4z"/><path d="M3.8 7.4L12 12l8.2-4.6M12 12v9.2"/></svg>
-          <span class="claw-tx"><b>模型管理</b><small id="clawModelsSub">各家模型的接口地址、key 和模型列表</small></span>
+          <span class="claw-tx"><b>模型管理</b><small id="clawModelsSub">各家模型的 Key、接口地址和模型</small></span>
           <span class="chev" aria-hidden="true"></span>
         </button>
         <div class="claw-h claw-h2">选择 Claw</div>
@@ -2208,12 +2244,12 @@ document.addEventListener('touchmove',function(e){
   },{passive:false});
   feed.addEventListener('touchcancel',function(){clearTimeout(timer);timer=null;el=null},{passive:true});
 })();
-function copyText(t){
+function copyText(t,onFail){   // onFail：复制不了时由调用方处理（不给就提示长按选择）
   function legacy(){
     var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');
     a.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';document.body.appendChild(a);
     a.select();a.setSelectionRange(0,t.length);var ok=false;try{ok=document.execCommand('copy')}catch(_){}
-    document.body.removeChild(a);toast(ok?'已复制':'复制失败，请长按选择');
+    document.body.removeChild(a);if(!ok&&onFail)onFail();else toast(ok?'已复制':'复制失败，请长按选择');
   }
   if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(function(){toast('已复制')},legacy);else legacy();
 }
@@ -3602,96 +3638,162 @@ function renderSkills(){
   }).join('')+'<div class="pe-note">技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。</div>';
   $('#hostBody').innerHTML=h;
 }
-// ---------- 模型管理：登记各家模型（供应商 → 接口地址、key、模型），入口在 Claw 页底部和宿主页的 Claw 区 ----------
-// 这一版只管增删改，存在电脑的 data/models.json；接到各 Claw 上（新建会话 / 切模型时选用）在后续版本。
-// key 只进不出：服务器只回「有没有 key + 后 4 位」，改 key 只能整个替换或清掉
-var mdl=null,mdlSub='',mdlMsg={},mdlFrom='host';   // mdlSub：'' 列表 / 'p:<id>' 供应商（'p:' 新增）/ 'm:<供应商>:<模型>' 模型（'m:<供应商>:' 新增）
+// ---------- 模型管理：以 Key 为单位登记、按供应商分组，入口在 Claw 页顶部和宿主页的 Claw 区 ----------
+// 添加只要 Key + 一个接口地址；供应商按地址的域名认（服务端认），备注、ID、其他格式的地址收在「更多」里；模型可以从接口读出来勾选。存在电脑的 data/models.json。
+// 列表只显示 Key 的后 4 位；查看 / 复制完整 Key 要再输一次 claclaw 用户名和密码（/api/models/key），拿到的只留在这一页、60 秒后忘掉
+var mdl=null,mdlSub='',mdlMsg={},mdlFrom='host';   // mdlSub：'' 列表 / 'p:<id>' 一个 Key 的详情（'p:' 新增，'p:+<id>' 照着这一条再加一个同家的：地址、模型带过来）/ 'm:<id>:<模型>' 模型（'m:<id>:' 新增）
+var mdlKey=null,mdlKeyT=null,mdlRemote=null;   // mdlKey {id,key,show}：验过密码拿到的完整 Key；mdlRemote {id,busy,err,items,total}：从接口读到、还没加的模型
 var MDL_FMT={anthropic:'Anthropic 格式',openai:'OpenAI 格式',gemini:'Gemini 格式'};
-function modelsSum(){if(!mdl)return '';var n=0;mdl.providers.forEach(function(p){n+=p.models.length});return mdl.providers.length?mdl.providers.length+' 个供应商 · '+n+' 个模型':'还没有添加'}
+function modelsSum(){if(!mdl)return '';var n=0;mdl.providers.forEach(function(p){n+=p.models.length});return mdl.providers.length?mdl.providers.length+' 个 Key · '+n+' 个模型':'还没有添加'}
 function loadModels(){
-  fetch('/api/models').then(function(r){return r.json()}).then(function(j){if(!j||!Array.isArray(j.providers))return;mdl=j;mdlClawSub();renderModels()}).catch(function(e){mdlMsg={err:'读取失败：'+e.message};renderModels()});
+  // 先用缓存的列表画出来，读到最新的再重画——只在还停在列表页时重画（已经点进去在填的，不能冲掉）
+  fetch('/api/models').then(function(r){return r.json()}).then(function(j){if(!j||!Array.isArray(j.providers))return;var first=!mdl;mdl=j;mdlClawSub();if(first||!mdlSub)renderModels()}).catch(function(e){if(!mdl){mdlMsg={err:'读取失败：'+e.message};renderModels()}});
 }
 function mdlPeek(){if(!mdl)fetch('/api/models').then(function(r){return r.json()}).then(function(j){if(j&&Array.isArray(j.providers)&&!mdl){mdl=j;mdlClawSub()}}).catch(function(){})}
 function mdlClawSub(){var el=$('#clawModelsSub');if(el&&mdl&&mdl.providers.length)el.textContent=modelsSum()}
 function openModels(from){
   mdlFrom=from;
   if(from==='claw'){mTab('host');document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab==='claw')})}
-  hostView='models';mdlSub='';mdlMsg={};renderModels();loadModels();
+  hostView='models';mdlSub='';mdlMsg={};mdlRemote=null;mdlForget();renderModels();loadModels();
 }
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
 function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');return a.join(' · ')}
 function mdlField(id,label,val,attrs,wide,mono){return '<div class="h-row'+(wide?' pe-urlrow':'')+'"><span class="k">'+label+'</span><input id="'+id+'" class="pe-in'+(wide?' left mono':mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}
+function mdlMask(p){return p.hasKey?'••••••••'+p.keyLast4:'没有 Key'}
+function mdlHost(u){try{return new URL(u).host}catch(_){return u||''}}
+function mdlEps0(p){return Object.keys(p.endpoints).map(function(f){return [f,p.endpoints[f]]})}
+// 按地址猜接口格式（新加时跟着填的地址变，手动选过就不再变）
+function mdlGuess(u){u=String(u||'').toLowerCase();if(/\/openai(\/|$)/.test(u))return 'openai';if(/anthropic/.test(u))return 'anthropic';if(/generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com/.test(u))return 'gemini';return 'openai'}
+function mdlEpRow(fmt,url,auto){
+  return '<div class="h-row pe-urlrow md-ep"><span class="k md-fk"><select class="md-fmt" aria-label="接口格式"'+(auto?' data-auto="1"':'')+'>'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span>'+
+    '<input class="pe-in left mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…" value="'+esc(url||'')+'"></div>'}
+function mdlKeyHtml(p){
+  var k=mdlKey&&mdlKey.id===p.id&&mdlKey.show?mdlKey.key:'';
+  return '<div class="h-row md-keyrow"><span class="md-key'+(k?' on':'')+'">'+esc(k||mdlMask(p))+'</span><span class="md-kbtns"><button type="button" class="pe-btn" data-act="mdl-key-show">'+(k?'隐藏':'查看')+'</button><button type="button" class="pe-btn" data-act="mdl-key-copy">复制</button></span></div>'}
+function mdlModelsHtml(p){
+  return hSec('模型（'+p.models.length+'）',(p.models.map(function(m){
+      return '<div class="h-row h-link" data-act="mdl-model" data-id="'+esc(m.id)+'"><span class="k" style="flex:1;min-width:0">'+esc(m.name||m.id)+(m.name?'<span class="md-sub">'+esc(m.id)+'</span>':'')+'</span><span class="v" style="flex:none">'+esc(mdlCaps(m))+'</span><span class="chev" aria-hidden="true"></span></div>'}).join('')||'<div class="h-row"><span class="v" style="text-align:left">还没有模型</span></div>'))+
+    '<div class="pe-btns pe-end"><button type="button" class="pe-btn" data-act="mdl-fetch">从接口读取</button><button type="button" class="pe-btn" data-act="mdl-model-new">手动添加</button></div>'+mdlRemoteHtml(p)}
+function mdlRemoteHtml(p){
+  var r=mdlRemote&&mdlRemote.id===p.id?mdlRemote:null;if(!r)return '';
+  if(r.busy)return '<div class="pe-note">正在从接口读取模型列表…</div>';
+  if(r.err)return '<div class="pe-err">'+esc(r.err)+'</div>';
+  if(!r.items.length)return '<div class="pe-note">'+(r.total?'接口上的 '+r.total+' 个模型都加过了':'接口没有返回模型')+'</div>';
+  return '<div><div class="h-h">接口上还没加的模型（'+r.items.length+'），勾上要用的</div><div class="h-card pe-ss md-pick">'+r.items.map(function(m,i){
+      return '<label><input type="checkbox" data-i="'+i+'"><span>'+esc(m.name||m.id)+(m.name?' <em class="md-pid">'+esc(m.id)+'</em>':'')+'</span>'+(mdlCaps(m)?'<small>'+esc(mdlCaps(m))+'</small>':'')+'</label>'}).join('')+'</div></div>'+
+    '<div class="pe-btns pe-end"><button type="button" class="pe-btn" data-act="mdl-pick-all">全选</button><button type="button" class="pe-btn pri" data-act="mdl-pick-add">添加勾上的</button></div>'}
 function renderModels(){
   if(hostView!=='models')return;
-  var h='',err=mdlMsg.err?'<div class="pe-err">'+esc(mdlMsg.err)+'</div>':'';
-  var sub=mdlSub,pm=/^p:(.*)$/.exec(sub),mm=/^m:([^:]*):(.*)$/.exec(sub);
-  if(!mdl){$('#hostBody').innerHTML=pgHd('data-act="mdl-back"','返回','模型管理')+err+(err?'':'<div class="h-empty">加载中…</div>');return}
+  var h='',errBox='<div class="pe-err" id="mdErr"'+(mdlMsg.err?'':' hidden')+'>'+esc(mdlMsg.err||'')+'</div>';
+  var sub=mdlSub,pm=/^p:(\+?)(.*)$/.exec(sub),mm=/^m:([^:]*):(.*)$/.exec(sub);
+  if(!mdl){$('#hostBody').innerHTML=pgHd('data-act="mdl-back"','返回','模型管理')+errBox+(mdlMsg.err?'':'<div class="h-empty">加载中…</div>');return}
   if(pm){
-    var p=pm[1]?mdlProv(pm[1]):null;
-    if(pm[1]&&!p){mdlSub='';return renderModels()}
-    h+=pgHd('data-act="mdl-back"','返回模型管理',p?p.name:'添加供应商')+err;
-    h+=hSec('供应商',mdlField('mdName','名字',p?p.name:'','maxlength="40" placeholder="比如 DeepSeek、Kimi"')+
-      (p?'<div class="h-row"><span class="k">ID</span><span class="v pe-mono">'+esc(p.id)+'</span></div>':mdlField('mdId','ID','','maxlength="32" placeholder="可不填，按名字生成"',false,true)));
-    h+=hSec('接口地址（至少填一个）',mdl.formats.map(function(f){return mdlField('mdEp-'+f,MDL_FMT[f]||f,p?p.endpoints[f]:'','maxlength="300" inputmode="url" placeholder="https://…"',true)}).join(''));
-    h+=hSec('密钥',mdlField('mdKey','Key','','type="password" maxlength="400" placeholder="'+(p&&p.hasKey?'已保存 …'+esc(p.keyLast4)+'，留空不改':'可不填')+'"',false,true)+
-      (p&&p.hasKey?'<div class="pe-ss"><label><input type="checkbox" id="mdKeyClear"><span>清除已保存的 key</span></label></div>':''));
-    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-save">'+(p?'保存':'添加')+'</button>'+(p?'<button type="button" class="pe-btn del" data-act="mdl-prov-del">删除供应商</button>':'')+'</div>';
-    if(p)h+=hSec('模型（'+p.models.length+'）',(p.models.map(function(m){
-      return '<div class="h-row h-link" data-act="mdl-model" data-id="'+esc(m.id)+'"><span class="k" style="flex:1;min-width:0">'+esc(m.name||m.id)+(m.name?'<span class="md-sub">'+esc(m.id)+'</span>':'')+'</span><span class="v" style="flex:none">'+esc(mdlCaps(m))+'</span><span class="chev" aria-hidden="true"></span></div>'}).join('')||'<div class="h-row"><span class="v" style="text-align:left">还没有模型</span></div>'))+
-      '<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-model-new">添加模型</button></div>';
+    var tpl=pm[1]?mdlProv(pm[2]):null,p=!pm[1]&&pm[2]?mdlProv(pm[2]):null;   // tpl：照着它再加一个同家的 Key
+    if(pm[2]&&!p&&!tpl){mdlSub='';return renderModels()}
+    var src=p||tpl,eps=src?mdlEps0(src):[],needKey=!p||!p.hasKey;
+    var keyIn=function(lbl,ph){return mdlField('mdKey',lbl,'','type="password" maxlength="1000" placeholder="'+ph+'"',false,true)};
+    h+=pgHd('data-act="mdl-back"','返回模型管理',p?p.name+(p.label?' · '+p.label:''):tpl?'再加一个 '+tpl.name+' 的 Key':'添加 Key')+errBox;
+    h+=hSec('Key',needKey?keyIn('Key','必填'):'<div id="mdKeyBox">'+mdlKeyHtml(p)+'</div>');
+    h+=hSec('接口地址',mdlEpRow(eps[0]?eps[0][0]:'openai',eps[0]?eps[0][1]:'',!src));
+    var more=(needKey?'':keyIn('换 Key','留空不改'))+
+      mdlField('mdLabel','备注',p&&p.label||'','maxlength="40" placeholder="可不填，比如 公司、个人"')+
+      (p?'<div class="h-row"><span class="k">ID</span><span class="v pe-mono">'+esc(p.id)+'</span></div>':mdlField('mdId','ID','','maxlength="32" placeholder="可不填，自动生成"',false,true));
+    h+='<details class="md-more"><summary>更多（可不填）</summary><div class="h-card">'+more+'</div>'+
+      '<div class="h-h md-h2">同一个 Key 的其他格式地址</div><div class="h-card" id="mdEps2">'+eps.slice(1).map(function(e){return mdlEpRow(e[0],e[1])}).join('')+'</div>'+
+      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="mdl-ep-add"'+(eps.length>=mdl.formats.length?' hidden':'')+'>再加一个地址</button></div></details>';
+    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-save">'+(p?'保存':'添加')+'</button>'+(p?'<button type="button" class="pe-btn del" data-act="mdl-prov-del">删除这个 Key</button>':'')+'</div>';
+    if(p)h+='<div id="mdModels">'+mdlModelsHtml(p)+'</div>';
   }else if(mm){
     var pp=mdlProv(mm[1]),m=pp&&mm[2]?pp.models.find(function(x){return x.id===mm[2]}):null;
     if(!pp||(mm[2]&&!m)){mdlSub=pp?'p:'+pp.id:'';return renderModels()}
-    h+=pgHd('data-act="mdl-back"','返回 '+pp.name,m?(m.name||m.id):'添加模型')+err;
-    h+=hSec(pp.name,mdlField('mdMId','模型 ID',m?m.id:'','maxlength="120" placeholder="调用接口时用的名字，比如 deepseek-v4-pro"',true)+
+    h+=pgHd('data-act="mdl-back"','返回 '+pp.name,m?(m.name||m.id):'添加模型')+errBox;
+    h+=hSec(pp.name+(pp.label?' · '+pp.label:'')+'（…'+pp.keyLast4+'）',mdlField('mdMId','模型 ID',m?m.id:'','maxlength="120" placeholder="调用接口时用的名字，比如 deepseek-v4-pro"',true)+
       mdlField('mdMName','显示名',m?m.name:'','maxlength="60" placeholder="可不填"')+
       mdlField('mdMCtx','上下文（token）',m?m.context:'','type="number" inputmode="numeric" min="1000" placeholder="可不填，比如 128000"',false,true));
     h+='<div><div class="h-h">能力</div><div class="h-card"><div class="pe-ss"><label><input type="checkbox" id="mdMVision"'+(m&&m.vision?' checked':'')+'><span>能识图</span></label><label><input type="checkbox" id="mdMReason"'+(m&&m.reasoning?' checked':'')+'><span>会推理（思考）</span></label></div></div></div>';
     h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-model-save">'+(m?'保存':'添加')+'</button>'+(m?'<button type="button" class="pe-btn del" data-act="mdl-model-del">删除模型</button>':'')+'</div>';
   }else{
-    h+=pgHd('data-act="mdl-back"','返回','模型管理')+err;
-    h+=mdl.providers.length?hSec('供应商',mdl.providers.map(function(p){
-      return '<div class="h-row h-link" data-act="mdl-prov" data-id="'+esc(p.id)+'"><span class="k" style="flex:1;min-width:0">'+esc(p.name)+'<span class="md-sub">'+esc(Object.keys(p.endpoints).map(function(f){return (MDL_FMT[f]||f).replace(' 格式','')}).join(' · '))+'</span></span>'+
-        '<span class="v" style="flex:none">'+p.models.length+' 个模型<small>'+(p.hasKey?'key …'+esc(p.keyLast4):'没有 key')+'</small></span><span class="chev" aria-hidden="true"></span></div>'}).join('')):
-      '<div class="pe-note">还没有添加模型。先添加一个供应商（一家模型服务商的一个账号：接口地址 + key），再在它下面添加模型。</div>';
-    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-new">添加供应商</button></div>';
-    h+='<div class="pe-note">这里先把各家模型登记好；以后各 Claw 新建会话、切换模型时从这里选。key 只存在这台电脑上（data/models.json），网页上只显示后 4 位。</div>';
+    h+=pgHd('data-act="mdl-back"','返回','模型管理')+errBox;
+    var groups=[],gi={};   // 按供应商分组，组的顺序按第一次出现
+    mdl.providers.forEach(function(p){if(!(p.name in gi)){gi[p.name]=groups.length;groups.push({name:p.name,items:[]})}groups[gi[p.name]].items.push(p)});
+    h+=groups.map(function(g){
+      return hSec(g.name,g.items.map(function(p){
+        var hosts=[];Object.keys(p.endpoints).forEach(function(f){var x=mdlHost(p.endpoints[f]);if(hosts.indexOf(x)<0)hosts.push(x)});
+        return '<div class="h-row h-link" data-act="mdl-prov" data-id="'+esc(p.id)+'"><span class="k md-kk"><span class="md-key">'+esc(mdlMask(p))+'</span><span class="md-sub">'+esc((p.label?p.label+' · ':'')+hosts.join(' · '))+'</span></span>'+
+          '<span class="v" style="flex:none">'+p.models.length+' 个模型</span><span class="chev" aria-hidden="true"></span></div>'}).join('')+
+        '<div class="h-row h-link md-addk" data-act="mdl-prov-new" data-from="'+esc(g.items[0].id)+'"><span class="k">＋ 再加一个 '+esc(g.name)+' 的 Key</span></div>');
+    }).join('')||'<div class="pe-note">还没有添加 Key。点下面「添加 Key」：填 Key 和接口地址就行，其他的都可以不填。</div>';
+    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-new">添加 Key</button></div>';
+    h+='<div class="pe-note">按接口地址的域名分供应商。各 Claw 的会话里选模型时，从这里加过的模型里选。Key 只存在这台电脑上（data/models.json），列表只显示最后 4 位；查看或复制完整的 Key 要再输一次 claclaw 的用户名和密码。</div>';
   }
   $('#hostBody').innerHTML=h;
 }
+// 出错只改错误那一行，不重画（填了一半的内容还在）
+function mdlErr(msg){var el=$('#mdErr');if(!el){mdlMsg={err:msg};renderModels();return}el.textContent=msg;el.hidden=false;try{el.scrollIntoView({block:'nearest'})}catch(_){}}
 function mdlPost(body,okMsg,then){
-  mdlMsg={};
   postJson('/api/models',body).then(function(r){return r.json()}).then(function(j){
-    if(j.error){mdlMsg={err:j.error};renderModels();return}
-    mdl=j;mdlClawSub();if(then)then(j);toast(okMsg);renderModels();
-  }).catch(function(e){mdlMsg={err:'没保存成功：'+e.message};renderModels()});
+    if(j.error){mdlErr(j.error);return}
+    mdl=j;mdlMsg={};mdlClawSub();if(then)then(j);toast(okMsg);renderModels();
+  }).catch(function(e){mdlErr('没保存成功：'+e.message)});
 }
 function mdlVal(id){var el=document.getElementById(id);return el?el.value.trim():''}
+function mdlFetch(id){
+  mdlRemote={id:id,busy:true};mdlModelsUpd();
+  postJson('/api/models',{op:'model-fetch',id:id}).then(needLogin).then(function(r){return r.json()}).then(function(j){
+    if(!mdlRemote||mdlRemote.id!==id)return;
+    if(j.error||!Array.isArray(j.models)){mdlRemote={id:id,err:j.error||'读取失败'};mdlModelsUpd();return}
+    var p=mdlProv(id),have={};(p?p.models:[]).forEach(function(m){have[m.id]=1});
+    mdlRemote={id:id,total:j.models.length,items:j.models.filter(function(m){return !have[m.id]})};mdlModelsUpd();
+  }).catch(function(e){if(mdlRemote&&mdlRemote.id===id){mdlRemote={id:id,err:'读取失败：'+e.message};mdlModelsUpd()}});
+}
+function mdlModelsUpd(){var p=mdlRemote&&mdlProv(mdlRemote.id),el=$('#mdModels');if(p&&el&&mdlSub==='p:'+p.id)el.innerHTML=mdlModelsHtml(p)}
+function mdlKeyUpd(){var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
+function mdlRemember(id,k,show){clearTimeout(mdlKeyT);mdlKey={id:id,key:k,show:show};mdlKeyUpd();mdlKeyT=setTimeout(mdlForget,60000)}
+function mdlForget(){clearTimeout(mdlKeyT);if(!mdlKey)return;mdlKey=null;mdlKeyUpd()}
+function mdlCopyFail(){if(mdlKey){mdlKey.show=true;mdlKeyUpd()}toast('复制不了，已显示出来，长按选择')}
 function mdlAct(act,a){
-  var pm=/^p:(.*)$/.exec(mdlSub),mm=/^m:([^:]*):(.*)$/.exec(mdlSub);
+  var pm=/^p:(\+?)(.*)$/.exec(mdlSub),mm=/^m:([^:]*):(.*)$/.exec(mdlSub),pid=pm&&!pm[1]?pm[2]:'';
   if(act==='mdl-back'){
     mdlMsg={};
     if(mm){mdlSub='p:'+mm[1];renderModels();return}
-    if(pm){mdlSub='';renderModels();return}
+    if(pm){mdlSub='';mdlRemote=null;mdlForget();renderModels();return}
     if(mdlFrom==='claw'){mTab('claw');return}
     hostView='';$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return;
   }
-  if(act==='mdl-prov'){mdlSub='p:'+a.dataset.id;mdlMsg={};renderModels();return}
-  if(act==='mdl-prov-new'){mdlSub='p:';mdlMsg={};renderModels();return}
-  if(act==='mdl-model'&&pm){mdlSub='m:'+pm[1]+':'+a.dataset.id;mdlMsg={};renderModels();return}
-  if(act==='mdl-model-new'&&pm){mdlSub='m:'+pm[1]+':';mdlMsg={};renderModels();return}
-  if(act==='mdl-prov-save'&&pm){
-    var eps={};mdl.formats.forEach(function(f){eps[f]=mdlVal('mdEp-'+f)});
-    var kc=document.getElementById('mdKeyClear');
-    var b={op:'provider-save',name:mdlVal('mdName'),endpoints:eps,key:mdlVal('mdKey')};
-    if(pm[1])b.orig=pm[1];else b.id=mdlVal('mdId');
-    if(kc&&kc.checked){if(b.key){mdlMsg={err:'要么填新 key，要么勾「清除」，不要同时'};renderModels();return}b.clearKey=true}
-    mdlPost(b,pm[1]?'已保存':'已添加，接着添加它的模型',function(j){mdlSub='p:'+j.saved});return;
+  if(act==='mdl-prov'){mdlSub='p:'+a.dataset.id;mdlMsg={};mdlForget();renderModels();return}
+  if(act==='mdl-prov-new'){mdlSub='p:'+(a.dataset.from?'+'+a.dataset.from:'');mdlMsg={};renderModels();return}
+  if(act==='mdl-model'&&pid){mdlSub='m:'+pid+':'+a.dataset.id;mdlMsg={};renderModels();return}
+  if(act==='mdl-model-new'&&pid){mdlSub='m:'+pid+':';mdlMsg={};renderModels();return}
+  if(act==='mdl-ep-add'){
+    var box=$('#mdEps2');if(!box)return;
+    var used={};document.querySelectorAll('#hostBody .md-fmt').forEach(function(s){used[s.value]=1});
+    box.insertAdjacentHTML('beforeend',mdlEpRow(mdl.formats.filter(function(f){return !used[f]})[0]||mdl.formats[0],''));
+    if(document.querySelectorAll('#hostBody .md-ep').length>=mdl.formats.length)a.hidden=true;
+    box.lastElementChild.querySelector('.md-url').focus();return;
   }
-  if(act==='mdl-prov-del'&&pm){
-    var p=mdlProv(pm[1]);if(!p)return;
-    if(!confirm('删除供应商「'+p.name+'」和它下面的 '+p.models.length+' 个模型？（电脑上会留一份备份，30 天后自动清掉）'))return;
-    mdlPost({op:'provider-delete',id:p.id},'已删除',function(){mdlSub=''});return;
+  if(act==='mdl-prov-save'&&pm){
+    var eps={},dup='';
+    document.querySelectorAll('#hostBody .md-ep').forEach(function(r){var u=r.querySelector('.md-url').value.trim(),f=r.querySelector('.md-fmt').value;if(!u)return;if(eps[f])dup=f;eps[f]=u});
+    if(dup){mdlErr('两个地址选了同一种格式（'+(MDL_FMT[dup]||dup)+'），一种格式只填一个地址');return}
+    var b={op:'provider-save',label:mdlVal('mdLabel'),endpoints:eps,key:mdlVal('mdKey')};
+    if(pid)b.orig=pid;else{b.id=mdlVal('mdId');if(pm[1])b.copyFrom=pm[2]}
+    if(!b.key&&!(pid&&(mdlProv(pid)||{}).hasKey)){mdlErr('填 Key');return}
+    if(!Object.keys(eps).length){mdlErr('填接口地址');return}
+    mdlPost(b,pid?'已保存':'已添加',function(j){mdlSub='p:'+j.saved;var np=mdlProv(j.saved);if(!pid&&np&&!np.models.length)mdlFetch(j.saved)});return;   // 新加的没有模型：顺手从接口读一次
+  }
+  if(act==='mdl-prov-del'&&pid){
+    var p=mdlProv(pid);if(!p)return;
+    if(!confirm('删除 '+p.name+(p.label?' · '+p.label:'')+' 的 Key（…'+p.keyLast4+'）和它下面的 '+p.models.length+' 个模型？（电脑上会留一份备份，30 天后自动清掉）'))return;
+    mdlPost({op:'provider-delete',id:p.id},'已删除',function(){mdlSub='';mdlRemote=null;mdlForget()});return;
+  }
+  if(act==='mdl-key-show'&&pid){if(mdlKey&&mdlKey.id===pid){mdlKey.show=!mdlKey.show;mdlKeyUpd()}else keyAsk(pid,'show');return}
+  if(act==='mdl-key-copy'&&pid){if(mdlKey&&mdlKey.id===pid)copyText(mdlKey.key,mdlCopyFail);else keyAsk(pid,'copy');return}
+  if(act==='mdl-fetch'&&pid){mdlFetch(pid);return}
+  if(act==='mdl-pick-all'){var bs=document.querySelectorAll('#hostBody .md-pick input'),all=[].every.call(bs,function(x){return x.checked});[].forEach.call(bs,function(x){x.checked=!all});return}
+  if(act==='mdl-pick-add'&&pid&&mdlRemote&&mdlRemote.items){
+    var sel=[].filter.call(document.querySelectorAll('#hostBody .md-pick input'),function(x){return x.checked}).map(function(x){return mdlRemote.items[+x.dataset.i]});
+    if(!sel.length){toast('先勾上要加的模型');return}
+    mdlPost({op:'models-add',provider:pid,models:sel},'已添加 '+sel.length+' 个模型',function(){var got={};sel.forEach(function(m){got[m.id]=1});mdlRemote.items=mdlRemote.items.filter(function(m){return !got[m.id]})});return;
   }
   if(act==='mdl-model-save'&&mm){
     var b2={op:'model-save',provider:mm[1],id:mdlVal('mdMId'),name:mdlVal('mdMName'),context:mdlVal('mdMCtx'),vision:!!(document.getElementById('mdMVision')||{}).checked,reasoning:!!(document.getElementById('mdMReason')||{}).checked};
@@ -3704,6 +3806,36 @@ function mdlAct(act,a){
   }
 }
 $('#clawModels').addEventListener('click',function(){openModels('claw')});
+// 查看 / 复制完整 Key：再输一次 claclaw 用户名和密码
+var keyDlg=$('#keyDlg'),keyFor=null;   // {id,mode:'show'|'copy'}
+function keyAsk(id,mode){
+  var p=mdlProv(id);if(!p)return;
+  keyFor={id:id,mode:mode};
+  $('#keyTitle').textContent=(mode==='copy'?'复制':'查看')+' '+p.name+(p.label?' · '+p.label:'')+' 的 Key';
+  $('#keyU').value='';$('#keyP').value='';$('#keyErr').textContent='';$('#keyGo').disabled=false;$('#keyGo').textContent=mode==='copy'?'复制':'查看';
+  showDlg(keyDlg,true);$('#keyU').focus();
+}
+function closeKey(){showDlg(keyDlg,false);keyFor=null;$('#keyP').value=''}
+$('#keyNo').addEventListener('click',closeKey);
+keyDlg.addEventListener('click',function(e){if(e.target===keyDlg)closeKey()});
+$('#keyForm').addEventListener('submit',function(e){
+  e.preventDefault();if(!keyFor)return;
+  var t=keyFor;$('#keyErr').textContent='';$('#keyGo').disabled=true;
+  var got=postJson('/api/models/key',{id:t.id,username:$('#keyU').value,password:$('#keyP').value}).then(function(r){
+    if(r.status===401)location.replace('/login');
+    return r.json().then(function(j){if(!r.ok||!j.key){var er=new Error(j.error||'没拿到 Key');er.user=true;throw er}return j.key});
+  });
+  // 复制要在这次点击里就发起（Safari 不许等网络回来再写剪贴板）：支持 ClipboardItem 就把「拿 Key」整个交给剪贴板
+  var clip=null;
+  if(t.mode==='copy'&&window.ClipboardItem&&navigator.clipboard&&navigator.clipboard.write&&window.isSecureContext){
+    try{clip=navigator.clipboard.write([new ClipboardItem({'text/plain':got.then(function(k){return new Blob([k],{type:'text/plain'})})})]);clip.catch(function(){})}catch(_){clip=null}   // 先挂上 catch：Key 还没回来剪贴板就拒了，也不算没处理的错
+  }
+  got.then(function(k){
+    closeKey();mdlRemember(t.id,k,t.mode==='show');
+    if(t.mode!=='copy')return;
+    if(clip)clip.then(function(){toast('已复制')},function(){copyText(k,mdlCopyFail)});else copyText(k,mdlCopyFail);
+  },function(er){$('#keyErr').textContent=er.user?er.message:'连不上服务';$('#keyGo').disabled=false});
+});
 // 两台电脑的会话互发消息。像蓝牙配对：对方申请 → 这里显示两位数配对码 → 你把码告诉对方 → 配对完成。
 // 登录了的网页（本机、手机、经中继）都能改全部协同设置；服务端 canAssign 恒为 true，下面 !canAssign 的分支只为兼容老服务端
 var peerCfg=null,peerList=null,peerMsg={},peerOnline={},peerPoll=null,peerCheck=null,peerNear=null,peerScanning=false;
@@ -3747,8 +3879,10 @@ $('#hostBody').addEventListener('click',function(e){
 });
 $('#hostBody').addEventListener('input',function(e){
   if(e.target.id==='pePoolQ'){peerPoolQ=e.target.value;var l=$('#pePoolList');if(l&&peerCfg)l.innerHTML=poolListHtml(peerCfg)}   // 协同会话页搜索：只重画列表
+  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs)fs.value=mdlGuess(e.target.value)}   // 模型管理：接口格式跟着地址猜
 });
 $('#hostBody').addEventListener('change',function(e){
+  if(e.target.classList.contains('md-fmt'))e.target.removeAttribute('data-auto');   // 手动选过格式：不再跟着地址猜
   // 会话池：勾 / 取消马上提交
   if(e.target.closest&&e.target.closest('#hostBody .pe-ss.pool')){var id=e.target.value,arr=(peerCfg.sessions||[]).slice();
     if(e.target.checked){if(arr.indexOf(id)<0)arr.push(id)}else arr=arr.filter(function(x){return x!==id});poolSave(arr)}
@@ -4697,7 +4831,7 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
   var g=null;
   function hScroll(el){for(;el&&el!==document.body;el=el.parentElement){if(el.scrollWidth>el.clientWidth+2){var o=getComputedStyle(el).overflowX;if(o==='auto'||o==='scroll')return true}}return false}
   function shown(el){if(!el||!el.offsetParent)return false;var r=el.getBoundingClientRect();return r.width>0&&r.height>0}
-  function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#diss.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
+  function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#diss.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#keyDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
   function backBtn(){
     if(!mList)return $('#backBtn');
     var c=[].slice.call(document.querySelectorAll('#setBack,.pe-back')).filter(function(x){return shown(x)});
@@ -5761,7 +5895,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   mark();
 })();
 function notice(t){if(mList)toast(t);else addSys(t)}
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(dissEl.classList.contains('on'))dsBack();else if(delDlg.classList.contains('on'))closeDel();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(dissEl.classList.contains('on'))dsBack();else if(delDlg.classList.contains('on'))closeDel();else if(keyDlg.classList.contains('on'))closeKey();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
 
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
 

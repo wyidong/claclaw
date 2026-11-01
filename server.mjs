@@ -40,7 +40,7 @@ import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs'
 import { peerRisk, destructive, sensitiveRoots } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, BUSY_MAX, SEEN_TTL } from './peerqueue.mjs';
 import { peerJudge } from './peerjudge.mjs';
-import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic } from './modelstore.mjs';
+import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './modelstore.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 协同那一轮里不用确认的常规维护（npm run check / npm test / npm run restart）：只在本仓库、且没有没提交的改动时
 const PEER_OPTS = {
@@ -2533,14 +2533,45 @@ const handler = async (req, res) => {
       }
       return sendJson(res, 200, claudeTokenPublic(req));
     }
-    // 模型库（Claw 页 → 模型管理）：登录了的网页都能看、能改；key 只进不出（只给后 4 位），日志不写 key
+    // 模型库：看完整的 key 要再输一次 claclaw 用户名和密码（登录用的哪组都行），输错和登录一起计次数、会锁；日志不写 key
+    if (url.pathname === '/api/models/key' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      const ip = realIp(req);
+      if (globalLocked(req)) return sendJson(res, 429, { error: globalLockMsg() });
+      const lf = lockedFor(ip);
+      if (lf) return sendJson(res, 429, { error: tooManyTries(lf) });
+      if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+      const body = await jsonBody(req, 4096);
+      const via = verify(body.username, body.password);
+      if (!via) {
+        const { n } = noteFail(ip);
+        noteGlobalFail(req);
+        log('models key: wrong credentials from', ip, 'fails=' + n);
+        return sendJson(res, 403, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '用户名或密码不对' });
+      }
+      clearFails(ip);
+      let key;
+      try { key = revealKey(loadStore(MODELS_FILE), String(body.id || '')); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
+      log('models key shown', String(body.id).slice(0, 40), 'to', ip, 'via', via);
+      return sendJson(res, 200, { key });
+    }
+    // 模型库（Claw 页 → 模型管理）：登录了的网页都能看、能改；列表只给 key 后 4 位，日志不写 key
     if (url.pathname === '/api/models') {
       if (req.method === 'POST') {
         if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         let body = {};
-        try { body = JSON.parse(await readBody(req, 16384)); } catch { return sendJson(res, 400, { error: '请求格式不对' }); }
+        try { body = JSON.parse(await readBody(req, 65536)); } catch { return sendJson(res, 400, { error: '请求格式不对' }); }
         const store = loadStore(MODELS_FILE);
+        if (body.op === 'model-fetch') {   // 从接口读模型列表给网页挑，不存
+          const p = store.providers.find(x => x.id === body.id);
+          if (!p) return sendJson(res, 400, { error: '没有这个 Key（可能已经删了）' });
+          try {
+            const models = await fetchModels(p);
+            log('models fetch', p.id, models.length);
+            return sendJson(res, 200, { models });
+          } catch (e) { if (e.user) { log('models fetch', p.id, 'failed:', e.message); return sendJson(res, 400, { error: e.message }); } throw e; }
+        }
         let r;
         try { r = modelOp(store, body); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
         if (r.removed) {   // 删掉的供应商（连 key）备份进回收站，30 天后自动清
@@ -2550,7 +2581,7 @@ const handler = async (req, res) => {
         saveStore(MODELS_FILE, store);
         for (const c of CLAWS) c.modelsChanged?.(log);
         for (const c of CLAWS) for (const r of c.runners.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
-        log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : '');
+        log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : body.op === 'models-add' ? r.saved : '');
         return sendJson(res, 200, { ...modelsPublic(store), saved: r.saved || null });
       }
       return sendJson(res, 200, modelsPublic(loadStore(MODELS_FILE)));
