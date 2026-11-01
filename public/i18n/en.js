@@ -988,6 +988,8 @@ var I18N={dict:{
 "没拿到 Key":"Couldn't get the key",
 },
 pat:[
+["^OpenCode 第 (\\d+) 次重试（(.+) 再试），报错同上；不想等就点停止，换个模型再发。$","OpenCode retry $1 (next at $2), same error as above; tap Stop and switch models if you don't want to wait."],
+["^OpenCode 第 (\\d+) 次重试，报错同上；不想等就点停止，换个模型再发。$","OpenCode retry $1, same error as above; tap Stop and switch models if you don't want to wait."],
 ["^本轮结束：模型报错：([\\s\\S]*)\\n重试也没用，已停下这一轮；换个模型再发。$","Turn ended: model error: $1\nRetrying won't help, so this turn was stopped; switch models and send again."],
 ["^模型报错：([\\s\\S]*)\\nOpenCode 会自己重试（第 (\\d+) 次，(.+) 再试）；不想等就点停止，换个模型再发。$","Model error: $1\nOpenCode will retry on its own (attempt $2, next at $3); tap Stop and switch models if you don't want to wait."],
 ["^模型报错：([\\s\\S]*)\\nOpenCode 会自己重试（第 (\\d+) 次）；不想等就点停止，换个模型再发。$","Model error: $1\nOpenCode will retry on its own (attempt $2); tap Stop and switch models if you don't want to wait."],

@@ -298,13 +298,15 @@ export class OpRunner extends AcpRunner {
   // 这一轮进行中每 5 秒问一次 /session/status：在重试就把报错和下次重试时间告诉网页；免费额度用完这种重试也没用的，直接停掉这一轮
   watchRetry() {
     this.unwatchRetry();
-    let last = '';
+    let last = '', lastMsg = '';
     const tick = async () => {
       if (!this.busy || this.closed) return this.unwatchRetry();
       let st = null;
       try { st = await opStatus(this.sid, this.cwd); } catch {}
       if (st?.type !== 'retry' || !this.busy) return;
-      const msg = String(st.message || '模型没有回应').trim().slice(0, 400), key = st.attempt + '|' + msg;
+      let msg = String(st.message || '模型没有回应').replace(/\s+/g, ' ').trim();   // 报错常带换行缩进（Google 的一大段），压成一段、最多 300 字
+      if (msg.length > 300) msg = msg.slice(0, 300) + '…';
+      const key = st.attempt + '|' + msg;
       if (key === last) return;
       last = key;
       this.log?.('opencode retry', this.sid.slice(0, 16), 'attempt=' + st.attempt, msg.slice(0, 120));
@@ -314,7 +316,9 @@ export class OpRunner extends AcpRunner {
         return this.unwatchRetry();
       }
       const next = Number(st.next) || 0, at = next ? new Date(next > 1e12 ? next : Date.now() + next).toLocaleTimeString('zh-CN', { hour12: false }) : '';
-      this.emit({ t: 'sys', text: '模型报错：' + msg + '\nOpenCode 会自己重试（第 ' + st.attempt + ' 次' + (at ? '，' + at + ' 再试' : '') + '）；不想等就点停止，换个模型再发。' });
+      if (msg === lastMsg) this.emit({ t: 'sys', text: 'OpenCode 第 ' + st.attempt + ' 次重试' + (at ? '（' + at + ' 再试）' : '') + '，报错同上；不想等就点停止，换个模型再发。' });   // 同样的报错不再整段重复
+      else this.emit({ t: 'sys', text: '模型报错：' + msg + '\nOpenCode 会自己重试（第 ' + st.attempt + ' 次' + (at ? '，' + at + ' 再试' : '') + '）；不想等就点停止，换个模型再发。' });
+      lastMsg = msg;
       this.activity('等重试');
     };
     this.retryT = setInterval(tick, 5000);

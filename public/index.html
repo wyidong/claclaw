@@ -301,7 +301,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .peer code{font-family:var(--mono);font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
 .peer .md pre{background:var(--surface)}
 .sys-dir{align-self:flex-start!important;text-align:left!important}
-.sys{align-self:center;max-width:92%;text-align:center;color:var(--muted);font-size:13px;line-height:1.45;white-space:pre-line}
+.sys{align-self:center;max-width:92%;min-width:0;text-align:center;color:var(--muted);font-size:13px;line-height:1.45;white-space:pre-line;overflow-wrap:anywhere}   /* 报错里的长网址也要折行，不然把聊天区撑宽 */
 .think{align-self:flex-start;display:flex;align-items:center;gap:5px;padding:6px 0}
 .think .tt{margin-left:6px;font-size:13px;color:var(--muted)}
 /* 顶部图标不闪：干活的闪烁在底部工作条上 */
