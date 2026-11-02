@@ -11,8 +11,7 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 // 例外：Claw 页的几个官方 logo（各家官网的公开地址）第一次取到就存下来，之后直接用缓存，离线也有
 const LOGOS = ['https://openclaw.ai/apple-touch-icon.png', 'https://cdn.deepseek.com/chat/icon.png',
   'https://img.alicdn.com/imgextra/i4/O1CN01QkSxiCocd3D0prc8_!!6000000008124-2-tps-412-412.png', 'https://codebuddy-1328495429.cos.accelerate.myqcloud.com/web/ide/logo.svg',
-  'https://cdn.hailuoai.video/open-hailuo-video-web/public_assets/agent-archon/web/share-logo/27b0276564e6bc41/share-logo.png',
-  'https://img.alicdn.com/imgextra/i4/O1CN01yBfg3x1iNi4YggwIt_!!6000000004401-2-tps-72-72.png', 'https://z-cdn.chatglm.cn/z-ai/static/logo.svg'];
+  'https://z-cdn.chatglm.cn/z-ai/static/logo.svg'];
 self.addEventListener('fetch', e => {
   if (!LOGOS.includes(e.request.url)) return;
   e.respondWith(caches.open('claclaw-logos').then(c => c.match(e.request).then(hit => hit || fetch(e.request).then(r => {
