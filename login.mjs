@@ -101,6 +101,13 @@ export function loginInfo(claw) {
 const jobs = new Map();   // claw → job
 const URL_RE = /https?:\/\/[^\s'"<>)\]]+/g;
 const CODE_RE = /\b([A-Z0-9]{4,5}-[A-Z0-9]{4,5})\b/;
+// 伪终端输出的最后两句（给手机看进度）：终端界面重画的几帧没有换行、会连成一行，所以除了换行还按转圈字符切开；网址单独给了，不要；重复的只留一句
+export function tailOf(text) {
+  // 转圈字符：✢…❋ 一段、盲文点阵一段；其它控制字符去掉
+  const lines = String(text).replace(/[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/g, '').split(/[\r\n]|[\u2722-\u274b\u2800-\u28ff]/).map(x => x.trim()).filter(l => l && !/https?:\/\//.test(l) && !/^[·\s]+$/.test(l));
+  const uniq = []; for (const l of lines.slice(-6).reverse()) if (!uniq.includes(l)) uniq.unshift(l);   // 去重留最后一次出现的位置
+  return uniq.slice(-2).join(' · ').slice(0, 200);
+}
 const view = j => ({ t: 'login.update', claw: j.claw, label: j.label, status: j.status, url: j.url, code: j.code, prompt: j.prompt, tail: redact(j.tail), error: j.error ? redact(j.error) : '' });
 function push(j) { const s = JSON.stringify(view(j)); for (const w of j.subs) if (w.readyState === 1) w.send(s); }
 
@@ -134,8 +141,8 @@ export function loginStart(claw, ws, { key = '', log } = {}) {
     // 网址：第一个不是文档 / 帮助页的；代码：XXXX-XXXX 形式的
     if (!j.url) { const urls = (j.text.match(URL_RE) || []).filter(u => !/docs\.|\/docs\b|vibex\.iflow|manage-apikey|github\.com|localhost|127\.0\.0\.1/i.test(u)); if (urls.length) j.url = urls[0].replace(/[.,;:!?]+$/, ''); }
     if (!j.code) { const m = j.text.match(CODE_RE); if (m) j.code = m[1]; }
-    const lines = j.text.split('\n').map(x => x.trim()).filter(l => l && !/https?:\/\//.test(l) && !/^[✶✸✹✺✻✽✢✳·\s]+$/.test(l));   // 网址单独给了；转圈的字符不要
-    j.tail = [...new Set(lines.slice(-4).map(l => l.replace(/^[✶✸✹✺✻✽✢✳]\s*/, '')))].slice(-2).join(' · ').slice(0, 200);
+    j.raw = tailOf(j.text);
+    j.tail = (j.url || j.code) && !j.prompt ? '等你在网页上完成授权…' : j.raw;   // 网址 / 代码已经给出去了：命令那边刷的「Waiting for auth…」不用再看，给一句明白话
     // 要用户粘贴授权码的提示（Claude 那种）
     if (s.paste && !j.prompt && s.paste.test(j.text)) { j.prompt = s.pasteLabel || '把网页上给的授权码粘到这里'; }
     // 要 key 的：看到提示就把 key 喂进去（只一次）
@@ -147,7 +154,7 @@ export function loginStart(claw, ws, { key = '', log } = {}) {
   };
   p.stdout.on('data', onData); p.stderr.on('data', onData);
   p.on('error', e => finish(j, false, log, s.label + ' 启动失败：' + e.message));
-  p.on('exit', code => { if (j.status !== 'running') return; const ok = code === 0 && (s.doneWhen ? true : s.loggedIn() !== false); finish(j, ok, log, ok ? '' : '命令退出了（' + code + '）：' + j.tail); });
+  p.on('exit', code => { if (j.status !== 'running') return; const ok = code === 0 && (s.doneWhen ? true : s.loggedIn() !== false); finish(j, ok, log, ok ? '' : '命令退出了（' + code + '）：' + (j.raw || j.tail)); });
   // 最多等 15 分钟
   setTimeout(() => { if (j.status === 'running') finish(j, false, log, '15 分钟没有完成，已停止'); }, 15 * 60 * 1000).unref?.();
   push(j);

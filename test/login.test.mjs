@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SPECS, loginInfo } from '../login.mjs';
+import { SPECS, loginInfo, tailOf } from '../login.mjs';
 
 test('登录规格：每个都有名字、说明，要么能起命令要么直接写文件；loginInfo 字段齐全', () => {
   for (const [k, s] of Object.entries(SPECS)) {
@@ -12,4 +12,12 @@ test('登录规格：每个都有名字、说明，要么能起命令要么直�
     assert.equal(info.key, !!(s.keyPrompt || s.write));
   }
   assert.equal(loginInfo('claude'), null);
+});
+
+test('tailOf：终端界面重画连成一行的几帧按转圈字符切开、去重、去网址，只留最后两句', () => {
+  const text = 'Waiting for auth... (Press ESC to cancel)\nBrowser didn\'t open? Use the url below to sign in: (Copied link to clipboard)\nhttps://example.com/auth?x=1\n✸ Waiting for auth... (Press ESC to cancel)✸ Waiting for auth... (Press ESC to cancel)✹ Waiting for auth... (Press ESC to cancel)';
+  assert.equal(tailOf(text), 'Browser didn\'t open? Use the url below to sign in: (Copied link to clipboard) · Waiting for auth... (Press ESC to cancel)');
+  assert.equal(tailOf('a\n\n · \nb\r\nb'), 'a · b');
+  assert.equal(tailOf(''), '');
+  assert.equal(tailOf('Pick one\x0f\n✷ Waiting for auth...✷ Waiting for auth...⠙ Waiting for auth...'), 'Pick one · Waiting for auth...');
 });

@@ -868,6 +868,7 @@ var I18N={dict:{
 "发送":"Send",
 "先填上 key":"Enter the key first",
 "正在启动登录命令…":"Starting the sign-in command…",
+"等你在网页上完成授权…":"Waiting for you to finish authorizing in the browser…",
 "等待中…":"Waiting…",
 "✓ 登录完成":"✓ Signed in",
 "没有正在进行的登录":"No sign-in in progress",
