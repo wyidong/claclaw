@@ -1028,10 +1028,10 @@ select.pe-in{text-align-last:right}
 .pe-peer .h-dot.wait{border-style:dotted;animation:rlspin 1s linear infinite}
 .pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
 /* 各 Claw 的登录：卡片上的「登录」小按钮；登录面板（网址 / 一次性代码 / 要粘贴的授权码） */
-.claw-login{margin-left:auto;flex:none;padding:5px 11px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:12.5px;font-weight:600;cursor:pointer}
+.claw-login{margin-left:auto;flex:none;font-size:12.5px;color:var(--accent);white-space:nowrap;cursor:pointer}   /* 不要底色，就一行「登录 ›」 */
+.claw-login::after{content:' ›'}
 .claw-grid .claw-card{position:relative}
-.claw-grid .claw-login{position:absolute;right:9px;bottom:9px;margin:0;padding:4px 9px;font-size:11.5px}   /* 两列卡片：钉在右下角，不挤名字那一栏 */
-.claw-grid .claw-card:has(.claw-login:not([hidden])) .claw-ds{padding-right:48px}   /* 说明文字给右下角的按钮让位 */
+.claw-grid .claw-login{position:absolute;right:11px;bottom:9px;margin:0;font-size:11.5px;line-height:15px}   /* 两列卡片：放在右下角，不改说明文字的宽度 */
 #loginPane{position:fixed;inset:0;z-index:40;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.42)}
 #loginPane.on{display:flex}
 #loginPane .lg-card{width:100%;max-width:440px;max-height:85vh;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
@@ -4894,11 +4894,14 @@ document.querySelectorAll('.claw-card[data-claw]').forEach(function(card){var b=
 document.querySelectorAll('.claw-card .claw-ic').forEach(function(ic){var w=document.createElement('span');w.className='claw-icw';ic.parentNode.insertBefore(w,ic);w.appendChild(ic)});
 // 说明放得下就写成「从这里打开…」，放不下（三行截断）就保持「打开…」；按实际宽度量，切到 Claw 页、转屏时重量（英文界面不改）
 function clawDsFit(){
-  if(document.documentElement.lang==='en')return;
   document.querySelectorAll('.claw-grid .claw-ds').forEach(function(d){
     if(!d.offsetParent)return;
     var b=d.dataset.base||(d.dataset.base=d.textContent);
-    d.textContent='从这里'+b;if(d.scrollHeight>d.clientHeight+1)d.textContent=b;
+    d.style.webkitLineClamp='';
+    if(document.documentElement.lang!=='en'){d.textContent='从这里'+b;if(d.scrollHeight>d.clientHeight+1)d.textContent=b;}
+    // 右下角有「登录 ›」的卡片：说明文字压到它了就少显示一行（宽度不变，不挤文字）
+    var lb=d.closest('.claw-card').querySelector('.claw-login');
+    if(lb&&!lb.hidden&&d.getBoundingClientRect().bottom>lb.getBoundingClientRect().top-2)d.style.webkitLineClamp='2';
   });
 }
 addEventListener('resize',function(){clearTimeout(clawDsFit.t);clawDsFit.t=setTimeout(clawDsFit,200)});
