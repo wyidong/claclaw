@@ -884,6 +884,7 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
+@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select){font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
 .pe-in.left,.pe-in.left::placeholder{text-align:left}
 .md-sub{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 /* 模型管理：Key 列表、Key 详情、接口格式下拉、「更多」、从接口读到的模型 */
@@ -1467,7 +1468,7 @@ select.pe-in{text-align-last:right}
   <div id="delDlg" aria-hidden="true">
     <form class="dlg" id="delForm" role="dialog" aria-label="删除会话">
       <h3 id="delTitle"></h3>
-      <p>会话会从列表和 claude --resume 里消失（文件移到 claclaw/data/trash，可以找回）。请输入<b>首次设置的初始</b>用户名和密码确认。</p>
+      <p><span id="delNote">会话会从列表和 claude --resume 里消失（文件移到 claclaw/data/trash，可以找回）</span>。请输入<b>首次设置的初始</b>用户名和密码确认。</p>
       <label for="delU">用户名</label>
       <input id="delU" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <label for="delP">密码</label>
@@ -6336,6 +6337,13 @@ var delDlg=$('#delDlg'),delTarget=null;
 function openDel(s){
   delTarget=s;
   $('#delTitle').textContent='删除「'+s.title+'」？';
+  // 各 Claw 删掉之后去了哪：多数是文件移到 claclaw 的回收站；MiniMax、OpenClaw 是在它们自己那里归档；Codex 由 codex-acp 自己删
+  var k=clawOf(s.id);
+  $('#delNote').textContent=k==='claude'?'会话会从列表和 claude --resume 里消失（文件移到 claclaw/data/trash，可以找回）'
+    :k==='minimax'?'会话会在 MiniMax Code 里归档、从列表里消失（在 mcode 的 /sessions 里可以恢复）'
+    :k==='openclaw'?'会话会在 OpenClaw 里归档、从列表里消失'
+    :k==='codex'?'会话会由 Codex 自己删除、从列表里消失'
+    :'会话会从列表和 '+(CLAW_NAMES[k]||k)+' 里消失（文件移到 claclaw/data/trash，可以找回）';
   $('#delU').value='';$('#delP').value='';$('#delErr').textContent='';$('#delGo').disabled=false;
   showDlg(delDlg,true);
   $('#delU').focus();

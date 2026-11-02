@@ -5,12 +5,13 @@
 // - 模型：mcode 的供应商配置在 ~/.minimax/config.yaml，claclaw 不直接改它，用 mcode 自己的命令（`mcode provider add / remove`）
 //   把模型库写成 claclaw-<供应商> 的自定义供应商（key 经环境变量交给命令，mcode 会把它写进 config.yaml，文件 600）；
 //   进程起来时同步一次，模型库改了要重启 mcode 才看得到
-// - 改名：agent 没有接口，名字记在 claclaw 这边；删除：会话在它的数据库里，不动（要在 mcode 自己里删）
+// - 改名：agent 没有接口，名字记在 claclaw 这边；删除：经 mcode 自己的 app-server（`mcode app-server --stdio`）把会话归档，
+//   和它界面里 /sessions 的「归档」一样，在那里可以恢复；claclaw 不直接改它的数据库
 // 网页里 MiniMax 会话的 id = 'mm:' + mcode 会话 id（mvs_…）。
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { AcpAgent, AcpRunner, localNames, stampTimes, stripTags } from './acp.mjs';
 import { HOME, tilde, oneLine, findBin, binEnv } from './util.mjs';
 import { storeNow, envName } from './modelpick.mjs';
@@ -193,8 +194,52 @@ export class MmRunner extends AcpRunner {
 
 export const mmNewSession = (cwd, opts) => MmRunner.create(cwd, opts);
 
-// 删除：mcode 的会话在它自己的数据库里，别的进程改不安全，不支持
-export function mmDelete() { throw new Error('MiniMax Code 的会话要在它自己的界面里删（claclaw 不改它的数据库）'); }
+// 删除 = 归档：mcode 的会话在它自己的数据库里，claclaw 不直接改；起一个 `mcode app-server --stdio`，
+// 用它的 DesktopService 接口（POST /minimax-desktop/api/v1/session/:id/archive，和 mcode 界面 /sessions 里的「归档」同一个）归档，
+// 列表只列没归档的，所以就从 claclaw 里消失了；在 mcode 的 /sessions 里能恢复。
+// 协议：initialize（protocolVersion 1、desktopService.transportProtocolVersion 2）→ initialized → desktopService/transport 通知里发 request 帧，
+// 回来 response-start（status）/ stream-chunk（base64 的 JSON）/ stream-done 帧
+export function mmArchive(sid, { timeoutMs = 30000 } = {}) {
+  const bin = mmBin();
+  if (!bin) return Promise.reject(new Error('没找到 mcode'));
+  return new Promise((resolve, reject) => {
+    const p = spawn(bin, ['app-server', '--stdio', '--foreground'], { env: binEnv(), stdio: ['pipe', 'pipe', 'ignore'] });
+    let buf = '', status = 0, body = '', settled = false;
+    const send = m => p.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
+    const done = (err, v) => { if (settled) return; settled = true; clearTimeout(tm); try { p.kill(); } catch {} err ? reject(err) : resolve(v); };
+    const tm = setTimeout(() => done(new Error('mcode 没有响应（30 秒）')), timeoutMs);
+    p.on('error', e => done(e));
+    p.on('exit', code => done(new Error('mcode app-server 退出了（' + code + '）')));
+    p.stdout.on('data', d => {
+      buf += d; let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 1);
+        let m; try { m = JSON.parse(line); } catch { continue; }
+        if (m.id === 1) {
+          if (m.error) return done(new Error(m.error.message || 'mcode app-server 初始化失败'));
+          send({ method: 'initialized', params: {} });
+          send({ method: 'desktopService/transport', params: { frame: { type: 'request', id: 'archive', method: 'POST', url: '/minimax-desktop/api/v1/session/' + encodeURIComponent(sid) + '/archive', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ archived: true }) } } });
+          continue;
+        }
+        const f = m.method === 'desktopService/transport' && m.params?.frame;
+        if (!f || f.id !== 'archive') continue;
+        if (f.type === 'response-start') status = f.status;
+        else if (f.type === 'stream-chunk') body += f.payload?.encoding === 'base64' ? Buffer.from(f.payload.data || '', 'base64').toString() : String(f.payload?.data ?? f.payload ?? '');
+        else if (f.type === 'stream-error') return done(new Error(f.message || f.code || '归档失败'));
+        else if (f.type === 'stream-done') {
+          let j = {}; try { j = JSON.parse(body); } catch {}
+          if (status >= 200 && status < 300 && j.success !== false) return done(null, true);
+          return done(new Error(j.message || j.error?.message || ('归档失败（' + status + '）')));
+        }
+      }
+    });
+    send({ id: 1, method: 'initialize', params: { protocolVersion: 1, clientInfo: { name: 'claclaw', version: '1' }, capabilities: { desktopService: { transportProtocolVersion: 2 } } } });
+  });
+}
+export async function mmDelete(id) {
+  if (!mmInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
+  await mmArchive(sidOf(id));
+}
 export function mmRename(id, title) {
   if (!mmInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
   localNames.set(id, title);
