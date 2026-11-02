@@ -42,6 +42,7 @@ setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
 import { relPath, findBin, readJson } from './util.mjs';
+import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
 import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, BUSY_MAX, SEEN_TTL } from './peerqueue.mjs';
@@ -2686,7 +2687,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/claws') {
       // running：装了但没启动的（OpenClaw 网关没开）手机上灰着显示、电脑上不显示；其他 Claw 用的时候才拉起进程，装了就算可用
       const list = detectClaws();
-      for (const c of list) c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false;
+      for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）
       return sendJson(res, 200, list);
     }
     if (url.pathname === '/api/sound') {
@@ -3029,6 +3030,11 @@ wss.on('connection', (ws, req) => {
         ttsOwner = ws; ttsOwnerAt = now; return;
       }
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
+      // 各 Claw 的登录（见 login.mjs）：在电脑上起登录命令，网址 / 代码推给这个连接
+      if (m.t === 'login.start') { try { loginStart(String(m.claw || ''), ws, { key: typeof m.key === 'string' ? m.key : '', log }); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
+      if (m.t === 'login.input') { try { loginInput(String(m.claw || ''), String(m.text || '')); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
+      if (m.t === 'login.cancel') { loginCancel(String(m.claw || ''), log); return; }
+      if (m.t === 'login.watch') { if (!loginWatch(String(m.claw || ''), ws)) send({ t: 'login.update', claw: m.claw, status: 'none' }); return; }
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
       if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }
       // 往上滑：要 before（绝对序号）之前的一页
@@ -3353,7 +3359,7 @@ wss.on('connection', (ws, req) => {
   ws.on('pong', () => { ws.isAlive = true; });
   ws.on('error', () => { try { ws.terminate(); } catch {} });
 
-  ws.on('close', (code, reason) => { runner?.unsubscribe(ws); log('ws closed', wsIp, 'code ' + code, Math.round((Date.now() - wsAt) / 1000) + 's', String(reason || '').slice(0, 60)); });   // 排查「总是断开重连」：谁断的、连了多久
+  ws.on('close', (code, reason) => { runner?.unsubscribe(ws); loginUnsubscribe(ws); log('ws closed', wsIp, 'code ' + code, Math.round((Date.now() - wsAt) / 1000) + 's', String(reason || '').slice(0, 60)); });   // 排查「总是断开重连」：谁断的、连了多久
 });
 
 // 每 30 秒 ping 一轮；连续两轮没有 pong 的连接直接 terminate

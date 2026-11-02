@@ -102,6 +102,17 @@ Claw 页顶部（电脑上在 设置 → 宿主 → Claw 区）有「模型管�
   - OpenClaw 只能换成它放行（`agents.defaults.models`）的模型；模型库里有、它没放行的会灰着显示。要放行得改 OpenClaw 自己的配置，并让网关重新加载。
   - Claude 会话还是用自己的模型选择（Claude 账号里的模型）。
 
+## 在手机上登录各 Claw
+
+Qoder、CodeBuddy 这类要先登录账号才能用；Kimi、Codex、MiniMax Code 用自家账号（不走模型库）时也要登录。它们的登录命令都是「打印一个网址（有的还带一次性代码）→ 等你在浏览器里授权 → 命令自己收尾」，网址在哪个设备上打开都行，所以可以在手机上完成：
+
+- Claw 页的卡片上有「登录」小按钮（已登录的显示「换账号」）；选了还没登录、模型库也顶不上的 Claw，会话列表页会直接提示「还没登录」并给出「去登录」，不列会话、不给新建
+- 点开后 claclaw 在电脑上起它的登录命令（套伪终端，`tools/ptywrap.py`），把网址 / 一次性代码推到手机；手机点「打开网址」完成授权，电脑上的命令自己完成，面板显示「登录完成」
+  - Qoder：`qodercli login`；CodeBuddy：起 `codebuddy` 终端界面，自动按掉「信任目录」、选「国内站」拿网址，登录成功后关掉它；Kimi：`kimi login`（网址 + 代码）；Codex：`codex login --device-auth`（网址 + 代码）；MiniMax Code：`mcode login --no-browser`（网址 + 代码）
+  - GLM Agent、iFlow 用 API key：手机上填 key，claclaw 分别喂给 `glm-acp-agent --setup`、写进 `~/.iflow/settings.json`
+- 登没登录按各家留在磁盘上的凭据判断（Qoder 问 `qodercli status`；CodeBuddy 判断不了，只在用的时候报错）；一个 Claw 同一时间只跑一个登录，最多等 15 分钟；推到手机的文字里 `sk-` 开头的串会打码
+- Claude Code 不在这里登录：用 claude.ai 登录或「长期令牌」（见上）
+
 ## 会话占用与接管
 
 下面说的是 Claude Code。OpenCode 按目录推断终端占用（见「目前的限制」）；DeepSeek 不检测占用，别在终端和网页里同时开同一个会话；OpenClaw 的会话都由它的网关管理，claclaw 只是网关的一个客户端。
@@ -250,6 +261,7 @@ codebuddy.mjs     CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebud
 qoder.mjs         Qoder CLI 会话（qodercli --acp；列表读 ~/.qoder/projects；模型库写进 ~/.qoder/settings.json 的 customModels）
 cclike.mjs        Claude Code 式会话记录（projects/<目录>/<id>.jsonl）的通用读取：CodeBuddy、Qoder 共用
 acp.mjs           ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面几个都继承它，只写各自的差异
+login.mjs         在手机上登录各 Claw：电脑上套伪终端起登录命令，网址 / 一次性代码推到手机（tools/ptywrap.py 是伪终端包装）
 peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
 skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
 skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）

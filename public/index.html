@@ -1027,6 +1027,27 @@ select.pe-in{text-align-last:right}
 .pe-peer .h-dot{flex:none;width:11px;height:11px;margin:0 8px 0 0;background:transparent;border:2px solid var(--muted);box-sizing:border-box}
 .pe-peer .h-dot.wait{border-style:dotted;animation:rlspin 1s linear infinite}
 .pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
+/* 各 Claw 的登录：卡片上的「登录」小按钮；登录面板（网址 / 一次性代码 / 要粘贴的授权码） */
+.claw-login{margin-left:auto;flex:none;padding:5px 11px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:12.5px;font-weight:600;cursor:pointer}
+.claw-grid .claw-card{position:relative}
+.claw-grid .claw-login{position:absolute;right:9px;bottom:9px;margin:0;padding:4px 9px;font-size:11.5px}   /* 两列卡片：钉在右下角，不挤名字那一栏 */
+.claw-grid .claw-card:has(.claw-login:not([hidden])) .claw-ds{padding-right:48px}   /* 说明文字给右下角的按钮让位 */
+#loginPane{position:fixed;inset:0;z-index:40;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.42)}
+#loginPane.on{display:flex}
+#loginPane .lg-card{width:100%;max-width:440px;max-height:85vh;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+@media (min-width:1000px){#loginPane{align-items:center}#loginPane .lg-card{border-radius:16px}}
+.lg-hd{display:flex;align-items:center;justify-content:space-between;font-size:17px;margin-bottom:8px}
+.lg-x{border:0;background:none;font-size:18px;color:var(--muted);padding:4px 8px;cursor:pointer}
+.lg-hint,.lg-lb{color:var(--muted);font-size:13.5px;line-height:1.5}
+.lg-sec{margin:12px 0}
+.lg-key{display:flex;gap:8px;margin-top:8px}
+.lg-in{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+.lg-btn{display:inline-block;padding:9px 16px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
+.lg-btn.ghost{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+.lg-code{font:700 28px/1.2 ui-monospace,Menlo,monospace;letter-spacing:2px;margin:8px 0;user-select:all;-webkit-user-select:all}
+.lg-st{margin-top:12px;color:var(--muted);font-size:13.5px;word-break:break-all;line-height:1.5}
+.lg-st.ok{color:var(--allow)}.lg-st.bad{color:#D33}
+.lg-ft{margin-top:14px;text-align:right}
 @media (max-width:999px){
   /* Claw 页：每个 Claw 一张大卡片，选了哪个，会话页就显示哪一种的会话 */
   #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
@@ -2950,6 +2971,7 @@ $('#bAlways').addEventListener('click',function(){reply('allow_session')});
 // ---------- 服务端事件 ----------
 
 function onEvent(m){
+  if(m.t==='login.update'){loginEvent(m);return}
   if(/^(user|ai\.|tool\.|peer|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;
   if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
@@ -4417,27 +4439,74 @@ if(Date.now()-clawsAt<3000)return;clawsAt=Date.now();
 fetch('/api/claws').then(function(r){return r.json()}).then(function(list){try{localStorage.setItem(hk('claws'),JSON.stringify(list))}catch(_){}applyClaws(list)}).catch(function(){});
 }
 // 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部、再少几个），服务器的结果到了再更新
+var clawInfo={};   // /api/claws 的结果，按 id 存（登录情况在 .login 里）
 function applyClaws(list){
   if(!Array.isArray(list))return;
   var any=false,ok=[];
   list.forEach(function(c){
+    clawInfo[c.id]=c;
     var down=c.installed&&c.supported&&c.running===false;   // 装了但没启动（OpenClaw 网关没开）：手机上灰着显示、不能选；电脑上不显示
     var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported||down;
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
     card.hidden=!c.installed||(down&&DESKTOP.matches);if(!card.hidden)any=true;
     card.disabled=!c.supported||down;card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):down?'已安装，没有启动':'';
+    // 登录：没登录（模型库也顶不上）就写「未登录」；claclaw 能替它登的加个「登录」小按钮（已登录的写「换账号」）
+    var lg=c.login,lb=card.querySelector('.claw-login');
+    if(c.supported&&!down&&lg&&lg.need)card.querySelector('.claw-st').textContent=lg.can?'未登录':'未登录（要在电脑上登录）';
+    if(c.supported&&!down&&lg&&lg.can){
+      if(!lb){lb=document.createElement('span');lb.className='claw-login';lb.setAttribute('role','button');lb.addEventListener('click',function(e){e.stopPropagation();openLogin(c.id)});card.appendChild(lb)}
+      lb.textContent=lg.loggedIn===true?'换账号':lg.key?'填 key':'登录';lb.hidden=false;
+    }else if(lb)lb.hidden=true;
     if((!c.supported||down)&&clawSel===c.id)clawSel=null;
     if(c.installed&&c.supported&&!down)ok.push(c.id);
     if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;
   document.querySelectorAll('.claw-g').forEach(function(g){g.hidden=!g.querySelector('.claw-card:not([hidden])')});clawDsFit();   // 整组都没装就不显示组名
+  // 列表页正显示着「还没登录」的提示、现在登上了：重新加载列表
+  if(clawSel&&$('#sList .login-need')&&!(clawInfo[clawSel]&&clawInfo[clawSel].login&&clawInfo[clawSel].login.need))openSheet(true);
   // 电脑端没选过 Claw 时默认 Claude；这台电脑没有可用的 Claude：改用第一个能用的（只在内存里，不记成用户的选择）
   if(DESKTOP.matches&&!clawSel&&ok.length&&ok.indexOf('claude')<0){clawSel=ok[0];lastList=null;$('#sList').innerHTML='';refreshList()}
   showClawSel();
 }
 try{applyClaws(JSON.parse(localStorage.getItem(hk('claws'))||'null'))}catch(_){}
 loadClaws();
+// ---------- 各 Claw 的登录（电脑上起它的登录命令，网址 / 一次性代码推到这里；见 login.mjs） ----------
+var loginClaw=null;
+function openLogin(claw){
+  var info=clawInfo[claw]||{},lg=info.login||{},nm=CLAW_NAMES[claw]||claw;
+  loginClaw=claw;
+  var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
+  p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc((lg.loggedIn===true?'重新登录 ':'登录 ')+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
+    +(lg.hint?'<p class="lg-hint">'+esc(lg.hint)+'</p>':'')
+    +(lg.key?'<div class="lg-key"><input type="password" class="lg-in" placeholder="'+esc(lg.keyLabel||'API key')+'" autocomplete="off"><button type="button" class="lg-btn lg-start">开始</button></div>':'')
+    +'<div class="lg-body"><div class="lg-st">'+(lg.key?'先填上 key':'正在启动登录命令…')+'</div></div>'
+    +'<div class="lg-ft"><button type="button" class="lg-btn ghost lg-cancel">取消</button></div></div>';
+  p.classList.add('on');
+  p.querySelector('.lg-x').addEventListener('click',closeLogin);
+  p.querySelector('.lg-cancel').addEventListener('click',function(){if(this.textContent==='取消')wsSend({t:'login.cancel',claw:claw});closeLogin()});
+  if(lg.key){
+    var inp=p.querySelector('.lg-in'),go=function(){var v=inp.value.trim();if(!v)return;p.querySelector('.lg-key').hidden=true;wsSend({t:'login.start',claw:claw,key:v})};
+    p.querySelector('.lg-start').addEventListener('click',go);inp.addEventListener('keydown',function(e){if(e.key==='Enter')go()});inp.focus();
+  }else wsSend({t:'login.start',claw:claw});
+}
+function closeLogin(){var p=$('#loginPane');if(p)p.classList.remove('on');loginClaw=null}
+function loginEvent(m){
+  var p=$('#loginPane');if(!p||!p.classList.contains('on')||m.claw!==loginClaw)return;
+  var b=p.querySelector('.lg-body'),h='';
+  if(m.status==='none')h='<div class="lg-st">没有正在进行的登录</div>';
+  else{
+    if(m.url)h+='<div class="lg-sec"><div class="lg-lb">1. 在手机上打开这个网址，完成授权</div><div class="lg-key"><a class="lg-btn lg-open" href="'+esc(m.url)+'" target="_blank" rel="noopener">打开网址</a><button type="button" class="lg-btn ghost lg-copy" data-v="'+esc(m.url)+'">复制链接</button></div></div>';
+    if(m.code)h+='<div class="lg-sec"><div class="lg-lb">'+(m.url?'2. ':'')+'网页问你要代码时填这个</div><div class="lg-code">'+esc(m.code)+'</div><button type="button" class="lg-btn ghost lg-copy" data-v="'+esc(m.code)+'">复制代码</button></div>';
+    if(m.prompt)h+='<div class="lg-sec"><div class="lg-lb">'+esc(m.prompt)+'</div><div class="lg-key"><input class="lg-in" autocomplete="off"><button type="button" class="lg-btn lg-send">发送</button></div></div>';
+    h+='<div class="lg-st'+(m.status==='ok'?' ok':m.status==='fail'?' bad':'')+'">'+(m.status==='ok'?'✓ 登录完成':m.status==='fail'?'✗ '+esc(m.error||'没成功'):esc(m.tail||'等待中…'))+'</div>';
+  }
+  b.innerHTML=h;
+  b.querySelectorAll('.lg-copy').forEach(function(x){x.addEventListener('click',function(){copyText(x.dataset.v)})});
+  var sd=b.querySelector('.lg-send');if(sd)sd.addEventListener('click',function(){var v=b.querySelector('.lg-in').value.trim();if(v)wsSend({t:'login.input',claw:m.claw,text:v})});
+  if(m.status==='ok'||m.status==='fail'||m.status==='none')p.querySelector('.lg-cancel').textContent='关闭';
+  if(m.status==='ok'){clawsAt=0;loadClaws()}   // 重新查一遍登录情况：卡片、列表页跟着更新
+}
 function pickClaw(id){
   if(curClaw()!==id){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
   clawSel=id;try{localStorage.setItem(hk('claw'),clawSel)}catch(_){}
@@ -4652,6 +4721,15 @@ function openSheet(silent){
   if(!rec&&!DESKTOP.matches&&!clawSel){   // 手机：还没选 Claw，会话列表不加载任何会话
     list.innerHTML='<div class="s-empty claw-need">还没选择 Claw。<br>先选一个，会话列表才会显示对应的会话。<br><button type="button" class="claw-go">去选择</button></div>';
     list.querySelector('.claw-go').addEventListener('click',function(){mTab('claw')});
+    return;
+  }
+  // 这个 Claw 还没登录、模型库也顶不上：用不了，列表页直接说明（能替它登的给「去登录」），不列会话、不给新建
+  if(!rec&&clawSel&&clawInfo[clawSel]&&clawInfo[clawSel].login&&clawInfo[clawSel].login.need){
+    var lgi=clawInfo[clawSel].login,lgn=CLAW_NAMES[clawSel]||clawSel;
+    $('#sNew').hidden=true;
+    list.innerHTML='<div class="s-empty claw-need login-need">'+esc(lgn)+' 还没登录，登录后才能用。<br>'+(lgi.can?esc(lgi.hint||'')+'<br><button type="button" class="claw-go login-go">'+(lgi.key?'填 key':'去登录')+'</button>':'claclaw 替不了它登录：先在电脑终端里登录，再回来。')+'</div>';
+    var lgb=list.querySelector('.login-go');if(lgb)lgb.addEventListener('click',function(){openLogin(clawSel)});
+    if(!silent&&DESKTOP.matches)showDlg(sheet,true);
     return;
   }
   if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载中…</div>';
