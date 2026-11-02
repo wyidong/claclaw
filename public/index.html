@@ -1021,6 +1021,17 @@ select.pe-in{text-align-last:right}
   /* Claw 页：整页滚动；底部多留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），内容多时圈被盖住，滚到底就露出来、点得到 */
   #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   #clawList{flex:none;display:flex;flex-direction:column;gap:12px}
+  /* Claw 按出品方分组，每行两张：图标在上，名字、出品方在下；说明放在 title 里 */
+  .claw-g[hidden]{display:none}
+  .claw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .claw-grid .claw-card{flex-direction:column;align-items:flex-start;gap:10px;min-height:0;padding:14px}
+  .claw-grid .claw-ic{width:40px;height:40px}
+  .claw-grid .claw-tx b{font-size:15.5px;line-height:1.25;overflow-wrap:anywhere}
+  .claw-grid .claw-st{font-size:11.5px;line-height:1.35}
+  /* 列入计划、还没接的 Claw：灰着显示，点不了；图标用首字母方块代替 */
+  .claw-card.claw-soon:disabled{opacity:1;filter:grayscale(1);color:var(--muted)}
+  .claw-card.claw-soon .claw-tx b{color:var(--muted)}
+  .claw-card .claw-soon-ic{display:grid;line-height:1;place-items:center;border-radius:22.5%;color:#fff;font-size:20px;font-weight:700;opacity:.55}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
@@ -1452,37 +1463,68 @@ select.pe-in{text-align-last:right}
           <span class="chev" aria-hidden="true"></span>
         </button>
         <div class="claw-h claw-h2">选择 Claw</div>
-        <!-- Claw 列表：跟整页一起滚；背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
+        <!-- Claw 列表：按出品方分组（海外 / 国内 / 开源），每行两个；跟整页一起滚，背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
         <div id="clawList">
           <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex 中任意一个后再来。</div>
-          <button type="button" class="claw-card" data-claw="claude">
-            <span class="claw-tx"><b>Claude Code</b><small>终端、VS Code、网页里开的会话都在这里</small></span>
-            <span class="claw-st"></span>
-          </button>
-          <button type="button" class="claw-card" data-claw="openclaw">
-            <span class="claw-tx"><b>OpenClaw</b><small>本机 OpenClaw 网关的会话</small></span>
-            <span class="claw-st"></span>
-          </button>
-          <button type="button" class="claw-card" data-claw="deepseek">
-            <span class="claw-tx"><b>DeepSeek Harness</b><small>dsh 的会话：网页版、终端里开的都在这里</small></span>
-            <span class="claw-st"></span>
-          </button>
-          <button type="button" class="claw-card" data-claw="opencode">
-            <span class="claw-tx"><b>OpenCode</b><small>opencode 的会话：终端里开的都在这里</small></span>
-            <span class="claw-st"></span>
-          </button>
-          <button type="button" class="claw-card" data-claw="kimi">
-            <span class="claw-tx"><b>Kimi Code</b><small>kimi 的会话：终端里开的都在这里</small></span>
-            <span class="claw-st"></span>
-          </button>
-          <button type="button" class="claw-card" data-claw="qwen">
-            <span class="claw-tx"><b>Qwen Code</b><small>qwen 的会话：终端里开的都在这里</small></span>
-            <span class="claw-st"></span>
-          </button>
-          <button type="button" class="claw-card" data-claw="codex">
-            <span class="claw-tx"><b>Codex</b><small>Codex 的会话：终端、IDE、桌面版里开的都在这里</small></span>
-            <span class="claw-st"></span>
-          </button>
+          <div class="claw-g"><div class="claw-h">海外厂商</div><div class="claw-grid">
+            <button type="button" class="claw-card" title="终端、VS Code、网页里开的会话都在这里" data-claw="claude">
+              <span class="claw-tx"><b>Claude Code</b><small>Anthropic</small></span>
+              <span class="claw-st"></span>
+            </button>
+            <button type="button" class="claw-card" title="Codex 的会话：终端、IDE、桌面版里开的都在这里" data-claw="codex">
+              <span class="claw-tx"><b>Codex</b><small>OpenAI</small></span>
+              <span class="claw-st"></span>
+            </button>
+          </div></div>
+          <div class="claw-g"><div class="claw-h">国内厂商</div><div class="claw-grid">
+            <button type="button" class="claw-card" title="dsh 的会话：网页版、终端里开的都在这里" data-claw="deepseek">
+              <span class="claw-tx"><b>DeepSeek Harness</b><small>深度求索</small></span>
+              <span class="claw-st"></span>
+            </button>
+            <button type="button" class="claw-card" title="kimi 的会话：终端里开的都在这里" data-claw="kimi">
+              <span class="claw-tx"><b>Kimi Code</b><small>月之暗面</small></span>
+              <span class="claw-st"></span>
+            </button>
+            <button type="button" class="claw-card" title="qwen 的会话：终端里开的都在这里" data-claw="qwen">
+              <span class="claw-tx"><b>Qwen Code</b><small>阿里通义</small></span>
+              <span class="claw-st"></span>
+            </button>
+            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
+              <span class="claw-ic claw-soon-ic" style="background:#6C5CE7" aria-hidden="true">Q</span>
+              <span class="claw-tx"><b>Qoder CLI</b><small>阿里云</small></span>
+              <span class="claw-st">暂不支持</span>
+            </button>
+            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
+              <span class="claw-ic claw-soon-ic" style="background:#2F6BFF" aria-hidden="true">C</span>
+              <span class="claw-tx"><b>CodeBuddy Code</b><small>腾讯云</small></span>
+              <span class="claw-st">暂不支持</span>
+            </button>
+            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
+              <span class="claw-ic claw-soon-ic" style="background:#E8455B" aria-hidden="true">M</span>
+              <span class="claw-tx"><b>MiniMax Code</b><small>MiniMax</small></span>
+              <span class="claw-st">暂不支持</span>
+            </button>
+            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
+              <span class="claw-ic claw-soon-ic" style="background:#13A07A" aria-hidden="true">i</span>
+              <span class="claw-tx"><b>iFlow CLI</b><small>心流</small></span>
+              <span class="claw-st">暂不支持</span>
+            </button>
+          </div></div>
+          <div class="claw-g"><div class="claw-h">开源社区</div><div class="claw-grid">
+            <button type="button" class="claw-card" title="opencode 的会话：终端里开的都在这里" data-claw="opencode">
+              <span class="claw-tx"><b>OpenCode</b><small>SST · 开源</small></span>
+              <span class="claw-st"></span>
+            </button>
+            <button type="button" class="claw-card" title="本机 OpenClaw 网关的会话" data-claw="openclaw">
+              <span class="claw-tx"><b>OpenClaw</b><small>开源社区</small></span>
+              <span class="claw-st"></span>
+            </button>
+            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
+              <span class="claw-ic claw-soon-ic" style="background:#3B5BDB" aria-hidden="true">G</span>
+              <span class="claw-tx"><b>GLM Agent</b><small>社区 · 智谱 GLM</small></span>
+              <span class="claw-st">暂不支持</span>
+            </button>
+          </div></div>
         </div>
       </div>
       <!-- 宿主：跑 claclaw 的这台电脑的状态（打开时每 5 秒刷新） -->
@@ -4346,6 +4388,7 @@ function applyClaws(list){
     if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;
+  document.querySelectorAll('.claw-g').forEach(function(g){g.hidden=!g.querySelector('.claw-card:not([hidden])')});   // 整组都没装就不显示组名
   // 电脑端没选过 Claw 时默认 Claude；这台电脑没有可用的 Claude：改用第一个能用的（只在内存里，不记成用户的选择）
   if(DESKTOP.matches&&!clawSel&&ok.length&&ok.indexOf('claude')<0){clawSel=ok[0];lastList=null;$('#sList').innerHTML='';refreshList()}
   showClawSel();
