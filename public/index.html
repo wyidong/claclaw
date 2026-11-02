@@ -128,7 +128,7 @@ window.__sc=(function(){
 :root[data-theme="ziwei"] #sList .s-row.wx .s-item{border:0}
 :root[data-theme="ziwei"] #app #sheet,:root[data-theme="ziwei"] #app #sheet .sheet-p,:root[data-theme="ziwei"] #app #hostPane,:root[data-theme="ziwei"] #app #sTop,:root[data-theme="ziwei"] #app #setTop{background:var(--bg)}
 /* 字：标题、名字用紫 */
-:root[data-theme="ziwei"] .lb,:root[data-theme="ziwei"] .claw-tx b,:root[data-theme="ziwei"] .s-item .t,:root[data-theme="ziwei"] #setTop,:root[data-theme="ziwei"] #nm,:root[data-theme="ziwei"] #setPane .set-h{color:var(--zw-t)}
+:root[data-theme="ziwei"] .lb,:root[data-theme="ziwei"] .claw-tx b,:root[data-theme="ziwei"] .claw-r b,:root[data-theme="ziwei"] .s-item .t,:root[data-theme="ziwei"] #setTop,:root[data-theme="ziwei"] #nm,:root[data-theme="ziwei"] #setPane .set-h{color:var(--zw-t)}
 :root[data-theme="ziwei"] #setPane .set-h,:root[data-theme="ziwei"] .h-h{font-weight:600}
 /* 宿主页、协同页：页头、分组标题、每行名称同样用紫 */
 :root[data-theme="ziwei"] .pg-hd,:root[data-theme="ziwei"] .h-h,:root[data-theme="ziwei"] .h-row .k{color:var(--zw-t)}
@@ -160,7 +160,7 @@ window.__sc=(function(){
 /* 聊天内容区：普通主题的底 */
 :root[data-theme="shichen"] #feed,:root[data-theme="shichen"] #banner{background:#F1F3F5}
 /* 字：标题、名字、分组标题用天干色 */
-:root[data-theme="shichen"] .lb,:root[data-theme="shichen"] .claw-tx b,:root[data-theme="shichen"] .s-item .t,:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .pg-hd,:root[data-theme="shichen"] .h-h,:root[data-theme="shichen"] .h-row .k{color:var(--sc-t)}
+:root[data-theme="shichen"] .lb,:root[data-theme="shichen"] .claw-tx b,:root[data-theme="shichen"] .claw-r b,:root[data-theme="shichen"] .s-item .t,:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .pg-hd,:root[data-theme="shichen"] .h-h,:root[data-theme="shichen"] .h-row .k{color:var(--sc-t)}
 :root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .h-h{font-weight:600}
 :root[data-theme="shichen"] .pe-back{color:var(--accent)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -1036,10 +1036,17 @@ select.pe-in{text-align-last:right}
   /* Claw 按出品方分组，每行两张：图标在上，名字、出品方在下；说明放在 title 里 */
   .claw-g[hidden]{display:none}
   .claw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-  .claw-grid .claw-card{flex-direction:column;align-items:flex-start;gap:10px;min-height:0;padding:14px}
-  .claw-grid .claw-ic{width:40px;height:40px}
-  .claw-grid .claw-tx b{font-size:15.5px;line-height:1.25;overflow-wrap:anywhere}
-  .claw-grid .claw-st{font-size:11.5px;line-height:1.35}
+  /* 每张一样高（112px）：左边一列 logo（占一半高 56px）+ 下面出品方；右边一列名字（最多两行）+ 一句话说明能接管哪些会话；有状态说明（暂不支持…）时换掉说明 */
+  .claw-grid .claw-card{display:flex;align-items:flex-start;gap:10px;height:112px;min-height:0;padding:10px 11px;overflow:hidden}
+  .claw-grid .claw-l{flex:none;width:56px;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .claw-grid .claw-ic{width:56px;height:56px}
+  .claw-grid .claw-l small{max-width:64px;text-align:center;font-size:11px;line-height:13px;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .claw-grid .claw-r{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:2px}
+  .claw-grid .claw-r b{font-size:14.5px;line-height:18px;color:var(--ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .claw-grid .claw-st,.claw-grid .claw-ds{font-size:11.5px;line-height:15px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .claw-grid .claw-ds{color:var(--muted)}
+  @media (max-width:375px){.claw-grid .claw-card{gap:8px;padding:10px 9px}.claw-grid .claw-r b{font-size:13.5px}}   /* 窄屏：CodeBuddy 这种长词不被拆开 */
+  .claw-grid .claw-card:has(.claw-st:not(:empty)) .claw-ds{display:none}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
@@ -1059,7 +1066,7 @@ select.pe-in{text-align-last:right}
      这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
      颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
   /* Kimi：用 Kimi Code 自带网页界面里的吉祥物（KimiMascotPeek：蓝色半圆探头 + 两只白眼睛 + 右上角蓝点），上下居中；干活时眨眼，不跟别的图标一起闪 */
-  .claw-h2{margin-top:10px}
+  #clawList{margin-top:14px}
   .claw-tool{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
   .claw-tool .claw-ic{width:34px;height:34px;margin:0 7px;color:var(--accent)}
   .claw-tool .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-right:4px}
@@ -1470,68 +1477,78 @@ select.pe-in{text-align-last:right}
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
       <div id="clawPane">
         <!-- 模型管理：以 Key 为单位登记各家模型（Key、接口地址、模型），按供应商分组；各 Claw 选模型时从这里选 -->
-        <div class="claw-h">模型</div>
         <button type="button" class="claw-tool" id="clawModels">
           <svg class="claw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 2.8l8.2 4.6v9.2L12 21.2l-8.2-4.6V7.4z"/><path d="M3.8 7.4L12 12l8.2-4.6M12 12v9.2"/></svg>
           <span class="claw-tx"><b>模型管理</b><small id="clawModelsSub">各家模型的 Key、接口地址和模型</small></span>
           <span class="chev" aria-hidden="true"></span>
         </button>
-        <div class="claw-h claw-h2">选择 Claw</div>
         <!-- Claw 列表：按出品方分组（海外 / 国内 / 开源），每行两个；跟整页一起滚，背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
         <div id="clawList">
           <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI 中任意一个后再来。</div>
-          <div class="claw-g"><div class="claw-h">海外厂商</div><div class="claw-grid">
-            <button type="button" class="claw-card" title="终端、VS Code、网页里开的会话都在这里" data-claw="claude">
+          <div class="claw-g"><div class="claw-h">海外 Agent</div><div class="claw-grid">
+            <button type="button" class="claw-card" data-claw="claude">
               <span class="claw-tx"><b>Claude Code</b><small>Anthropic</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端、VS Code、网页里开的会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="Codex 的会话：终端、IDE、桌面版里开的都在这里" data-claw="codex">
+            <button type="button" class="claw-card" data-claw="codex">
               <span class="claw-tx"><b>Codex</b><small>OpenAI</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端、IDE、桌面版里开的 Codex 会话列表</span>
             </button>
           </div></div>
-          <div class="claw-g"><div class="claw-h">国内厂商</div><div class="claw-grid">
-            <button type="button" class="claw-card" title="dsh 的会话：网页版、终端里开的都在这里" data-claw="deepseek">
+          <div class="claw-g"><div class="claw-h">国产 Agent</div><div class="claw-grid">
+            <button type="button" class="claw-card" data-claw="deepseek">
               <span class="claw-tx"><b>DeepSeek Harness</b><small>深度求索</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开网页版、终端里开的 dsh 会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="kimi 的会话：终端里开的都在这里" data-claw="kimi">
+            <button type="button" class="claw-card" data-claw="kimi">
               <span class="claw-tx"><b>Kimi Code</b><small>月之暗面</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端里开的 Kimi 会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="qwen 的会话：终端里开的都在这里" data-claw="qwen">
+            <button type="button" class="claw-card" data-claw="qwen">
               <span class="claw-tx"><b>Qwen Code</b><small>阿里通义</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端里开的 Qwen 会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="qodercli 的会话：终端里开的都在这里" data-claw="qoder">
+            <button type="button" class="claw-card" data-claw="qoder">
               <span class="claw-tx"><b>Qoder CLI</b><small>阿里云</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端里开的 Qoder 会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="codebuddy 的会话：终端里开的都在这里" data-claw="codebuddy">
+            <button type="button" class="claw-card" data-claw="codebuddy">
               <span class="claw-tx"><b>CodeBuddy Code</b><small>腾讯云</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端里开的 CodeBuddy 会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="mcode 的会话：终端里开的都在这里" data-claw="minimax">
+            <button type="button" class="claw-card" data-claw="minimax">
               <span class="claw-tx"><b>MiniMax Code</b><small>MiniMax</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端里开的 mcode 会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="iflow 走 ACP 开的会话在这里" data-claw="iflow">
+            <button type="button" class="claw-card" data-claw="iflow">
               <span class="claw-tx"><b>iFlow CLI</b><small>心流</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开 iFlow 经 ACP 开的会话列表</span>
             </button>
           </div></div>
           <div class="claw-g"><div class="claw-h">开源社区</div><div class="claw-grid">
-            <button type="button" class="claw-card" title="opencode 的会话：终端里开的都在这里" data-claw="opencode">
+            <button type="button" class="claw-card" data-claw="opencode">
               <span class="claw-tx"><b>OpenCode</b><small>SST · 开源</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开终端里开的 opencode 会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="本机 OpenClaw 网关的会话" data-claw="openclaw">
+            <button type="button" class="claw-card" data-claw="openclaw">
               <span class="claw-tx"><b>OpenClaw</b><small>开源社区</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开本机 OpenClaw 网关的会话列表</span>
             </button>
-            <button type="button" class="claw-card" title="glm-acp-agent 的会话（Zed 等编辑器里开的也在）" data-claw="glm">
+            <button type="button" class="claw-card" data-claw="glm">
               <span class="claw-tx"><b>GLM Agent</b><small>社区 · 智谱 GLM</small></span>
               <span class="claw-st"></span>
+              <span class="claw-ds">打开 GLM Agent 的会话列表，含 Zed 里开的</span>
             </button>
           </div></div>
         </div>
@@ -3578,7 +3595,7 @@ function mTab(t){
   if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   if(t!=='host'){hostView='';peerWatch(false)}
-  hostLive(t==='host');if(t==='claw'){loadClaws();mdlPeek()}if(t==='set')loadSetData();
+  hostLive(t==='host');if(t==='claw'){loadClaws();mdlPeek();requestAnimationFrame(clawDsFit)}if(t==='set')loadSetData();
   $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railModels').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
   $('.sheet-p').scrollTop=0;
@@ -4414,7 +4431,7 @@ function applyClaws(list){
     if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;
-  document.querySelectorAll('.claw-g').forEach(function(g){g.hidden=!g.querySelector('.claw-card:not([hidden])')});   // 整组都没装就不显示组名
+  document.querySelectorAll('.claw-g').forEach(function(g){g.hidden=!g.querySelector('.claw-card:not([hidden])')});clawDsFit();   // 整组都没装就不显示组名
   // 电脑端没选过 Claw 时默认 Claude；这台电脑没有可用的 Claude：改用第一个能用的（只在内存里，不记成用户的选择）
   if(DESKTOP.matches&&!clawSel&&ok.length&&ok.indexOf('claude')<0){clawSel=ok[0];lastList=null;$('#sList').innerHTML='';refreshList()}
   showClawSel();
@@ -4797,6 +4814,23 @@ function syncWorkMarks(){
 // Claw 卡片的图标和左栏的是同一个：从左栏拷过来（只写一份）
 document.querySelectorAll('.claw-card[data-claw]').forEach(function(card){var b=document.querySelector('#rail .rclaw[data-claw="'+card.dataset.claw+'"]'),ic=b&&b.firstElementChild&&b.firstElementChild.cloneNode(true);if(ic){ic.classList.add('claw-ic');card.insertBefore(ic,card.firstChild)}});
 document.querySelectorAll('.claw-card .claw-ic').forEach(function(ic){var w=document.createElement('span');w.className='claw-icw';ic.parentNode.insertBefore(w,ic);w.appendChild(ic)});
+// 说明放得下就写成「从这里打开…」，放不下（三行截断）就保持「打开…」；按实际宽度量，切到 Claw 页、转屏时重量（英文界面不改）
+function clawDsFit(){
+  if(document.documentElement.lang==='en')return;
+  document.querySelectorAll('.claw-grid .claw-ds').forEach(function(d){
+    if(!d.offsetParent)return;
+    var b=d.dataset.base||(d.dataset.base=d.textContent);
+    d.textContent='从这里'+b;if(d.scrollHeight>d.clientHeight+1)d.textContent=b;
+  });
+}
+addEventListener('resize',function(){clearTimeout(clawDsFit.t);clawDsFit.t=setTimeout(clawDsFit,200)});
+// 手机 Claw 页两列卡片：左边一列 logo + 下面出品方，右边一列名字 + 一句话说明
+document.querySelectorAll('.claw-grid .claw-card').forEach(function(c){
+  var L=document.createElement('span'),R=document.createElement('span');L.className='claw-l';R.className='claw-r';
+  [c.querySelector('.claw-icw'),c.querySelector('.claw-tx small')].forEach(function(x){if(x)L.appendChild(x)});
+  [c.querySelector('.claw-tx b'),c.querySelector('.claw-st'),c.querySelector('.claw-ds')].forEach(function(x){if(x)R.appendChild(x)});
+  var t=c.querySelector('.claw-tx');if(t)t.remove();c.insertBefore(R,c.firstChild);c.insertBefore(L,R);
+});
 function renderUnread(){
   var ids=Object.keys(unread),total=0,other=false,byClaw={};
   ids.forEach(function(id){total+=unread[id]||0;if(!session||id!==session.id){other=true;byClaw[clawOf(id)]=true}});
