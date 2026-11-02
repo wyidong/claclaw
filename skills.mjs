@@ -51,7 +51,7 @@ export function list(clawsInstalled) {
     ...s,
     targets: Object.entries(TARGETS)
       .filter(([, v]) => v.claws.some(c => s.claws.includes(c) && clawsInstalled.includes(c)))
-      .map(([t, v]) => ({ id: t, label: v.label, state: stateAt(s.name, t) })),
+      .map(([t, v]) => ({ id: t, label: v.label, state: stateAt(s.name, t), claws: v.claws.filter(c => s.claws.includes(c) && clawsInstalled.includes(c) && targetOf(c) === t) })),   // claws：这一处管到的 Claw（页面一行一个）
   }));
 }
 

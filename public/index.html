@@ -1008,6 +1008,10 @@ select.pe-in{text-align-last:right}
 .pe-note{margin:8px 14px 0;font-size:12.5px;line-height:1.6;color:var(--muted)}
 .sk-row{display:flex;align-items:center;gap:10px}
 .sk-row .k{flex:1;min-width:0}
+.sk-row .pe-btn{margin-left:auto;flex:none}
+.sk-ic{display:inline-grid;place-items:center;width:30px;height:30px;flex:none}
+.sk-ic img,.sk-ic svg{width:30px;height:30px;object-fit:contain}
+.sk-ic img.tile{border-radius:22.5%}
 .pe-err{margin:8px 14px 0;font-size:13px;color:var(--deny)}
 .pe-ok{margin:8px 14px 0;font-size:13px;color:var(--allow)}
 #hostBody{display:flex;flex-direction:column;gap:18px}
@@ -3744,10 +3748,12 @@ function renderSkills(){
         var st=t.state==='ours'?'已安装':t.state==='foreign'?'已有同名技能（不是 claclaw 装的）':'未安装';
         var btn=t.state==='ours'?'<button type="button" class="pe-btn" data-act="skill-remove" data-name="'+esc(s.name)+'" data-target="'+esc(t.id)+'">卸载</button>':
           t.state==='none'?'<button type="button" class="pe-btn pri" data-act="skill-install" data-name="'+esc(s.name)+'" data-target="'+esc(t.id)+'">安装</button>':'';
-        return '<div class="h-row sk-row"><span class="k">'+esc(t.label)+'<br><small style="color:var(--muted)">'+st+'</small></span>'+btn+'</div>';
+        var cs=t.claws&&t.claws.length?t.claws:null;   // 一行一个 Claw；共用一处的几个，装 / 卸一起变
+        if(!cs)return '<div class="h-row sk-row"><span class="k">'+esc(t.label)+'<br><small style="color:var(--muted)">'+st+'</small></span>'+btn+'</div>';
+        return cs.map(function(k){return '<div class="h-row sk-row"><span class="sk-ic">'+clawIcon(k)+'</span><span class="k">'+esc(CLAW_NAMES[k]||k)+'<br><small style="color:var(--muted)">'+st+'</small></span>'+btn+'</div>'}).join('');
       }).join(''):'<div class="h-row"><span class="v">这台电脑上没有用得上它的 Claw</span></div>')+
       '</div></div>';
-  }).join('')+'<div class="pe-note">技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。</div>';
+  }).join('')+'<div class="pe-note">技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。除 Claude Code 外的 Agent 共用一份，装一个都能用。</div>';
   $('#hostBody').innerHTML=h;
 }
 // ---------- 模型管理：以 Key 为单位登记、按供应商分组，入口在 Claw 页顶部和宿主页的 Claw 区 ----------

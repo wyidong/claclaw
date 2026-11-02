@@ -430,6 +430,7 @@ var I18N={dict:{
 "找不到这个会话":"Session not found",
 "找会话":"Finding sessions",
 "技能":"Skills",
+"技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。除 Claude Code 外的 Agent 共用一份，装一个都能用。":"Skills are instructions and commands for the AI, installed on this computer. Usually nothing to do: claclaw installs them automatically when a feature needs them. Agents other than Claude Code share one copy, so installing for one covers all.",
 "技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。":"Skills are instructions and commands for the AI, installed on this computer. Usually nothing to do: claclaw installs them automatically when a feature needs them.",
 "拒绝":"Deny",
 "拖动调整宽度，双击恢复默认":"Drag to resize, double-click to reset",
