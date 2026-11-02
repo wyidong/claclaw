@@ -27,7 +27,7 @@ export function storeMatch(store, baseUrl, modelId) {
   return null;
 }
 
-const envName = id => 'CLACLAW_KEY_' + String(id).toUpperCase().replace(/[^A-Z0-9]/g, '_');
+export const envName = id => 'CLACLAW_KEY_' + String(id).toUpperCase().replace(/[^A-Z0-9]/g, '_');
 
 // OpenCode 的注入：{ content（OPENCODE_CONFIG_CONTENT，没有可注入的为 null）, env（key）, sig（模型库变了没有） }
 // 有 Anthropic 格式地址优先用它（@ai-sdk/anthropic，OpenCode 自带），其次 OpenAI 兼容，再次 Gemini
@@ -176,5 +176,83 @@ export function qwenSettingsMerge(cur, inj) {
     s.security = { ...(s.security || {}), auth: { ...(s.security?.auth || {}), selectedType: first.type } };
   } else if (first && !s.security?.auth?.selectedType) s.security = { ...(s.security || {}), auth: { ...(s.security?.auth || {}), selectedType: first.type } };
   else if (!first && name && wasOurs(name)) { s.model = { ...s.model }; delete s.model.name; }   // 模型库清空了：别留着指向没了的模型
+  return s;
+}
+
+// ---------- 进程级走法：一个进程只能用一个供应商（GLM Agent）/ 一个模型（iFlow）的 agent ----------
+// 模型库里能给它用的：有指定格式接口地址的供应商的模型；value 形如 lib:<供应商 id>/<模型 id>
+export const LIB = 'lib:';
+export const libModels = (store, fmts = ['openai']) => store.providers
+  .filter(p => fmts.some(f => p.endpoints?.[f]) && p.models.length)
+  .flatMap(p => p.models.map(m => ({ p, m, value: LIB + p.id + '/' + m.id, fmt: fmts.find(f => p.endpoints[f]) })));
+// 现在走哪条：route 文件里记的那条还在就用它（perProvider：只认供应商，模型随会话选）；
+// 没记过、或记的没了：agent 自己用不了（没登录）就模型库第一个，不然用 agent 自带（null）
+export function routeNow(route, store, fmts, ownUsable, perProvider = false) {
+  const lib = libModels(store, fmts);
+  const hit = route?.provider && lib.find(x => x.p.id === route.provider && (perProvider || x.m.id === route.model));
+  if (hit) return hit;
+  if (route?.own) return ownUsable() ? null : (lib[0] || null);
+  return lib.length && !ownUsable() ? lib[0] : null;
+}
+
+// ---------- CodeBuddy Code：~/.codebuddy/models.json ----------
+// 只认 OpenAI 兼容接口，url 要写到 /chat/completions；key 只能写进文件（文件 600）。
+// id 就是传给接口的模型名（CodeBuddy 没有单独的字段），所以靠 vendor 带「claclaw ·」认出哪些是 claclaw 写的；
+// availableModels 里加上我们的，用户自己的保留
+const chatUrl = base => String(base).replace(/\/+$/, '').replace(/\/chat\/completions$/, '').replace(/\/v1$/, '') + '/v1/chat/completions';
+export const CB_VENDOR = 'claclaw · ';
+export function codebuddyInject(store) {
+  const models = [];
+  for (const p of store.providers) {
+    if (!p.endpoints?.openai || !p.models.length) continue;
+    for (const m of p.models) {
+      models.push({
+        id: m.id, name: m.name || m.id, vendor: CB_VENDOR + p.name, apiKey: p.key || '',
+        maxInputTokens: Math.max(1, Number(m.context) || 131072), maxOutputTokens: 32768,
+        url: chatUrl(p.endpoints.openai), supportsToolCall: true, supportsImages: !!m.vision, ...(m.reasoning ? { supportsReasoning: true } : {}),
+      });
+    }
+  }
+  const sig = models.length ? crypto.createHash('sha256').update(JSON.stringify(models)).digest('hex').slice(0, 16) : '';
+  return { models, sig };
+}
+export function codebuddyMerge(cur, inj) {
+  const s = JSON.parse(JSON.stringify(cur || {}));
+  const ours = e => typeof e?.vendor === 'string' && e.vendor.startsWith(CB_VENDOR);
+  const before = Array.isArray(cur?.models) ? cur.models.filter(ours).map(e => e.id) : [];
+  s.models = [...(Array.isArray(s.models) ? s.models.filter(e => !ours(e)) : []), ...inj.models];
+  const mineIds = inj.models.map(e => e.id);
+  const avail = Array.isArray(s.availableModels) ? s.availableModels.filter(x => !before.includes(x) || mineIds.includes(x)) : [];
+  if (avail.length || mineIds.length) s.availableModels = [...new Set([...avail, ...mineIds])];
+  if (!s.models.length) delete s.models;
+  if (Array.isArray(s.availableModels) && !s.availableModels.length) delete s.availableModels;
+  return s;
+}
+
+// ---------- Qoder CLI：~/.qoder/settings.json 的 customModels ----------
+// 字段按 Qoder 文档：provider / apiKey / model / baseURL / key / format（openai | anthropic）/ isReasoning / isVl / maxInputTokens。
+// key（选模型用的名字）带 claclaw- 前缀认出是我们写的。要 Qoder 个人付费订阅才能用自定义模型（没订阅的话 Qoder 不认这些）
+export function qoderInject(store) {
+  const list = [];
+  for (const p of store.providers) {
+    const ep = p.endpoints || {};
+    if (!p.models.length) continue;
+    const [format, base] = ep.openai ? ['openai', ep.openai] : ep.anthropic ? ['anthropic', ep.anthropic] : [];
+    if (!format) continue;
+    for (const m of p.models) {
+      list.push({
+        key: 'claclaw-' + p.id + '/' + m.id, provider: p.id, apiKey: p.key || '', model: m.id, baseURL: base, format,
+        ...(m.reasoning ? { isReasoning: true } : {}), ...(m.vision ? { isVl: true } : {}), ...(m.context ? { maxInputTokens: m.context } : {}),
+      });
+    }
+  }
+  const sig = list.length ? crypto.createHash('sha256').update(JSON.stringify(list)).digest('hex').slice(0, 16) : '';
+  return { list, sig };
+}
+export function qoderSettingsMerge(cur, inj) {
+  const s = JSON.parse(JSON.stringify(cur || {}));
+  const keep = Array.isArray(s.customModels) ? s.customModels.filter(e => !String(e?.key || '').startsWith('claclaw-')) : [];
+  const all = [...keep, ...inj.list];
+  if (all.length) s.customModels = all; else delete s.customModels;
   return s;
 }

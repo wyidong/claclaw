@@ -8,6 +8,11 @@ import { request as httpsRequest } from 'node:https';
 import { kmBin } from './kimi.mjs';
 import { qwBin } from './qwen.mjs';
 import { cxVersion } from './codex.mjs';
+import { glVersion } from './glm.mjs';
+import { ifBin } from './iflow.mjs';
+import { mmBin } from './minimax.mjs';
+import { cbBin } from './codebuddy.mjs';
+import { qdBin } from './qoder.mjs';
 
 const run = (cmd, args, ms = 4000) => new Promise(ok => {
   execFile(cmd, args, { timeout: ms, env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin', '/opt/homebrew/bin'].join(':') } },
@@ -23,7 +28,7 @@ export function slowInfo(root) {   // server 启动时先跑一次，第一次�
 }
 async function readSlow(root) {
   const mac = process.platform === 'darwin';
-  const [name, osVer, model, claude, openclaw, gitLine, opencode, kimi, qwen, codex] = await Promise.all([
+  const [name, osVer, model, claude, openclaw, gitLine, opencode, kimi, qwen, codex, iflow, mcode, codebuddy, qoder] = await Promise.all([
     mac ? run('scutil', ['--get', 'ComputerName']) : Promise.resolve(os.hostname()),
     mac ? run('sw_vers', ['-productVersion']) : Promise.resolve(os.release()),
     mac ? run('sysctl', ['-n', 'hw.model']) : Promise.resolve(''),
@@ -34,6 +39,10 @@ async function readSlow(root) {
     kmBin() ? run(kmBin(), ['--version'], 8000) : Promise.resolve(''),
     qwBin() ? run(qwBin(), ['--version'], 8000) : Promise.resolve(''),
     Promise.resolve(cxVersion()),
+    ifBin() ? run(ifBin(), ['--version'], 8000) : Promise.resolve(''),
+    mmBin() ? run(mmBin(), ['--version'], 8000) : Promise.resolve(''),
+    cbBin() ? run(cbBin(), ['--version'], 8000) : Promise.resolve(''),
+    qdBin() ? run(qdBin(), ['--version'], 8000) : Promise.resolve(''),
   ]);
   let dsh = '';
   try { dsh = JSON.parse(fs.readFileSync('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json', 'utf8')).version; } catch {}
@@ -43,6 +52,7 @@ async function readSlow(root) {
     claude: (claude.match(/\d+\.\d+\.\d+\S*/) || [''])[0],
     openclaw: (openclaw.match(/\d{4}\.\d+\.\d+\S*|\d+\.\d+\.\d+\S*/) || [''])[0],
     dsh, opencode: (opencode.match(/\d+\.\d+\.\d+\S*/) || [''])[0], kimi: (kimi.match(/\d+\.\d+\.\d+\S*/) || [''])[0], qwen: (qwen.match(/\d+\.\d+\.\d+\S*/) || [''])[0], codex, commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
+    glm: glVersion(), ...Object.fromEntries([['iflow', iflow], ['minimax', mcode], ['codebuddy', codebuddy], ['qoder', qoder]].map(([k, v]) => [k, (String(v || '').match(/\d+\.\d+\.\d+\S*/) || [''])[0]])),
   };
   slow.at = Date.now();
   return slow.data;
@@ -131,6 +141,7 @@ export async function hostInfo({ root, port, hosts, https, startedAt, sessions, 
       ...(claws.kimi ? [{ id: 'kimi', name: 'Kimi Code', version: s.kimi, ...claws.kimi }] : []),
       ...(claws.qwen ? [{ id: 'qwen', name: 'Qwen Code', version: s.qwen, ...claws.qwen }] : []),
       ...(claws.codex ? [{ id: 'codex', name: 'Codex', version: s.codex, ...claws.codex }] : []),
+      ...[['glm', 'GLM Agent'], ['iflow', 'iFlow CLI'], ['minimax', 'MiniMax Code'], ['codebuddy', 'CodeBuddy Code'], ['qoder', 'Qoder CLI']].filter(([k]) => claws[k]).map(([k, n]) => ({ id: k, name: n, version: s[k], ...claws[k] })),
     ],
   };
 }

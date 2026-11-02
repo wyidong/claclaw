@@ -1028,10 +1028,6 @@ select.pe-in{text-align-last:right}
   .claw-grid .claw-ic{width:40px;height:40px}
   .claw-grid .claw-tx b{font-size:15.5px;line-height:1.25;overflow-wrap:anywhere}
   .claw-grid .claw-st{font-size:11.5px;line-height:1.35}
-  /* 列入计划、还没接的 Claw：灰着显示，点不了；图标用首字母方块代替 */
-  .claw-card.claw-soon:disabled{opacity:1;filter:grayscale(1);color:var(--muted)}
-  .claw-card.claw-soon .claw-tx b{color:var(--muted)}
-  .claw-card .claw-soon-ic{display:grid;line-height:1;place-items:center;border-radius:22.5%;color:#fff;font-size:20px;font-weight:700;opacity:.55}
   .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
@@ -1284,7 +1280,7 @@ select.pe-in{text-align-last:right}
   var onClaw=window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   var rt=ss.getItem('claclaw.reloadTo')||'';   // 刷新前在哪一页（见主脚本 railReload）：直接画那一页
   if(rt){app.className={set:'m-list set-on',host:'m-list host-on',claw:'m-list claw-on',recent:'m-list',chats:'m-list',chat:''}[rt]||'';return}
-  if(onClaw||!/^(claude|openclaw|deepseek|opencode|kimi|qwen|codex)$/.test(claw||''))app.className='m-list claw-on';
+  if(onClaw||!/^(claude|openclaw|deepseek|opencode|kimi|qwen|codex|glm|iflow|minimax|codebuddy|qoder)$/.test(claw||''))app.className='m-list claw-on';
   else if(view!=='chat'||!sess)app.className='m-list';
 }catch(e){}})();
 </script>
@@ -1315,6 +1311,11 @@ select.pe-in{text-align-last:right}
     <div id="hdCard">
     <!-- 不用 <button>：按钮里的字不能用鼠标选中复制。会话名、ID、目录、分支都可以直接拖选 -->
     <div id="sessBtn">
+    <button type="button" class="rclaw" data-claw="glm" aria-label="GLM Agent" title="GLM Agent"><img src="https://z-cdn.chatglm.cn/z-ai/static/logo.svg" alt=""></button>
+    <button type="button" class="rclaw" data-claw="iflow" aria-label="iFlow CLI" title="iFlow CLI"><img src="https://img.alicdn.com/imgextra/i4/O1CN01yBfg3x1iNi4YggwIt_!!6000000004401-2-tps-72-72.png" alt="" class="tile"></button>
+    <button type="button" class="rclaw" data-claw="minimax" aria-label="MiniMax Code" title="MiniMax Code"><img src="https://cdn.hailuoai.video/open-hailuo-video-web/public_assets/agent-archon/web/share-logo/27b0276564e6bc41/share-logo.png" alt=""></button>
+    <button type="button" class="rclaw" data-claw="codebuddy" aria-label="CodeBuddy Code" title="CodeBuddy Code"><img src="https://codebuddy-1328495429.cos.accelerate.myqcloud.com/web/ide/logo.svg" alt=""></button>
+    <button type="button" class="rclaw" data-claw="qoder" aria-label="Qoder CLI" title="Qoder CLI"><img src="https://img.alicdn.com/imgextra/i4/O1CN01QkSxiCocd3D0prc8_!!6000000008124-2-tps-412-412.png" alt="" class="tile"></button>
       <span class="dot"></span>
       <span class="st">
         <span class="r1"><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span></span>
@@ -1465,7 +1466,7 @@ select.pe-in{text-align-last:right}
         <div class="claw-h claw-h2">选择 Claw</div>
         <!-- Claw 列表：按出品方分组（海外 / 国内 / 开源），每行两个；跟整页一起滚，背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
         <div id="clawList">
-          <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex 中任意一个后再来。</div>
+          <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI 中任意一个后再来。</div>
           <div class="claw-g"><div class="claw-h">海外厂商</div><div class="claw-grid">
             <button type="button" class="claw-card" title="终端、VS Code、网页里开的会话都在这里" data-claw="claude">
               <span class="claw-tx"><b>Claude Code</b><small>Anthropic</small></span>
@@ -1489,25 +1490,21 @@ select.pe-in{text-align-last:right}
               <span class="claw-tx"><b>Qwen Code</b><small>阿里通义</small></span>
               <span class="claw-st"></span>
             </button>
-            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
-              <span class="claw-ic claw-soon-ic" style="background:#6C5CE7" aria-hidden="true">Q</span>
+            <button type="button" class="claw-card" title="qodercli 的会话：终端里开的都在这里" data-claw="qoder">
               <span class="claw-tx"><b>Qoder CLI</b><small>阿里云</small></span>
-              <span class="claw-st">暂不支持</span>
+              <span class="claw-st"></span>
             </button>
-            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
-              <span class="claw-ic claw-soon-ic" style="background:#2F6BFF" aria-hidden="true">C</span>
+            <button type="button" class="claw-card" title="codebuddy 的会话：终端里开的都在这里" data-claw="codebuddy">
               <span class="claw-tx"><b>CodeBuddy Code</b><small>腾讯云</small></span>
-              <span class="claw-st">暂不支持</span>
+              <span class="claw-st"></span>
             </button>
-            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
-              <span class="claw-ic claw-soon-ic" style="background:#E8455B" aria-hidden="true">M</span>
+            <button type="button" class="claw-card" title="mcode 的会话：终端里开的都在这里" data-claw="minimax">
               <span class="claw-tx"><b>MiniMax Code</b><small>MiniMax</small></span>
-              <span class="claw-st">暂不支持</span>
+              <span class="claw-st"></span>
             </button>
-            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
-              <span class="claw-ic claw-soon-ic" style="background:#13A07A" aria-hidden="true">i</span>
+            <button type="button" class="claw-card" title="iflow 走 ACP 开的会话在这里" data-claw="iflow">
               <span class="claw-tx"><b>iFlow CLI</b><small>心流</small></span>
-              <span class="claw-st">暂不支持</span>
+              <span class="claw-st"></span>
             </button>
           </div></div>
           <div class="claw-g"><div class="claw-h">开源社区</div><div class="claw-grid">
@@ -1519,10 +1516,9 @@ select.pe-in{text-align-last:right}
               <span class="claw-tx"><b>OpenClaw</b><small>开源社区</small></span>
               <span class="claw-st"></span>
             </button>
-            <button type="button" class="claw-card claw-soon" disabled title="已列入计划，暂不支持">
-              <span class="claw-ic claw-soon-ic" style="background:#3B5BDB" aria-hidden="true">G</span>
+            <button type="button" class="claw-card" title="glm-acp-agent 的会话（Zed 等编辑器里开的也在）" data-claw="glm">
               <span class="claw-tx"><b>GLM Agent</b><small>社区 · 智谱 GLM</small></span>
-              <span class="claw-st">暂不支持</span>
+              <span class="claw-st"></span>
             </button>
           </div></div>
         </div>
@@ -1643,7 +1639,12 @@ var CLAW_T=[
   {id:'opencode',p:'op',name:'OpenCode',long:'OpenCode',strip:/^op:(ses_)?/,acp:true},
   {id:'kimi',p:'km',name:'Kimi',long:'Kimi Code',strip:/^km:(session_)?/,acp:true,dissect:true},
   {id:'qwen',p:'qw',name:'Qwen',long:'Qwen Code',strip:/^qw:/,acp:true},
-  {id:'codex',p:'cx',name:'Codex',long:'Codex',strip:/^cx:/,acp:true}
+  {id:'codex',p:'cx',name:'Codex',long:'Codex',strip:/^cx:/,acp:true},
+  {id:'glm',p:'gl',name:'GLM',long:'GLM Agent',strip:/^gl:/,acp:true},
+  {id:'iflow',p:'if',name:'iFlow',long:'iFlow CLI',strip:/^if:/,acp:true},
+  {id:'minimax',p:'mm',name:'MiniMax',long:'MiniMax Code',strip:/^mm:(mvs_)?/,acp:true},
+  {id:'codebuddy',p:'cb',name:'CodeBuddy',long:'CodeBuddy Code',strip:/^cb:/,acp:true},
+  {id:'qoder',p:'qd',name:'Qoder',long:'Qoder CLI',strip:/^qd:/,acp:true}
 ];
 var NOT_CLAUDE=new RegExp('^('+CLAW_T.map(function(c){return c.p}).join('|')+'):');
 function clawT(id){id=String(id||'');for(var i=0;i<CLAW_T.length;i++)if(id.indexOf(CLAW_T[i].p+':')===0)return CLAW_T[i];return null}
@@ -4209,7 +4210,7 @@ function peerAddHtml(c){
 // 协同会话：上面「已加入」（按 Claw 分组，一眼看出开放了哪些 Claw 的会话，点「移出」马上生效）；
 // 下面「添加会话」：先选 Claw，再搜 / 按目录勾选，勾上马上加入。不用再点保存
 var peerPoolClaw='',peerPoolQ='';
-var CLAW_ORDER=['claude','deepseek','opencode','kimi','qwen','codex','openclaw'];
+var CLAW_ORDER=['claude','codex','deepseek','kimi','qwen','glm','iflow','minimax','codebuddy','qoder','opencode','openclaw'];
 // Claw 的图标：和左边栏用同一份（左边栏的按钮里就是图标）
 function clawIcon(k){var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:esc(CLAW_NAMES[k])}
 function clawSegBtn(k,n,on){return '<button type="button" data-act="pool-claw" data-claw="'+k+'" title="'+esc(CLAW_NAMES[k])+'" aria-label="'+esc(CLAW_NAMES[k])+'"'+(on?' class="on"':'')+'>'+clawIcon(k)+(n?'<i>'+n+'</i>':'')+'</button>'}

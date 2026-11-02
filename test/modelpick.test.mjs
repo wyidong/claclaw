@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { storeMatch, opencodeInject, splitGroups, hostOf, kimiInject, kimiConfigMerge, qwenInject, qwenSettingsMerge } from '../modelpick.mjs';
+import * as mp from '../modelpick.mjs';
 
 const store = { version: 1, providers: [
   { id: 'deepseek', name: 'DeepSeek', endpoints: { anthropic: 'https://api.deepseek.com/anthropic', openai: 'https://api.deepseek.com' }, key: 'sk-ds-1234',
@@ -113,4 +114,52 @@ test('Qwen settings 合并：模型库清空时不留指向已删模型的 model
   const s = qwenSettingsMerge({}, qwenInject(store));
   const s2 = qwenSettingsMerge(s, qwenInject({ providers: [] }));
   assert.equal(s2.model.name, undefined);
+});
+
+test('CodeBuddy models.json：只认 OpenAI 兼容地址、url 到 /chat/completions、vendor 带 claclaw 标记；合并时用户自己的条目不动', () => {
+  const { codebuddyInject, codebuddyMerge } = mp;
+  const inj = codebuddyInject(store);
+  assert.deepEqual(inj.models.map(m => m.id), ['deepseek-v4-pro', 'deepseek-flash', 'kimi-k2']);
+  assert.equal(inj.models[0].url, 'https://api.deepseek.com/v1/chat/completions');
+  assert.equal(inj.models[2].url, 'https://api.moonshot.cn/v1/chat/completions');
+  assert.equal(inj.models[0].vendor, 'claclaw · DeepSeek'); assert.equal(inj.models[0].apiKey, 'sk-ds-1234');
+  assert.equal(inj.models[1].supportsImages, true); assert.equal(inj.models[0].supportsReasoning, true);
+  const cur = { models: [{ id: 'mine', vendor: 'Me', url: 'https://x/v1/chat/completions' }, { id: 'old', vendor: 'claclaw · Old' }], availableModels: ['mine', 'old', 'hy3'] };
+  const s = codebuddyMerge(cur, inj);
+  assert.deepEqual(s.models.map(m => m.id), ['mine', 'deepseek-v4-pro', 'deepseek-flash', 'kimi-k2']);
+  assert.deepEqual(s.availableModels, ['mine', 'hy3', 'deepseek-v4-pro', 'deepseek-flash', 'kimi-k2']);
+  // 模型库清空：claclaw 的都拿掉，用户的留着
+  const s2 = codebuddyMerge(s, codebuddyInject({ providers: [] }));
+  assert.deepEqual(s2.models.map(m => m.id), ['mine']); assert.deepEqual(s2.availableModels, ['mine', 'hy3']);
+  assert.equal(codebuddyInject({ providers: [] }).sig, '');
+});
+
+test('Qoder customModels：key 带 claclaw- 前缀、OpenAI 优先；合并时用户自己的条目不动', () => {
+  const { qoderInject, qoderSettingsMerge } = mp;
+  const inj = qoderInject(store);
+  assert.deepEqual(inj.list.map(m => m.key), ['claclaw-deepseek/deepseek-v4-pro', 'claclaw-deepseek/deepseek-flash', 'claclaw-kimi/kimi-k2']);
+  assert.equal(inj.list[0].format, 'openai'); assert.equal(inj.list[0].baseURL, 'https://api.deepseek.com'); assert.equal(inj.list[0].model, 'deepseek-v4-pro');
+  assert.equal(inj.list[0].isReasoning, true); assert.equal(inj.list[1].isVl, true); assert.equal(inj.list[0].maxInputTokens, 1000000);
+  const s = qoderSettingsMerge({ theme: 'x', customModels: [{ key: 'mine', provider: 'p' }, { key: 'claclaw-old/x' }] }, inj);
+  assert.equal(s.theme, 'x');
+  assert.deepEqual(s.customModels.map(m => m.key), ['mine', 'claclaw-deepseek/deepseek-v4-pro', 'claclaw-deepseek/deepseek-flash', 'claclaw-kimi/kimi-k2']);
+  const s2 = qoderSettingsMerge(s, qoderInject({ providers: [] }));
+  assert.deepEqual(s2.customModels.map(m => m.key), ['mine']);
+  assert.equal(qoderSettingsMerge({}, qoderInject({ providers: [] })).customModels, undefined);
+});
+
+test('进程级走法：libModels 只列有指定格式地址的；routeNow 记的那条还在就用它，没记过且 agent 自己用不了就第一个', () => {
+  const { libModels, routeNow, LIB } = mp;
+  const lib = libModels(store, ['openai']);
+  assert.deepEqual(lib.map(x => x.value), [LIB + 'deepseek/deepseek-v4-pro', LIB + 'deepseek/deepseek-flash', LIB + 'kimi/kimi-k2']);
+  assert.equal(libModels(store, ['anthropic']).length, 2);
+  const no = () => false, yes = () => true;
+  assert.equal(routeNow({}, store, ['openai'], no).value, LIB + 'deepseek/deepseek-v4-pro');
+  assert.equal(routeNow({}, store, ['openai'], yes), null);
+  assert.equal(routeNow({ own: true }, store, ['openai'], yes), null);
+  assert.equal(routeNow({ own: true }, store, ['openai'], no).value, LIB + 'deepseek/deepseek-v4-pro');   // 选过自带但现在用不了：退回模型库
+  assert.equal(routeNow({ provider: 'kimi', model: 'kimi-k2' }, store, ['openai'], yes).value, LIB + 'kimi/kimi-k2');
+  assert.equal(routeNow({ provider: 'kimi', model: 'gone' }, store, ['openai'], yes), null);   // 记的模型没了
+  assert.equal(routeNow({ provider: 'deepseek' }, store, ['openai'], yes, true).m.id, 'deepseek-v4-pro');   // 只认供应商：取它第一个模型
+  assert.equal(routeNow({ provider: 'nope' }, store, ['openai'], no).p.id, 'deepseek');
 });

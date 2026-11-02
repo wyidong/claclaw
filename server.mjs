@@ -1,4 +1,5 @@
-// claclaw —— 用手机浏览器接管本机的 AI 编程会话（Claude Code / OpenClaw / OpenCode / DeepSeek Harness / Kimi Code / Qwen Code / Codex）。
+// claclaw —— 用手机浏览器接管本机的 AI 编程会话（Claude Code / OpenClaw / OpenCode / DeepSeek Harness / Kimi Code / Qwen Code / Codex /
+// GLM Agent / iFlow CLI / MiniMax Code / CodeBuddy Code / Qoder CLI）。
 // 网页服务默认只监听 127.0.0.1 和本机的 Tailscale IP；登录要密码（初始账号 + 最近一次设置，两者都有效）。
 // 会话用 Claude Agent SDK 驱动：改文件、跑命令前会问一次，等网页上点「允许 / 拒绝」；
 // 原处（终端 / VS Code）闲置够久，网页端才能接管，接管时会核对进程启动时间，避免误杀别的进程。
@@ -19,6 +20,11 @@ import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured }
 import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './kimi.mjs';
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './qwen.mjs';
 import { isCx, CxRunner, cxRunners, cxSessionList, cxNewSession, cxShutdown, cxAcpRunning, cxInfo, cxExists, cxDelete, cxInstalled, cxSupported, cxUnsupportedReason, cxRename, cxModelsChanged } from './codex.mjs';
+import { isGl, GlRunner, glRunners, glSessionList, glNewSession, glShutdown, glAcpRunning, glInfo, glExists, glDelete, glInstalled, glRename, glModelsChanged } from './glm.mjs';
+import { isIf, IfRunner, ifRunners, ifSessionList, ifNewSession, ifShutdown, ifAcpRunning, ifInfo, ifExists, ifDelete, ifInstalled, ifRename, ifModelsChanged } from './iflow.mjs';
+import { isMm, MmRunner, mmRunners, mmSessionList, mmNewSession, mmShutdown, mmAcpRunning, mmInfo, mmExists, mmDelete, mmInstalled, mmSupported, mmUnsupportedReason, mmRename, mmModelsChanged } from './minimax.mjs';
+import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbAcpRunning, cbInfo, cbExists, cbDelete, cbInstalled, cbRename, cbModelsChanged } from './codebuddy.mjs';
+import { isQd, QdRunner, qdRunners, qdSessionList, qdNewSession, qdShutdown, qdAcpRunning, qdInfo, qdExists, qdDelete, qdInstalled, qdRename, qdModelsChanged } from './qoder.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
@@ -762,7 +768,7 @@ function claclawMcp(sessionId) {
       // claclaw 协同：本机会话之间都能用；跨电脑只能找对方开放的会话（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
-        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / Codex / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
+        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / Codex / GLM / iFlow / MiniMax / CodeBuddy / Qoder / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
         '只在用户要你和「别的会话 / 对方 / 另一台电脑的会话」沟通时使用。peer 填「本机」只列本机，填对方名字只列那个对方，不填两边都列。',
         { peer: z.string().optional().describe('「本机」或对方名字，可省略') },
         async ({ peer }) => {
@@ -889,6 +895,62 @@ const CLAWS = [
     short: shortKeep(/^cx:/),
     // Codex 的删除是归档（~/.codex/archived_sessions），能找回
     del: id => cxDelete(id, log), rename: (id, title) => cxRename(id, title, log),
+  },
+  // 下面五个是同一个路子（ACP、attachOnOpen、历史靠 session/load 重放或读记录文件）：差异都在各自的模块里
+  {
+    id: 'glm', label: 'GLM', logName: 'glm', prefix: 'gl:', is: isGl, runners: glRunners, acp: true, attachOnOpen: true,
+    installed: glInstalled, supported: () => true,
+    running: glAcpRunning, shutdown: glShutdown, modelsChanged: glModelsChanged, exists: glExists,
+    list: () => glSessionList({ busy: x => !!glRunners.get(x)?.busy }),
+    make: id => { const s = glInfo(id); return s ? new GlRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => glInfo(id)?.cwd,
+    newSession: cwd => glNewSession(cwd, dsOpts()), cls: GlRunner,
+    short: shortKeep(/^gl:/),
+    del: id => glDelete(id, TRASH), rename: (id, title) => glRename(id, title),
+  },
+  {
+    id: 'iflow', label: 'iFlow', logName: 'iflow', prefix: 'if:', is: isIf, runners: ifRunners, acp: true, attachOnOpen: true,
+    installed: ifInstalled, supported: () => true,
+    running: ifAcpRunning, shutdown: ifShutdown, modelsChanged: ifModelsChanged, exists: ifExists,
+    list: () => ifSessionList({ busy: x => !!ifRunners.get(x)?.busy }),
+    make: id => { const s = ifInfo(id); return s ? new IfRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => ifInfo(id)?.cwd,
+    newSession: cwd => ifNewSession(cwd, dsOpts()), cls: IfRunner,
+    short: shortKeep(/^if:/),
+    del: id => ifDelete(id, TRASH), rename: (id, title) => ifRename(id, title),
+  },
+  {
+    id: 'minimax', label: 'MiniMax', logName: 'mcode', prefix: 'mm:', is: isMm, runners: mmRunners, acp: true, attachOnOpen: true,
+    installed: mmInstalled, supported: mmSupported, reason: mmUnsupportedReason,
+    running: mmAcpRunning, shutdown: mmShutdown, modelsChanged: mmModelsChanged, exists: mmExists,
+    list: () => mmSessionList({ busy: x => !!mmRunners.get(x)?.busy }),
+    make: id => { const s = mmInfo(id); return s ? new MmRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => mmInfo(id)?.cwd,
+    newSession: cwd => mmNewSession(cwd, dsOpts()), cls: MmRunner,
+    short: shortKeep(/^mm:(?:mvs_)?/),
+    del: id => mmDelete(id), rename: (id, title) => mmRename(id, title),
+  },
+  {
+    id: 'codebuddy', label: 'CodeBuddy', logName: 'codebuddy', prefix: 'cb:', is: isCb, runners: cbRunners, acp: true, attachOnOpen: true,
+    installed: cbInstalled, supported: () => true,
+    running: cbAcpRunning, shutdown: cbShutdown, modelsChanged: cbModelsChanged, exists: cbExists,
+    list: () => cbSessionList({ busy: x => !!cbRunners.get(x)?.busy }),
+    make: id => { const s = cbInfo(id); return s ? new CbRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => cbInfo(id)?.cwd,
+    newSession: cwd => cbNewSession(cwd, dsOpts()), cls: CbRunner,
+    short: shortKeep(/^cb:/),
+    del: id => cbDelete(id, TRASH), rename: (id, title) => cbRename(id, title),
+  },
+  {
+    id: 'qoder', label: 'Qoder', logName: 'qoder', prefix: 'qd:', is: isQd, runners: qdRunners, acp: true, attachOnOpen: true,
+    installed: qdInstalled, supported: () => true,
+    running: qdAcpRunning, shutdown: qdShutdown, modelsChanged: qdModelsChanged, exists: qdExists,
+    list: () => qdSessionList({ busy: x => !!qdRunners.get(x)?.busy }),
+    make: id => { const s = qdInfo(id); return s ? new QdRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => qdInfo(id)?.cwd,
+    newSession: cwd => qdNewSession(cwd, dsOpts()), cls: QdRunner,
+    short: shortKeep(/^qd:/),
+    del: id => qdDelete(id, TRASH, log), rename: (id, title) => qdRename(id, title),
   },
 ];
 const clawOf = id => typeof id === 'string' ? CLAWS.find(c => c.is(id)) : undefined;   // undefined = Claude

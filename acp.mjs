@@ -71,8 +71,8 @@ export function stampTimes(items, recs) {
 
 // 推理强度 / 权限：agent 在 configOptions 里用 category 标（thought_level / mode），没标的按 id 认。
 // 有没有、有哪几档都看 agent 和当前模型（Codex 只给它认识的模型推理强度；OpenCode 看模型）
-const CFG_KINDS = { effort: { cat: 'thought_level', ids: ['reasoning_effort', 'effort', 'thinking'], name: '推理强度' }, mode: { cat: 'mode', ids: ['mode'], name: '权限' } };
-export const cfgFind = (cfg, kind) => Array.isArray(cfg) ? cfg.find(o => o.category === CFG_KINDS[kind].cat) || cfg.find(o => !o.category && CFG_KINDS[kind].ids.includes(o.id)) || null : null;
+const CFG_KINDS = { effort: { cat: ['thought_level'], ids: ['reasoning_effort', 'effort', 'thinking'], name: '推理强度' }, mode: { cat: ['mode', '_permission'], ids: ['mode', 'permissionMode'], name: '权限' } };
+export const cfgFind = (cfg, kind) => Array.isArray(cfg) ? cfg.find(o => CFG_KINDS[kind].cat.includes(o.category)) || cfg.find(o => !o.category && CFG_KINDS[kind].ids.includes(o.id)) || null : null;
 export const cfgKindName = kind => CFG_KINDS[kind]?.name || kind;
 const EFFORT_ZH = {
   off: ['不思考', '最快，适合简单问题'], none: ['不思考', '最快，适合简单问题'], on: ['思考', '先想再回答'],
@@ -90,6 +90,9 @@ const MODE_ZH = {
   'workspace-write': ['工作区可写', '目录里随便改；写到外面或上网前先问'],
   agent: ['自动审核', '只有看起来不安全的操作才问'],
   'agent-full-access': ['完全访问', '任何文件、网络都不受限制，什么都不问'],
+  accept_edits: ['自动改文件', '改文件不问，跑命令还会问'], acceptedits: ['自动改文件', '改文件不问，跑命令还会问'],
+  bypass_permissions: ['全部自动', '什么都不问'], bypasspermissions: ['全部自动', '什么都不问'],
+  smart: ['智能判断', '自动评估风险，有风险的才问'], dontask: ['不询问', '要确认的操作直接拒绝，不问你'],
 };
 // 网页用的选项：{ id, current, items: [{ value, label, sub }] }
 export function cfgView(opt, kind, current = opt?.currentValue) {
@@ -98,6 +101,17 @@ export function cfgView(opt, kind, current = opt?.currentValue) {
   const items = flatOptions(opt).map(o => { const v = String(o.value), z = zh[v.toLowerCase()]; return { value: v, label: z ? z[0] : String(o.name || v), sub: z ? z[1] : String(o.description || '') }; });
   return items.length ? { id: opt.id, current: current ?? null, items } : null;
 }
+
+// 有的 agent 没有改名接口（GLM Agent / iFlow / MiniMax Code / CodeBuddy / Qoder）：名字记在 claclaw 这边，按会话 id 查
+const NAMES_FILE = path.join(DATA, 'claw-names.json');
+let namesCache = null;
+export const localNames = {
+  all() { return (namesCache ??= readJson(NAMES_FILE)); },
+  get(id) { return this.all()[id] || ''; },
+  set(id, title) { const c = this.all(); if (title) c[id] = title; else delete c[id]; try { writeJsonAtomic(NAMES_FILE, c); } catch {} },
+};
+// 用户消息里 agent 自己塞的提示块（<system-reminder>、<xxx-reminder>、<agent-context>）去掉
+export const stripTags = t => String(t || '').replace(/\s*<(system-reminder|[a-z]+(?:-[a-z]+)*-reminder|agent-context)>[\s\S]*?<\/\1>\s*/g, '\n').trim();
 
 export class AcpAgent {
   // name：日志和报错里的名字（dsh / opencode / kimi）
@@ -159,7 +173,8 @@ export class AcpAgent {
     // initialize 最多等 45 秒（老电脑上几个会话同时启动时会超过 15 秒）。失败或挂住就杀掉子进程、
     // proc/ready 置空，下次用时自动重新拉起；不然整个后端就永久不可用了
     let initTimer = null;
-    const init = this.rpc('initialize', { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'claclaw', version: '0.1' } });
+    // clientCapabilities 按 ACP 的样子给全（fs 两项都 false：文件读写由 agent 自己做）；iFlow 少了 fs 这项会拒绝 initialize
+    const init = this.rpc('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: 'claclaw', version: '0.1' } });
     const timeout = new Promise((_, rej) => { initTimer = setTimeout(() => rej(new Error('initialize 45 秒没有应答')), 45000); initTimer.unref?.(); });
     this.ready = Promise.race([init, timeout])
       .then(r => { clearTimeout(initTimer); this.caps = r?.agentCapabilities || {}; log?.(this.name + ' acp ready'); return p; })
@@ -271,6 +286,8 @@ export class AcpRunner {
   attachError(e) { return e; }
   get imageError() { return this.constructor.label + ' 当前模型没有声明图片输入'; }
   get openMethod() { return 'session/resume'; }
+  // 接上 / 新建的应答里的选项清单；模型、模式不在 configOptions 里的 agent（iFlow）由子类从 models / modes 合成
+  cfgOf(r) { return r?.configOptions; }
 
   metaLine() { return tilde(this.cwd || '') + (this.model ? ' · ' + this.model : ''); }
 
@@ -296,7 +313,7 @@ export class AcpRunner {
               await new Promise(res => setTimeout(res, 500));
             }
           }
-          this.setConfig(r?.configOptions);
+          this.setConfig(this.cfgOf(r));
           this.attached = true; ok = true;
         } catch (e) {
           this.agent.release(this.sid, this);
@@ -347,11 +364,18 @@ export class AcpRunner {
     const hit = flatOptions(opt).find(o => String(o.value) === value);
     if (!hit) throw new Error('没有这个' + cfgKindName(kind) + '：' + value);
     if (String(opt.currentValue) !== value) {
-      const r = await this.agent.rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value: hit.value });
-      this.setConfig(r?.configOptions);
+      this.setConfig(await this.applyCfg(opt, hit.value));
       this.log?.(this.agent.name + ' ' + kind, this.sid.slice(0, 16), '→', value);
     }
     return cfgView(opt, kind).items.find(x => x.value === value)?.label || value;
+  }
+  // 改一个选项，返回新的 configOptions。一般走 session/set_config_option；
+  // 子类合成的选项（_set = 'model' | 'mode'）走 session/set_model / session/set_mode，改完自己更新 currentValue
+  async applyCfg(opt, value) {
+    if (!opt._set) { const r = await this.agent.rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value }); return r?.configOptions; }
+    if (opt._set === 'model') await this.agent.rpc('session/set_model', { sessionId: this.sid, modelId: value });
+    else await this.agent.rpc('session/set_mode', { sessionId: this.sid, modeId: value });
+    return (this.config || []).map(o => o === opt ? { ...o, currentValue: value } : o);
   }
   // 新建对话框用：还没有会话时按上次记下的清单给出可选的模型 / 推理强度 / 权限
   static preview() { return new this(this.prefix + 'preview', {}).xmodels(); }
@@ -366,8 +390,7 @@ export class AcpRunner {
     const opt = this.config?.find(o => o.id === 'model');
     const hit = flatOptions(opt).find(o => o.value === value);
     if (!opt || !hit) throw new Error('没有这个模型');
-    const r = await this.agent.rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value });
-    this.setConfig(r?.configOptions);
+    this.setConfig(await this.applyCfg(opt, value));
     const name = this.cleanName(hit.name || value);
     this.log?.(this.agent.name + ' model', this.sid.slice(0, 16), '→', name);
     return name;
@@ -443,13 +466,18 @@ export class AcpRunner {
         this.ctx = Number(u.used);
         if (!this.busy && !this.replaying && this.ctx !== this.ctxSent) { this.ctxSent = this.ctx; this.emit({ t: 'ctx', tokens: this.ctx }); }
         return;
-      case 'session_info_update':   // agent 自己起的标题
-        if (!this.constructor.titleFromAgent || !u.title || this.replaying) return;
+      case 'session_info_update':   // agent 自己起的标题（本机改过名的不跟它走）
+        if (!this.constructor.titleFromAgent || !u.title || this.replaying || localNames.get(this.id)) return;
         { const t = oneLine(u.title).slice(0, 100); if (t && t !== this.title) { this.title = t; this.emit({ t: 'session.renamed', title: t }); } }
         return;
       case 'config_option_update':
         this.setConfig(u.configOptions);
         return;
+      case 'current_mode_update': {   // 模式被 agent 自己改了：合成的 mode 选项跟着更新
+        const o = cfgFind(this.config, 'mode');
+        if (o?._set && u.currentModeId && o.currentValue !== u.currentModeId) this.setConfig(this.config.map(x => x === o ? { ...x, currentValue: u.currentModeId } : x));
+        return;
+      }
     }
   }
   streamedArgs() { return null; }
@@ -583,8 +611,7 @@ export class AcpRunner {
     const hit = list.find(o => String(o.value).toLowerCase() === a || String(o.name).toLowerCase() === a)
       || list.filter(o => (o.name + ' ' + o.value).toLowerCase().includes(a)).sort((x, y) => String(x.name).length - String(y.name).length)[0];
     if (!hit) return { reason: 'command', text: '没有匹配「' + arg + '」的选项' };
-    const r = await this.agent.rpc('session/set_config_option', { sessionId: this.sid, configId: opt.id, value: hit.value });
-    this.setConfig(r?.configOptions);
+    this.setConfig(await this.applyCfg(opt, hit.value));
     return { reason: 'command', text: '已切换为 ' + hit.name + '（下一条消息生效）' };
   }
 
@@ -632,7 +659,7 @@ export class AcpRunner {
     const runner = new this(id, { ...opts, info: { cwd, title: '新会话' } });
     ag.owners.set(r.sessionId, runner);
     runner.attached = true;
-    runner.setConfig(r.configOptions);
+    runner.setConfig(runner.cfgOf(r));
     this.runners.set(id, runner);
     return runner;
   }
