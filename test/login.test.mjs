@@ -21,3 +21,8 @@ test('tailOf：终端界面重画连成一行的几帧按转圈字符切开、�
   assert.equal(tailOf(''), '');
   assert.equal(tailOf('Pick one\x0f\n✷ Waiting for auth...✷ Waiting for auth...⠙ Waiting for auth...'), 'Pick one · Waiting for auth...');
 });
+
+test('Copilot 登录用设备码（默认的浏览器回调只能在电脑上用）', async () => {
+  const { SPECS } = await import('../login.mjs');
+  assert.ok(SPECS.copilot && /--device-code/.test(String(SPECS.copilot.cmd)), 'Copilot 要用设备码登录');
+});

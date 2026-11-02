@@ -25,6 +25,7 @@ import { isIf, IfRunner, ifRunners, ifSessionList, ifNewSession, ifShutdown, ifA
 import { isMm, MmRunner, mmRunners, mmSessionList, mmNewSession, mmShutdown, mmAcpRunning, mmInfo, mmExists, mmDelete, mmInstalled, mmSupported, mmUnsupportedReason, mmRename, mmModelsChanged } from './minimax.mjs';
 import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbAcpRunning, cbInfo, cbExists, cbDelete, cbInstalled, cbRename, cbModelsChanged } from './codebuddy.mjs';
 import { isQd, QdRunner, qdRunners, qdSessionList, qdNewSession, qdShutdown, qdAcpRunning, qdInfo, qdExists, qdDelete, qdInstalled, qdRename, qdModelsChanged } from './qoder.mjs';
+import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './copilot.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
@@ -952,6 +953,17 @@ const CLAWS = [
     newSession: cwd => qdNewSession(cwd, dsOpts()), cls: QdRunner,
     short: shortKeep(/^qd:/),
     del: id => qdDelete(id, TRASH, log), rename: (id, title) => qdRename(id, title),
+  },
+  {
+    id: 'copilot', label: 'Copilot', logName: 'copilot', prefix: 'cp:', is: isCp, runners: cpRunners, acp: true, attachOnOpen: true,
+    installed: cpInstalled, supported: () => true,
+    running: cpAcpRunning, shutdown: cpShutdown, modelsChanged: cpModelsChanged, exists: cpExists,
+    list: () => cpSessionList({ busy: x => !!cpRunners.get(x)?.busy }),
+    make: id => { const s = cpInfo(id); return s ? new CpRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => cpInfo(id)?.cwd,
+    newSession: cwd => cpNewSession(cwd, dsOpts()), cls: CpRunner,
+    short: shortKeep(/^cp:/),
+    del: id => cpDelete(id, TRASH), rename: (id, title) => cpRename(id, title),
   },
 ];
 const clawOf = id => typeof id === 'string' ? CLAWS.find(c => c.is(id)) : undefined;   // undefined = Claude

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { HOME, findBin, binEnv, readJson } from './util.mjs';
 import { DATA } from './auth.mjs';
 import { storeNow, libModels } from './modelpick.mjs';
+import { cpLoggedIn } from './copilot.mjs';
 
 const stripAnsi = s => String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*(\x07|\x1b\\)|\x1b[()][A-Z0-9]|\r/g, '');
 const redact = s => String(s).replace(/sk-[A-Za-z0-9_-]{12,}/g, 'sk-…');
@@ -67,6 +68,12 @@ export const SPECS = {
     label: 'Codex', cmd: () => { const b = findBin('codex'); return b && [b, ['login', '--device-auth']]; },
     loggedIn: () => exists(path.join(process.env.CODEX_HOME || path.join(HOME, '.codex'), 'auth.json')), libOk: () => libModels(storeNow(), ['openai']).length > 0,
     hint: '打开网址，登录 ChatGPT 账号，把下面的一次性代码填进去',
+  },
+  copilot: {
+    // 默认是本机浏览器 + 127.0.0.1 回调，手机上用不了：强制设备码（github.com/login/device + 一次性代码）
+    label: 'Copilot CLI', cmd: () => { const b = findBin('copilot'); return b && [b, ['login', '--device-code']]; },
+    loggedIn: cpLoggedIn, libOk: () => libModels(storeNow(), ['openai', 'anthropic']).length > 0,
+    hint: '打开网址，登录 GitHub 账号，把下面的一次性代码填进去（要有 Copilot 订阅；只用模型库的模型可以不登录）',
   },
   glm: {
     label: 'GLM Agent', cmd: () => { const b = findBin('glm-acp-agent'); return b && [b, ['--setup']]; },
@@ -139,7 +146,7 @@ export function loginStart(claw, ws, { key = '', log } = {}) {
     const chunk = stripAnsi(d);
     j.text = (j.text + chunk).slice(-20000);
     // 网址：第一个不是文档 / 帮助页的；代码：XXXX-XXXX 形式的
-    if (!j.url) { const urls = (j.text.match(URL_RE) || []).filter(u => !/docs\.|\/docs\b|vibex\.iflow|manage-apikey|github\.com|localhost|127\.0\.0\.1/i.test(u)); if (urls.length) j.url = urls[0].replace(/[.,;:!?]+$/, ''); }
+    if (!j.url) { const urls = (j.text.match(URL_RE) || []).filter(u => !/docs\.|\/docs\b|vibex\.iflow|manage-apikey|github\.com(?!\/login\/device)|localhost|127\.0\.0\.1/i.test(u)); if (urls.length) j.url = urls[0].replace(/[.,;:!?]+$/, ''); }
     if (!j.code) { const m = j.text.match(CODE_RE); if (m) j.code = m[1]; }
     j.raw = tailOf(j.text);
     j.tail = (j.url || j.code) && !j.prompt ? '等你在网页上完成授权…' : j.raw;   // 网址 / 代码已经给出去了：命令那边刷的「Waiting for auth…」不用再看，给一句明白话

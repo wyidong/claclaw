@@ -4,7 +4,7 @@
 
 在手机浏览器里接管本机的 AI 编程会话。
 
-claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十二个：[Claude Code](https://docs.claude.com/en/docs/claude-code)、DeepSeek Harness（dsh）、[OpenCode](https://opencode.ai)、[Kimi Code](https://github.com/MoonshotAI/kimi-code)、[Qwen Code](https://github.com/QwenLM/qwen-code)、[Codex](https://developers.openai.com/codex)、[GLM Agent](https://www.npmjs.com/package/glm-acp-agent)、[iFlow CLI](https://platform.iflow.cn/cli)、[MiniMax Code](https://github.com/MiniMax-AI/minimax-code)、[CodeBuddy Code](https://www.codebuddy.ai)、[Qoder CLI](https://docs.qoder.com/cli)、[OpenClaw](https://openclaw.ai)。**装了其中任意一个就能用**，不一定要有 Claude；装了几个，「Claw」页就列几个，随时切换。
+claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十三个：[Claude Code](https://docs.claude.com/en/docs/claude-code)、DeepSeek Harness（dsh）、[OpenCode](https://opencode.ai)、[Kimi Code](https://github.com/MoonshotAI/kimi-code)、[Qwen Code](https://github.com/QwenLM/qwen-code)、[Codex](https://developers.openai.com/codex)、[GLM Agent](https://www.npmjs.com/package/glm-acp-agent)、[iFlow CLI](https://platform.iflow.cn/cli)、[MiniMax Code](https://github.com/MiniMax-AI/minimax-code)、[CodeBuddy Code](https://www.codebuddy.ai)、[Qoder CLI](https://docs.qoder.com/cli)、[GitHub Copilot CLI](https://github.com/github/copilot-cli)、[OpenClaw](https://openclaw.ai)。**装了其中任意一个就能用**，不一定要有 Claude；装了几个，「Claw」页就列几个，随时切换。
 
 手机上用 SSH 进终端操作这些工具很难受：没有方向键、容易断线、排版乱。claclaw 在开发机上起一个小网页服务，用手机浏览器打开就能：
 
@@ -34,9 +34,10 @@ claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十二个：[C
 | MiniMax Code | 起 `mcode acp` 进程（`npm i -g @minimax-ai/code`） | **22.13+**（会话在 SQLite 库里） | 模型库里的模型自动用 `mcode provider add` 配进去（key 会被 mcode 写进它的 config.yaml，文件 600）；也能 `mcode login` 用 MiniMax 账号；`/model`、`/mode` |
 | CodeBuddy Code | 起 `codebuddy --acp` 进程（`npm i -g @tencent-ai/codebuddy-code`） | 18+ | 要先在终端登录过腾讯账号（微信 / Google / 企业域）；模型库里 OpenAI 兼容的模型写进 `~/.codebuddy/models.json`（key 只能写进文件，600）；`/model`、`/mode`。这一块没在真机上验证过 |
 | Qoder CLI | 起 `qodercli --acp` 进程（`npm i -g @qoder-ai/qodercli`） | 18+ | 要先 `qodercli login`；模型库写进 `~/.qoder/settings.json` 的 customModels，但 Qoder 要个人付费订阅才认自定义模型；`/model`、`/mode`。这一块没在真机上验证过 |
+| Copilot CLI | 起 `copilot --acp` 进程（`npm i -g @github/copilot`） | 22+ | 用模型库的模型（BYOK）不用登录；用 Copilot 自带模型要登录 GitHub（`copilot login`，手机上也能登）；模型库走环境变量，一个进程一个模型；`/model`、`/mode`（每次询问 / 只做计划 / 全自动） |
 | OpenClaw | 连本机 OpenClaw 网关 | 18+ | 网关要开着；改文件、跑命令的确认由 OpenClaw 自己处理，网页上不弹按钮 |
 
-- 怎么算「装了」：Claude Code 有 `~/.claude/projects`；DeepSeek 有 `~/.dsh` 或 `dsh` 命令；OpenCode 有 `opencode` 命令；Kimi Code 有 `kimi` 命令（默认装在 `~/.kimi-code/bin`）；Qwen Code 有 `qwen` 命令（`npm i -g @qwen-code/qwen-code`）；Codex 有 `codex` / `codex-acp` 命令或 `~/.codex/sessions`（要用还得装 `codex-acp`）；GLM Agent 有 `glm-acp-agent` 命令；iFlow 有 `iflow` 命令；MiniMax Code 有 `mcode` 命令；CodeBuddy 有 `codebuddy` 命令或 `~/.codebuddy/projects`；Qoder 有 `qodercli` 命令或 `~/.qoder/projects`；OpenClaw 有 `~/.openclaw/openclaw.json` 或 `openclaw` 命令
+- 怎么算「装了」：Claude Code 有 `~/.claude/projects`；DeepSeek 有 `~/.dsh` 或 `dsh` 命令；OpenCode 有 `opencode` 命令；Kimi Code 有 `kimi` 命令（默认装在 `~/.kimi-code/bin`）；Qwen Code 有 `qwen` 命令（`npm i -g @qwen-code/qwen-code`）；Codex 有 `codex` / `codex-acp` 命令或 `~/.codex/sessions`（要用还得装 `codex-acp`）；GLM Agent 有 `glm-acp-agent` 命令；iFlow 有 `iflow` 命令；MiniMax Code 有 `mcode` 命令；CodeBuddy 有 `codebuddy` 命令或 `~/.codebuddy/projects`；Qoder 有 `qodercli` 命令或 `~/.qoder/projects`；Copilot CLI 有 `copilot` 命令；OpenClaw 有 `~/.openclaw/openclaw.json` 或 `openclaw` 命令
 - Node 版本不够时，Claw 页上那个 Claw 会写明原因；一个都没检测到时，Claw 页会提示先装一个
 - 电脑上打开时默认选 Claude Code；这台电脑没有可用的 Claude Code，就自动选第一个能用的 Claw
 
@@ -98,6 +99,7 @@ Claw 页顶部（电脑上在 设置 → 宿主 → Claw 区）有「模型管�
   - MiniMax Code：claclaw 不直接改它的 `~/.minimax/config.yaml`，起进程前用 `mcode provider add / remove` 把模型库同步成 `claclaw-<供应商>` 的自定义供应商（key 经环境变量交给命令，mcode 会把它写进 config.yaml，文件 600）；只碰 `claclaw-` 开头的
   - CodeBuddy Code：写进 `~/.codebuddy/models.json`（只认 OpenAI 兼容接口，key 只能写进文件，600）；只碰 vendor 带「claclaw ·」的条目
   - Qoder CLI：写进 `~/.qoder/settings.json` 的 `customModels`（key 带 `claclaw-` 前缀的是 claclaw 写的）；Qoder 要个人付费订阅（Pro 以上）才认自定义模型
+  - Copilot CLI：它的「自带模型」（BYOK）走环境变量（`COPILOT_PROVIDER_BASE_URL` / `COPILOT_PROVIDER_TYPE` / `COPILOT_PROVIDER_API_KEY` / `COPILOT_MODEL`），OpenAI 兼容、Anthropic 兼容都认，设了就不用登录 GitHub；一个进程一个模型：换模型库的模型要重启进程（所有 Copilot 会话一起换，记在 `data/copilot-route.json`），接上的老会话也跟着换到这个模型；没登录 GitHub 时默认用模型库第一个
   - dsh、OpenClaw：用它们自己配好的供应商，按「同一个接口地址 + 同一个模型 ID」认出哪些是模型库里的模型。
   - OpenClaw 只能换成它放行（`agents.defaults.models`）的模型；模型库里有、它没放行的会灰着显示。要放行得改 OpenClaw 自己的配置，并让网关重新加载。
   - Claude 会话还是用自己的模型选择（Claude 账号里的模型）。
@@ -108,7 +110,7 @@ Qoder、CodeBuddy 这类要先登录账号才能用；Kimi、Codex、MiniMax Cod
 
 - Claw 页的卡片上有「登录」小按钮（已登录的显示「换账号」）；选了还没登录、模型库也顶不上的 Claw，会话列表页会直接提示「还没登录」并给出「去登录」，不列会话、不给新建
 - 点开后 claclaw 在电脑上起它的登录命令（套伪终端，`tools/ptywrap.py`），把网址 / 一次性代码推到手机；手机点「打开网址」完成授权，电脑上的命令自己完成，面板显示「登录完成」
-  - Qoder：`qodercli login`；CodeBuddy：起 `codebuddy` 终端界面，自动按掉「信任目录」、选「国内站」拿网址，登录成功后关掉它；Kimi：`kimi login`（网址 + 代码）；Codex：`codex login --device-auth`（网址 + 代码）；MiniMax Code：`mcode login --no-browser`（网址 + 代码）
+  - Qoder：`qodercli login`；CodeBuddy：起 `codebuddy` 终端界面，自动按掉「信任目录」、选「国内站」拿网址，登录成功后关掉它；Kimi：`kimi login`（网址 + 代码）；Codex：`codex login --device-auth`（网址 + 代码）；MiniMax Code：`mcode login --no-browser`（网址 + 代码）；Copilot CLI：`copilot login --device-code`（github.com/login/device + 代码；它默认的浏览器回调只能在电脑上用，所以强制设备码）
   - GLM Agent、iFlow 用 API key：手机上填 key，claclaw 分别喂给 `glm-acp-agent --setup`、写进 `~/.iflow/settings.json`
 - 登没登录按各家留在磁盘上的凭据判断（Qoder 问 `qodercli status`；CodeBuddy 判断不了，只在用的时候报错）；一个 Claw 同一时间只跑一个登录，最多等 15 分钟；推到手机的文字里 `sk-` 开头的串会打码
 - Claude Code 不在这里登录：用 claude.ai 登录或「长期令牌」（见上）
@@ -225,7 +227,7 @@ Qoder、CodeBuddy 这类要先登录账号才能用；Kimi、Codex、MiniMax Cod
 - Kimi Code 会话：不检测终端占用，别在终端和网页里同时给同一个会话发消息；改名按 kimi `/title` 的做法写会话的 `state.json`（之后自动标题不会盖掉；终端里正开着同一会话的要重开，不然会被它写回旧名）；删除前先 `kimi export` 成 zip 放到 data/trash
 - Codex 会话：同样不检测终端占用；列表读 `~/.codex/sessions`（只列终端 / IDE / 桌面版里开的，不列 `codex exec` 和子代理），名字看 `~/.codex/session_index.jsonl`；删除是 Codex 的归档（`~/.codex/archived_sessions`，能找回）；改名往 `session_index.jsonl` 追加一行
 - Qwen Code 会话：同样不检测终端占用；列表读 `~/.qwen/projects/*/chats/*.jsonl`；改名、删除用 qwen 自己的 ACP 扩展方法（删除前把会话文件复制到 data/trash）
-- GLM Agent / iFlow / MiniMax Code / CodeBuddy / Qoder 会话：同样不检测终端占用。它们都没有改名接口，名字记在 claclaw 的 `data/claw-names.json` 里（终端里看不到）。GLM 列表读 `~/.local/state/glm-acp-agent/sessions`、iFlow 读 `~/.iflow/acp/sessions`（只有走 ACP 开的会话）、MiniMax 读 `~/.minimax/v2/sqlite/runtime-state.sqlite`、CodeBuddy 读 `~/.codebuddy/projects`、Qoder 读 `~/.qoder/projects`；删除：GLM / iFlow / CodeBuddy 把会话文件挪进 data/trash，Qoder 先复制到 data/trash 再让它自己删，MiniMax 经 mcode 自己的 app-server（`mcode app-server --stdio`）归档，和它 /sessions 里的「归档」一样，在那里能恢复
+- GLM Agent / iFlow / MiniMax Code / CodeBuddy / Qoder / Copilot 会话：同样不检测终端占用。它们都没有改名接口，名字记在 claclaw 的 `data/claw-names.json` 里（终端里看不到）。GLM 列表读 `~/.local/state/glm-acp-agent/sessions`、iFlow 读 `~/.iflow/acp/sessions`（只有走 ACP 开的会话）、MiniMax 读 `~/.minimax/v2/sqlite/runtime-state.sqlite`、CodeBuddy 读 `~/.codebuddy/projects`、Qoder 读 `~/.qoder/projects`、Copilot 读 `~/.copilot/session-state`；删除：GLM / iFlow / CodeBuddy 把会话文件挪进 data/trash，Qoder 先复制到 data/trash 再让它自己删，Copilot 把会话目录挪进 data/trash，MiniMax 经 mcode 自己的 app-server（`mcode app-server --stdio`）归档，和它 /sessions 里的「归档」一样，在那里能恢复
 - CodeBuddy、Qoder 这两个要登录各自账号才能用，开发时没有账号，接入是按文档和源码推断的，没在真机上跑过；碰到问题请提 issue
 - OpenCode 会话（需要 Node 22.13+ 的 `node:sqlite`）：opencode 不登记哪个进程开着哪个会话，claclaw 按目录推断终端占用——终端 opencode 开着的目录里、它启动后改动过的最新会话视为被占用；接管会结束该目录的终端 opencode。终端里之后再打开同一会话，网页端不会自动退出。改名走 opencode 自己的本机接口（终端里开着同一会话的要重开才看到新名）；删除前先导出到 data/trash（`opencode import` 可找回）
 - OpenCode 模型报错（额度用完、超时、过载……）时会自己等着重试，ACP 里不说，网页原本只看到一直「工作中」。现在 claclaw 在一轮进行中每 5 秒问一次它的 `/session/status`：在重试就在会话里显示报错原文、第几次、几点再试（不想等就点停止换模型）；OpenCode 免费额度用完（重试也没用）直接停下这一轮并显示报错。
@@ -259,6 +261,7 @@ iflow.mjs         iFlow CLI 会话（iflow --experimental-acp；历史从 ~/.ifl
 minimax.mjs       MiniMax Code 会话（mcode acp；历史靠 session/load 重放；列表只读它的 SQLite 库；模型库用 mcode provider add 同步）
 codebuddy.mjs     CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebuddy/projects；模型库写进 ~/.codebuddy/models.json）
 qoder.mjs         Qoder CLI 会话（qodercli --acp；列表读 ~/.qoder/projects；模型库写进 ~/.qoder/settings.json 的 customModels）
+copilot.mjs       GitHub Copilot CLI 会话（copilot --acp；列表读 ~/.copilot/session-state；模型库走 BYOK 环境变量）
 cclike.mjs        Claude Code 式会话记录（projects/<目录>/<id>.jsonl）的通用读取：CodeBuddy、Qoder 共用
 acp.mjs           ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面几个都继承它，只写各自的差异
 login.mjs         在手机上登录各 Claw：电脑上套伪终端起登录命令，网址 / 一次性代码推到手机（tools/ptywrap.py 是伪终端包装）
