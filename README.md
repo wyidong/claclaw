@@ -73,7 +73,7 @@ ssh -L 8787:127.0.0.1:8787 用户名@那台电脑
 多个 Claude 会话各自刷新 claude.ai 登录，可能把刷新令牌换坏（报「OAuth session expired and could not be refreshed」）。可以给 claclaw 配一个长期令牌，所有 Claude 会话共用，不再各自刷新：
 
 1. 在运行 claclaw 的电脑终端里运行 `claude setup-token`，按提示在浏览器里登录，复制输出的 `sk-ant-oat01-…`（一年有效）。
-2. 在这台电脑的浏览器里打开 `http://127.0.0.1:8787` → 设置 → Claude 登录 → 长期令牌，粘贴保存。保存前会用它发一句话验证，用不了的不保存。
+2. 在这台电脑的浏览器里打开 `http://127.0.0.1:8787` → Claw 页 → Claude Code 卡片右下角「长期令牌」，粘贴保存。保存前会用它发一句话验证，用不了的不保存。
 3. 没人看、也没在干活的会话进程马上换成新令牌；正打开着的会话关掉重开后生效（或者重启 claclaw）。
 
 令牌只存在 `data/claude-token.json`（权限 600）：不写日志，网页上只显示「已配置 · 后 4 位 · 配置时间」，不经协同发出；设置、替换、清除只能在本机浏览器里做（经 clarelay、tailscale 之类转发进来的都不行）。清除后恢复用 claude.ai 登录。令牌会作为 `CLAUDE_CODE_OAUTH_TOKEN` 出现在 Claude 会话的环境变量里，所以协同消息触发的那一轮里读环境变量（`env`、`printenv`、`$变量`、`process.env`……）一律要你确认。

@@ -2687,7 +2687,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/claws') {
       // running：装了但没启动的（OpenClaw 网关没开）手机上灰着显示、电脑上不显示；其他 Claw 用的时候才拉起进程，装了就算可用
       const list = detectClaws();
-      for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）
+      for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.id === 'claude') c.login = { can: true, ctok: claudeTokenPublic(req) }; else if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）；Claude 只有长期令牌这一项
       return sendJson(res, 200, list);
     }
     if (url.pathname === '/api/sound') {
