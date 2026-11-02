@@ -575,7 +575,14 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-tb tbody.tn tr.r td{border-bottom:0;padding-top:8px}
 @media (hover:hover){.ds-tb tbody.tn:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
-@media (min-width:1000px){#diss{left:64px;right:8px;bottom:8px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
+@media (min-width:1000px){#diss,#fview{left:64px;right:8px;bottom:8px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
+/* 电脑：模型管理整页（像会话解剖）——中间栏铺满右边，聊天区让开；内容居中限宽 */
+@media (min-width:1000px){
+  #app.host-on:has(#hostBody [data-act="mdl-back"]) #sheet{grid-column:2 / -1;z-index:6}
+  #app.host-on:has(#hostBody [data-act="mdl-back"]) :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
+  #app.host-on:has(#hostBody [data-act="mdl-back"]) #sheet::after{display:none}
+  #app.host-on:has(#hostBody [data-act="mdl-back"]) #hostBody{max-width:880px;margin:0 auto}
+}
 @media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb{font-size:12.5px}.ds-tb th,.ds-tb td{padding:6px 8px}}
 /* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最大 180）；点开才是原图 */
 .sfimg{align-self:flex-start;margin:6px 0;max-width:min(260px,80%)}
@@ -897,6 +904,11 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 .md-more[open]>summary{margin-bottom:10px}
 .md-more[open]>summary::before{transform:rotate(45deg)}
 .md-h2{margin-top:16px}
+.md-solo .pe-in{flex:1;min-width:0;width:100%;max-width:none;text-align:left}   /* 添加 / 编辑 Key：输入框占满一行，说明在占位字里 */
+.md-main{margin-top:14px}
+.md-eps2:empty{display:none}
+.md-eps2{margin-top:10px}
+#mdFmt0{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;cursor:pointer}
 .md-pick{max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .md-pid{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
@@ -1307,6 +1319,7 @@ select.pe-in{text-align-last:right}
     </div>
     <span class="rsep"></span>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+    <button type="button" id="railModels" aria-label="模型管理" title="模型管理（各家模型的 Key、接口地址和模型）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="M22 17.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg></button>
     <button type="button" id="railPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button>
     <button type="button" id="railHost" aria-label="宿主" title="宿主"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
@@ -3566,7 +3579,7 @@ function mTab(t){
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   if(t!=='host'){hostView='';peerWatch(false)}
   hostLive(t==='host');if(t==='claw'){loadClaws();mdlPeek()}if(t==='set')loadSetData();
-  $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
+  $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railModels').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
   $('.sheet-p').scrollTop=0;
   if(typeof showClawSel==='function')showClawSel();
@@ -3710,11 +3723,16 @@ function openModels(from){
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
 function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');return a.join(' · ')}
 function mdlField(id,label,val,attrs,wide,mono){return '<div class="h-row'+(wide?' pe-urlrow':'')+'"><span class="k">'+label+'</span><input id="'+id+'" class="pe-in'+(wide?' left mono':mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}
+function mdlIn(id,val,attrs,mono){return '<div class="h-row md-solo"><input id="'+id+'" class="pe-in left'+(mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}   // 不带左边标题，说明写在占位字里
 function mdlMask(p){return p.hasKey?'••••••••'+p.keyLast4:'没有 Key'}
 function mdlHost(u){try{return new URL(u).host}catch(_){return u||''}}
 function mdlEps0(p){return Object.keys(p.endpoints).map(function(f){return [f,p.endpoints[f]]})}
 // 按地址猜接口格式（新加时跟着填的地址变，手动选过就不再变）
 function mdlGuess(u){u=String(u||'').toLowerCase();if(/\/openai(\/|$)/.test(u))return 'openai';if(/anthropic/.test(u))return 'anthropic';if(/generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com/.test(u))return 'gemini';return 'openai'}
+function mdlEpMain(fmt,url,auto){
+  return '<div class="h-row md-solo md-ep"><input type="hidden" class="md-fmt" value="'+esc(fmt)+'"'+(auto?' data-auto="1"':'')+'>'+
+    '<input class="pe-in left mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="接口地址，比如 https://api.deepseek.com（格式自动判断）" value="'+esc(url||'')+'"></div>'}
+function mdlFmtRow(fmt){return '<div class="h-row"><span class="k">接口格式</span><span class="md-fk" style="margin-left:auto"><select id="mdFmt0" aria-label="接口格式">'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></div>'}
 function mdlEpRow(fmt,url,auto){
   return '<div class="h-row pe-urlrow md-ep"><span class="k md-fk"><select class="md-fmt" aria-label="接口格式"'+(auto?' data-auto="1"':'')+'>'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span>'+
     '<input class="pe-in left mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…" value="'+esc(url||'')+'"></div>'}
@@ -3744,14 +3762,17 @@ function renderModels(){
     var src=p||tpl,eps=src?mdlEps0(src):[],needKey=!p||!p.hasKey;
     var keyIn=function(lbl,ph){return mdlField('mdKey',lbl,'','type="password" maxlength="1000" placeholder="'+ph+'"',false,true)};
     h+=pgHd('data-act="mdl-back"','返回模型管理',p?p.name+(p.label?' · '+p.label:''):tpl?'再加一个 '+tpl.name+' 的 Key':'添加 Key')+errBox;
-    h+=hSec('Key',needKey?keyIn('Key','必填'):'<div id="mdKeyBox">'+mdlKeyHtml(p)+'</div>');
-    h+=hSec('接口地址',mdlEpRow(eps[0]?eps[0][0]:'openai',eps[0]?eps[0][1]:'',!src));
-    var more=(needKey?'':keyIn('换 Key','留空不改'))+
-      mdlField('mdLabel','备注',p&&p.label||'','maxlength="40" placeholder="可不填，比如 公司、个人"')+
-      (p?'<div class="h-row"><span class="k">ID</span><span class="v pe-mono">'+esc(p.id)+'</span></div>':mdlField('mdId','ID','','maxlength="32" placeholder="可不填，自动生成"',false,true));
-    h+='<details class="md-more"><summary>更多（可不填）</summary><div class="h-card">'+more+'</div>'+
-      '<div class="h-h md-h2">同一个 Key 的其他格式地址</div><div class="h-card" id="mdEps2">'+eps.slice(1).map(function(e){return mdlEpRow(e[0],e[1])}).join('')+'</div>'+
-      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="mdl-ep-add"'+(eps.length>=mdl.formats.length?' hidden':'')+'>再加一个地址</button></div></details>';
+    var f0=eps[0]?eps[0][0]:'openai';
+    // 默认只露三个框：Key、接口地址（格式按地址自动判断）、备注；其他收进「更多」
+    h+='<div class="h-card md-main">'+(needKey?mdlIn('mdKey','','type="password" maxlength="1000" placeholder="Key（必填）"',true):'<div id="mdKeyBox">'+mdlKeyHtml(p)+'</div>')+
+      mdlEpMain(f0,eps[0]?eps[0][1]:'',!src)+
+      mdlIn('mdLabel',p&&p.label||'','maxlength="40" placeholder="备注（可不填），比如 公司、个人"')+'</div>';
+    var more=(needKey?'':mdlIn('mdKey','','type="password" maxlength="1000" placeholder="换 Key（留空不改）"',true))+
+      mdlFmtRow(f0)+
+      (p?'<div class="h-row"><span class="k">ID</span><span class="v pe-mono">'+esc(p.id)+'</span></div>':mdlIn('mdId','','maxlength="32" placeholder="ID（可不填，自动生成）"',true));
+    h+='<details class="md-more"><summary>更多</summary><div class="h-card">'+more+'</div>'+
+      '<div class="h-card md-eps2" id="mdEps2">'+eps.slice(1).map(function(e){return mdlEpRow(e[0],e[1])}).join('')+'</div>'+
+      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="mdl-ep-add"'+(eps.length>=mdl.formats.length?' hidden':'')+'>同一个 Key 再加一个其他格式的地址</button></div></details>';
     h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-save">'+(p?'保存':'添加')+'</button>'+(p?'<button type="button" class="pe-btn del" data-act="mdl-prov-del">删除这个 Key</button>':'')+'</div>';
     if(p)h+='<div id="mdModels">'+mdlModelsHtml(p)+'</div>';
   }else if(mm){
@@ -3809,6 +3830,7 @@ function mdlAct(act,a){
     if(mm){mdlSub='p:'+mm[1];renderModels();return}
     if(pm){mdlSub='';mdlRemote=null;mdlForget();renderModels();return}
     if(mdlFrom==='claw'){mTab('claw');return}
+    if(mdlFrom==='rail'){$('#railModels').classList.remove('on');$('#railHost').classList.add('on')}   // 从左栏进的：返回到宿主页
     hostView='';$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return;
   }
   if(act==='mdl-prov'){mdlSub='p:'+a.dataset.id;mdlMsg={};mdlForget();renderModels();return}
@@ -3930,10 +3952,11 @@ $('#hostBody').addEventListener('click',function(e){
 });
 $('#hostBody').addEventListener('input',function(e){
   if(e.target.id==='pePoolQ'){peerPoolQ=e.target.value;var l=$('#pePoolList');if(l&&peerCfg)l.innerHTML=poolListHtml(peerCfg)}   // 协同会话页搜索：只重画列表
-  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs)fs.value=mdlGuess(e.target.value)}   // 模型管理：接口格式跟着地址猜
+  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden')f0.value=fs.value}}   // 模型管理：接口格式跟着地址猜
 });
 $('#hostBody').addEventListener('change',function(e){
-  if(e.target.classList.contains('md-fmt'))e.target.removeAttribute('data-auto');   // 手动选过格式：不再跟着地址猜
+  if(e.target.classList.contains('md-fmt'))e.target.removeAttribute('data-auto');
+  if(e.target.id==='mdFmt0'){var h0=document.querySelector('#hostBody .md-ep .md-fmt[type="hidden"]');if(h0){h0.value=e.target.value;h0.removeAttribute('data-auto')}}   // 「更多」里手动选了主地址的格式：不再跟着地址猜   // 手动选过格式：不再跟着地址猜
   // 会话池：勾 / 取消马上提交
   if(e.target.closest&&e.target.closest('#hostBody .pe-ss.pool')){var id=e.target.value,arr=(peerCfg.sessions||[]).slice();
     if(e.target.checked){if(arr.indexOf(id)<0)arr.push(id)}else arr=arr.filter(function(x){return x!==id});poolSave(arr)}
@@ -4001,6 +4024,8 @@ function openPeerView(){
 // 左边栏的「协同」快捷入口：在协同页时亮起（这时「设置」不亮）；有配对申请时带红点
 function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#railSet').classList.remove('on')}}
 $('#railPeer').addEventListener('click',openPeerView);
+// 电脑左栏的「模型管理」快捷入口：直接打开 宿主 → 模型管理，在模型管理页时亮起
+$('#railModels').addEventListener('click',function(){mTab('host');openModels('rail');$('#railHost').classList.remove('on');$('#railModels').classList.add('on')});
 // 附近的 claclaw（局域网里开着协同的电脑，Bonjour 广播找到的）
 function peerScan(){
   if(!peerCfg||!peerCfg.local||!peerCfg.enabled||peerScanning)return;
@@ -4449,7 +4474,7 @@ $('#railReload').addEventListener('click',function(){
 try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionStorage.removeItem('claclaw.drafts');
   if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
 $('#railSet').addEventListener('click',function(){railTab(true)});
-$('#railHost').addEventListener('click',function(){mTab('host')});
+$('#railHost').addEventListener('click',function(){var sub=hostView;mTab('host');if(sub){hostView='';peerWatch(false);$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost()}});   // 在协同 / 模型管理子页时点「宿主」回宿主页
 $('#setHost').addEventListener('click',function(){mTab('host')});
 $('#hostBack').addEventListener('click',function(){mTab('set')});
 // 会话列表宽度：拖右边缘调整，记在本机；最窄 240，最宽到聊天区还剩 420
