@@ -843,6 +843,7 @@ var I18N={dict:{
 "选择 Claw":"Choose a Claw",
 "海外 Agent":"Overseas agents",
 "国产 Agent":"Chinese agents",
+"开源 Agent":"Open-source agents",
 "开源社区":"Open source",
 "深度求索":"DeepSeek",
 "月之暗面":"Moonshot AI",
