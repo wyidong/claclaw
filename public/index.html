@@ -1028,10 +1028,10 @@ select.pe-in{text-align-last:right}
 .pe-peer .h-dot.wait{border-style:dotted;animation:rlspin 1s linear infinite}
 .pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
 /* 各 Claw 的登录：卡片上的「登录」小按钮；登录面板（网址 / 一次性代码 / 要粘贴的授权码） */
-.claw-login{margin-left:auto;flex:none;font-size:12.5px;color:var(--accent);white-space:nowrap;cursor:pointer}   /* 不要底色，就一行「登录 ›」 */
+.claw-login{margin-left:auto;flex:none;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);font-size:12.5px;white-space:nowrap;cursor:pointer}   /* 一行「登录 ›」，淡淡一点底色 */
 .claw-login::after{content:' ›'}
 .claw-grid .claw-card{position:relative}
-.claw-grid .claw-login{position:absolute;right:11px;bottom:9px;margin:0;font-size:11.5px;line-height:15px}   /* 两列卡片：放在右下角，不改说明文字的宽度 */
+.claw-grid .claw-login{position:absolute;right:9px;bottom:8px;margin:0;font-size:11.5px;line-height:15px}   /* 两列卡片：放在右下角，不改说明文字的宽度 */
 #loginPane{position:fixed;inset:0;z-index:40;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.42)}
 #loginPane.on{display:flex}
 #loginPane .lg-card{width:100%;max-width:440px;max-height:85vh;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
