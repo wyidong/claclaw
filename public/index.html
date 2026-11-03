@@ -6169,16 +6169,15 @@ $('#soundSel').addEventListener('change',function(e){
 });
 // 设置页里的数据（提示音、会话设置、电脑合成的声音）进设置页再拉，启动时少几个请求
 function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
-// Claude 长期令牌：入口在 Claw 页 Claude Code 卡片右下角（Claude 不在 claclaw 里登录，只有这一项）；面板只显示「已配置 · 后 4 位 · 配置时间」；设置 / 替换 / 清除只能在本机浏览器里做（服务器也会拦）
+// Claude 长期令牌：入口在 Claw 页 Claude Code 卡片右下角（Claude 不在 claclaw 里登录，只有这一项）；面板只显示「已配置 · 后 4 位 · 配置时间」；登录了 claclaw 的网页在哪都能设置 / 替换 / 清除
 function openCtok(j){
   loginClaw='claude';
   var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>Claude 长期令牌</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
-    +'<p class="lg-hint">所有 Claude 会话共用一个长期令牌（在电脑终端运行 claude setup-token 生成，一年有效），不再各自刷新登录。只能在这台电脑的浏览器（127.0.0.1）里设置。</p>'
+    +'<p class="lg-hint">所有 Claude 会话共用一个长期令牌（在电脑终端运行 claude setup-token 生成，一年有效），不再各自刷新登录。</p>'
     +'<div class="lg-st">'+esc(j.set?'已配置 · …'+j.last4+(j.at?' · '+new Date(j.at).toLocaleString('zh-CN',{hour12:false}):''):'未配置 · 用 claude.ai 登录')+'</div>'
-    +(j.canEdit?'<div class="lg-key"><input type="password" class="lg-in" placeholder="sk-ant-oat01-…" autocomplete="off"><button type="button" class="lg-btn lg-save">'+(j.set?'换一个':'保存')+'</button></div>'
-      :'<div class="lg-st">要设置、替换或清除：在运行 claclaw 的电脑上用浏览器打开 http://127.0.0.1:'+(j.port||8787)+'</div>')
-    +'<div class="lg-ft">'+(j.set&&j.canEdit?'<button type="button" class="lg-btn ghost lg-clear">清除长期令牌</button> ':'')+'<button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';
+    +'<div class="lg-key"><input type="password" class="lg-in" placeholder="sk-ant-oat01-…" autocomplete="off"><button type="button" class="lg-btn lg-save">'+(j.set?'换一个':'保存')+'</button></div>'
+    +'<div class="lg-ft">'+(j.set?'<button type="button" class="lg-btn ghost lg-clear">清除长期令牌</button> ':'')+'<button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';
   p.classList.add('on');
   p.querySelector('.lg-x').addEventListener('click',closeLogin);p.querySelector('.lg-cancel').addEventListener('click',closeLogin);
   var inp=p.querySelector('.lg-in');

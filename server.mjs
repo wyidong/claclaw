@@ -187,7 +187,7 @@ CHILD_ENV.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = 'true';
 // ---------- Claude 长期令牌（`claude setup-token` 生成，一年有效）----------
 // 多个会话各自刷新 claude.ai 的 OAuth，会把刷新令牌换坏（「OAuth session expired and could not be refreshed」）。
 // 配了长期令牌，claclaw 起的所有 Claude 进程（会话、协同审查）都用它，不再刷新；没配照旧用 claude.ai 登录。
-// 只存在 data/claude-token.json（600）：不写日志、不返回网页（只给后 4 位）、不经协同发出；只能在本机浏览器里设置
+// 只存在 data/claude-token.json（600）：不写日志、不返回网页（只给后 4 位）、不经协同发出；登录了 claclaw 的网页都能设置
 const CLAUDE_TOKEN_FILE = path.join(DATA, 'claude-token.json');
 const MODELS_FILE = path.join(DATA, 'models.json');   // 模型库（modelstore.mjs）
 function claudeToken() {
@@ -198,7 +198,7 @@ const childEnv = () => { const t = claudeToken(); return t ? { ...CHILD_ENV, CLA
 const CLAUDE_TOKEN_RE = /^sk-ant-oat\d{2}-[A-Za-z0-9_-]{20,400}$/;
 function claudeTokenPublic(req) {
   const t = claudeToken();
-  return { set: !!t, last4: t ? t.token.slice(-4) : '', at: t?.at || null, canEdit: isLocalReq(req), port: PORT };
+  return { set: !!t, last4: t ? t.token.slice(-4) : '', at: t?.at || null, port: PORT };
 }
 function saveClaudeToken(tok) {
   if (!tok) return fs.rmSync(CLAUDE_TOKEN_FILE, { force: true });
@@ -2591,11 +2591,10 @@ const handler = async (req, res) => {
       saveSettings({ clientPrefs: next });
       return sendJson(res, 200, { ok: true });
     }
-    // Claude 长期令牌：谁都能看是否已配置（只给后 4 位）；设置、替换、清除只能在本机浏览器里做
+    // Claude 长期令牌：只给后 4 位；登录了 claclaw 的网页（本机、局域网、clarelay）都能设置、替换、清除
     if (url.pathname === '/api/claude-token') {
       if (req.method === 'POST') {
         if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
-        if (!isLocalReq(req)) { log('claude-token refused from', realIp(req)); return sendJson(res, 403, { error: '长期令牌只能在这台电脑的浏览器里设置（http://127.0.0.1:' + PORT + '）' }); }
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         let body = await jsonBody(req, 4096);
         if (body.clear === true) {
