@@ -1687,7 +1687,9 @@ class Runner {
         this.emit({ t: 'suggest', text: m.suggestion });
       } else if (m.type === 'result') {
         touchWeb(this.id);
-        if (!this.sawState) this.busy = false;   // 有 session_state 时以它的 idle 为准
+        // 有 session_state 时以它的 idle 为准。SDK 0.3.x 会把 CLI 的 session_state_changed（sdk_host_only）自己吞掉，
+        // 实际一直走这里：插话记录也要在这里清，否则留到下一轮，重新打开会话时又被补显示出来
+        if (!this.sawState) { this.busy = false; this.steered = []; }
         this.peerTurn = null;
         this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined });
         this.notify(m.subtype === 'success' ? snippet(m.result, '回复完了') : '这一轮出错结束了', 'done-' + this.id);
@@ -3243,8 +3245,9 @@ wss.on('connection', (ws, req) => {
         const live = runners.get(m.id);
         if (live?.busy && live.steered?.length) {
           // 已经被 Claude 读到的插话会出现在会话文件里（整段历史里找，不只看这一页）：从待显示里去掉，只补还在排队的
-          const seen = new Set(hist.items.filter(x => x.kind === 'user').map(x => x.text));
-          live.steered = live.steered.filter(t => !seen.has(t));
+          // 连着插的几句会被 Claude 合成一条读进去（各段文字用换行连起来）：按整行包含算读到了
+          const seen = hist.items.filter(x => x.kind === 'user' && x.text).map(x => '\n' + x.text + '\n');
+          live.steered = live.steered.filter(t => !seen.some(h => h.includes('\n' + t + '\n')));
           for (const t of live.steered) pg.items.push({ kind: 'user', text: t, queued: true });
         }
         if (!runners.has(m.id)) {
