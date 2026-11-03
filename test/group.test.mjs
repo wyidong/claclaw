@@ -176,3 +176,39 @@ test('重启后从磁盘读回群', async () => {
   assert.equal(g2.items.at(-1).text, '你好');
   assert.equal(b.list().length, 1);
 });
+
+test('评审修复：重试用同一个 msgId；解散后的同步 / 消息不再复活镜像；同步必须带本机成员、条目字段校验', async () => {
+  const ids = [];
+  let n = 0;
+  const { groups } = setup(async (m, t, o) => { ids.push(o.msgId); return ++n < 3 ? { busy: true } : { ok: true, reply: 'ok' }; });
+  const g = groups.create({ members: [M('s1', '后端'), M('s2', '前端')] });
+  groups.post(g.id, '@后端 x');
+  for (let i = 0; i < 20; i++) await flush();
+  assert.equal(ids.length, 3); assert.ok(ids[0] && ids.every(x => x === ids[0]));
+  // 镜像：没有本机成员的快照不收
+  const peer = setup(async () => ({}));
+  const snap = { id: 'gp-0a0b0c0d', name: '', title: 't', members: [{ name: 'a', collab: true }, { name: 'b', collab: true }], items: [], status: [] };
+  assert.equal(peer.groups.applyMirror('PH', snap), null);
+  const snap2 = { ...snap, members: [{ name: 'a', collab: true }, { name: 'b', collab: false }], items: [{ seq: 1, at: 'bad', kind: 'user', text: 'hi' }, { seq: 'x', kind: 'gm', text: 1 }, { seq: 2, at: 5, kind: 'evil', text: 'y' }] };
+  const mg = peer.groups.applyMirror('PH', snap2);
+  assert.ok(mg);
+  assert.equal(mg.items.length, 1); assert.equal(typeof mg.items[0].at, 'number');
+  assert.equal(typeof mg.lastAt, 'number');
+  // 解散后晚到的同步不再建镜像
+  peer.groups.dissolve(mg.id, { fromPeer: 'PH' });
+  assert.equal(peer.groups.applyMirror('PH', snap2), null);
+  assert.equal(peer.groups.get(mg.id), null);
+  // 主群：解散后对方再发 post 不收
+  const h = setup(async () => ({ ok: true, reply: 'r' }));
+  const hg = h.groups.create({ members: [M('s1', '后端'), M('a1', '需求', { peerId: 'P15' })] });
+  h.groups.dissolve(hg.id);
+  assert.equal(h.groups.peerPost(hg.id, 'P15', 'hi', '15'), false);
+});
+
+test('评审修复：重名序号不撞名；成员名以「全体」开头不误触 @全体', () => {
+  const ms = memberNames([{ key: 'a', title: '会话' }, { key: 'b', title: '会话' }, { key: 'c', title: '会话2' }]);
+  assert.equal(new Set(ms.map(m => m.name)).size, 3);
+  const ms2 = memberNames([{ key: 'a', title: '全体项目' }, { key: 'b', title: '前端' }]);
+  assert.deepEqual(parseMentions('@全体项目 看下', ms2), ['a']);
+  assert.deepEqual(parseMentions('@全体 看下', ms2), ['a', 'b']);
+});

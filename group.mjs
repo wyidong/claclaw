@@ -14,18 +14,19 @@ export const fromWire = s => /^gp-[0-9a-f]{8}$/.test(String(s || '')) ? 'gp:' + 
 
 // 成员名（@ 用）：标题压空格、截 16 字；重名加序号
 export function memberNames(members) {
-  const used = new Map();
+  const taken = new Set();
   return members.map(m => {
     const base = Array.from(String(m.title || '').replace(/\s+/g, ' ').trim().replace(/@/g, '')).slice(0, 16).join('') || '会话';
-    const n = (used.get(base) || 0) + 1; used.set(base, n);
-    return { ...m, name: n > 1 ? base + n : base };
+    let name = base;
+    for (let n = 2; taken.has(name); n++) name = base + n;
+    taken.add(name);
+    return { ...m, name };
   });
 }
 
 // 文字里 @ 了谁（key 列表，按出现顺序去重）；@全体 / @all = 全部。长名先匹配，短名不会误中长名的一部分
 export function parseMentions(text, members) {
   let t = String(text || '');
-  if (/@(全体|所有人|all)(?![\w])/i.test(t)) return members.map(m => m.key);
   const hits = [];
   for (const m of [...members].sort((a, b) => b.name.length - a.name.length)) {
     const at = '@' + m.name;
@@ -34,6 +35,7 @@ export function parseMentions(text, members) {
     hits.push([i, m.key]);
     while (i >= 0) { t = t.slice(0, i) + '\u0000'.repeat(at.length) + t.slice(i + at.length); i = t.indexOf(at); }
   }
+  if (/@(全体|所有人|all)(?![\w])/i.test(t)) return members.map(m => m.key);   // 成员名已经先换掉了：「@全体项目」不算 @全体
   return [...new Set(hits.sort((a, b) => a[0] - b[0]).map(h => h[1]))];
 }
 
@@ -59,7 +61,7 @@ class Group {
     this.busy = false; this.queue = [];
   }
   get title() { return this.mirror ? (this.mirrorTitle || this.name || '群聊') : this.name || cut(this.members.map(m => m.name).join('、'), 24) || '群聊'; }
-  get lastAt() { return this.items.length ? this.items[this.items.length - 1].at : this.created; }
+  get lastAt() { const a = this.items.length ? this.items[this.items.length - 1].at : this.created; return Number.isFinite(a) ? a : 0; }
   // 给 ws 用：和各 Claw 的会话进程同样的接口
   subscribe(ws) { this.subs.add(ws); }
   unsubscribe(ws) { this.subs.delete(ws); }
@@ -94,6 +96,10 @@ export class Groups {
     Object.assign(this, { dir, log, deliver, peerOp, onItem, retryMs, retryFor, syncDelay });
     this.map = new Map(); this.syncT = new Map();
     fs.mkdirSync(dir, { recursive: true });
+    // 解散过的群（墓碑，留 30 天）：之后晚到的同步、消息、回复一律不收，镜像不会被「复活」
+    this.goneFile = path.join(dir, 'gone.json');
+    try { this.gone = JSON.parse(fs.readFileSync(this.goneFile, 'utf8')) || {}; } catch { this.gone = {}; }
+    for (const [k, t] of Object.entries(this.gone)) if (Date.now() - t > 30 * 864e5) delete this.gone[k];
     for (const f of fs.readdirSync(dir)) {
       if (!/^[0-9a-f]{8}\.json$/.test(f)) continue;
       try { const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); if (isGroupId(d.id)) this.map.set(d.id, new Group(this, d)); } catch {}
@@ -134,6 +140,8 @@ export class Groups {
   }
   // 协同对方（镜像那边）发来的：只收群里有它的会话的对方
   peerPost(id, peerId, text, via) { const g = this.get(id); return !!g && !g.mirror && g.peers().includes(peerId) && this.post(id, text, { via }); }
+  // 本机这个群是不是对方 peerId 那边建的群的镜像（对方发来的群投递，只有这时才按群消息处理）
+  isMirrorOf(id, peerId) { return this.get(id)?.mirror?.peerId === peerId; }
 
   add(g, it) {
     it = { seq: ++g.seqMax, at: Date.now(), ...it };
@@ -177,12 +185,13 @@ export class Groups {
     for (;;) {
       this.setStatus(g, key, '正在回复…');
       let r;
-      try { r = await this.deliver(m, text, { asUser: job.asUser, groupId: g.id, groupName: g.title, from: speaker(trig, g.members) }); }
+      job.msgId ||= crypto.randomUUID();   // 重试用同一个编号：对方据此去重，不会把同一条处理两遍
+      try { r = await this.deliver(m, text, { asUser: job.asUser, groupId: g.id, groupName: g.title, from: speaker(trig, g.members), msgId: job.msgId }); }
       catch (e) { r = { ok: false, error: e.message }; }
       if (g.closed) return;
       if (r?.busy) {
         if (Date.now() - job.firstAt >= this.retryFor) { this.setStatus(g, key, ''); this.add(g, { kind: 'sys', text: '「' + m.name + '」一直在忙，这条没送到' }); return; }
-        this.setStatus(g, key, '在忙，排队中');
+        this.setStatus(g, key, r.offline ? '连不上，排队重试中' : '在忙，排队中');
         await new Promise(res => setTimeout(res, this.retryMs));
         if (g.closed) return;
         continue;
@@ -196,7 +205,7 @@ export class Groups {
       this.setStatus(g, key, '');
       if (r?.ok) {
         g.seen[key] = Math.max(g.seen[key] || 0, job.trigger);
-        const it = this.add(g, { kind: 'gm', who: key, text: r.reply || '（这一轮没有文字回复）', depth: job.depth + 1 });
+        const it = this.add(g, { kind: 'gm', who: key, text: String(r.reply || '（这一轮没有文字回复）').slice(0, 20000), depth: job.depth + 1 });
         g.seen[key] = it.seq; this.save(g);
         this.route(g, it);
       } else this.add(g, { kind: 'sys', text: '「' + m.name + '」没收到：' + (r?.error || '未知错误') });
@@ -221,7 +230,7 @@ export class Groups {
   // 镜像：给某个对方看的快照（collab 按对方的视角）
   snapshotFor(id, peerId) {
     const g = this.get(id);
-    return g && { id: toWire(id), name: g.name, title: g.title, created: g.created, members: g.membersView(peerId), items: g.items.slice(-SNAP).map(it => g.view(it, peerId)), status: Object.entries(g.status).map(([k, text]) => ({ name: g.members.find(m => m.key === k)?.name || '', text })) };
+    return g && { id: toWire(id), name: g.name, title: g.title, created: g.created, members: g.membersView(peerId), items: g.items.slice(-SNAP).map(it => { const v = g.view(it, peerId); return v.text && v.text.length > 8000 ? { ...v, text: v.text.slice(0, 8000) + '…' } : v; }), status: Object.entries(g.status).map(([k, text]) => ({ name: g.members.find(m => m.key === k)?.name || '', text })) };
   }
   syncOut(g) {
     if (g.mirror || !g.peers().length) return;
@@ -235,15 +244,24 @@ export class Groups {
   // 收到主群的快照：建 / 更新镜像；别的对方不能改它
   applyMirror(peerId, snap) {
     const id = fromWire(snap?.id);
-    if (!id || !Array.isArray(snap.items) || !Array.isArray(snap.members)) return null;
+    if (!id || this.gone[id] || !Array.isArray(snap.items) || !Array.isArray(snap.members)) return null;
+    const str = (x, n) => String(x ?? '').slice(0, n);
+    const who = w => w && typeof w === 'object' ? { name: str(w.name, 40), claw: /^[a-z]{1,20}$/.test(w.claw) ? w.claw : '', collab: !!w.collab, peer: w.peer ? str(w.peer, 40) : undefined } : undefined;
+    const members = snap.members.slice(0, 20).map(who);
+    if (!members.some(m => !m.collab)) return null;   // 群里得有本机的会话
+    const items = snap.items.filter(x => x && Number.isInteger(x.seq) && ['user', 'gm', 'sys'].includes(x.kind)).slice(-SNAP)
+      .map(x => ({ seq: x.seq, at: Number.isFinite(x.at) ? x.at : Date.now(), kind: x.kind, text: str(x.text, 20000), via: x.via ? str(x.via, 40) : undefined, who: who(x.who) }));
+    snap = { ...snap, members, items, status: Array.isArray(snap.status) ? snap.status.slice(0, 20).map(s => ({ name: str(s?.name, 40), text: str(s?.text, 40) })) : [] };
     let g = this.get(id);
     if (g && (!g.mirror || g.mirror.peerId !== peerId)) return null;
-    if (!g) { g = new Group(this, { id, mirror: { peerId }, created: snap.created || Date.now() }); this.map.set(id, g); this.log('group mirror', id, 'from', peerId); }
+    const isNew = !g;
+    if (!g) { g = new Group(this, { id, mirror: { peerId }, created: Number.isFinite(snap.created) ? snap.created : Date.now() }); this.map.set(id, g); this.log('group mirror', id, 'from', peerId); }
     const fresh = snap.items.filter(x => x.seq > g.seqMax);
-    Object.assign(g, { name: String(snap.name || ''), mirrorTitle: String(snap.title || ''), members: snap.members, items: snap.items, status: Array.isArray(snap.status) ? snap.status : [] });
+    Object.assign(g, { name: str(snap.name, 40), mirrorTitle: str(snap.title, 60), members: snap.members, items: snap.items, status: snap.status });
     g.seqMax = snap.items.reduce((a, x) => Math.max(a, x.seq || 0), g.seqMax);
     this.save(g);
-    for (const it of fresh) { g.emit({ t: 'group.msg', id, item: it }); try { this.onItem(g, it); } catch {} }
+    for (const it of fresh) { g.emit({ t: 'group.msg', id, item: it }); if (!isNew) try { this.onItem(g, it); } catch {} }
+    if (isNew && fresh.length) try { this.onItem(g, fresh[fresh.length - 1]); } catch {}   // 第一次同步：未读只记一条
     g.emit({ t: 'group.status', id, status: g.statusView() });
     return g;
   }
@@ -253,6 +271,7 @@ export class Groups {
     if (!g) return false;
     if (fromPeer && (g.mirror ? g.mirror.peerId !== fromPeer : !g.peers().includes(fromPeer))) return false;
     this.map.delete(id); g.closed = true;
+    this.gone[id] = Date.now(); try { fs.writeFileSync(this.goneFile, JSON.stringify(this.gone)); } catch {}
     clearTimeout(this.syncT.get(id)); this.syncT.delete(id);
     try { fs.rmSync(path.join(this.dir, id.slice(3) + '.json'), { force: true }); } catch {}
     g.emit({ t: 'group.gone', id });

@@ -14,6 +14,7 @@ var I18N={dict:{
 "发消息，@ 谁谁回":"Message, @ someone to get a reply",
 "正在回复…":"replying…",
 "在忙，排队中":"busy, queued",
+"连不上，排队重试中":"unreachable, will retry",
 "已收到，回复稍后到":"received, reply coming later",
 "群聊暂时只能发文字":"Group chats only support text for now",
 "至少选 2 个会话":"Pick at least 2 sessions",
