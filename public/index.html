@@ -869,6 +869,7 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #mtabs{display:none}
 #setTop{display:none}
 #clawPane{display:none}
+#clawTop{display:none}   /* Claw 页的标题条：只在电脑端显示 */
 #hostPane{display:none}
 #hostPane:has(#hostBody .pg-hd) #hostHd{display:none}   /* 协同、技能子页面有自己的标题栏 */
 /* 宿主页的分组卡片（手机和电脑共用） */
@@ -1066,56 +1067,57 @@ select.pe-in{text-align-last:right}
   #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
   /* Claw 页：整页滚动；底部多留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），内容多时圈被盖住，滚到底就露出来、点得到 */
   #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
-  #clawList{flex:none;display:flex;flex-direction:column;gap:12px}
-  /* Claw 按出品方分组，每行两张：图标在上，名字、出品方在下；说明放在 title 里 */
-  .claw-g[hidden]{display:none}
-  .claw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-  /* 每张一样高（112px）：左边一列 logo（占一半高 56px）+ 下面出品方；右边一列名字（最多两行）+ 一句话说明能接管哪些会话；有状态说明（暂不支持…）时换掉说明 */
-  .claw-grid .claw-card{display:flex;align-items:flex-start;gap:10px;height:112px;min-height:0;padding:10px 11px;overflow:hidden}
-  .claw-grid .claw-l{flex:none;width:56px;display:flex;flex-direction:column;align-items:center;gap:5px}
-  .claw-grid .claw-ic{width:56px;height:56px}
-  .claw-grid .claw-l small{max-width:64px;text-align:center;font-size:11px;line-height:13px;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .claw-grid .claw-r{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:2px}
-  .claw-grid .claw-r b{font-size:14.5px;line-height:18px;color:var(--ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .claw-grid .claw-st,.claw-grid .claw-ds{font-size:11.5px;line-height:15px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-  .claw-grid .claw-ds{color:var(--muted)}
-  @media (max-width:375px){.claw-grid .claw-card{gap:8px;padding:10px 9px}.claw-grid .claw-r b{font-size:13.5px}}   /* 窄屏：CodeBuddy 这种长词不被拆开 */
-  .claw-grid .claw-card:has(.claw-st:not(:empty)) .claw-ds{display:none}
-  .claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
   #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip);border-bottom:1px solid var(--line)}
   #app.m-list.host-on #hostPane .pe-back{left:0;top:env(safe-area-inset-top,0px);bottom:0}   /* 标题上下留白一样：不再往上多挪 6px、底下不多留 6px */
-  .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
-  .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
-  .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
-  .claw-card[aria-current="true"]{border-color:var(--user-bg);background:var(--user-bg)}   /* 选中：浅绿底，和会话列表一致 */
-  .claw-card:disabled{opacity:.45;cursor:default}
-  .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
-  .claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
-  /* Claude Code：用 Claude 的花瓣标记（LobeHub 图标库 claude-color.svg，MIT），无底板，颜色 #D97757 */
-  /* DeepSeek：官方 icon.png 是蓝底方块，这里换成透明底的蓝鲸标记（LobeHub 图标库 deepseek-color.svg，MIT），和其它几个一样没有底板 */
-  /* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比其它几个重得多也小得多。
-     这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
-     颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
-  /* Kimi：用 Kimi Code 自带网页界面里的吉祥物（KimiMascotPeek：蓝色半圆探头 + 两只白眼睛 + 右上角蓝点），上下居中；干活时眨眼，不跟别的图标一起闪 */
-  #clawList{margin-top:14px}
-  .claw-tool{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
-  .claw-tool .claw-ic{width:34px;height:34px;margin:0 7px;color:var(--accent)}
-  .claw-tool .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-right:4px}
-  .claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
-  .claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-  .claw-tx b{font-size:17px}
-  .claw-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
-  .claw-st{flex:none;font-size:12.5px;color:var(--muted)}
-  .claw-st:empty{display:none}   /* 选中靠边框表示；只有「即将支持」这类说明才显示 */
-  .claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
-  /* Claw 页卡片和底部「会话」logo 呼应：这个 Claw 有会话在干活 → logo 轻闪；有没看的 → logo 右上角红点（两者可以同时） */
-  .claw-icw{position:relative;flex:none;display:block}
-  .claw-card.busy .claw-ic{animation:wpulse 1.8s ease-in-out infinite}
-  .claw-card.unread .claw-icw::after{content:'';position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
 }
+/* Claw 页的卡片：手机、电脑共用（电脑端的 Claw 页整页显示，见下面 min-width:1000px 里的 claw-on） */
+#clawList{flex:none;display:flex;flex-direction:column;gap:12px}
+/* Claw 按出品方分组，每行两张：图标在上，名字、出品方在下；说明放在 title 里 */
+.claw-g[hidden]{display:none}
+.claw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+/* 每张一样高（112px）：左边一列 logo（占一半高 56px）+ 下面出品方；右边一列名字（最多两行）+ 一句话说明能接管哪些会话；有状态说明（暂不支持…）时换掉说明 */
+.claw-grid .claw-card{display:flex;align-items:flex-start;gap:10px;height:112px;min-height:0;padding:10px 11px;overflow:hidden}
+.claw-grid .claw-l{flex:none;width:56px;display:flex;flex-direction:column;align-items:center;gap:5px}
+.claw-grid .claw-ic{width:56px;height:56px}
+.claw-grid .claw-l small{max-width:64px;text-align:center;font-size:11px;line-height:13px;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.claw-grid .claw-r{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:2px}
+.claw-grid .claw-r b{font-size:14.5px;line-height:18px;color:var(--ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.claw-grid .claw-st,.claw-grid .claw-ds{font-size:11.5px;line-height:15px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.claw-grid .claw-ds{color:var(--muted)}
+@media (max-width:375px){.claw-grid .claw-card{gap:8px;padding:10px 9px}.claw-grid .claw-r b{font-size:13.5px}}   /* 窄屏：CodeBuddy 这种长词不被拆开 */
+.claw-grid .claw-card:has(.claw-st:not(:empty)) .claw-ds{display:none}
+.claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
+.claw-need{padding:48px 16px;text-align:center;line-height:1.8}
+.claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
+.claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.claw-card[aria-current="true"]{border-color:var(--user-bg);background:var(--user-bg)}   /* 选中：浅绿底，和会话列表一致 */
+.claw-card:disabled{opacity:.45;cursor:default}
+.claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
+.claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
+/* Claude Code：用 Claude 的花瓣标记（LobeHub 图标库 claude-color.svg，MIT），无底板，颜色 #D97757 */
+/* DeepSeek：官方 icon.png 是蓝底方块，这里换成透明底的蓝鲸标记（LobeHub 图标库 deepseek-color.svg，MIT），和其它几个一样没有底板 */
+/* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比其它几个重得多也小得多。
+   这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
+   颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
+/* Kimi：用 Kimi Code 自带网页界面里的吉祥物（KimiMascotPeek：蓝色半圆探头 + 两只白眼睛 + 右上角蓝点），上下居中；干活时眨眼，不跟别的图标一起闪 */
+#clawList{margin-top:14px}
+.claw-tool{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.claw-tool .claw-ic{width:34px;height:34px;margin:0 7px;color:var(--accent)}
+.claw-tool .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-right:4px}
+.claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
+.claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.claw-tx b{font-size:17px}
+.claw-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
+.claw-st{flex:none;font-size:12.5px;color:var(--muted)}
+.claw-st:empty{display:none}   /* 选中靠边框表示；只有「即将支持」这类说明才显示 */
+.claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
+/* Claw 页卡片和底部「会话」logo 呼应：这个 Claw 有会话在干活 → logo 轻闪；有没看的 → logo 右上角红点（两者可以同时） */
+.claw-icw{position:relative;flex:none;display:block}
+.claw-card.busy .claw-ic{animation:wpulse 1.8s ease-in-out infinite}
+.claw-card.unread .claw-icw::after{content:'';position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
 /* 15 个主题快捷方块：点一下切主题（普通 / 深色 / 九紫离火 / 流变时辰 12 个时辰） */
@@ -1236,6 +1238,23 @@ select.pe-in{text-align-last:right}
   #rclaws.solo .rclaw.on:hover{background:var(--surface)}   /* 当前 Claw：浅绿底，和选中的会话一个样子 */
   #rail .rclaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
   #rail .rsep{width:24px;margin:4px 0;border-top:1px solid var(--line)}
+  /* 左栏不再一个个列 Claw：#railCur = 当前 Claw 的会话（图标随 Claw 换），#railClaw = Claw 页（切 Claw、模型管理），和手机底栏一样 */
+  #rclaws,#rail .rsep{display:none}
+  #railCur,#railClaw{position:relative}
+  #railCur img,#railCur svg{width:26px;height:26px;object-fit:contain}
+  #railCur img.tile{border-radius:22.5%}
+  #railCur.on{background:var(--user-bg)}
+  #railCur.busy :is(svg,img),#railClaw.busy svg{animation:wpulse 1.8s ease-in-out infinite}
+  #railCur.dot::after,#railClaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+  /* Claw 页：像模型管理一样占满列表 + 聊天区，卡片按宽度排几列 */
+  #app.claw-on #sheet{grid-column:2 / -1;z-index:6}
+  #app.claw-on :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
+  #app.claw-on #sheet::after{display:none}
+  #app.claw-on #sTop,#app.claw-on #sList{display:none}
+  #app.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;padding-bottom:24px}
+  #app.claw-on #clawPane>:not(#clawTop){width:100%;max-width:880px;margin-left:auto;margin-right:auto}
+  #app.claw-on #clawTop{display:flex;position:sticky;top:0;z-index:2;align-items:center;justify-content:center;box-sizing:border-box;min-height:var(--hd-h,56px);margin:0 -10px 2px;background:var(--strip);border-bottom:1px solid var(--strip-line);font-size:17px;font-weight:600}
+  #app.claw-on .claw-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
 
   /* 会话列表栏 */
   #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:relative;display:block;background:var(--surface);border-right:0;min-height:0;z-index:auto}
@@ -1341,8 +1360,10 @@ select.pe-in{text-align-last:right}
   <nav id="rail" aria-label="导航">
     <img class="logo" src="/icons/icon-192.png?v=10" alt="Claclaw">
     <button type="button" id="railChats" class="on" aria-label="会话" title="会话"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg></button>
+    <!-- 和手机底栏一样：当前 Claw 的会话（图标就是那个 Claw 的）；Claw 页（选 Claw、模型管理）的按钮在下面一组 -->
+    <button type="button" id="railCur" aria-label="会话" title="会话"></button>
     <span class="gap"></span>
-    <!-- 电脑端的 Claw 切换：点哪个，会话列表就显示哪一种的会话（只列这台电脑装了、能用的） -->
+    <!-- 各个 Claw 的图标（只当图标库用：clawIcon、Claw 卡片从这里拷图标；不显示，电脑端切 Claw 在 Claw 页里） -->
     <div id="rclaws">
     <button type="button" id="rclawMore" aria-label="更多 Claw" title="更多 Claw" aria-expanded="false" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
     <button type="button" class="rclaw" data-claw="claude" aria-label="Claude Code" title="Claude Code"><svg class="cc-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fill-rule="nonzero"></path></svg></button>
@@ -1360,8 +1381,8 @@ select.pe-in{text-align-last:right}
     <button type="button" class="rclaw" data-claw="copilot" aria-label="Copilot CLI" title="Copilot CLI"><svg class="cp-mark" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.922 16.992c-.861 1.495-5.859 5.023-11.922 5.023-6.063 0-11.061-3.528-11.922-5.023A.641.641 0 0 1 0 16.736v-2.869a.841.841 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.195 10.195 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952 1.399-1.136 3.392-2.093 6.122-2.093 2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.832.832 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256ZM12.172 11h-.344a4.323 4.323 0 0 1-.355.508C10.703 12.455 9.555 13 7.965 13c-1.725 0-2.989-.359-3.782-1.259a2.005 2.005 0 0 1-.085-.104L4 11.741v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.323 4.323 0 0 1-.355-.508h-.016.016Zm.641-2.935c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/><path d="M14.5 14.25a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1Zm-5 0a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1Z"/></svg></button>
     </div>
     <span class="rsep"></span>
+    <button type="button" id="railClaw" aria-label="Claw" title="Claw（切换 Claw、模型管理）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg></button>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
-    <button type="button" id="railModels" aria-label="模型管理" title="模型管理（各家模型的 Key、接口地址和模型）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="M22 17.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg></button>
     <button type="button" id="railPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button>
     <button type="button" id="railHost" aria-label="宿主" title="宿主"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
     <button type="button" id="railSet" aria-label="设置" title="设置"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
@@ -1511,6 +1532,7 @@ select.pe-in{text-align-last:right}
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
       <div id="clawPane">
+        <div id="clawTop">Claw</div>
         <!-- 模型管理：以 Key 为单位登记各家模型（Key、接口地址、模型），按供应商分组；各 Claw 选模型时从这里选 -->
         <button type="button" class="claw-tool" id="clawModels">
           <svg class="claw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 2.8l8.2 4.6v9.2L12 21.2l-8.2-4.6V7.4z"/><path d="M3.8 7.4L12 12l8.2-4.6M12 12v9.2"/></svg>
@@ -3630,7 +3652,7 @@ function mTab(t){
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   if(t!=='host'){hostView='';peerWatch(false)}
   hostLive(t==='host');if(t==='claw'){loadClaws();mdlPeek();requestAnimationFrame(clawDsFit)}if(t==='set')loadSetData();
-  $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railModels').classList.remove('on');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
+  $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railClaw').classList.toggle('on',t==='claw');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
   $('.sheet-p').scrollTop=0;
   if(typeof showClawSel==='function')showClawSel();
@@ -3770,7 +3792,7 @@ function mdlPeek(){if(!mdl)fetch('/api/models').then(function(r){return r.json()
 function mdlClawSub(){var el=$('#clawModelsSub');if(el&&mdl&&mdl.providers.length)el.textContent=modelsSum()}
 function openModels(from){
   mdlFrom=from;
-  if(from==='claw'){mTab('host');document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab==='claw')})}
+  if(from==='claw'){mTab('host');document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab==='claw')});$('#railHost').classList.remove('on');$('#railClaw').classList.add('on')}
   hostView='models';mdlSub='';mdlMsg={};mdlRemote=null;mdlForget();renderModels();loadModels();
 }
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
@@ -3883,7 +3905,6 @@ function mdlAct(act,a){
     if(mm){mdlSub='p:'+mm[1];renderModels();return}
     if(pm){mdlSub='';mdlRemote=null;mdlForget();renderModels();return}
     if(mdlFrom==='claw'){mTab('claw');return}
-    if(mdlFrom==='rail'){$('#railModels').classList.remove('on');$('#railHost').classList.add('on')}   // 从左栏进的：返回到宿主页
     hostView='';$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return;
   }
   if(act==='mdl-prov'){mdlSub='p:'+a.dataset.id;mdlMsg={};mdlForget();renderModels();return}
@@ -4078,7 +4099,6 @@ function openPeerView(){
 function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#railSet').classList.remove('on')}}
 $('#railPeer').addEventListener('click',openPeerView);
 // 电脑左栏的「模型管理」快捷入口：直接打开 宿主 → 模型管理，在模型管理页时亮起
-$('#railModels').addEventListener('click',function(){mTab('host');openModels('rail');$('#railHost').classList.remove('on');$('#railModels').classList.add('on')});
 // 附近的 claclaw（局域网里开着协同的电脑，Bonjour 广播找到的）
 function peerScan(){
   if(!peerCfg||!peerCfg.local||!peerCfg.enabled||peerScanning)return;
@@ -4433,11 +4453,12 @@ function syncChatsTab(){
   if(k){n=document.createElement('span');n.className='tlogo';n.innerHTML=clawIcon(k)}else n=chatsIcon;
   if(old!==n)old.replaceWith(n);
   tb.dataset.k=k;tb.classList.toggle('logo',!!k);tb.setAttribute('aria-label',(k?CLAW_NAMES[k]+' ':'')+'会话');
+  var rc=$('#railCur');if(rc&&rc.dataset.k!==k){rc.dataset.k=k;rc.innerHTML=k?clawIcon(k):chatsIcon.outerHTML;rc.title=(k?CLAW_NAMES[k]+' ':'')+'会话';rc.setAttribute('aria-label',rc.title)}   // 电脑左栏同一个按钮
 }
 function showClawSel(){
   syncChatsTab();
   document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('on',listMode==='claw'&&b.dataset.claw===curClaw())});
-  var app0=$('#app');$('#railChats').classList.toggle('on',listMode==='recent'&&!app0.classList.contains('set-on')&&!app0.classList.contains('host-on'));
+  var app0=$('#app'),pg=app0.classList.contains('set-on')||app0.classList.contains('host-on')||app0.classList.contains('claw-on');$('#railChats').classList.toggle('on',listMode==='recent'&&!pg);$('#railCur').classList.toggle('on',listMode==='claw'&&!pg);
   $('#rclaws').classList.remove('open');renderRailClaws();
   document.querySelectorAll('.claw-card').forEach(function(x){
     var on=x.dataset.claw===clawSel;x.setAttribute('aria-current',String(on));
@@ -4530,6 +4551,8 @@ function pickClaw(id){
 document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(!c.disabled)pickClaw(c.dataset.claw)})});
 document.querySelectorAll('#rail .rclaw').forEach(function(b){b.addEventListener('click',function(){pickClaw(b.dataset.claw)})});
 $('#rclawMore').addEventListener('click',function(){$('#rclaws').classList.toggle('open');renderRailClaws()});
+$('#railCur').addEventListener('click',function(){pickClaw(curClaw()||'claude')});
+$('#railClaw').addEventListener('click',function(){mTab('claw')});
 document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){
   var t=b.dataset.tab;
   if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
@@ -4896,12 +4919,12 @@ function syncWorkMarks(){
   });
   var cc=curClaw()||'claude';
   var busyAny=Object.keys(activity).some(function(id){return activity[id]&&clawOf(id)===cc})||!!document.querySelector('#sList .s-row.working');
-  var tb=$('#mtabs [data-tab="chats"]');if(tb)tb.classList.toggle('busy',busyAny);
+  var tb=$('#mtabs [data-tab="chats"]');if(tb)tb.classList.toggle('busy',busyAny);$('#railCur').classList.toggle('busy',busyAny);
   // 每个 Claw 是否有会话在干活：Claw 页卡片 logo 轻闪；底部「Claw」和电脑左栏图标替别的 Claw 闪
   var byClaw={};Object.keys(activity).forEach(function(id){if(activity[id])byClaw[clawOf(id)]=true});if(busyAny)byClaw[cc]=true;
   document.querySelectorAll('.claw-card').forEach(function(c){c.classList.toggle('busy',!!byClaw[c.dataset.claw])});
   document.querySelectorAll('#rail .rclaw').forEach(function(b){b.classList.toggle('busy',b.dataset.claw!==cc&&!!byClaw[b.dataset.claw])});
-  var ct=$('#mtabs [data-tab="claw"]');if(ct)ct.classList.toggle('busy',Object.keys(byClaw).some(function(k){return k!==cc}));
+  var oth=Object.keys(byClaw).some(function(k){return k!==cc});var ct=$('#mtabs [data-tab="claw"]');if(ct)ct.classList.toggle('busy',oth);$('#railClaw').classList.toggle('busy',oth);
 }
 // Claw 页卡片的 logo 包一层，好在右上角挂红点
 // Claw 卡片的图标和左栏的是同一个：从左栏拷过来（只写一份）
@@ -4946,6 +4969,8 @@ function renderUnread(){
   $('#mtabs [data-tab="chats"]').classList.toggle('dot',!!byClaw[clawSel]||(!clawSel&&other));
   $('#mtabs [data-tab="recent"]').classList.toggle('dot',other);
   $('#mtabs [data-tab="claw"]').classList.toggle('dot',!!clawSel&&otherClaw);
+  $('#railCur').classList.toggle('dot',!!byClaw[cc]);   // 电脑左栏：当前 Claw 的未读亮在它的图标上，别的 Claw 的亮在「Claw」上
+  $('#railClaw').classList.toggle('dot',Object.keys(byClaw).some(function(c){return c!==cc}));
   document.querySelectorAll('.claw-card').forEach(function(c){c.classList.toggle('unread',!!byClaw[c.dataset.claw])});
   $('#sessBtn').classList.toggle('unr',other);$('#backBtn').classList.toggle('unr',other);
   if(navigator.setAppBadge){(total?navigator.setAppBadge(total):navigator.clearAppBadge()).catch(function(){})}
