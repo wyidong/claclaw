@@ -123,7 +123,11 @@ export class Groups {
   post(id, text, { via } = {}) {
     const g = this.get(id); text = String(text || '').trim();
     if (!g || !text) return false;
-    if (g.mirror) { this.peerOp(g.mirror.peerId, { op: 'post', id: toWire(id), text }).catch(e => this.log('group post fwd', e.message)); return true; }
+    if (g.mirror) {   // 镜像：转给建群的电脑，它收下后会随快照回来；没送到就告诉页面（输入框放回原文）
+      const fail = why => g.emit({ t: 'group.msg', id, item: { kind: 'sys', fail: true, text: '没发到建群的电脑：' + why } });
+      this.peerOp(g.mirror.peerId, { op: 'post', id: toWire(id), text }).then(j => { if (!j?.ok) fail(j?.error || '对方没收下'); }, e => { this.log('group post fwd', e.message); fail(e.message); });
+      return true;
+    }
     const it = this.add(g, { kind: 'user', text: text.slice(0, 8000), via: via || undefined, depth: 0 });
     this.route(g, it);
     return true;

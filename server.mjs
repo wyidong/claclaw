@@ -1232,7 +1232,8 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
         end(200, { ok: m.subtype === 'success', reply: out, error: m.error });
       }
     } };
-    const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); resolve([code, obj]); };
+    const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); if (group) setTimeout(() => { r.quietTurn = false; }, 0); resolve([code, obj]); };
+    if (group) r.quietTurn = true;   // 群投递的这一轮：回复贴回群里、由群推送，成员会话自己不再记未读、不推送（要确认的照推）
     const timer = setTimeout(() => end(504, { ok: false, error: '30 分钟内没等到回复', partial: (cur || reply).trim() }), 30 * 60 * 1000);   // 对方早已拿到 202，这里只是兜底
     r.subscribe(sub);
     // 对方发来的、或本机会话在处理对方消息时转过来的：这一轮有风险的操作要用户确认
@@ -1959,6 +1960,7 @@ class Runner {
   watched() { return [...this.subs].some(ws => ws.visible !== false); }
 
   notify(body, tag) {
+    if (this.quietTurn && !/^perm-/.test(tag)) return;
     const w = this.watched();
     if (w && !PUSH_ALWAYS) return;
     const title = this.info.customTitle || this.title || path.basename(this.cwd || '') || '会话';
@@ -2048,6 +2050,7 @@ function snippet(text, fallback) {
   return t.length > 80 ? t.slice(0, 80) + '…' : t;
 }
 function ocTurnDone(r, ok, text) {
+  if (r.quietTurn) return;
   const w = r.watched();
   if (w && !PUSH_ALWAYS) return;
   if (!w) localSound();
@@ -3274,7 +3277,7 @@ wss.on('connection', (ws, req) => {
         if (ws.visible !== false) clearUnread(m.id);
         const hist = g.history(), pg = historyPage(hist, hist.total, HISTORY_PAGE);
         send({
-          t: 'session.opened', id: m.id, title: g.title, cwd: '', cwdShort: '', claw: 'group',
+          t: 'session.opened', id: m.id, title: g.title, cwd: '', cwdShort: g.members.length + ' 个成员：' + g.members.map(x => x.name).join('、'), claw: 'group',
           group: { members: g.membersView(), mirror: !!g.mirror, status: g.statusView() },
           mode: 'default', modes: ['default'], busy: false, history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
           pending: [], suggestion: null, commands: [],

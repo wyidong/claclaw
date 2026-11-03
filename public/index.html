@@ -298,6 +298,45 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important}   /* 嵌在 clarelay 外壳里：通知由外壳收，不在这里订阅 */
 .peer .from{font-size:12px;color:var(--muted);margin-bottom:3px}
 .peer .body{word-break:break-word}
+/* 群聊：成员的话（Claw logo + 协同标识 + 名字）、状态行、建群按钮和选成员面板 */
+.peer.gm{border-left-color:var(--accent)}
+.peer.gm .from{display:flex;align-items:center;gap:4px;color:var(--ink);font-weight:600}
+.gm-ic{display:inline-grid;place-items:center;width:18px;height:18px;flex:none}
+.gm-ic svg,.gm-ic img{width:16px;height:16px;object-fit:contain;display:block}
+.gm-co{display:inline-block;width:18px;height:14px;flex:none;color:var(--muted)}
+.gm-co svg{width:18px;height:14px;display:block}
+.gp-mark{color:var(--accent)}
+.u-via{font-size:11.5px;color:var(--muted);margin-bottom:2px}
+#gStat{align-self:flex-start;font-size:12.5px;color:var(--muted);padding:2px 4px}
+#gStat div::before{content:'· '}
+#gNew{flex:none;width:46px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+#gNew:hover{color:var(--accent)}
+#gNew[hidden]{display:none}
+#grpPane{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35)}
+#grpPane.on{display:flex}
+#grpPane .gp-card{width:100%;max-width:520px;max-height:86vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box}
+@media (min-width:1000px){#grpPane{align-items:center}#grpPane .gp-card{border-radius:16px}}
+#grpPane .gp-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+#grpPane .gp-hd b{font-size:16px}
+#grpPane .gp-x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
+#grpPane input.gp-in{width:100%;box-sizing:border-box;height:36px;padding:0 10px;margin-bottom:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
+#grpPane .gp-list{flex:1;min-height:120px;overflow-y:auto;overscroll-behavior:contain}
+#grpPane .gp-sec{font-size:12px;color:var(--muted);margin:10px 2px 4px}
+#grpPane label.gp-row{display:flex;align-items:center;gap:9px;padding:7px 4px;border-radius:9px;cursor:pointer}
+#grpPane label.gp-row:hover{background:var(--bg)}
+#grpPane .gp-row input{flex:none;width:18px;height:18px;accent-color:var(--accent)}
+#grpPane .gp-av{flex:none;display:flex;align-items:center;gap:2px}
+#grpPane .gp-av .gm-ic{width:26px;height:26px}
+#grpPane .gp-av .gm-ic svg,#grpPane .gp-av .gm-ic img{width:22px;height:22px}
+#grpPane .gp-t{flex:1;min-width:0}
+#grpPane .gp-t b{display:block;font-weight:500;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grpPane .gp-t small{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grpPane .gp-ft{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+#grpPane .gp-ft button{height:36px;padding:0 16px;border-radius:9px;border:0;font:inherit;font-size:14.5px;cursor:pointer}
+#grpPane .gp-go{background:var(--accent);color:#fff}
+#grpPane .gp-go:disabled{opacity:.45;cursor:default}
+#grpPane .gp-cancel{background:var(--bg);color:var(--ink)}
+.cmd .c-ic{display:inline-flex;vertical-align:-3px;margin-right:6px}
 .peer code{font-family:var(--mono);font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
 .peer .md pre{background:var(--surface)}
 .sys-dir{align-self:flex-start!important;text-align:left!important}
@@ -1529,7 +1568,7 @@ select.pe-in{text-align-last:right}
     <div id="sheetGrip" title="拖动调整宽度，双击恢复默认" aria-hidden="true"></div>
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2>会话</h2>
-      <div id="sTop"><div id="tmpTh"></div><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><button type="button" id="gNew" aria-label="建群" title="建群（把几个会话拉进一个群）" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5 1.2 0 2.3.3 3.2.8"/><path d="M18 13v6M15 16h6"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -1731,7 +1770,8 @@ var CLAW_T=[
   {id:'minimax',p:'mm',name:'MiniMax',long:'MiniMax Code',strip:/^mm:(mvs_)?/,acp:true},
   {id:'codebuddy',p:'cb',name:'CodeBuddy',long:'CodeBuddy Code',strip:/^cb:/,acp:true},
   {id:'qoder',p:'qd',name:'Qoder',long:'Qoder CLI',strip:/^qd:/,acp:true},
-  {id:'copilot',p:'cp',name:'Copilot',long:'Copilot CLI',strip:/^cp:/,acp:true}
+  {id:'copilot',p:'cp',name:'Copilot',long:'Copilot CLI',strip:/^cp:/,acp:true},
+  {id:'group',p:'gp',name:'群聊',long:'群聊',strip:/^gp:/}
 ];
 var NOT_CLAUDE=new RegExp('^('+CLAW_T.map(function(c){return c.p}).join('|')+'):');
 function clawT(id){id=String(id||'');for(var i=0;i<CLAW_T.length;i++)if(id.indexOf(CLAW_T[i].p+':')===0)return CLAW_T[i];return null}
@@ -2433,6 +2473,19 @@ function addPeer(from,t){
   feed.appendChild(e);scrollDown();
   return e;
 }
+// 群聊里成员说的话：头像 + 名字，正文按 Markdown 渲染
+function addGm(it){
+  var w=it.who||{},e=document.createElement('div');e.className='peer gm';
+  var f=document.createElement('div');f.className='from';f.innerHTML=gmAv(w);var n=document.createElement('span');n.textContent=w.name||'成员';f.appendChild(n);e.appendChild(f);
+  if(it.text){var b=document.createElement('div');b.className='body md';b.innerHTML=md(it.text);e.appendChild(b)}
+  feed.appendChild(e);gStatTail();scrollDown();
+  return e;
+}
+// 群聊里用户说的话：在别的电脑上发的标一下
+function addGu(it){var e=addUser(it.text);if(e&&it.via){var v=document.createElement('div');v.className='u-via';v.textContent='在 '+it.via+' 上发的';e.insertBefore(v,e.firstChild)}gStatTail();return e}
+// 状态行（谁正在回复 / 在忙排队）：始终在聊天区最下面
+function gStat(list){var el=$('#gStat');if(!list||!list.length){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='gStat'}el.innerHTML='';list.forEach(function(x){var d=document.createElement('div');d.textContent=(x.name?x.name+' ':'')+x.text;el.appendChild(d)});feed.appendChild(el);scrollDown()}
+function gStatTail(){var el=$('#gStat');if(el&&el.parentNode===feed&&feed.lastElementChild!==el)feed.appendChild(el)}
 // 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
 function clawName(id){var c=clawT(id);return c?c.name:'Claude'}
 function shortId(id){id=String(id||'');var c=clawT(id);if(c&&c.strip)return id.replace(c.strip,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':'),q=p[p.length-1]||p[0];return /^[0-9a-f]{8}-/i.test(q)?q.slice(0,8):q}return id.slice(0,8)}
@@ -2641,7 +2694,7 @@ function setSuggestion(t){
 }
 function syncSuggestion(){
   var on=!!suggestion&&!ta.value&&!busy&&!!session;
-  ta.placeholder=on?suggestion:PLACEHOLDER;
+  ta.placeholder=on?suggestion:session&&session.group?'发消息，@ 谁谁回':PLACEHOLDER;
   taWrap.classList.toggle('sug',on);
   sugBtn.hidden=true;   // 不再单独放「↵ 填入」按钮：输入框空着时点灰色的发送键就是填入建议
   syncSend();
@@ -2807,7 +2860,28 @@ function renderAtts(){
 // ---------- 斜杠命令菜单：输入框以 / 开头、还没打空格时弹出 ----------
 
 var cmdMenu=$('#cmdMenu');
+// 群聊里输入 @：弹出成员（含 @全体），选一个插进去
+function syncAtMenu(){
+  var pos=ta.selectionEnd==null?ta.value.length:ta.selectionEnd,m=ta.value.slice(0,pos).match(/(^|[^\w])@([^\s@]*)$/);
+  if(!m){cmdMenu.hidden=true;cmdShown=[];return}
+  var q=m[2].toLowerCase(),all=(session.group.members||[]).concat([{name:'全体',all:true}]);
+  cmdShown=all.filter(function(x){return !q||x.name.toLowerCase().indexOf(q)>=0}).sort(function(a,b){return (a.name.toLowerCase().indexOf(q)===0?0:1)-(b.name.toLowerCase().indexOf(q)===0?0:1)});
+  if(cmdSel>=cmdShown.length)cmdSel=0;
+  cmdMenu.innerHTML='';
+  if(!cmdShown.length){cmdMenu.hidden=true;return}
+  for(var i=cmdShown.length-1;i>=0;i--)(function(x,i){
+    var b=document.createElement('button');b.type='button';b.className='cmd';b.setAttribute('role','option');b.setAttribute('aria-selected',i===cmdSel?'true':'false');
+    b.innerHTML='<span class="cn"><span class="c-ic">'+(x.all?GROUP_SVG.replace('<svg ','<svg width="16" height="16" '):gmAv(x).replace(/<svg /g,'<svg width="16" height="14" '))+'</span></span><span class="cd"></span>';
+    b.querySelector('.cn').appendChild(document.createTextNode('@'+x.name));
+    b.querySelector('.cd').textContent=x.all?'所有成员都回一轮':(x.collab?'协同会话'+(x.peer?' · '+x.peer:''):(CLAW_NAMES[x.claw]||''));
+    b.addEventListener('mousedown',function(e){e.preventDefault()});
+    b.addEventListener('click',function(){pickCmd(i)});
+    b.dataset.i=i;cmdMenu.appendChild(b);
+  })(cmdShown[i],i);
+  cmdMenu.hidden=false;cmdMenu.scrollTop=cmdMenu.scrollHeight;
+}
 function syncCmdMenu(){
+  if(session&&session.group){syncAtMenu();return}
   var v=ta.value,m=v.match(/^\/(\S*)$/);
   if(!m||!session||busy||dock.dataset.state==='perm'||dock.dataset.state==='ask'){cmdMenu.hidden=true;return}
   var q=m[1].toLowerCase();
@@ -2850,6 +2924,10 @@ function syncCmdMenu(){
 }
 function pickCmd(i){
   var c=cmdShown[i];if(!c)return;
+  if(session&&session.group){   // 群聊：把光标前的「@半截」换成完整的成员名
+    var pos=ta.selectionEnd==null?ta.value.length:ta.selectionEnd,pre=ta.value.slice(0,pos).replace(/@[^\s@]*$/,'@'+c.name+' ');
+    ta.value=pre+ta.value.slice(pos);cmdMenu.hidden=true;ta.focus();ta.setSelectionRange(pre.length,pre.length);syncSend();return;
+  }
   ta.value='/'+c.name+' ';
   cmdMenu.hidden=true;
   ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
@@ -3017,7 +3095,7 @@ function onEvent(m){
     var sameSess=!!(session&&session.id===m.id)&&!m.compacted,wasStick=stick;
     if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
     var keepDone=m.compacted&&session&&session.id===m.id?(session.ctxAsk?(m.ctx||-1):session.ctxDone||0):0;   // DeepSeek 压缩完会整页重开：接着显示压缩结果
-    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null,ctx:m.ctx||null};
+    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null,ctx:m.ctx||null,group:m.group||null};
     if(keepDone){session.ctxDone=keepDone;clearTimeout(ctxAskTimer)}
     ctxShow();lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;if(shellOpen===m.id){clog('shell open 已打开 '+m.id.slice(0,8));shellOpen=null}
     switchDraft(m.id);
@@ -3044,13 +3122,15 @@ function onEvent(m){
     sessionModes=m.modes||['default','acceptEdits','plan','auto','dontAsk'];
     // dsh / OpenCode / OpenClaw：会话设置里只有模型（从模型库 + 各 Claw 自带的里选），没有推理强度和权限模式
     xcfg=NOT_CLAUDE.test(m.id)?(m.xmodels||{current:null,label:'',groups:null}):null;xcfgAsked=false;xcfgErr='';
-    $('#cfgMode').hidden=!!xcfg;$('#cfgBtn').style.display='';
+    $('#cfgMode').hidden=!!xcfg;$('#cfgBtn').style.display=m.group?'none':'';   // 群聊没有会话设置
     cfg={models:null,model:null,effort:null,pick:'default'};cfgBusy=null;applyModel(m);
     setMode(m.mode,false);
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
     renderHistory(m.history,m.historyStart||0);
     histStart=m.historyStart||0;histMore=!!m.historyMore;setTimeout(fillShort,300);
+    if(m.group)gStat(m.group.status);
+    syncSuggestion();
     if(m.compacted)addSys('会话已压缩，历史已重新加载');
     else if(m.cwdShort){var tk=function(n){return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?Math.round(n/1000)+'k':String(n)};var ts=m.tokSum,dt=m.usage&&m.usage.tokens;if(!ts&&dt)ts={in:(dt.uncachedInputTokens||0)+(dt.cacheReadTokens||0)+(dt.cacheWriteTokens||0),out:dt.outputTokens||0};   // DeepSeek：用现成的累计用量（含子任务）
     addSys((ts&&(ts.in||ts.out)?'↑'+tk(ts.in)+' ↓'+tk(ts.out)+' · ':'')+m.cwdShort+(m.branch?' · '+m.branch:''));feed.lastElementChild.classList.add('sys-dir')}   // 会话 ID 标题栏有，这里只给目录，靠左
@@ -3105,6 +3185,24 @@ function onEvent(m){
     if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');if(m.queued)outbox.el.classList.add('queued');stamp(outbox.el,Date.now());outboxDone();think(true);break}
     if(outbox&&m.text===outbox.text)outboxDone();
     var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');stamp(ue,Date.now());think(true);
+    break;
+  case 'group.msg':   // 群里新的一条（自己发的也从这里回来：镜像那边要等建群的电脑收下）
+    if(!session||m.id!==session.id)break;
+    var gi=m.item||{};
+    if(gi.kind==='user'){
+      if(outbox&&gi.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');stamp(outbox.el,Date.now());outboxDone()}
+      else{if(outbox&&gi.text===outbox.text)outboxDone();stamp(addGu(gi),gi.at)}
+      setBusy(false);
+    }else if(gi.kind==='gm')stamp(addGm(gi),gi.at);
+    else{addSys(gi.text);gStatTail();if(gi.fail&&outbox){outboxRestore();setBusy(false)}}
+    refreshList();
+    break;
+  case 'group.status':
+    if(session&&m.id===session.id)gStat(m.status);
+    break;
+  case 'group.gone':
+    if(session&&m.id===session.id){gStat(null);addSys('这个群已经解散了');setBusy(false)}
+    refreshList();
     break;
   case 'send.dup':   // 重发的这份服务器早就收到了（卡住的那份后来送到了）：不再处理，当作已送达
     if(outbox&&m.cid===outbox.cid){if(outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');stamp(outbox.el,Date.now())}outboxDone()}
@@ -4312,7 +4410,11 @@ function peerAddHtml(c){
 var peerPoolClaw='',peerPoolQ='';
 var CLAW_ORDER=['claude','codex','copilot','deepseek','kimi','qwen','glm','iflow','minimax','codebuddy','qoder','opencode','openclaw'];
 // Claw 的图标：和左边栏用同一份（左边栏的按钮里就是图标）
-function clawIcon(k){var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:esc(CLAW_NAMES[k])}
+var GROUP_SVG='<svg class="gp-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 13.7c.5-.1 1-.2 1.5-.2 2.8 0 5 1.9 5 4.8"/></svg>';
+var COLLAB_SVG='<svg viewBox="0 0 64 48" fill="currentColor" aria-label="协同"><circle cx="14" cy="14" r="7"/><path d="M2 37V32C2 26.5 7.5 23 14 23S26 26.5 26 32V37Z"/><circle cx="50" cy="24" r="7"/><path d="M38 47V42C38 36.5 43.5 33 50 33S62 36.5 62 42V47Z"/><path d="M30 7L37 1V4.5H50V9.5H37V13Z"/><rect x="23" y="11" width="11" height="3" rx="1.5"/><rect x="27" y="19" width="13" height="3" rx="1.5" fill-opacity=".5"/><path d="M41 30L34 24.5V27.5H27V32.5H34V35.5Z"/></svg>';
+function clawIcon(k){if(k==='group')return GROUP_SVG;var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:k?esc(CLAW_NAMES[k]||''):''}
+// 群成员的头像：Claw logo（知道的话）+ 协同标识（别的电脑上的会话）
+function gmAv(w){return (w&&w.claw?'<span class="gm-ic">'+clawIcon(w.claw)+'</span>':'')+(w&&w.collab?'<span class="gm-co" title="协同会话'+(w.peer?' · '+esc(w.peer):'')+'">'+COLLAB_SVG+'</span>':'')}
 function clawSegBtn(k,n,on){return '<button type="button" data-act="pool-claw" data-claw="'+k+'" title="'+esc(CLAW_NAMES[k])+'" aria-label="'+esc(CLAW_NAMES[k])+'"'+(on?' class="on"':'')+'>'+clawIcon(k)+(n?'<i>'+n+'</i>':'')+'</button>'}
 function poolInfo(id){return (peerList||[]).find(function(x){return x.id===id})||((peerCfg&&peerCfg.poolInfo)||[]).find(function(x){return x.id===id&&x.title})}
 function poolJoinedHtml(c){
@@ -4714,9 +4816,10 @@ function drawRecent(arr){
       // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
       var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
       var hideIt=function(){
+        if(s.group&&!confirm('解散「'+s.title+'」？'+(s.group.mirror?'建群的电脑上':'对方电脑上')+'的这个群也会一起删除（成员会话本身不受影响）。'))return;
         postJson('/api/recent/hide',{id:s.id}).then(function(r){return r.json()}).then(function(j){
           if(!j.ok){toast(j.error||'删除失败');return}
-          row.remove();if(lastList)lastList=lastList.filter(function(x){return x.id!==s.id});toast('已从最近里删除');
+          row.remove();if(lastList)lastList=lastList.filter(function(x){return x.id!==s.id});toast(j.dissolved?'群已解散':'已从最近里删除');
         }).catch(function(){toast('删除失败')});
       };
       hd.addEventListener('click',function(e){e.stopPropagation();hideIt()});
@@ -4753,10 +4856,48 @@ $('#sNew').addEventListener('click',function(){
   if(Array.isArray(lastList)&&clawSel!=='openclaw'){firstOrAlert(lastList);return}
   fetch('/api/sessions').then(function(r){return r.json()}).then(function(arr){if(Array.isArray(arr))lastList=arr;firstOrAlert(arr)}).catch(function(){firstOrAlert(null)});
 });
+// 建群：选成员（本机任意 Claw 的会话 + 各对方开放给本机的会话），至少 2 个
+function openGroupNew(){
+  var p=$('#grpPane');
+  if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
+  p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>建群</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
+    +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><input class="gp-in gp-q" type="search" placeholder="搜索会话"><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
+    +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go" disabled>建群</button></div></div>';
+  p.classList.add('on');
+  var close=function(){p.classList.remove('on')};
+  p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel').addEventListener('click',close);
+  var list=p.querySelector('.gp-list'),go=p.querySelector('.gp-go'),q=p.querySelector('.gp-q'),picked={};
+  var count=function(){var n=Object.keys(picked).length;go.disabled=n<2;go.textContent=n?'建群（'+n+'）':'建群'};
+  var row=function(x,peer){
+    var k=(peer?peer.peerId+'/':'')+x.id,l=document.createElement('label');l.className='gp-row';l.dataset.q=(x.title+' '+(x.cwd||'')+' '+(peer?peer.name:'')).toLowerCase();
+    l.innerHTML='<input type="checkbox"><span class="gp-av">'+gmAv({claw:x.claw,collab:!!peer})+'</span><span class="gp-t"><b></b><small></small></span>';
+    l.querySelector('b').textContent=x.title||'(无标题)';
+    l.querySelector('small').textContent=peer?'协同 · '+peer.name:(CLAW_NAMES[x.claw]||'')+(x.cwd?' · '+x.cwd:'');
+    var cb=l.querySelector('input');cb.checked=!!picked[k];
+    cb.addEventListener('change',function(){if(cb.checked)picked[k]={id:x.id,peerId:peer?peer.peerId:undefined};else delete picked[k];count()});
+    return l;
+  };
+  fetch('/api/group/candidates').then(function(r){return r.json()}).then(function(j){
+    list.innerHTML='';
+    var sec=function(t){var d=document.createElement('div');d.className='gp-sec';d.textContent=t;list.appendChild(d)};
+    sec('本机');(j.local||[]).forEach(function(x){list.appendChild(row(x,null))});
+    (j.peers||[]).forEach(function(pr){sec('协同 · '+pr.name+(pr.ok?'':'（连不上：'+(pr.error||'')+'）'));(pr.sessions||[]).forEach(function(x){list.appendChild(row(x,pr))});if(pr.ok&&!(pr.sessions||[]).length)sec('（对方没有开放会话给本机）')});
+  }).catch(function(e){list.innerHTML='<div class="gp-sec">加载失败：'+esc(e.message)+'</div>'});
+  q.addEventListener('input',function(){var v=q.value.trim().toLowerCase();list.querySelectorAll('.gp-row').forEach(function(l){l.hidden=!!v&&l.dataset.q.indexOf(v)<0})});
+  go.addEventListener('click',function(){
+    go.disabled=true;
+    postJson('/api/group/create',{name:p.querySelector('.gp-name').value.trim(),members:Object.keys(picked).map(function(k){return picked[k]})}).then(function(r){return r.json()}).then(function(j){
+      if(!j.ok){alert(j.error||'建群失败');count();return}
+      close();toast('群建好了');refreshList();if(listMode==='recent'&&!DESKTOP.matches)loadRecent();openFromNotice(j.id);
+    }).catch(function(e){alert('建群失败：'+e.message);count()});
+  });
+}
+$('#gNew').addEventListener('click',openGroupNew);
 function openSheet(silent){
   var list=$('#sList');
   var rec=listMode==='recent';
   $('#sTop').style.display=!DESKTOP.matches&&!clawSel&&!rec?'none':'';
+  $('#gNew').hidden=!rec;   // 建群只在「最近」里
   $('#sNew').hidden=rec;   // 「最近」里不新建：新建要先选 Claw   // 手机还没选 Claw：没有可搜、可新建的会话，搜索框和 ⊕ 一起藏起来
   if(!rec&&!DESKTOP.matches&&!clawSel){   // 手机：还没选 Claw，会话列表不加载任何会话
     list.innerHTML='<div class="s-empty claw-need">还没选择 Claw。<br>先选一个，会话列表才会显示对应的会话。<br><button type="button" class="claw-go">去选择</button></div>';
@@ -5196,7 +5337,9 @@ function histSig(h,total){var l=h[h.length-1]||{};return (total||h.length)+'|'+(
 function renderHistory(items,base){
   base=base||0;
   items.forEach(function(it,i){
-    if(it.kind==='user'){var hu=addUser(it.text,it.images);if(it.waiting&&hu)hu.classList.add('queued');stamp(hu,it.at)}
+    if(it.kind==='gm')stamp(addGm(it),it.at);
+    else if(it.kind==='user'&&session&&session.group)stamp(addGu(it),it.at);
+    else if(it.kind==='user'){var hu=addUser(it.text,it.images);if(it.waiting&&hu)hu.classList.add('queued');stamp(hu,it.at)}
     else if(it.kind==='ai'){addAi(it.text);stamp(feed.lastElementChild,it.at)}
     else if(it.kind==='peer')stamp(addPeer(it.from,it.text),it.at);
     else if(it.kind==='sys')addSys(it.text);
