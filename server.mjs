@@ -60,8 +60,8 @@ const uploadKeepDays = () => { const d = Math.round(Number(settings().uploadKeep
 setTimeout(() => { try { cleanUploads(uploadsDir(DATA), uploadKeepDays()); } catch {} }, 15000);   // 启动后清一次过期附件
 // 推送走哪：auto = clarelay 设备在线就交给它（推到外壳），不在线 claclaw 自己推；clarelay = 只走它；self = 只自己推；both = 都推
 const PUSH_VIA = ['auto', 'clarelay', 'self', 'both'];
-// 先感受推送量：有人正看着这个会话也照推、照记未读（电脑不响提示音）；以后要减少推送把它改回 false
-const PUSH_ALWAYS = true;
+// 有人正看着这个会话（页面在前台、clarelay 外壳报 visible 为 on、打开的就是它）：不记未读、不推送、不报 clarelay；改成 true = 照推照记
+const PUSH_ALWAYS = false;
 const pushVia = () => PUSH_VIA.includes(settings().pushVia) ? settings().pushVia : 'auto';
 const vidName = n => String(n || '视频').replace(/[\r\n\]「」]/g, ' ').slice(0, 80);
 const UPLOADS = uploadsDir(DATA);
