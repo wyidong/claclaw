@@ -775,13 +775,14 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 /* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
 #workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
 /* 干活时：这个会话所属 Claw 的图标一闪一闪（代替原来的绿点和「XXX 正在工作」） */
-#workBar .wlogo{flex:none;display:grid;place-items:center;width:18px;height:18px;animation:wpulse 1.8s ease-in-out infinite}
-@keyframes wpulse{0%,100%{opacity:1}50%{opacity:.6}}   /* 轻一点：看得出在闪就行 */
+#workBar .wlogo{flex:none;display:grid;place-items:center;width:18px;height:18px;animation:wbreath 2.4s ease-in-out infinite}
+@keyframes wpulse{0%,100%{opacity:1}50%{opacity:.6}}   /* 轻一点：看得出在闪就行（文字用） */
+/* Claw 图标干活时：原色、原大小 ⇄ 黑白、缩到一半，来回渐变（黑白的 logo 只看得出缩放） */
+@keyframes wbreath{0%,100%{filter:grayscale(0);transform:scale(1)}50%{filter:grayscale(1);transform:scale(.5)}}
 #workBar .wlogo svg,#workBar .wlogo img{display:block;width:18px;height:18px;object-fit:contain}
 #workBar .wlogo img.tile{border-radius:22.5%}
-/* Kimi 吉祥物干活时眨眼（代替一闪一闪） */
+/* Kimi 吉祥物干活时还会眨眼 */
 .km-mark .eyes{transform-box:fill-box;transform-origin:50% 50%}
-#rail .rclaw.busy svg.km-mark,.claw-card.busy .claw-ic.km-mark,#mtabs button.busy .tlogo:has(.km-mark),#workBar .wlogo:has(.km-mark){animation:none}
 #rail .rclaw.busy .km-mark .eyes,.claw-card.busy .km-mark .eyes,#mtabs button.busy .km-mark .eyes,#workBar .wlogo .km-mark .eyes,#sessBtn .dot.busy .km-mark .eyes{animation:kmblink 2.4s ease-in-out infinite}
 @keyframes kmblink{0%,82%,100%{transform:scaleY(1)}88%{transform:scaleY(.12)}94%{transform:scaleY(1)}}
 #workBar.quiet{color:var(--warn)}
@@ -851,7 +852,8 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
   #mtabs button.dot::after{content:'';position:absolute;top:3px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:#F23C3C}
   #mtabs button.logo.dot::after{top:4px;left:calc(50% + 11px);box-shadow:0 0 0 2px var(--surface)}   /* 大 logo：红点挂在右上角 */
   /* 这个 Claw 有任意会话在干活：「会话」图标跟着轻闪，和列表里目录的绿点呼应 */
-  #mtabs button.busy .tlogo,#mtabs button.busy .ti{animation:wpulse 1.8s ease-in-out infinite}
+  #mtabs button.busy .tlogo{animation:wbreath 2.4s ease-in-out infinite}
+  #mtabs button.busy .ti{animation:wpulse 1.8s ease-in-out infinite}
   /* 「设置」页：只显示设置；「会话」页：只显示列表 */
   #app.m-list #setPane{display:none;margin-top:0;padding-top:0;border-top:0}
   #app.m-list.set-on #setPane{display:block}
@@ -1116,7 +1118,7 @@ select.pe-in{text-align-last:right}
 .claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
 /* Claw 页卡片和底部「会话」logo 呼应：这个 Claw 有会话在干活 → logo 轻闪；有没看的 → logo 右上角红点（两者可以同时） */
 .claw-icw{position:relative;flex:none;display:block}
-.claw-card.busy .claw-ic{animation:wpulse 1.8s ease-in-out infinite}
+.claw-card.busy .claw-ic{animation:wbreath 2.4s ease-in-out infinite}
 .claw-card.unread .claw-icw::after{content:'';position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
@@ -1230,7 +1232,7 @@ select.pe-in{text-align-last:right}
   #rclawMore svg{transition:transform .18s}
   #rclaws.open #rclawMore svg{transform:rotate(180deg)}
   #rail .rclaw{position:relative}
-  #rail .rclaw.busy svg,#rail .rclaw.busy img{animation:wpulse 1.8s ease-in-out infinite}   /* 别的 Claw 有会话在干活：左栏图标轻闪 */
+  #rail .rclaw.busy svg,#rail .rclaw.busy img{animation:wbreath 2.4s ease-in-out infinite}   /* 别的 Claw 有会话在干活：左栏图标轻闪 */
   #rail .rclaw img,#rail .rclaw svg{width:26px;height:26px;object-fit:contain}
   #rail .rclaw img.tile{border-radius:22.5%}
   #rail .rclaw.on{background:var(--user-bg)}
@@ -1244,7 +1246,7 @@ select.pe-in{text-align-last:right}
   #railCur img,#railCur svg{width:26px;height:26px;object-fit:contain}
   #railCur img.tile{border-radius:22.5%}
   #railCur.on{background:var(--user-bg)}
-  #railCur.busy :is(svg,img),#railClaw.busy svg{animation:wpulse 1.8s ease-in-out infinite}
+  #railCur.busy :is(svg,img),#railClaw.busy svg{animation:wbreath 2.4s ease-in-out infinite}
   #railCur.dot::after,#railClaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
   /* Claw 页：像模型管理一样占满列表 + 聊天区，卡片按宽度排几列 */
   #app.claw-on #sheet{grid-column:2 / -1;z-index:6}
