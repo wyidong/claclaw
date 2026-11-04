@@ -342,6 +342,8 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #grpPane .gp-chip{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:3px 4px 3px 8px;border-radius:999px;background:var(--bg);font-size:13px}
 #grpPane .gp-chip i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:9em}
 #grpPane .gp-chip i{cursor:pointer}
+.gm .gm-att{display:flex;flex-direction:column;gap:6px;margin:6px 0 2px}
+.gm .gm-att .uimgs img{max-width:220px;max-height:220px;border-radius:10px;cursor:zoom-in}
 #grpPane .gp-chip.host{background:color-mix(in srgb,var(--accent) 16%,var(--bg))}
 #grpPane .gp-chip em{font-style:normal;font-size:11px;color:var(--accent);margin-left:2px}
 #grpPane .gp-hosthint{font-size:12px;color:var(--muted);margin:-2px 0 8px}
@@ -2514,6 +2516,7 @@ function addGm(it){
     // 每条结尾一个播放键：只念这一条（离开回来挑着听）；在念时变方块，点了停
     var ft=document.createElement('div');ft.className='gm-foot';var pb=document.createElement('button');pb.type='button';pb.className='gm-play';pb.setAttribute('aria-label','朗读这条');pb.title='朗读这条';pb.innerHTML=GM_PLAY.say;
     pb.addEventListener('click',function(){gmSay(pb,w.name,it.text)});ft.appendChild(pb);e.appendChild(ft)}
+  if(it.att&&it.att.length)e.insertBefore(gAttBox(it.att),e.querySelector('.gm-foot'));   // 成员发的图片 / 文件
   feed.appendChild(e);gStatTail();scrollDown();
   return e;
 }
@@ -2535,6 +2538,13 @@ function gmPlayShow(){
 }
 // 群聊里用户说的话：在别的电脑上发的标一下
 // 群里的附件：图片直接显示，视频 / 文件显示成文件块，点了打开（看不了的就下载）
+function gAttBox(att){
+  var box=document.createElement('div');box.className='gm-att';
+  var imgs=att.filter(function(a){return a.kind==='image'});
+  if(imgs.length){var g=document.createElement('div');g.className='uimgs';imgs.forEach(function(a){var im=document.createElement('img');im.src=gAttUrl(a);im.alt=a.name||'图片';im.loading='lazy';im.addEventListener('click',function(){showImage(im.src)});im.addEventListener('load',function(){scrollDown()});g.appendChild(im)});box.appendChild(g)}
+  att.filter(function(a){return a.kind!=='image'}).forEach(function(a){var t=fileTile(a.name,(a.kind==='video'?'视频 ':'')+fmtSize(a.size||0),gAttUrl(a));t.dataset.gurl=gAttUrl(a);box.appendChild(t)});
+  return box;
+}
 function gAttUrl(a){return '/api/group/att?id='+encodeURIComponent(session.id)+'&aid='+encodeURIComponent(a.aid)}
 function addGu(it){var att=it.att||[],f=att.filter(function(a){return a.kind!=='image'})[0];
   var e=addUser(it.text,att.filter(function(a){return a.kind==='image'}).map(gAttUrl),f?{kind:'file',name:f.name,label:(f.kind==='video'?'视频 ':'')+fmtSize(f.size||0),url:gAttUrl(f)}:null);

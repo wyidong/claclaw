@@ -51,6 +51,7 @@ export const logLine = (it, members, dir) => '#' + it.seq + ' ' + stamp(it.at ||
 export const isAid = s => /^[0-9a-f]{16}(\.[a-z0-9]{1,8})?$/.test(String(s || ''));
 const ATT_KIND = { image: '图片', video: '视频', file: '文件' };
 export const cleanAtt = a => Array.isArray(a) ? a.filter(x => x && isAid(x.aid)).slice(0, 10).map(x => ({ aid: x.aid, kind: ATT_KIND[x.kind] ? x.kind : 'file', name: String(x.name || '').replace(/[\r\n「」\]]/g, ' ').slice(0, 80), size: Number.isFinite(x.size) ? x.size : 0 })) : undefined;
+export const attKind = name => /\.(png|jpe?g|gif|webp)$/i.test(name || '') ? 'image' : /\.(mp4|mov|m4v|webm)$/i.test(name || '') ? 'video' : 'file';
 const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
 // 一条的附件写成文字：dir 给了就带上本机路径（成员要看就去读）
 export const attText = (it, dir) => (it.att || []).map(a => '[' + ATT_KIND[a.kind] + '「' + (a.name || a.aid) + '」 ' + fmtSize(a.size) + (dir ? '：' + path.join(dir, a.aid) : '') + ']').join(' ');
@@ -326,7 +327,8 @@ export class Groups {
       this.setStatus(g, key, '');
       if (r?.ok) {
         g.seen[key] = Math.max(g.seen[key] || 0, job.trigger);
-        const it = this.add(g, { kind: 'gm', who: key, text: String(r.reply || '（这一轮没有文字回复）').slice(0, 20000), depth: job.depth + 1 });
+        const att = cleanAtt(r.att);
+        const it = this.add(g, { kind: 'gm', who: key, text: String(r.reply || (att?.length ? '' : '（这一轮没有文字回复）')).slice(0, 20000), att: att?.length ? att : undefined, depth: job.depth + 1 });
         g.seen[key] = it.seq; this.save(g);
         this.route(g, it);
       } else this.add(g, { kind: 'sys', text: '「' + m.name + '」没收到：' + (r?.error || '未知错误') });
@@ -369,16 +371,24 @@ export class Groups {
   }
 
   // 协同成员先回了 202，回复稍后以「回复 <编号>」单独发来：只收自己发过、同一个对方的编号，一个编号只收一次
-  remoteReply(id, peerId, replyTo, text) {
+  // att：回复带的附件（在对方那台上），先拉过来再贴
+  remoteReply(id, peerId, replyTo, text, att) {
     const g = this.get(id);
     if (!g || g.mirror) return false;
     const p = g.pending[replyTo];
     if (!p || p.peerId !== peerId) return false;
     delete g.pending[replyTo];
-    this.setStatus(g, p.key, '');
-    const it = this.add(g, { kind: 'gm', who: p.key, text: String(text || '').replace(/^回复 \S+\n?/, '') || '（这一轮没有文字回复）', depth: p.depth });
-    g.seen[p.key] = it.seq; this.save(g);
-    this.route(g, it);
+    att = cleanAtt(att);
+    (async () => {
+      let note = '';
+      if (att?.length) { this.setStatus(g, p.key, '正在传附件…'); try { for (const a of att) await this.fetchAtt(id, peerId, a); } catch (e) { note = '\n（附件没传过来：' + e.message + '）'; att = undefined; } }
+      if (g.closed) return;
+      this.setStatus(g, p.key, '');
+      const body = String(text || '').replace(/^回复 \S+\n?/, '');
+      const it = this.add(g, { kind: 'gm', who: p.key, text: (body || (att?.length ? '' : '（这一轮没有文字回复）')) + note, att: att?.length ? att : undefined, depth: p.depth });
+      g.seen[p.key] = it.seq; this.save(g);
+      this.route(g, it);
+    })().catch(e => this.log('group reply', e.message));
     return true;
   }
 

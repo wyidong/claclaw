@@ -323,3 +323,26 @@ test('附件：存进群目录，投递给本机成员带路径、协同成员�
   host.dissolve(g.id);
   assert.ok(!fs.existsSync(host.attDir(g.id)));
 });
+
+test('成员回复带附件：本机回复直接带 att；协同成员 202 后的回复先把附件拉过来再贴', async () => {
+  let host, mem;
+  const mk = (deliver, peerOp) => new Groups({ dir: tmp(), retryMs: 10, syncDelay: 0, deliver, peerOp });
+  host = mk(async m => {
+    if (m.peerId) return { accepted: true, msgId: 'm1' };
+    return { ok: true, reply: '图来了', att: [host.saveAtt(g.id, { kind: 'image', name: 'a.png', buf: Buffer.from('img') })] };
+  }, async (pid, b) => { if (b.op === 'sync') { mem.applyMirror('HOST', b.group); return { ok: true }; } if (b.op === 'attget') return mem.attChunk(fromWire(b.id), 'HOST', b.aid, b.off); return { ok: true }; });
+  mem = mk(async () => ({ ok: true }), async () => ({ ok: true }));
+  const g = host.create({ members: [M('s1', '后端'), M('abcd1234', '前端', { peerId: 'P15', peerName: '15' })] });
+  host.post(g.id, '@后端 发图');
+  for (let i = 0; i < 5; i++) await flush();
+  const r1 = g.items.find(x => x.kind === 'gm' && x.who === 's1');
+  assert.equal(r1.text, '图来了'); assert.equal(r1.att[0].kind, 'image');
+  host.post(g.id, '@前端 发文件');
+  for (let i = 0; i < 5; i++) await flush();
+  const a = mem.saveAtt(g.id, { kind: 'file', name: 'r.txt', buf: Buffer.from('report') });
+  assert.ok(host.remoteReply(g.id, 'P15', 'm1', '回复 m1\n', [a]));
+  for (let i = 0; i < 10; i++) await flush();
+  const r2 = g.items.find(x => x.kind === 'gm' && x.who === 'P15/abcd1234');
+  assert.equal(r2.text, ''); assert.equal(r2.att[0].name, 'r.txt');
+  assert.equal(fs.readFileSync(host.attFile(g.id, a.aid), 'utf8'), 'report');
+});
