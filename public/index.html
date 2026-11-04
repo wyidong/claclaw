@@ -4708,10 +4708,11 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){var ch=listMode!=='recent';mTab('recent');if(ch)openSheet()});
 $('#setRecentClear').addEventListener('click',function(){
-  if(!confirm('清空「最近」列表？\n只清空列表，不会删除任何会话。'))return;
+  if(!confirm('清空「最近」列表？\n只清空列表，不会删除任何会话；群聊留着，要删在群上左滑删除。'))return;
   postJson('/api/recent/clear',{}).then(function(r){return r.json()}).then(function(j){
     if(!j.ok){alert(j.error||'清空失败');return}
-    toast('已清空最近');if(listMode==='recent'){lastList=null;$('#sList').innerHTML='';if(DESKTOP.matches)openSheet()}
+    listSave('recent',(listSaved('recent')||[]).filter(function(x){return x.claw==='group'}));   // 缓存也只留群，免得先画出清掉的旧列表
+    toast('已清空最近（群聊保留）');if(listMode==='recent'){lastList=null;$('#sList').innerHTML='';loadRecent()}   // 重新拉：群聊还在
   }).catch(function(e){alert('清空失败：'+e.message)});
 });
 // 背景里的「更新客户端」圈（手机的最近 / 会话 / Claw 页）：只在页面内容没盖到它的时候显示、能点
@@ -5740,7 +5741,7 @@ function srvNext(){
   var it=srvQ[0];if(!it){ttsShowStop();return}
   srvBusy=true;
   srvKeepIdle(true);   // 开念就点亮静音保活，整段只占一个媒体会话（见 srvKeepIdle）
-  srvQ.slice(0,4).forEach(srvFetch);   // 后面几句先并行合成，念完一句下一句已经好了
+  srvQ.slice(0,4).forEach(function(x){srvFetch(x).catch(function(){})});   // 后面几句先并行合成，念完一句下一句已经好了
   var gen=srvGen;
   srvFetch(it).then(function(){
     if(gen!==srvGen)return;
