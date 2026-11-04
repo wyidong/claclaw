@@ -300,6 +300,11 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .peer .body{word-break:break-word}
 /* 群聊：成员的话（Claw logo + 协同标识 + 名字）、状态行、建群按钮和选成员面板 */
 .peer.gm{border-left-color:var(--accent)}
+.gm-foot{display:flex;justify-content:flex-end;margin:2px -6px -4px 0}
+.gm-play{width:30px;height:30px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.gm-play svg{width:18px;height:18px}
+.gm-play:hover{background:var(--surface);color:var(--ink)}
+.gm-play.on{color:var(--accent)}
 .gm-who{display:flex;align-items:center;gap:4px;align-self:flex-start;margin:0 0 -10px;padding:2px 8px 2px 2px;border:0;border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 群成员：和回复分开，点一下 @ 它 */
 .gm-who:active,.gm-who:hover{background:var(--code-bg)}
 .gm-ic{display:inline-grid;place-items:center;width:18px;height:18px;flex:none}
@@ -2501,9 +2506,28 @@ function addGm(it){
   var w=it.who||{},e=document.createElement('div');e.className='peer gm';
   var f=document.createElement('button');f.type='button';f.className='gm-who';f.innerHTML=gmAv(w);var n=document.createElement('span');n.textContent=w.name||'成员';f.appendChild(n);
   if(w.name)f.addEventListener('click',function(){atInsert(w.name)});feed.appendChild(f);
-  if(it.text){var b=document.createElement('div');b.className='body md';b.innerHTML=md(it.text);e.appendChild(b)}
+  if(it.text){var b=document.createElement('div');b.className='body md';b.innerHTML=md(it.text);e.appendChild(b);
+    // 每条结尾一个播放键：只念这一条（离开回来挑着听）；在念时变方块，点了停
+    var ft=document.createElement('div');ft.className='gm-foot';var pb=document.createElement('button');pb.type='button';pb.className='gm-play';pb.setAttribute('aria-label','朗读这条');pb.title='朗读这条';pb.innerHTML=GM_PLAY.say;
+    pb.addEventListener('click',function(){gmSay(pb,w.name,it.text)});ft.appendChild(pb);e.appendChild(ft)}
   feed.appendChild(e);gStatTail();scrollDown();
   return e;
+}
+var GM_PLAY={say:'<svg viewBox="0 0 24 24"><path d="M8.5 6v12l9.5-6z" fill="currentColor"/></svg>',stop:'<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>'},gmPlaying=null;
+function gmSay(btn,name,text){
+  var again=gmPlaying===btn&&ttsSpeaking();
+  ttsStop();ttsHush=false;if(again)return;
+  tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+  ttsManual=true;ttsSay((name?name+' 说：':'')+text,true);
+  gmPlaying=btn;gmPlayAt=Date.now();gmPlayGot=false;gmPlayShow();
+}
+// 成员回复上的播放键跟着朗读状态走：念完 / 停了变回三角
+var gmPlayAt=0,gmPlayGot=false;
+function gmPlayShow(){
+  var sp=ttsSpeaking();if(sp)gmPlayGot=true;
+  // 声音列表要先拉、合成要等：刚点下还没出声时别急着变回三角（最多等 8 秒）
+  if(gmPlaying&&(!gmPlaying.isConnected||(!sp&&(gmPlayGot||Date.now()-gmPlayAt>8000)))){gmPlaying.innerHTML=GM_PLAY.say;gmPlaying.classList.remove('on');gmPlaying=null}
+  if(gmPlaying&&!gmPlaying.classList.contains('on')){gmPlaying.innerHTML=GM_PLAY.stop;gmPlaying.classList.add('on')}
 }
 // 群聊里用户说的话：在别的电脑上发的标一下
 function addGu(it){var e=addUser(it.text);if(e&&it.via){var v=document.createElement('div');v.className='u-via';v.textContent='在 '+it.via+' 上发的';e.insertBefore(v,e.firstChild)}gStatTail();return e}
@@ -3228,7 +3252,7 @@ function onEvent(m){
       if(outbox&&gi.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');stamp(outbox.el,Date.now());outboxDone()}
       else{if(outbox&&gi.text===outbox.text)outboxDone();stamp(addGu(gi),gi.at)}
       setBusy(false);
-    }else if(gi.kind==='gm')stamp(addGm(gi),gi.at);
+    }else if(gi.kind==='gm'){stamp(addGm(gi),gi.at);if(gi.text&&ttsModeAllows(3))ttsSay(((gi.who&&gi.who.name)?gi.who.name+' 说：':'')+gi.text)}   // 开着自动朗读：成员回复来一条念一条，开头报名字
     else{addSys(gi.text);gStatTail();if(gi.fail&&outbox){outboxRestore();setBusy(false)}}
     refreshList();
     break;
@@ -6160,7 +6184,7 @@ var dockTopPut=function(){};
   put();
 })();
 function ttsShowStop(){
-  dockTopPut();
+  dockTopPut();gmPlayShow();
   var sp=ttsSpeaking();
   if(!sp&&ttsClaimed){ttsClaimed=false;ttsManual=false;wsSend({t:'tts',on:0})}
   if(!(srvBusy||srvQ.length||srvPlaying()))srvKeepIdle();
