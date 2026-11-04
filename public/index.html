@@ -5869,16 +5869,20 @@ function ttsSay(src,force){
 }
 // 浏览器自带的朗读：自己排队，一段念完再交下一段。一次全塞给浏览器的话，Edge 的在线声音（Online (Natural)）
 // 会让后一段把前一段打断（interrupted），只念出一两句
-var devQ=[],devBusy=false,devGen=0;
+var devQ=[],devBusy=false,devGen=0,devAgain=false;
 function devPump(){
   if(devBusy)return;
   if(!devQ.length){setTimeout(ttsShowStop,50);return}
   devBusy=true;
-  var gen=devGen,started=false,u=new SpeechSynthesisUtterance(devQ.shift());
+  var gen=devGen,started=false,u=new SpeechSynthesisUtterance(devQ.shift()),again=devAgain;devAgain=false;
   u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
   var done=function(){if(gen!==devGen)return;devBusy=false;devPump()};
   u.onstart=function(){started=true;ttsClaim();ttsShowStop()};
-  u.onend=done;u.onerror=function(e){if(gen===devGen&&e&&e.error)ttsDbg('device error: '+e.error);done()};
+  u.onend=done;u.onerror=function(e){
+    if(gen===devGen&&e&&e.error)ttsDbg('device error: '+e.error+(started?'':' (未开念)'));
+    if(gen===devGen&&!started&&e&&e.error==='interrupted'&&!again){devQ.unshift(u.text);devAgain=true}   // 还没开念就被打断：重念一次，不跳过
+    done();
+  };
   speechSynthesis.speak(u);
   // 卡住（一直「在念」却不出声）：8 秒还没开念就全部取消，免得停止键一直挂着
   setTimeout(function(){if(gen===devGen&&devBusy&&!started){ttsDbg('device stuck, cancel');ttsStop()}},8000);
@@ -6168,11 +6172,11 @@ function ttsLastReply(){
   c.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,blockquote').forEach(function(x){x.append('\n')});
   return c.textContent;
 }
-function ttsStop(){srvStop();devGen++;devQ=[];devBusy=false;if(ttsOk())speechSynthesis.cancel();ttsManual=false;ttsShowStop()}
+function ttsStop(){srvStop();devGen++;devQ=[];devBusy=false;devAgain=false;if(ttsOk())speechSynthesis.cancel();ttsManual=false;ttsShowStop()}
 // 开始出声时告诉服务器：别的页面（另一个标签 / clarelay 里嵌的）停下；手动点的优先，自动念的让给正在念的
 var ttsManual=false,ttsClaimed=false;
 function ttsClaim(){ttsClaimed=true;wsSend({t:'tts',on:1,manual:ttsManual?1:0})}
-function ttsUnlock(){if(tts.on&&ttsSrvVoice())srvUnlock();if(!tts.on||!ttsOk()||tts.unlocked)return;tts.unlocked=true;var u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}
+function ttsUnlock(){if(tts.on&&ttsSrvVoice())srvUnlock();if(!tts.on||!ttsOk()||tts.unlocked)return;tts.unlocked=true;if(!COARSE.matches)return;   /* 电脑上不用空格解锁（Edge 上它会打断正在念的） */var u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}
 function ttsWake(){
   if(!tts.on||document.hidden||!navigator.wakeLock||tts.lock)return;
   navigator.wakeLock.request('screen').then(function(l){tts.lock=l;l.addEventListener('release',function(){tts.lock=null})}).catch(function(){});
@@ -6239,7 +6243,8 @@ $('#ttsStop').addEventListener('click',function(){
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
   if(ttsSpeaking()){ttsStop();ttsHush=!!busy;if(narration&&narration.onUserStop)narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
-  tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);else ttsUnlock();
+  // 浏览器自带的声音不用先念一个空格解锁：这次点击里马上就开念；Edge 上那个空格会把第一句打断
+  tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
   ttsDbg('tap say '+(ttsSrvVoice()||'want='+(tts.want||'-'))+' srv='+(tts.srv?tts.srv.length:'-')+(DESKTOP.matches?' desk':' mob'));
   ttsManual=true;ttsSay(ttsLastReply(),true);ttsShowStop();
 });
