@@ -5708,8 +5708,16 @@ function ttsLoadSrv(){
 }
 // 用电脑合成的哪个声音：选过就用选的；没选过（这台浏览器第一次用）默认用最好的那个，不落到浏览器自带的（Mac 上的 Chrome 常常一声不响）
 // 选的是这台设备上的声音、但它现在没有了（换了浏览器 / 系统）也一样
-function ttsWantSrv(){return !tts.want||/^srv:/.test(tts.want)||!ttsVoices().some(function(v){return v.voiceURI===tts.want})}
-function ttsSrvVoice(){var w=/^srv:/.test(tts.want)?tts.want:ttsWantSrv()&&tts.srv&&tts.srv[0]?'srv:'+tts.srv[0].name:'';return w&&(tts.srv||[]).some(function(v){return 'srv:'+v.name===w})?w.slice(4):''}
+// Edge 自带的「Microsoft Xiaoyi Online (Natural)」这类在线声音，和电脑合成的微软声音是同一个；Edge 网页里用它常常念一两句就断，
+// 换成电脑合成的同名声音来念（听起来一样）
+function ttsEdgeTwin(w){var m=/^Microsoft (\w+) Online \(Natural\) - Chinese \((Mainland|Taiwan)/.exec(w||'');return m?'edge:zh-'+(m[2]==='Taiwan'?'TW':'CN')+'-'+m[1]+'Neural':''}
+function ttsWantSrv(){return !tts.want||/^srv:/.test(tts.want)||!!ttsEdgeTwin(tts.want)||!ttsVoices().some(function(v){return v.voiceURI===tts.want})}
+function ttsSrvVoice(){
+  var has=function(n){return (tts.srv||[]).some(function(v){return v.name===n})},tw=ttsEdgeTwin(tts.want);
+  if(/^srv:/.test(tts.want))return has(tts.want.slice(4))?tts.want.slice(4):'';
+  if(tw&&has(tw))return tw;
+  return ttsWantSrv()&&tts.srv&&tts.srv[0]?tts.srv[0].name:'';
+}
 function ttsPickVoice(){
   var vs=ttsVoices(),srv=tts.srv||[];
   tts.voice=vs.find(function(v){return v.voiceURI===tts.want})||vs[0]||null;
@@ -5885,7 +5893,7 @@ function devPump(){
   };
   speechSynthesis.speak(u);
   // 卡住（一直「在念」却不出声）：8 秒还没开念就全部取消，免得停止键一直挂着
-  setTimeout(function(){if(gen===devGen&&devBusy&&!started){ttsDbg('device stuck, cancel');ttsStop()}},8000);
+  setTimeout(function(){if(gen===devGen&&devBusy&&!started&&!speechSynthesis.speaking){ttsDbg('device stuck, cancel');ttsStop()}},8000);   // Edge 有时出声了也不报开念：在念就别取消
 }
 // P0：两条播放路径都要能立刻出声。服务端声音插队；系统语音只能 cancel 后重念 P0，
 // 被丢掉的正文不再接（设计评审允许这个降级）。
