@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const HOPS = 2, INLINE = 400, CUR_MAX = 1500, KEEP = 500, SNAP = 200, LOG_MAX = 4e6, ATT_MAX = 12 * 1024 * 1024, ATT_CHUNK = 512 * 1024;
+export const HOPS = 5, INLINE = 400, CUR_MAX = 1500, KEEP = 500, SNAP = 200, LOG_MAX = 4e6, ATT_MAX = 12 * 1024 * 1024, ATT_CHUNK = 512 * 1024;
 export const isGroupId = id => /^gp:[0-9a-f]{8}$/.test(String(id || ''));
 export const toWire = id => 'gp-' + String(id).slice(3);   // 对方会把 from_session 里 [\w-] 以外的字符去掉
 export const fromWire = s => /^gp-[0-9a-f]{8}$/.test(String(s || '')) ? 'gp:' + String(s).slice(3) : null;

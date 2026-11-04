@@ -87,13 +87,13 @@ test('建群至少 2 个成员；@ 谁谁回，回复贴回群里；不 @ 不触
   assert.ok(!calls[1].text.includes('大家好'));
 });
 
-test('成员互相 @ 最多转 2 跳，不转给自己', async () => {
+test('成员互相 @ 最多转 5 跳，不转给自己', async () => {
   const say = { s1: '@前端 接口好了', s2: '@测试 你看', s3: '@后端 有问题', };
   const { groups, calls } = setup(async m => ({ ok: true, reply: say[m.id] || 'ok' }));
   const g = groups.create({ members: [M('s1', '后端'), M('s2', '前端'), M('s3', '测试')] });
   groups.post(g.id, '@后端 开工');
-  for (let i = 0; i < 10; i++) await flush();
-  assert.deepEqual(calls.map(c => c.key), ['s1', 's2', 's3']);
+  for (let i = 0; i < 20; i++) await flush();
+  assert.deepEqual(calls.map(c => c.key), ['s1', 's2', 's3', 's1', 's2', 's3']);
   assert.equal(calls[1].o.asUser, false);
   assert.ok(g.items.some(x => x.kind === 'sys' && /转发上限/.test(x.text)));
 });
