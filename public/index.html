@@ -341,6 +341,10 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #grpPane .gp-chips:empty{display:none}
 #grpPane .gp-chip{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:3px 4px 3px 8px;border-radius:999px;background:var(--bg);font-size:13px}
 #grpPane .gp-chip i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:9em}
+#grpPane .gp-chip i{cursor:pointer}
+#grpPane .gp-chip.host{background:color-mix(in srgb,var(--accent) 16%,var(--bg))}
+#grpPane .gp-chip em{font-style:normal;font-size:11px;color:var(--accent);margin-left:2px}
+#grpPane .gp-hosthint{font-size:12px;color:var(--muted);margin:-2px 0 8px}
 #grpPane .gp-chip button{border:0;background:none;color:var(--muted);font-size:12px;padding:0 4px;cursor:pointer}
 #grpPane .gp-nh{display:flex;align-items:center;gap:8px;width:100%;padding:9px 4px;border:0;border-radius:9px;background:none;color:var(--ink);font:inherit;font-size:14.5px;text-align:left;cursor:pointer}
 #grpPane .gp-nh:hover{background:var(--bg)}
@@ -3257,7 +3261,7 @@ function onEvent(m){
     refreshList();
     break;
   case 'group.meta':   // 改了群名 / 成员
-    if(session&&m.id===session.id&&session.group){session.title=m.title;session.group.members=m.members||[];session.cwdShort=(m.members||[]).length+' 个成员：'+(m.members||[]).map(function(x){return x.name}).join('、');setHeader()}
+    if(session&&m.id===session.id&&session.group){session.title=m.title;session.group.members=m.members||[];session.cwdShort=(m.members||[]).length+' 个成员：'+(m.members||[]).map(function(x){return x.name+(x.host?'（主理人）':'')}).join('、');setHeader()}
     refreshList();if(listMode==='recent'&&!DESKTOP.matches&&mList)loadRecent();
     break;
   case 'group.status':
@@ -4927,22 +4931,24 @@ function openGroupPick(gid){
   var p=$('#grpPane');
   if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>'+(gid?'群设置':'建群')+'</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
-    +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><div class="gp-chips"></div><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
+    +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><div class="gp-chips"></div><div class="gp-hosthint" hidden>点成员名设为主理人（再点取消）：你发的消息没 @ 人时由它接</div><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
     +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go" disabled>'+(gid?'保存':'建群')+'</button></div></div>';
   p.classList.add('on');
   var close=function(){p.classList.remove('on')};
   p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel').addEventListener('click',close);
-  var list=p.querySelector('.gp-list'),go=p.querySelector('.gp-go'),chips=p.querySelector('.gp-chips'),nameIn=p.querySelector('.gp-name'),picked={},order=[];
+  var list=p.querySelector('.gp-list'),go=p.querySelector('.gp-go'),chips=p.querySelector('.gp-chips'),nameIn=p.querySelector('.gp-name'),picked={},order=[],host='';
   var keyOf=function(x,peer){return (peer?peer.peerId+'/':'')+x.id};
   var sync=function(){
     var n=order.length;go.disabled=n<2;go.textContent=(gid?'保存':'建群')+(n?'（'+n+'）':'');
     chips.innerHTML='';
-    order.forEach(function(k){var m=picked[k],c=document.createElement('span');c.className='gp-chip';c.innerHTML=gmAv({claw:m.claw,collab:!!m.peerId})+'<i></i><button type="button" aria-label="移出">✕</button>';c.querySelector('i').textContent=m.title||'(无标题)';
+    p.querySelector('.gp-hosthint').hidden=n<2;
+    order.forEach(function(k){var m=picked[k],c=document.createElement('span');c.className='gp-chip'+(k===host?' host':'');c.innerHTML=gmAv({claw:m.claw,collab:!!m.peerId})+'<i></i>'+(k===host?'<em>主理人</em>':'')+'<button type="button" aria-label="移出">✕</button>';c.querySelector('i').textContent=m.title||'(无标题)';
+      c.querySelector('i').addEventListener('click',function(){host=host===k?'':k;sync()});
       c.querySelector('button').addEventListener('click',function(){unpick(k)});chips.appendChild(c)});
     list.querySelectorAll('.gp-row input').forEach(function(cb){cb.checked=!!picked[cb.dataset.k]});
   };
   var pick=function(k,m){if(!picked[k]){picked[k]=m;order.push(k)}sync()};
-  var unpick=function(k){delete picked[k];order=order.filter(function(x){return x!==k});sync()};
+  var unpick=function(k){delete picked[k];order=order.filter(function(x){return x!==k});if(host===k)host='';sync()};
   var row=function(x,peer){
     var k=keyOf(x,peer),l=document.createElement('label');l.className='gp-row';
     l.innerHTML='<input type="checkbox"><span class="gp-av">'+gmAv({claw:x.claw,collab:!!peer})+'</span><span class="gp-t"><b></b><small></small></span>';
@@ -5008,13 +5014,13 @@ function openGroupPick(gid){
   };
   if(gid)fetch('/api/group/info?id='+encodeURIComponent(gid)).then(function(r){return r.json()}).then(function(j){
     if(j.error){close();toast(j.error);return}
-    nameIn.value=j.name||'';(j.members||[]).forEach(function(m){var k=(m.peerId?m.peerId+'/':'')+m.id;picked[k]={id:m.id,peerId:m.peerId,title:m.name||m.title,claw:m.claw};order.push(k)});
+    nameIn.value=j.name||'';host=j.host||'';(j.members||[]).forEach(function(m){var k=(m.peerId?m.peerId+'/':'')+m.id;picked[k]={id:m.id,peerId:m.peerId,title:m.name||m.title,claw:m.claw};order.push(k)});
     sync();load();
   }).catch(function(e){close();toast('读不到群信息：'+e.message)});
   else{sync();load()}
   go.addEventListener('click',function(){
     go.disabled=true;
-    var body={name:nameIn.value.trim(),members:order.map(function(k){return picked[k]})};if(gid)body.id=gid;
+    var body={name:nameIn.value.trim(),members:order.map(function(k){return picked[k]}),host:host};if(gid)body.id=gid;
     postJson(gid?'/api/group/edit':'/api/group/create',body).then(function(r){return r.json()}).then(function(j){
       if(!j.ok){alert(j.error||'没保存成功');sync();return}
       close();refreshList();if(listMode==='recent'&&!DESKTOP.matches)loadRecent();

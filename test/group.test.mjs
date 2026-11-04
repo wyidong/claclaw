@@ -234,3 +234,24 @@ test('改群名、加减成员：保留老成员的名字，新成员名字不�
   assert.throws(() => groups.edit(g.id, { members: [M('s1', '后端')] }));
   assert.equal(g.members.length, 3);
 });
+
+test('主理人：用户没 @ 人由主理人接，@ 了谁只给谁；成员没 @ 不转主理人；移出主理人就清掉', async () => {
+  const { groups, calls } = setup(async m => ({ ok: true, reply: m.name + ' 收到' }));
+  const g = groups.create({ members: [M('s1', '后端'), M('s2', '前端'), M('s3', '测试')], host: 's2' });
+  assert.equal(g.hostName, '前端');
+  assert.equal(g.membersView().find(m => m.host).name, '前端');
+  groups.post(g.id, '今天做什么');
+  await flush();
+  assert.equal(calls.length, 1); assert.equal(calls[0].key, 's2'); assert.equal(calls[0].o.host, true);
+  groups.post(g.id, '@后端 写接口');
+  await flush();
+  assert.equal(calls.length, 2); assert.equal(calls[1].key, 's1'); assert.equal(calls[1].o.host, false);   // 成员回复没 @ 人，不再转主理人
+  assert.throws(() => groups.edit(g.id, { host: 'nope' }));
+  groups.edit(g.id, { host: 's3' });
+  assert.equal(g.hostName, '测试'); assert.ok(/主理人/.test(g.items.at(-1).text));
+  groups.edit(g.id, { members: [M('s1', '后端'), M('s2', '前端')] });
+  assert.equal(g.host, ''); assert.ok(g.items.some(x => x.kind === 'sys' && /没有主理人/.test(x.text)));
+  groups.post(g.id, '还在吗');
+  await flush();
+  assert.equal(calls.length, 2, '没有主理人：不 @ 不触发');
+});

@@ -64,11 +64,13 @@ export function composeDelivery({ items, since, upto, selfKey, members, current 
 class Group {
   constructor(store, d) {
     this.store = store;
-    Object.assign(this, { name: '', created: Date.now(), members: [], items: [], seen: {}, pending: {}, seqMax: 0, mirror: null, status: {} }, d);
+    Object.assign(this, { name: '', created: Date.now(), members: [], items: [], seen: {}, pending: {}, seqMax: 0, mirror: null, status: {}, host: '' }, d);
     this.subs = new Set(); this.q = {}; this.running = {}; this.closed = false;
     this.busy = false; this.queue = [];
   }
   get title() { return this.mirror ? (this.mirrorTitle || this.name || '群聊') : this.name || cut(this.members.map(m => m.name).join('、'), 24) || '群聊'; }
+  // 主理人：用户发的消息没 @ 任何人时由它接（镜像里看成员的 host 标记）
+  get hostName() { return (this.mirror ? this.members.find(m => m.host) : this.members.find(m => m.key === this.host))?.name || ''; }
   get lastAt() { const a = this.items.length ? this.items[this.items.length - 1].at : this.created; return Number.isFinite(a) ? a : 0; }
   // 给 ws 用：和各 Claw 的会话进程同样的接口
   subscribe(ws) { this.subs.add(ws); }
@@ -85,7 +87,7 @@ class Group {
   }
   history() { return { items: this.items.map(it => this.view(it)), total: this.items.length }; }
   statusView() { return this.mirror ? (this.status || []) : Object.entries(this.status).map(([k, text]) => ({ name: this.members.find(m => m.key === k)?.name || '', text })); }
-  membersView(viewer) { return this.mirror ? this.members : this.members.map(m => memberView(m, viewer)); }
+  membersView(viewer) { return this.mirror ? this.members : this.members.map(m => ({ ...memberView(m, viewer), host: m.key === this.host || undefined })); }
   preview() {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.view(this.items[i]);
@@ -94,7 +96,7 @@ class Group {
     return '';
   }
   peers() { return [...new Set(this.members.map(m => m.peerId).filter(Boolean))]; }
-  toJSON() { const { name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, id } = this; return { id, name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, status: this.mirror ? this.status : undefined }; }
+  toJSON() { const { name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, id, host } = this; return { id, name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, host: host || undefined, status: this.mirror ? this.status : undefined }; }
 }
 // viewer：给哪台电脑看（undefined = 本机）；collab = 对看的人来说是不是别的电脑上的会话
 const memberView = (m, viewer) => ({ name: m.name, claw: m.claw || '', collab: viewer === undefined ? !!m.peerId : m.peerId !== viewer, peer: m.peerName || undefined });
@@ -127,7 +129,7 @@ export class Groups {
   save(g) { if (g.closed) return; const f = path.join(this.dir, g.id.slice(3) + '.json'); fs.writeFileSync(f + '.tmp', JSON.stringify(g)); fs.renameSync(f + '.tmp', f); }
 
   // members：[{id, peerId?, peerName?, title, claw}]
-  create({ name, members }) {
+  create({ name, members, host }) {
     const seen = new Set(), ms = [];
     for (const m of members || []) {
       if (!m.id || seen.has(memberKey(m))) continue;
@@ -135,14 +137,15 @@ export class Groups {
     }
     if (ms.length < 2) throw new Error('至少选 2 个会话');
     let id; do id = 'gp:' + crypto.randomBytes(4).toString('hex'); while (this.map.has(id));
-    const g = new Group(this, { id, name: String(name || '').trim().slice(0, 40), members: memberNames(ms) });
+    const g = new Group(this, { id, name: String(name || '').trim().slice(0, 40), members: memberNames(ms), host: ms.some(m => m.key === host) ? host : '' });
     this.map.set(id, g); this.save(g); this.syncOut(g);
     this.log('group create', id, ms.length + ' members');
     return g;
   }
 
   // 改群名 / 加减成员（只在建群的电脑上改）：老成员名字不变，新成员名字不和现有的撞；被移出的对方不再有成员就让它删掉镜像
-  edit(id, { name, members } = {}) {
+  // host：主理人的成员 key（'' = 不设）
+  edit(id, { name, members, host } = {}) {
     const g = this.get(id);
     if (!g) throw new Error('这个群已经解散了');
     if (g.mirror) throw new Error('群名和成员只能在建群的电脑上改');
@@ -168,6 +171,12 @@ export class Groups {
       if (named.length) notes.push('把 ' + named.map(m => m.name).join('、') + ' 加进群');
       if (removed.length) notes.push('把 ' + removed.map(m => m.name).join('、') + ' 移出群');
       for (const pid of oldPeers) if (!g.peers().includes(pid)) this.peerOp(pid, { op: 'dissolve', id: toWire(id) }).catch(e => this.log('group dissolve', pid, e.message));
+      if (g.host && !out.some(m => m.key === g.host)) { g.host = ''; if (host === undefined) notes.push('主理人被移出群，现在没有主理人'); }
+    }
+    if (typeof host === 'string') {
+      const h = host ? g.members.find(m => m.key === host) : null;
+      if (host && !h) throw new Error('主理人得是群里的成员');
+      if ((h?.key || '') !== g.host) { g.host = h?.key || ''; notes.push(h ? '设「' + h.name + '」为主理人（没 @ 人的消息由它接）' : '取消了主理人'); }
     }
     this.save(g);
     g.emit({ t: 'group.meta', id, title: g.title, members: g.membersView() });
@@ -212,7 +221,8 @@ export class Groups {
 
   route(g, it) {
     if (it.kind === 'sys') return;
-    const targets = parseMentions(it.text, g.members).filter(k => k !== it.who);
+    let targets = parseMentions(it.text, g.members).filter(k => k !== it.who);
+    if (!targets.length && it.kind === 'user' && g.members.some(m => m.key === g.host)) targets = [g.host];   // 用户没 @ 人：主理人接
     if (!targets.length) return;
     if (it.kind === 'gm' && it.depth > HOPS) {
       this.add(g, { kind: 'sys', text: '已到转发上限（成员之间最多连着转 ' + HOPS + ' 次），没有转给 ' + targets.map(k => g.members.find(m => m.key === k)?.name).join('、') });
@@ -237,7 +247,7 @@ export class Groups {
       this.setStatus(g, key, '正在回复…');
       let r;
       job.msgId ||= crypto.randomUUID();   // 重试用同一个编号：对方据此去重，不会把同一条处理两遍
-      try { r = await this.deliver(m, text, { asUser: job.asUser, groupId: g.id, groupName: g.title, from: speaker(trig, g.members), msgId: job.msgId }); }
+      try { r = await this.deliver(m, text, { host: key === g.host, asUser: job.asUser, groupId: g.id, groupName: g.title, from: speaker(trig, g.members), msgId: job.msgId }); }
       catch (e) { r = { ok: false, error: e.message }; }
       if (g.closed) return;
       if (r?.busy) {
@@ -298,7 +308,7 @@ export class Groups {
     if (!id || this.gone[id] || !Array.isArray(snap.items) || !Array.isArray(snap.members)) return null;
     const str = (x, n) => String(x ?? '').slice(0, n);
     const who = w => w && typeof w === 'object' ? { name: str(w.name, 40), claw: /^[a-z]{1,20}$/.test(w.claw) ? w.claw : '', collab: !!w.collab, peer: w.peer ? str(w.peer, 40) : undefined } : undefined;
-    const members = snap.members.slice(0, 20).map(who);
+    const members = snap.members.slice(0, 20).map(w => ({ ...who(w), host: w?.host === true || undefined }));
     if (!members.some(m => !m.collab)) return null;   // 群里得有本机的会话
     const items = snap.items.filter(x => x && Number.isInteger(x.seq) && ['user', 'gm', 'sys'].includes(x.kind)).slice(-SNAP)
       .map(x => ({ seq: x.seq, at: Number.isFinite(x.at) ? x.at : Date.now(), kind: x.kind, text: str(x.text, 20000), via: x.via ? str(x.via, 40) : undefined, who: who(x.who) }));
