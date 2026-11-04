@@ -2157,7 +2157,7 @@ function playVideo(id){
 }
 function closeVideo(){var pl=$('#vplayer'),v=pl.querySelector('video');pl.classList.remove('on');try{v.pause()}catch(_){}if(v.dataset.local)URL.revokeObjectURL(v.dataset.local);v.removeAttribute('src');v.load()}
 document.getElementById('vplayer').querySelector('button').addEventListener('click',closeVideo);
-feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
+feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&!t.dataset.vid&&t.dataset.gurl){e.preventDefault();window.open(t.dataset.gurl,'_blank');return}if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
 // 文件：本机有就直接打开（看不了的类型浏览器会给下载 / 分享），没有再从电脑取
 function openFile(id,name){
   var fromServer=function(){
@@ -2534,7 +2534,11 @@ function gmPlayShow(){
   if(gmPlaying&&!gmPlaying.classList.contains('on')){gmPlaying.innerHTML=GM_PLAY.stop;gmPlaying.classList.add('on')}
 }
 // 群聊里用户说的话：在别的电脑上发的标一下
-function addGu(it){var e=addUser(it.text);if(e&&it.via){var v=document.createElement('div');v.className='u-via';v.textContent='在 '+it.via+' 上发的';e.insertBefore(v,e.firstChild)}gStatTail();return e}
+// 群里的附件：图片直接显示，视频 / 文件显示成文件块，点了打开（看不了的就下载）
+function gAttUrl(a){return '/api/group/att?id='+encodeURIComponent(session.id)+'&aid='+encodeURIComponent(a.aid)}
+function addGu(it){var att=it.att||[],f=att.filter(function(a){return a.kind!=='image'})[0];
+  var e=addUser(it.text,att.filter(function(a){return a.kind==='image'}).map(gAttUrl),f?{kind:'file',name:f.name,label:(f.kind==='video'?'视频 ':'')+fmtSize(f.size||0),url:gAttUrl(f)}:null);
+  var ft=f&&e&&e.querySelector('.uvid');if(ft)ft.dataset.gurl=gAttUrl(f);if(e&&it.via){var v=document.createElement('div');v.className='u-via';v.textContent='在 '+it.via+' 上发的';e.insertBefore(v,e.firstChild)}gStatTail();return e}
 // 状态行（谁正在回复 / 在忙排队）：始终在聊天区最下面
 function gStat(list){var el=$('#gStat');if(!list||!list.length){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='gStat'}el.innerHTML='';list.forEach(function(x){var d=document.createElement('div');d.textContent=(x.name?x.name+' ':'')+x.text;el.appendChild(d)});feed.appendChild(el);scrollDown()}
 function gStatTail(){var el=$('#gStat');if(el&&el.parentNode===feed&&feed.lastElementChild!==el)feed.appendChild(el)}
@@ -2820,14 +2824,15 @@ function fmtSize(n){return n>=1048576?(n/1048576).toFixed(1)+'MB':Math.max(1,Mat
 // 带视频的消息：文字立刻发（附一句「视频随后到」，AI 自己决定先回还是等视频）；视频在后台上传，传完单独作为下一条发过去
 var videoJob=null;
 function vidName(n){return String(n||'视频').replace(/[\r\n\]「」]/g,' ').slice(0,80)}
-function startVideoJob(v,sid,host){
-  var job={v:v,sid:sid,el:host||addUser('',[],{kind:v.kind,name:v.name,size:v.size,url:v.url,label:'上传 0%'})};if(!host)job.el.classList.add('pending');videoJob=job;
+function startVideoJob(v,sid,host,extra){
+  var job={v:v,sid:sid,extra:extra,el:host||addUser('',[],{kind:v.kind,name:v.name,size:v.size,url:v.url,label:'上传 0%'})};if(!host)job.el.classList.add('pending');videoJob=job;
   var lab=function(t){if(job.el&&job.el.vbadge)job.el.vbadge.textContent=t},prog=function(l,t){if(t)lab('上传 '+Math.floor(l*100/t)+'%')};
   var isDoc=v.kind==='file',url=isDoc?'/api/upload/doc':'/api/upload/video',ctype=v.file.type||(isDoc?'application/octet-stream':'video/quicktime');
   var fail=function(msg){
     if(videoJob===job)videoJob=null;
     if(job.el&&job.el.isConnected){if(job.el.dataset.vpend){var tl=job.el.querySelector('.uvid');if(tl)tl.remove();delete job.el.dataset.vpend}else job.el.remove()}
     addSys((v.kind==='file'?'文件':'视频')+'上传失败'+(msg?'：'+msg:'')+'，已放回输入框，可以重发');
+    if(extra&&extra.text&&session&&session.id===sid&&!ta.value){ta.value=extra.text;syncSend()}
     if(session&&session.id===sid&&!attachments.some(function(a){return a.video})){attachments.push({url:v.url,data:true,video:{kind:v.kind,name:v.name,file:v.file,id:'',size:v.size}});renderAtts()}
   };
   var done=function(status,text){var j={};try{j=JSON.parse(text)}catch(_){}
@@ -2858,7 +2863,7 @@ function sendVideoJob(){
   videoJob=null;
   if(!session||session.id!==job.sid){addSys((job.v.kind==='file'?'文件':'视频')+'没发出去（已经换了会话），可以重新选择发送');return}
   if(job.el&&job.el.vbadge)job.el.vbadge.textContent='服务器处理中…';
-  outbox={text:'',images:[],video:{kind:job.v.kind,id:job.v.id,name:job.v.name,url:job.v.url,size:job.v.size},sid:job.sid,el:job.el};
+  outbox={text:job.extra?job.extra.text:'',images:job.extra?job.extra.images:[],video:{kind:job.v.kind,id:job.v.id,name:job.v.name,url:job.v.url,size:job.v.size},sid:job.sid,el:job.el};
   trySend();
 }
 // 长边压到 2000px 内转 JPEG；小于 1.5MB 的 PNG（截图）和 GIF 保持原样，免得文字糊或动图变静态
@@ -3254,7 +3259,7 @@ function onEvent(m){
     if(!session||m.id!==session.id)break;
     var gi=m.item||{};
     if(gi.kind==='user'){
-      if(outbox&&gi.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');stamp(outbox.el,Date.now());outboxDone()}
+      if(outbox&&gi.text===outbox.text&&outbox.el&&outbox.el.isConnected){var ob=outbox;ob.el.classList.remove('pending');if(ob.video&&ob.el.vbadge)ob.el.vbadge.textContent=(ob.video.kind==='file'?'':'视频 ')+fmtSize(ob.video.size||0);stamp(ob.el,Date.now());outboxDone()}
       else{if(outbox&&gi.text===outbox.text)outboxDone();stamp(addGu(gi),gi.at)}
       setBusy(false);
     }else if(gi.kind==='gm'){stamp(addGm(gi),gi.at);if(gi.text&&ttsModeAllows(3))ttsSay(((gi.who&&gi.who.name)?gi.who.name+' 说：':'')+gi.text)}   // 开着自动朗读：成员回复来一条念一条，开头报名字
@@ -3526,6 +3531,10 @@ function run(text){
   ta.value='';ta.style.height='auto';ta.style.overflowY='hidden';
   busy=true;setDock('busy');
   if(video&&video.id){outbox={text:text,images:images,video:video,sid:session.id};outboxShow();trySend()}   // 视频早就传过（放回输入框后重发）
+  else if(video&&session.group){   // 群里：等视频 / 文件传完，和文字、图片作为一条一起发（成员被 @ 时附件已经在）
+    var gel=addUser(text,images.map(function(i){return 'data:'+i.media_type+';base64,'+i.data}),{kind:video.kind,name:video.name,size:video.size,url:video.url,label:'上传 0%'});gel.classList.add('pending');
+    startVideoJob(video,session.id,gel,{text:text,images:images});
+  }
   else{
     var host=null;
     if(text||images.length){outbox={text:text,images:images,videoPending:video&&video.kind!=='file'?vidName(video.name):'',filePending:video&&video.kind==='file'?vidName(video.name):'',videoFile:video,sid:session.id};outboxShow();host=outbox.el;trySend()}

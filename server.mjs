@@ -25,7 +25,7 @@ import { isIf, IfRunner, ifRunners, ifSessionList, ifNewSession, ifShutdown, ifA
 import { isMm, MmRunner, mmRunners, mmSessionList, mmNewSession, mmShutdown, mmAcpRunning, mmInfo, mmExists, mmDelete, mmInstalled, mmSupported, mmUnsupportedReason, mmRename, mmModelsChanged } from './minimax.mjs';
 import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbAcpRunning, cbInfo, cbExists, cbDelete, cbInstalled, cbRename, cbModelsChanged } from './codebuddy.mjs';
 import { isQd, QdRunner, qdRunners, qdSessionList, qdNewSession, qdShutdown, qdAcpRunning, qdInfo, qdExists, qdDelete, qdInstalled, qdRename, qdModelsChanged } from './qoder.mjs';
-import { Groups, isGroupId, toWire, fromWire } from './group.mjs';
+import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText } from './group.mjs';
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './copilot.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
@@ -1285,7 +1285,7 @@ async function groupDeliver(m, text, o) {
   const c = loadPeer(), p = c.peers.find(x => x.id === m.peerId);
   if (!c.enabled || !p?.inbox || !p.theirToken) return { ok: false, error: '对方联系不上（协同没开，或已解除配对）' };
   const msgId = o.msgId || crypto.randomUUID();
-  const body = { msg_id: msgId, sent_at: isoLocal(), from, from_session: toWire(o.groupId), text, session: m.id, group: { name: o.groupName, members: names, self: m.name, host: o.host || undefined } };
+  const body = { msg_id: msgId, sent_at: isoLocal(), from, from_session: toWire(o.groupId), text, session: m.id, group: { name: o.groupName, members: names, self: m.name, host: o.host || undefined, att: o.att || undefined } };
   let j = null, err = null;
   try { j = await peerCall(c, p, '', { body }); } catch (e) { err = e; }
   const kind = classify(j, err);
@@ -1297,7 +1297,7 @@ async function groupDeliver(m, text, o) {
 async function groupPeerOp(peerId, body) {
   const c = loadPeer(), p = c.peers.find(x => x.id === peerId);
   if (!c.enabled || !p?.inbox || !p.theirToken) return { ok: false };
-  const j = await peerCall(c, p, '/group', { body, ms: 30000 });
+  const j = await peerCall(c, p, '/group', { body, ms: body.op === 'post' && body.att?.length ? 180000 : 30000 });   // 带附件的要等对方把附件拉完
   if (!j?.ok) log('group peer', body.op, '→', p.name, j?.error || 'HTTP ' + j?.status);
   return j;
 }
@@ -1479,7 +1479,8 @@ async function peerHandler(req, res) {
       if (b.op === 'sync') { const g = groups.applyMirror(peer.id, b.group); return out(g ? 200 : 409, { ok: !!g }); }
       const gid = fromWire(b.id);
       if (!gid) return out(400, { ok: false, error: '缺群编号' });
-      if (b.op === 'post') { const ok = groups.peerPost(gid, peer.id, String(b.text || '').slice(0, 8000), peer.name); log('group post in', peer.name, gid, ok ? 'ok' : 'rejected'); return out(ok ? 200 : 404, { ok }); }
+      if (b.op === 'post') { let ok = false, error; try { ok = await groups.peerPost(gid, peer.id, String(b.text || '').slice(0, 8000), peer.name, b.att); } catch (e) { error = '附件没传过来：' + e.message; } log('group post in', peer.name, gid, ok ? 'ok' : 'rejected', error || ''); return out(ok ? 200 : 404, { ok, error }); }
+      if (b.op === 'attget') return out(200, groups.attChunk(gid, peer.id, String(b.aid || ''), b.off));
       if (b.op === 'permstat') { const ok = groups.peerPermStatus(gid, peer.id, peer.name, String(b.sid || '').slice(0, 80), !!b.on); return out(ok ? 200 : 404, { ok }); }
       if (b.op === 'dissolve') { const ok = groups.dissolve(gid, { fromPeer: peer.id }); if (ok) clearUnread(gid); return out(200, { ok }); }
       return out(400, { ok: false, error: '不认识的操作' });
@@ -1515,7 +1516,15 @@ async function peerHandler(req, res) {
     log('peer in', peer.name, ip, '→', info.sessionId.slice(0, 8), text.length + ' chars', '· msg_id', msgId || '-', '· sent_at', sentAt || '-');
     // 对方发来的 from 是「会话名 · 它自己的名字」，后半段和我们给它起的名字一样就去掉，不显示两遍
     const fromS = from.endsWith(' · ' + peer.name) ? from.slice(0, -(' · ' + peer.name).length) : from;
-    const result = peerDeliver(info, text, peer.name + (fromS && fromS !== peer.name ? ' · ' + fromS : ''), peer.id, { late: lateText(sentAt), group: grp });
+    // 群消息带附件：先从发来的那台拉到本机，再把本机路径补在正文后面
+    const gAtt = grp && cleanAtt(jb.group.att);
+    const result = (async () => {
+      if (gAtt?.length) {
+        try { for (const a of gAtt) await groups.fetchAtt(grp.gid, peer.id, a); text += '\n[附件已在本机：' + attText({ att: gAtt }, groups.attDir(grp.gid)) + '（要看内容再读，不需要就不用管）]'; }
+        catch (e) { log('group att pull', e.message); text += '\n[附件没拉过来：' + e.message + ']'; }
+      }
+      return peerDeliver(info, text, peer.name + (fromS && fromS !== peer.name ? ' · ' + fromS : ''), peer.id, { late: lateText(sentAt), group: grp });
+    })();
     if (dupKey) peerSeen.set(dupKey, { at: Date.now(), result });
     // 60 秒内没回完：先回 202「已收到」+ 编号，连接放掉（经中继的连接等久了会被线路挂断，回复会丢），回完再主动发到对方的会话
     const id = msgId || crypto.randomUUID();
@@ -2888,6 +2897,17 @@ const handler = async (req, res) => {
       const j = await peerCall(c, p, '/sessions', { ms: 8000 }).catch(e => ({ ok: false, error: e.message }));
       return sendJson(res, 200, { ok: !!j?.ok, sessions: j?.sessions || [], error: j?.ok ? undefined : j?.error || '连不上' });
     }
+    if (url.pathname === '/api/group/att' && req.method === 'GET') {   // 群里的图片 / 文件；镜像这边没有就先从主群拉
+      const g = groups.get(url.searchParams.get('id') || ''), aid = url.searchParams.get('aid') || '';
+      const a = g && g.items.flatMap(it => it.att || []).find(x => x.aid === aid);
+      if (!a) return sendJson(res, 404, { error: '没有这个附件（太早的可能已经不在了）' });
+      let f = groups.attFile(g.id, aid);
+      if (!fs.existsSync(f) && g.mirror) try { f = await groups.fetchAtt(g.id, g.mirror.peerId, a); } catch (e) { return sendJson(res, 502, { error: '从建群的电脑拉附件失败：' + e.message }); }
+      if (!fs.existsSync(f)) return sendJson(res, 404, { error: '附件不在了' });
+      if (url.searchParams.get('dl') === '1' || /\.(html?|svg|xhtml|xml)$/i.test(f)) res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(a.name || aid));
+      if (url.searchParams.get('thumb') === '1' && a.kind === 'image') return serveVideo(req, res, await imageThumb(f), a.name);
+      return serveVideo(req, res, f, a.name);
+    }
     if (url.pathname === '/api/group/info' && req.method === 'GET') {
       const g = groups.get(url.searchParams.get('id') || '');
       if (!g) return sendJson(res, 404, { error: '这个群已经解散了' });
@@ -3436,6 +3456,7 @@ wss.on('connection', (ws, req) => {
         if (cid) noteCid(cid);   // 先占上（视频要等截帧信息，两份可能交错）；没收下就删掉，重发还能进来
         const fail = o => { if (cid) sentCids.delete(cid); return send(o); };
         let text = String(m.text || '').trim();
+        const said = text;   // 用户原话（群里存原话 + 附件，不存给 AI 的说明）
         const images = Array.isArray(m.images) ? m.images.slice() : [];
         if (images.length > MAX_IMAGES) return fail({ t: 'error', message: '一次最多 ' + MAX_IMAGES + ' 张图片' });
         for (const i of images) {
@@ -3470,9 +3491,14 @@ wss.on('connection', (ws, req) => {
           log('file', path.basename(file), kb.toFixed(1) + 'KB');
         }
         if (!text && !images.length) { if (cid) sentCids.delete(cid); return; }
-        if (isGroupId(runner.id)) {   // 群里只发文字；自己的话由群广播（镜像要等主群确认），不在这里回显
-          if (images.length || m.video || m.file) return fail({ t: 'error', message: '群聊暂时只能发文字' });
-          if (!runner.send(text)) return fail({ t: 'error', message: '这个群已经解散了' });
+        if (isGroupId(runner.id)) {   // 群里：原话 + 附件（图片 / 视频 / 文件存进群的附件目录）；自己的话由群广播（镜像要等主群确认），不在这里回显
+          const att = [];
+          try {
+            for (const i of images) att.push(groups.saveAtt(runner.id, { kind: 'image', name: '图片' + (images.length > 1 ? att.length + 1 : '') + '.' + i.media_type.split('/')[1], ext: i.media_type.split('/')[1], buf: Buffer.from(i.data, 'base64') }));
+            const up = m.video || m.file, f = up && videoFile(UPLOADS, up.id);
+            if (f) att.push(groups.saveAtt(runner.id, { kind: m.video ? 'video' : 'file', name: vidName(up.name), src: f }));
+          } catch (e) { return fail({ t: 'error', message: '附件没存下：' + e.message }); }
+          if (!runner.send(said, att)) return fail({ t: 'error', message: '这个群已经解散了' });
           return;
         }
         const acp = runner instanceof AcpRunner;

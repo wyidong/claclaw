@@ -209,7 +209,7 @@ test('评审修复：重试用同一个 msgId；解散后的同步 / 消息不�
   const h = setup(async () => ({ ok: true, reply: 'r' }));
   const hg = h.groups.create({ members: [M('s1', '后端'), M('a1', '需求', { peerId: 'P15' })] });
   h.groups.dissolve(hg.id);
-  assert.equal(h.groups.peerPost(hg.id, 'P15', 'hi', '15'), false);
+  assert.equal(await h.groups.peerPost(hg.id, 'P15', 'hi', '15'), false);
 });
 
 test('评审修复：重名序号不撞名；成员名以「全体」开头不误触 @全体', () => {
@@ -286,4 +286,40 @@ test('群里转确认：本机成员要确认时群里弹出（标名字），�
   const mg = g2.applyMirror('P15', snap);
   g2.permOpen(mg.id, 'abcd1234ffff', '前端', { t: 'perm.request', requestId: 'r3', toolUseID: 't3', name: 'Bash' });
   assert.ok(ops2.some(o => o.peerId === 'P15' && o.body.op === 'permstat' && o.body.on === true && o.body.sid === 'abcd1234ffff'));
+});
+
+test('附件：存进群目录，投递给本机成员带路径、协同成员只带名字；镜像发的附件主群分段拉过来；镜像缺的从主群拉', async () => {
+  const mk = (peerOp) => new Groups({ dir: tmp(), retryMs: 10, syncDelay: 0, deliver: async (m, text, o) => { got.push({ key: m.key, text, o }); return { ok: true, reply: '收到' }; }, peerOp });
+  const got = [];
+  let host, mir;
+  host = mk(async (pid, b) => { if (b.op === 'sync') { mir.applyMirror('HOST', b.group); return { ok: true }; } if (b.op === 'attget') return mir.attChunk(fromWire(b.id), 'HOST', b.aid, b.off); return { ok: true }; });
+  mir = mk(async (pid, b) => { if (b.op === 'post') return { ok: await host.peerPost(fromWire(b.id), 'P15', b.text, '15', b.att) }; if (b.op === 'attget') return host.attChunk(fromWire(b.id), 'P15', b.aid, b.off); return { ok: true }; });
+  const g = host.create({ members: [M('s1', '后端'), M('abcd1234', '前端', { peerId: 'P15', peerName: '15' })] });
+  await flush();
+  const big = Buffer.alloc(1300 * 1024, 7);   // 超过一段，要分段拉
+  const a1 = host.saveAtt(g.id, { kind: 'image', name: '图片.png', ext: 'png', buf: Buffer.from('PNG') });
+  const a2 = host.saveAtt(g.id, { kind: 'file', name: '说明.pdf', buf: big });
+  assert.match(a2.aid, /^[0-9a-f]{16}\.pdf$/); assert.equal(a2.size, big.length);
+  assert.ok(host.post(g.id, '@全体 看下', { att: [a1, a2] }));
+  await flush(); await flush();
+  const loc = got.find(x => x.key === 's1'), rem = got.find(x => x.key === 'P15/abcd1234');
+  assert.ok(loc.text.includes(host.attFile(g.id, a2.aid)), '本机成员拿到本机路径');
+  assert.ok(rem.text.includes('说明.pdf') && !rem.text.includes(host.attDir(g.id)), '协同成员只有名字');
+  assert.equal(rem.o.att.length, 2);
+  assert.ok(fs.readFileSync(host.logFile(g.id), 'utf8').includes(host.attFile(g.id, a1.aid)), '群记录带附件路径');
+  // 镜像那边从主群拉
+  const mg = mir.get(g.id);
+  assert.ok(mg.items.at(-3).att || mg.items.some(it => it.att?.length));
+  const f = await mir.fetchAtt(g.id, 'HOST', a2);
+  assert.ok(fs.readFileSync(f).equals(big));
+  assert.equal(mir.attChunk(g.id, 'P99', a2.aid, 0).ok, false, '别的对方拿不到');
+  // 镜像里发附件：主群先拉过来再贴
+  const a3 = mir.saveAtt(g.id, { kind: 'file', name: 'x.txt', buf: Buffer.from('hello') });
+  assert.ok(mir.post(g.id, '', { att: [a3] }));
+  await flush(); await flush(); await flush();
+  const it = g.items.find(x => x.att?.some(a => a.aid === a3.aid));
+  assert.ok(it && it.via === '15');
+  assert.equal(fs.readFileSync(host.attFile(g.id, a3.aid), 'utf8'), 'hello');
+  host.dissolve(g.id);
+  assert.ok(!fs.existsSync(host.attDir(g.id)));
 });

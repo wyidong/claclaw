@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const HOPS = 2, INLINE = 400, CUR_MAX = 1500, KEEP = 500, SNAP = 200, LOG_MAX = 4e6;
+export const HOPS = 2, INLINE = 400, CUR_MAX = 1500, KEEP = 500, SNAP = 200, LOG_MAX = 4e6, ATT_MAX = 12 * 1024 * 1024, ATT_CHUNK = 512 * 1024;
 export const isGroupId = id => /^gp:[0-9a-f]{8}$/.test(String(id || ''));
 export const toWire = id => 'gp-' + String(id).slice(3);   // 对方会把 from_session 里 [\w-] 以外的字符去掉
 export const fromWire = s => /^gp-[0-9a-f]{8}$/.test(String(s || '')) ? 'gp:' + String(s).slice(3) : null;
@@ -46,16 +46,25 @@ const cut = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
 const pad = n => String(n).padStart(2, '0');
 const stamp = t => { const d = new Date(t); return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 // 群记录文件里的一条：「#序号 时间 谁：内容」，成员要前文自己去读
-export const logLine = (it, members) => '#' + it.seq + ' ' + stamp(it.at || Date.now()) + ' ' + speaker(it, members) + '：' + String(it.text || '') + '\n';
+export const logLine = (it, members, dir) => '#' + it.seq + ' ' + stamp(it.at || Date.now()) + ' ' + speaker(it, members) + '：' + withAtt(it, dir) + '\n';
+// 附件（图片 / 文件）：存在群记录目录的 files/<群>/<aid> 里；aid = 16 位十六进制 + 扩展名
+export const isAid = s => /^[0-9a-f]{16}(\.[a-z0-9]{1,8})?$/.test(String(s || ''));
+const ATT_KIND = { image: '图片', video: '视频', file: '文件' };
+export const cleanAtt = a => Array.isArray(a) ? a.filter(x => x && isAid(x.aid)).slice(0, 10).map(x => ({ aid: x.aid, kind: ATT_KIND[x.kind] ? x.kind : 'file', name: String(x.name || '').replace(/[\r\n「」\]]/g, ' ').slice(0, 80), size: Number.isFinite(x.size) ? x.size : 0 })) : undefined;
+const fmtSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
+// 一条的附件写成文字：dir 给了就带上本机路径（成员要看就去读）
+export const attText = (it, dir) => (it.att || []).map(a => '[' + ATT_KIND[a.kind] + '「' + (a.name || a.aid) + '」 ' + fmtSize(a.size) + (dir ? '：' + path.join(dir, a.aid) : '') + ']').join(' ');
+const withAtt = (it, dir) => { const t = String(it.text || ''), a = attText(it, dir); return a ? (t ? t + '\n' : '') + a : t; };
 const LOG_HEAD = '# 群聊记录：每条以「#序号 时间 谁：」开头，新的在后面（只读需要的部分，比如最后几十行）\n';
 
 // 发给某个成员的正文：本条（太长截断）+ 它上次之后别人说的。别人说的很短就直接带上，长了只说有几条、谁说的，要前文让它去读群记录
-export function composeDelivery({ items, since, upto, selfKey, members, current }) {
-  const t = String(current.text || '');
-  const cur = '#' + current.seq + ' ' + speaker(current, members) + '：' + (t.length > CUR_MAX ? t.slice(0, CUR_MAX) + '…（太长，全文看群记录 #' + current.seq + '）' : t);
+// dir：本条附件在本机的目录（协同成员不给，由它那边收到后补上自己的路径）
+export function composeDelivery({ items, since, upto, selfKey, members, current, dir }) {
+  const t = String(current.text || ''), a = attText(current, dir);
+  const cur = '#' + current.seq + ' ' + speaker(current, members) + '：' + (t.length > CUR_MAX ? t.slice(0, CUR_MAX) + '…（太长，全文看群记录 #' + current.seq + '）' : t) + (a ? (t ? '\n' : '') + a + (dir ? '（附件要看内容再读，不需要就不用管）' : '') : '');
   const un = items.filter(i => i.seq > since && i.seq < upto && i.kind !== 'sys' && i.who !== selfKey);
   if (!un.length) return cur;
-  const full = un.map(i => '#' + i.seq + ' ' + speaker(i, members) + '：' + String(i.text || '')).join('\n');
+  const full = un.map(i => '#' + i.seq + ' ' + speaker(i, members) + '：' + withAtt(i)).join('\n');
   if (full.length <= INLINE) return '[群里你上次之后的消息]\n' + full + '\n[这一条]\n' + cur;
   const cnt = new Map(); for (const i of un) { const k = speaker(i, members); cnt.set(k, (cnt.get(k) || 0) + 1); }
   return '[群里你上次之后还有 ' + un.length + ' 条（#' + un[0].seq + '～#' + un[un.length - 1].seq + '，' + [...cnt].map(([k, n]) => k + ' ' + n + ' 条').join('、') + '）没贴过来，要前文就读群记录]\n[这一条]\n' + cur;
@@ -77,7 +86,7 @@ class Group {
   unsubscribe(ws) { this.subs.delete(ws); }
   watched() { return [...this.subs].some(ws => ws.visible !== false); }
   emit(o) { const s = JSON.stringify(o); for (const ws of this.subs) if (ws.readyState === 1) ws.send(s); }
-  send(text) { return this.store.post(this.id, text); }
+  send(text, att) { return this.store.post(this.id, text, { att }); }
   async interrupt() {}
   // 在群里点了允许 / 拒绝：交给那个成员会话（只有本机成员的确认会出现在本机的群里）
   replyPermission(requestId, decision, answers) { const p = this.perms.get(requestId); if (p) this.store.permReply(p.sid, requestId, decision, answers); }
@@ -85,7 +94,7 @@ class Group {
   view(it, viewer) {
     if (this.mirror) return it;
     const m = it.who && this.members.find(x => x.key === it.who);
-    return { seq: it.seq, at: it.at, kind: it.kind, text: it.text, via: it.via, who: m ? memberView(m, viewer) : undefined };
+    return { seq: it.seq, at: it.at, kind: it.kind, text: it.text, att: it.att, via: it.via, who: m ? memberView(m, viewer) : undefined };
   }
   history() { return { items: this.items.map(it => this.view(it)), total: this.items.length }; }
   statusView() { return this.mirror ? (this.status || []) : Object.entries(this.status).map(([k, text]) => ({ name: this.members.find(m => m.key === k)?.name || '', text })); }
@@ -93,7 +102,7 @@ class Group {
   preview() {
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.view(this.items[i]);
-      if (it.kind !== 'sys') return (it.kind === 'user' ? '我' : it.who?.name || '成员') + '：' + String(it.text || '').replace(/\s+/g, ' ').slice(0, 40);
+      if (it.kind !== 'sys') return (it.kind === 'user' ? '我' : it.who?.name || '成员') + '：' + withAtt(it).replace(/\s+/g, ' ').slice(0, 40);
     }
     return '';
   }
@@ -119,12 +128,53 @@ export class Groups {
     }
     for (const g of this.map.values()) if (!fs.existsSync(this.logFile(g.id))) this.writeLog(g);
   }
+  attDir(id) { return isGroupId(id) ? path.join(this.logDir, 'files', id.slice(3)) : null; }
+  attFile(id, aid) { return isAid(aid) ? path.join(this.attDir(id), aid) : null; }
+  // 存一个附件：buf（图片）或 src（已上传的文件，拷过来）；返回附件记录
+  saveAtt(id, { kind, name, ext, buf, src }) {
+    const e = String(ext || path.extname(name || '').slice(1)).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+    const aid = crypto.randomBytes(8).toString('hex') + (e ? '.' + e : '');
+    fs.mkdirSync(this.attDir(id), { recursive: true });
+    const f = path.join(this.attDir(id), aid);
+    if (buf) fs.writeFileSync(f, buf); else fs.copyFileSync(src, f);
+    return cleanAtt([{ aid, kind, name, size: fs.statSync(f).size }])[0];
+  }
+  // 附件在本机吗；不在就从 peerId（有这个附件的那台）分段拉过来
+  async fetchAtt(id, peerId, a) {
+    const f = this.attFile(id, a?.aid);
+    if (!f) throw new Error('附件编号不对');
+    if (fs.existsSync(f)) return f;
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const tmp = f + '.part' + crypto.randomBytes(3).toString('hex');
+    try {
+      for (let off = 0; ;) {
+        const j = await this.peerOp(peerId, { op: 'attget', id: toWire(id), aid: a.aid, off });
+        if (!j?.ok || typeof j.data !== 'string') throw new Error(j?.error || '对方没给');
+        const buf = Buffer.from(j.data, 'base64');
+        fs.appendFileSync(tmp, buf); off += buf.length;
+        if (off > ATT_MAX) throw new Error('附件太大');
+        if (j.done || !buf.length) break;
+      }
+      fs.renameSync(tmp, f);
+      return f;
+    } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  }
+  // 对方来拉附件：只给这个群的另一边（主群给有成员的对方，镜像只给主群）
+  attChunk(id, peerId, aid, off) {
+    const g = this.get(id), f = this.attFile(id, aid);
+    if (!g || !f || !(g.mirror ? g.mirror.peerId === peerId : g.peers().includes(peerId))) return { ok: false, error: '没有这个附件' };
+    let st; try { st = fs.statSync(f); } catch { return { ok: false, error: '没有这个附件' }; }
+    off = Math.max(0, Math.floor(Number(off) || 0));
+    const fd = fs.openSync(f, 'r'), buf = Buffer.alloc(Math.max(0, Math.min(ATT_CHUNK, st.size - off)));
+    try { fs.readSync(fd, buf, 0, buf.length, off); } finally { fs.closeSync(fd); }
+    return { ok: true, data: buf.toString('base64'), done: off + buf.length >= st.size };
+  }
   logFile(id) { return isGroupId(id) ? path.join(this.logDir, id.slice(3) + '.md') : null; }
-  writeLog(g) { try { fs.writeFileSync(this.logFile(g.id), LOG_HEAD + g.items.map(it => logLine(it, g.members)).join('')); } catch (e) { this.log('group log', e.message); } }
+  writeLog(g) { try { fs.writeFileSync(this.logFile(g.id), LOG_HEAD + g.items.map(it => logLine(it, g.members, this.attDir(g.id))).join('')); } catch (e) { this.log('group log', e.message); } }
   appendLog(g, its) {
     if (g.closed || !its.length) return;
     const f = this.logFile(g.id);
-    try { if (fs.statSync(f).size > LOG_MAX) return this.writeLog(g); fs.appendFileSync(f, its.map(it => logLine(it, g.members)).join('')); } catch { this.writeLog(g); }
+    try { if (fs.statSync(f).size > LOG_MAX) return this.writeLog(g); fs.appendFileSync(f, its.map(it => logLine(it, g.members, this.attDir(g.id))).join('')); } catch { this.writeLog(g); }
   }
   get(id) { return this.map.get(id) || null; }
   list() { return [...this.map.values()]; }
@@ -188,20 +238,28 @@ export class Groups {
   }
 
   // 用户在群里发一条（via：在哪台对方电脑上发的，经协同转来）；镜像里发的转回主群
-  post(id, text, { via } = {}) {
-    const g = this.get(id); text = String(text || '').trim();
-    if (!g || !text) return false;
+  post(id, text, { via, att } = {}) {
+    const g = this.get(id); text = String(text || '').trim(); att = cleanAtt(att);
+    if (!att?.length) att = undefined;
+    if (!g || (!text && !att)) return false;
     if (g.mirror) {   // 镜像：转给建群的电脑，它收下后会随快照回来；没送到就告诉页面（输入框放回原文）
       const fail = why => g.emit({ t: 'group.msg', id, item: { kind: 'sys', fail: true, text: '没发到建群的电脑：' + why } });
-      this.peerOp(g.mirror.peerId, { op: 'post', id: toWire(id), text }).then(j => { if (!j?.ok) fail(j?.error || '对方没收下'); }, e => { this.log('group post fwd', e.message); fail(e.message); });
+      this.peerOp(g.mirror.peerId, { op: 'post', id: toWire(id), text, ...(att ? { att } : {}) }).then(j => { if (!j?.ok) fail(j?.error || '对方没收下'); }, e => { this.log('group post fwd', e.message); fail(e.message); });
       return true;
     }
-    const it = this.add(g, { kind: 'user', text: text.slice(0, 8000), via: via || undefined, depth: 0 });
+    const it = this.add(g, { kind: 'user', text: text.slice(0, 8000), att, via: via || undefined, depth: 0 });
     this.route(g, it);
     return true;
   }
   // 协同对方（镜像那边）发来的：只收群里有它的会话的对方
-  peerPost(id, peerId, text, via) { const g = this.get(id); return !!g && !g.mirror && g.peers().includes(peerId) && this.post(id, text, { via }); }
+  // 镜像那边带附件发的：先把附件拉过来再贴进群
+  async peerPost(id, peerId, text, via, att) {
+    const g = this.get(id);
+    if (!g || g.mirror || !g.peers().includes(peerId)) return false;
+    att = cleanAtt(att);
+    for (const a of att || []) await this.fetchAtt(id, peerId, a);
+    return this.post(id, text, { via, att });
+  }
   // 本机这个群是不是对方 peerId 那边建的群的镜像（对方发来的群投递，只有这时才按群消息处理）
   isMirrorOf(id, peerId) { return this.get(id)?.mirror?.peerId === peerId; }
 
@@ -244,12 +302,12 @@ export class Groups {
   async run(g, key, job) {
     const m = g.members.find(x => x.key === key), trig = g.items.find(x => x.seq === job.trigger);
     if (!m || !trig) return;
-    const text = composeDelivery({ items: g.items, since: g.seen[key] || 0, upto: job.trigger, selfKey: key, members: g.members, current: trig });
+    const text = composeDelivery({ items: g.items, since: g.seen[key] || 0, upto: job.trigger, selfKey: key, members: g.members, current: trig, dir: m.peerId ? undefined : this.attDir(g.id) });
     for (;;) {
       this.setStatus(g, key, '正在回复…');
       let r;
       job.msgId ||= crypto.randomUUID();   // 重试用同一个编号：对方据此去重，不会把同一条处理两遍
-      try { r = await this.deliver(m, text, { host: key === g.host, asUser: job.asUser, groupId: g.id, groupName: g.title, from: speaker(trig, g.members), msgId: job.msgId }); }
+      try { r = await this.deliver(m, text, { att: m.peerId ? trig.att : undefined, host: key === g.host, asUser: job.asUser, groupId: g.id, groupName: g.title, from: speaker(trig, g.members), msgId: job.msgId }); }
       catch (e) { r = { ok: false, error: e.message }; }
       if (g.closed) return;
       if (r?.busy) {
@@ -347,7 +405,7 @@ export class Groups {
     const members = snap.members.slice(0, 20).map(w => ({ ...who(w), host: w?.host === true || undefined }));
     if (!members.some(m => !m.collab)) return null;   // 群里得有本机的会话
     const items = snap.items.filter(x => x && Number.isInteger(x.seq) && ['user', 'gm', 'sys'].includes(x.kind)).slice(-SNAP)
-      .map(x => ({ seq: x.seq, at: Number.isFinite(x.at) ? x.at : Date.now(), kind: x.kind, text: str(x.text, 20000), via: x.via ? str(x.via, 40) : undefined, who: who(x.who) }));
+      .map(x => ({ seq: x.seq, at: Number.isFinite(x.at) ? x.at : Date.now(), kind: x.kind, text: str(x.text, 20000), att: cleanAtt(x.att), via: x.via ? str(x.via, 40) : undefined, who: who(x.who) }));
     snap = { ...snap, members, items, status: Array.isArray(snap.status) ? snap.status.slice(0, 20).map(s => ({ name: str(s?.name, 40), text: str(s?.text, 40) })) : [] };
     let g = this.get(id);
     if (g && (!g.mirror || g.mirror.peerId !== peerId)) return null;
@@ -372,7 +430,7 @@ export class Groups {
     this.map.delete(id); g.closed = true;
     this.gone[id] = Date.now(); try { fs.writeFileSync(this.goneFile, JSON.stringify(this.gone)); } catch {}
     clearTimeout(this.syncT.get(id)); this.syncT.delete(id);
-    try { fs.rmSync(path.join(this.dir, id.slice(3) + '.json'), { force: true }); fs.rmSync(this.logFile(id), { force: true }); } catch {}
+    try { fs.rmSync(path.join(this.dir, id.slice(3) + '.json'), { force: true }); fs.rmSync(this.logFile(id), { force: true }); fs.rmSync(this.attDir(id), { recursive: true, force: true }); } catch {}
     g.emit({ t: 'group.gone', id });
     const to = g.mirror ? (fromPeer ? [] : [g.mirror.peerId]) : g.peers().filter(p => p !== fromPeer);
     for (const pid of to) this.peerOp(pid, { op: 'dissolve', id: toWire(id) }).catch(e => this.log('group dissolve', pid, e.message));
