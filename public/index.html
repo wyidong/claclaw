@@ -300,7 +300,8 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .peer .body{word-break:break-word}
 /* 群聊：成员的话（Claw logo + 协同标识 + 名字）、状态行、建群按钮和选成员面板 */
 .peer.gm{border-left-color:var(--accent)}
-.peer.gm .from{display:flex;align-items:center;gap:4px;color:var(--ink);font-weight:600}
+.gm-who{display:flex;align-items:center;gap:4px;align-self:flex-start;margin:0 0 -10px;padding:2px 8px 2px 2px;border:0;border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 群成员：和回复分开，点一下 @ 它 */
+.gm-who:active,.gm-who:hover{background:var(--code-bg)}
 .gm-ic{display:inline-grid;place-items:center;width:18px;height:18px;flex:none}
 .gm-ic svg,.gm-ic img{width:16px;height:16px;object-fit:contain;display:block}
 .gm-co{display:inline-block;width:18px;height:14px;flex:none;color:var(--muted)}
@@ -495,6 +496,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #composer.nosend #ta{padding-right:12px}
 #composer.nosend #stopBtn{right:2px}
 #composer.nosend.busy #ta{padding-right:48px}
+#atBtn{position:absolute;top:2px;right:2px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--accent);font-size:21px;font-weight:600;line-height:1;-webkit-tap-highlight-color:transparent}   /* 群聊：@ 成员，一直在 */
+#composer:not(.nosend) #atBtn{right:42px}
+#composer.grp #ta,#composer.grp.nosend #ta{padding-right:48px}
+#composer.grp:not(.nosend) #ta{padding-right:88px}
 #sugBtn{position:absolute;right:42px;top:2px;width:40px;height:40px;padding:0;border:0;background:none;color:var(--accent);display:grid;place-items:center;z-index:1}
 #cmdMenu{position:absolute;left:10px;right:10px;bottom:calc(100% + 6px);max-height:46vh;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.14);z-index:4;padding:4px}
 .cmd{display:block;width:100%;min-height:48px;padding:7px 10px;border:0;border-radius:9px;background:none;text-align:left}
@@ -1390,6 +1395,10 @@ select.pe-in{text-align-last:right}
   #send:disabled,#send.sugfill{background:var(--code-bg);color:var(--muted);opacity:1}
   #stopBtn{top:auto;bottom:12px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
   #stopBtn:hover{background:var(--del-bg)}
+  #atBtn{top:auto;bottom:12px;right:16px;width:32px;height:32px;border-radius:6px;font-size:18px}
+  #atBtn:hover{background:var(--bg)}
+  #composer:not(.nosend) #atBtn{right:100px}
+  #composer.grp #ta,#composer.grp.nosend #ta,#composer.grp:not(.nosend) #ta{padding-right:20px}
   #composer.busy #ta{padding-right:20px}
   #sugBtn{bottom:10px;top:auto;right:110px}
 }
@@ -1496,6 +1505,7 @@ select.pe-in{text-align-last:right}
         <button type="button" id="sugBtn" hidden aria-label="填入建议" title="填入建议"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 5v5.5a2.5 2.5 0 0 1-2.5 2.5H5"/><path d="M8.5 9.5 5 13l3.5 3.5"/></svg></button>
       </div>
       <button type="button" id="stopBtn" aria-label="停止" title="停止 Claude 当前的工作" hidden></button>
+      <button type="button" id="atBtn" hidden aria-label="@ 成员" title="@ 成员">@</button>
       <button type="button" id="send" aria-label="发送" disabled></button>
     </div>
   </div>
@@ -2489,7 +2499,8 @@ function addPeer(from,t){
 // 群聊里成员说的话：头像 + 名字，正文按 Markdown 渲染
 function addGm(it){
   var w=it.who||{},e=document.createElement('div');e.className='peer gm';
-  var f=document.createElement('div');f.className='from';f.innerHTML=gmAv(w);var n=document.createElement('span');n.textContent=w.name||'成员';f.appendChild(n);e.appendChild(f);
+  var f=document.createElement('button');f.type='button';f.className='gm-who';f.innerHTML=gmAv(w);var n=document.createElement('span');n.textContent=w.name||'成员';f.appendChild(n);
+  if(w.name)f.addEventListener('click',function(){atInsert(w.name)});feed.appendChild(f);
   if(it.text){var b=document.createElement('div');b.className='body md';b.innerHTML=md(it.text);e.appendChild(b)}
   feed.appendChild(e);gStatTail();scrollDown();
   return e;
@@ -2935,6 +2946,15 @@ function syncCmdMenu(){
   var cur=cmdMenu.querySelector('[data-i="'+cmdSel+'"]');
   if(cmdSel===0)cmdMenu.scrollTop=cmdMenu.scrollHeight;else if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:'nearest'});
 }
+// 在光标处插入 @（name 有值就插完整的 @名字 ），前面紧挨着字母数字时补个空格
+function atInsert(name){
+  if(!session||!session.group)return;
+  var v=ta.value,a=ta.selectionStart==null?v.length:ta.selectionStart,b=ta.selectionEnd==null?v.length:ta.selectionEnd;
+  if(document.activeElement!==ta&&!name){a=b=v.length}
+  var ins=(a&&/\w/.test(v[a-1])?' ':'')+'@'+(name?name+' ':'');
+  ta.value=v.slice(0,a)+ins+v.slice(b);ta.focus();ta.setSelectionRange(a+ins.length,a+ins.length);
+  ta.dispatchEvent(new Event('input'));
+}
 function pickCmd(i){
   var c=cmdShown[i];if(!c)return;
   if(session&&session.group){   // 群聊：把光标前的「@半截」换成完整的成员名
@@ -2958,7 +2978,9 @@ function syncSend(){
   var sb=$('#stopBtn');sb.hidden=!busy;sb.innerHTML=d?'停止':ICON_STOP;
   $('#composer').classList.toggle('busy',busy);
   // 手机上回车键就是发送：键盘开着（输入框有焦点）时不要发送键；键盘收起时只在有东西可发（建议回复、双击回写）时出现
-  $('#composer').classList.toggle('nosend',kbSend()&&!d&&(document.activeElement===ta||(sendBtn.disabled&&!sugOn)));
+  // 群聊：@ 键一直在；没写东西时它占发送键的位置
+  var g=!!(session&&session.group);$('#atBtn').hidden=!g;$('#composer').classList.toggle('grp',g);
+  $('#composer').classList.toggle('nosend',(kbSend()&&!d&&(document.activeElement===ta||(sendBtn.disabled&&!sugOn)))||(g&&sendBtn.disabled));
 }
 function setBusy(b){
   if(b&&!busy){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
@@ -3539,6 +3561,8 @@ function outboxRestore(){
 }
 function stop(){wsSend({t:'interrupt'})}
 
+$('#atBtn').addEventListener('mousedown',function(e){e.preventDefault()});   // 不让输入框失焦收起键盘
+$('#atBtn').addEventListener('click',function(){atInsert('')});
 sendBtn.addEventListener('click',function(){if(sendBtn.classList.contains('sugfill')){acceptSuggestion(true);return}run(ta.value)});
 $('#stopBtn').addEventListener('click',stop);
 ta.addEventListener('input',function(){
