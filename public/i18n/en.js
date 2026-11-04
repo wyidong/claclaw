@@ -2,6 +2,11 @@
 // dict：界面上一段文字（去掉首尾空白后）整段对应的英文；pat：带变量的句子，按顺序试正则，$1 原样、$T1 再翻译一次。
 // 新加界面文字后在这里补上，没补的会保持中文。
 var I18N={dict:{
+"群设置":"Group settings",
+"群名和成员只能在建群的电脑上改":"The group name and members can only be changed on the computer that created the group",
+"本机没有会话":"No sessions on this computer",
+"群里至少要有 2 个会话":"A group needs at least 2 sessions",
+"连不上，排队重试中":"unreachable, will retry",
 "建群":"New group",
 "建群（把几个会话拉进一个群）":"New group (put several sessions in one group chat)",
 "群名（可不填，默认用成员名）":"Group name (optional, defaults to member names)",
@@ -14,7 +19,6 @@ var I18N={dict:{
 "发消息，@ 谁谁回":"Message, @ someone to get a reply",
 "正在回复…":"replying…",
 "在忙，排队中":"busy, queued",
-"连不上，排队重试中":"unreachable, will retry",
 "已收到，回复稍后到":"received, reply coming later",
 "群聊暂时只能发文字":"Group chats only support text for now",
 "至少选 2 个会话":"Pick at least 2 sessions",
@@ -1072,6 +1076,11 @@ pat:[
 ["^(.+) 正在回复…$","$1 replying…"],
 ["^(.+) 在忙，排队中$","$1 busy, queued"],
 ["^解散「(.+)」？(建群的电脑上|对方电脑上)的这个群也会一起删除（成员会话本身不受影响）。$","Dissolve \"$1\"? The group on the other computer is deleted too (member sessions are not affected)."],
+["^保存（(\\d+)）$","Save ($1)"],
+["^正在问 (.+)…$","Asking $1…"],
+["^群名改成「(.+)」$","Group renamed to \"$1\""],
+["^把 (.+) 加进群$","Added $1"],
+["^把 (.+) 移出群$","Removed $1"],
 ["^OpenCode 第 (\\d+) 次重试（(.+) 再试），报错同上；不想等就点停止，换个模型再发。$","OpenCode retry $1 (next at $2), same error as above; tap Stop and switch models if you don't want to wait."],
 ["^OpenCode 第 (\\d+) 次重试，报错同上；不想等就点停止，换个模型再发。$","OpenCode retry $1, same error as above; tap Stop and switch models if you don't want to wait."],
 ["^本轮结束：模型报错：([\\s\\S]*)\\n重试也没用，已停下这一轮；换个模型再发。$","Turn ended: model error: $1\nRetrying won't help, so this turn was stopped; switch models and send again."],
