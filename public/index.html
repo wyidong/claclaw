@@ -331,6 +331,19 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #grpPane .gp-t{flex:1;min-width:0}
 #grpPane .gp-t b{display:block;font-weight:500;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #grpPane .gp-t small{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grpPane .gp-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+#grpPane .gp-chips:empty{display:none}
+#grpPane .gp-chip{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:3px 4px 3px 8px;border-radius:999px;background:var(--bg);font-size:13px}
+#grpPane .gp-chip i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:9em}
+#grpPane .gp-chip button{border:0;background:none;color:var(--muted);font-size:12px;padding:0 4px;cursor:pointer}
+#grpPane .gp-nh{display:flex;align-items:center;gap:8px;width:100%;padding:9px 4px;border:0;border-radius:9px;background:none;color:var(--ink);font:inherit;font-size:14.5px;text-align:left;cursor:pointer}
+#grpPane .gp-nh:hover{background:var(--bg)}
+#grpPane .gp-chev{flex:none;color:var(--muted);transition:transform .15s}
+#grpPane .gp-node.open>.gp-nh>.gp-chev{transform:rotate(90deg)}
+#grpPane .gp-nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grpPane .gp-nn{flex:none;font-style:normal;font-size:12px;color:var(--muted)}
+#grpPane .gp-fold{flex:none;color:var(--muted)}
+#grpPane .gp-kids{padding-left:18px}
 #grpPane .gp-ft{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 #grpPane .gp-ft button{height:36px;padding:0 16px;border-radius:9px;border:0;font:inherit;font-size:14.5px;cursor:pointer}
 #grpPane .gp-go{background:var(--accent);color:#fff}
@@ -2304,7 +2317,7 @@ dissEl.querySelector('.ds-b').addEventListener('click',function(e){
   var sr=e.target.closest('tr.s');if(sr){var d=sr.nextElementSibling;if(d&&d.classList.contains('d'))d.hidden=!d.hidden;return}
   var tr=e.target.closest('tr[data-i],.ds-st[data-i]');if(tr){showTurn(+tr.dataset.i)}
 });
-$('#sessBtn').addEventListener('click',function(){if(session)openDissect()});
+$('#sessBtn').addEventListener('click',function(){if(!session)return;if(session.group){if(session.group.mirror)toast('群名和成员只能在建群的电脑上改');else openGroupPick(session.id);return}openDissect()});
 (function(){   // 手机：右滑 = 返回
   var g=null;
   dissEl.addEventListener('touchstart',function(e){if(e.touches.length!==1){g=null;return}var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),tw:!!e.target.closest('.ds-tw')}},{passive:true});
@@ -3196,6 +3209,10 @@ function onEvent(m){
     }else if(gi.kind==='gm')stamp(addGm(gi),gi.at);
     else{addSys(gi.text);gStatTail();if(gi.fail&&outbox){outboxRestore();setBusy(false)}}
     refreshList();
+    break;
+  case 'group.meta':   // 改了群名 / 成员
+    if(session&&m.id===session.id&&session.group){session.title=m.title;session.group.members=m.members||[];session.cwdShort=(m.members||[]).length+' 个成员：'+(m.members||[]).map(function(x){return x.name}).join('、');setHeader()}
+    refreshList();if(listMode==='recent'&&!DESKTOP.matches&&mList)loadRecent();
     break;
   case 'group.status':
     if(session&&m.id===session.id)gStat(m.status);
@@ -4856,43 +4873,107 @@ $('#sNew').addEventListener('click',function(){
   if(Array.isArray(lastList)&&clawSel!=='openclaw'){firstOrAlert(lastList);return}
   fetch('/api/sessions').then(function(r){return r.json()}).then(function(arr){if(Array.isArray(arr))lastList=arr;firstOrAlert(arr)}).catch(function(){firstOrAlert(null)});
 });
-// 建群：选成员（本机任意 Claw 的会话 + 各对方开放给本机的会话），至少 2 个
-function openGroupNew(){
+// 建群 / 群设置：按 Claw → 会话目录 → 会话逐层展开着选（只列有会话的 Claw）；协同的对方点开才去取它开放的会话。至少 2 个
+function openGroupPick(gid){
   var p=$('#grpPane');
   if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
-  p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>建群</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
-    +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><input class="gp-in gp-q" type="search" placeholder="搜索会话"><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
-    +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go" disabled>建群</button></div></div>';
+  p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>'+(gid?'群设置':'建群')+'</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
+    +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><div class="gp-chips"></div><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
+    +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go" disabled>'+(gid?'保存':'建群')+'</button></div></div>';
   p.classList.add('on');
   var close=function(){p.classList.remove('on')};
   p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel').addEventListener('click',close);
-  var list=p.querySelector('.gp-list'),go=p.querySelector('.gp-go'),q=p.querySelector('.gp-q'),picked={};
-  var count=function(){var n=Object.keys(picked).length;go.disabled=n<2;go.textContent=n?'建群（'+n+'）':'建群'};
+  var list=p.querySelector('.gp-list'),go=p.querySelector('.gp-go'),chips=p.querySelector('.gp-chips'),nameIn=p.querySelector('.gp-name'),picked={},order=[];
+  var keyOf=function(x,peer){return (peer?peer.peerId+'/':'')+x.id};
+  var sync=function(){
+    var n=order.length;go.disabled=n<2;go.textContent=(gid?'保存':'建群')+(n?'（'+n+'）':'');
+    chips.innerHTML='';
+    order.forEach(function(k){var m=picked[k],c=document.createElement('span');c.className='gp-chip';c.innerHTML=gmAv({claw:m.claw,collab:!!m.peerId})+'<i></i><button type="button" aria-label="移出">✕</button>';c.querySelector('i').textContent=m.title||'(无标题)';
+      c.querySelector('button').addEventListener('click',function(){unpick(k)});chips.appendChild(c)});
+    list.querySelectorAll('.gp-row input').forEach(function(cb){cb.checked=!!picked[cb.dataset.k]});
+  };
+  var pick=function(k,m){if(!picked[k]){picked[k]=m;order.push(k)}sync()};
+  var unpick=function(k){delete picked[k];order=order.filter(function(x){return x!==k});sync()};
   var row=function(x,peer){
-    var k=(peer?peer.peerId+'/':'')+x.id,l=document.createElement('label');l.className='gp-row';l.dataset.q=(x.title+' '+(x.cwd||'')+' '+(peer?peer.name:'')).toLowerCase();
+    var k=keyOf(x,peer),l=document.createElement('label');l.className='gp-row';
     l.innerHTML='<input type="checkbox"><span class="gp-av">'+gmAv({claw:x.claw,collab:!!peer})+'</span><span class="gp-t"><b></b><small></small></span>';
     l.querySelector('b').textContent=x.title||'(无标题)';
-    l.querySelector('small').textContent=peer?'协同 · '+peer.name:(CLAW_NAMES[x.claw]||'')+(x.cwd?' · '+x.cwd:'');
-    var cb=l.querySelector('input');cb.checked=!!picked[k];
-    cb.addEventListener('change',function(){if(cb.checked)picked[k]={id:x.id,peerId:peer?peer.peerId:undefined};else delete picked[k];count()});
+    l.querySelector('small').textContent=peer?'协同 · '+peer.name:wxTime(x.lastModified||x.at);
+    var cb=l.querySelector('input');cb.dataset.k=k;cb.checked=!!picked[k];
+    cb.addEventListener('change',function(){if(cb.checked)pick(k,{id:x.id,peerId:peer?peer.peerId:undefined,title:x.title,claw:x.claw});else unpick(k)});
     return l;
   };
-  fetch('/api/group/candidates').then(function(r){return r.json()}).then(function(j){
+  // 一个可展开的节点：标题行 + 子内容（第一次展开时才生成）
+  var node=function(box,headHtml,fill,open){
+    var d=document.createElement('div');d.className='gp-node';
+    var h=document.createElement('button');h.type='button';h.className='gp-nh';h.innerHTML='<svg class="gp-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>'+headHtml;
+    var kids=document.createElement('div');kids.className='gp-kids';kids.hidden=true;
+    var filled=false;h.addEventListener('click',function(){if(!filled){filled=true;fill(kids)}kids.hidden=!kids.hidden;d.classList.toggle('open',!kids.hidden)});
+    d.appendChild(h);d.appendChild(kids);box.appendChild(d);
+    if(open)h.click();
+    return d;
+  };
+  var label=function(t,n){return '<span class="gp-nt"></span>'+(n!=null?'<em class="gp-nn">'+n+'</em>':'')};
+  var setText=function(d,t){d.querySelector('.gp-nt').textContent=t};
+  var dirName=function(s){var c=s.cwdShort||s.cwd||'';return c.replace(/^\/(Users|home)\/[^\/]+/,'~')||'(没有目录)'};
+  var clawNode=function(box,k,arr){
+    var d=node(box,'<span class="gm-ic">'+clawIcon(k)+'</span>'+label('',arr.length),function(kids){
+      arr.forEach(function(s){s.claw=k});
+      var dirs={},keys=[];
+      arr.forEach(function(s){var dk=k==='openclaw'?'':dirName(s);if(!dirs[dk]){dirs[dk]=[];keys.push(dk)}dirs[dk].push(s)});
+      if(keys.length===1&&!keys[0]){dirs[''].forEach(function(s){kids.appendChild(row(s,null))});return}
+      keys.forEach(function(dk){var dd=node(kids,'<svg class="gp-fold" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'+label('',dirs[dk].length),function(k2){dirs[dk].forEach(function(s){k2.appendChild(row(s,null))})});setText(dd,dk)});
+    });
+    setText(d,CLAW_NAMES[k]||k);
+  };
+  var load=function(){
     list.innerHTML='';
-    var sec=function(t){var d=document.createElement('div');d.className='gp-sec';d.textContent=t;list.appendChild(d)};
-    sec('本机');(j.local||[]).forEach(function(x){list.appendChild(row(x,null))});
-    (j.peers||[]).forEach(function(pr){sec('协同 · '+pr.name+(pr.ok?'':'（连不上：'+(pr.error||'')+'）'));(pr.sessions||[]).forEach(function(x){list.appendChild(row(x,pr))});if(pr.ok&&!(pr.sessions||[]).length)sec('（对方没有开放会话给本机）')});
-  }).catch(function(e){list.innerHTML='<div class="gp-sec">加载失败：'+esc(e.message)+'</div>'});
-  q.addEventListener('input',function(){var v=q.value.trim().toLowerCase();list.querySelectorAll('.gp-row').forEach(function(l){l.hidden=!!v&&l.dataset.q.indexOf(v)<0})});
+    var sec=function(t){var d=document.createElement('div');d.className='gp-sec';d.textContent=t;list.appendChild(d);return d};
+    sec('本机');var localBox=document.createElement('div');localBox.innerHTML='<div class="gp-sec">加载中…</div>';list.appendChild(localBox);
+    var peerSec=sec('协同');peerSec.hidden=true;var peerBox=document.createElement('div');list.appendChild(peerBox);
+    fetch('/api/claws').then(function(r){return r.json()}).then(function(cl){
+      var ok={};(Array.isArray(cl)?cl:[]).forEach(function(c){if(c.installed&&c.supported!==false)ok[c.id]=1});
+      var ids=CLAW_ORDER.filter(function(k){return ok[k]});
+      return Promise.all(ids.map(function(k){return fetch('/api/sessions'+(k==='claude'?'':'?claw='+k)).then(function(r){return r.json()}).then(function(a){return [k,Array.isArray(a)?a.filter(function(s){return !s.unsent}):[]]},function(){return [k,[]]})}));
+    }).then(function(res){
+      localBox.innerHTML='';
+      res.filter(function(x){return x[1].length}).forEach(function(x){clawNode(localBox,x[0],x[1])});
+      if(!localBox.firstChild)localBox.innerHTML='<div class="gp-sec">本机没有会话</div>';
+    }).catch(function(e){localBox.innerHTML='<div class="gp-sec">加载失败：'+esc(e.message)+'</div>'});
+    fetch('/api/group/peers').then(function(r){return r.json()}).then(function(peers){
+      if(!Array.isArray(peers)||!peers.length)return;
+      peerSec.hidden=false;
+      peers.forEach(function(pr){
+        var d=node(peerBox,'<span class="gm-co">'+COLLAB_SVG+'</span>'+label(''),function(kids){
+          kids.innerHTML='<div class="gp-sec">正在问 '+esc(pr.name)+'…</div>';
+          fetch('/api/group/peer-sessions?peer='+encodeURIComponent(pr.peerId)).then(function(r){return r.json()}).then(function(j){
+            kids.innerHTML='';
+            if(!j.ok){kids.innerHTML='<div class="gp-sec"></div>';kids.firstChild.textContent='连不上：'+(j.error||'');return}
+            if(!j.sessions.length){kids.innerHTML='<div class="gp-sec">（对方没有开放会话给本机）</div>';return}
+            j.sessions.forEach(function(s){kids.appendChild(row(s,pr))});
+          }).catch(function(e){kids.innerHTML='<div class="gp-sec"></div>';kids.firstChild.textContent='连不上：'+e.message});
+        });
+        setText(d,pr.name);
+      });
+    }).catch(function(){});
+  };
+  if(gid)fetch('/api/group/info?id='+encodeURIComponent(gid)).then(function(r){return r.json()}).then(function(j){
+    if(j.error){close();toast(j.error);return}
+    nameIn.value=j.name||'';(j.members||[]).forEach(function(m){var k=(m.peerId?m.peerId+'/':'')+m.id;picked[k]={id:m.id,peerId:m.peerId,title:m.name||m.title,claw:m.claw};order.push(k)});
+    sync();load();
+  }).catch(function(e){close();toast('读不到群信息：'+e.message)});
+  else{sync();load()}
   go.addEventListener('click',function(){
     go.disabled=true;
-    postJson('/api/group/create',{name:p.querySelector('.gp-name').value.trim(),members:Object.keys(picked).map(function(k){return picked[k]})}).then(function(r){return r.json()}).then(function(j){
-      if(!j.ok){alert(j.error||'建群失败');count();return}
-      close();toast('群建好了');refreshList();if(listMode==='recent'&&!DESKTOP.matches)loadRecent();openFromNotice(j.id);
-    }).catch(function(e){alert('建群失败：'+e.message);count()});
+    var body={name:nameIn.value.trim(),members:order.map(function(k){return picked[k]})};if(gid)body.id=gid;
+    postJson(gid?'/api/group/edit':'/api/group/create',body).then(function(r){return r.json()}).then(function(j){
+      if(!j.ok){alert(j.error||'没保存成功');sync();return}
+      close();refreshList();if(listMode==='recent'&&!DESKTOP.matches)loadRecent();
+      if(gid)toast('已保存');else{toast('群建好了');openFromNotice(j.id)}
+    }).catch(function(e){alert('没保存成功：'+e.message);sync()});
   });
 }
-$('#gNew').addEventListener('click',openGroupNew);
+$('#gNew').addEventListener('click',function(){openGroupPick(null)});
 function openSheet(silent){
   var list=$('#sList');
   var rec=listMode==='recent';

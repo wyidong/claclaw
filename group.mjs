@@ -13,8 +13,7 @@ export const toWire = id => 'gp-' + String(id).slice(3);   // 对方会把 from_
 export const fromWire = s => /^gp-[0-9a-f]{8}$/.test(String(s || '')) ? 'gp:' + String(s).slice(3) : null;
 
 // 成员名（@ 用）：标题压空格、截 16 字；重名加序号
-export function memberNames(members) {
-  const taken = new Set();
+export function memberNames(members, taken = new Set()) {
   return members.map(m => {
     const base = Array.from(String(m.title || '').replace(/\s+/g, ' ').trim().replace(/@/g, '')).slice(0, 16).join('') || '会话';
     let name = base;
@@ -23,6 +22,8 @@ export function memberNames(members) {
     return { ...m, name };
   });
 }
+const memberKey = m => (m.peerId ? m.peerId + '/' : '') + m.id;
+const memberRec = m => ({ key: memberKey(m), id: m.id, peerId: m.peerId || undefined, peerName: m.peerName || undefined, title: m.title || '', claw: m.claw || '' });
 
 // 文字里 @ 了谁（key 列表，按出现顺序去重）；@全体 / @all = 全部。长名先匹配，短名不会误中长名的一部分
 export function parseMentions(text, members) {
@@ -113,15 +114,49 @@ export class Groups {
   create({ name, members }) {
     const seen = new Set(), ms = [];
     for (const m of members || []) {
-      const key = (m.peerId ? m.peerId + '/' : '') + m.id;
-      if (!m.id || seen.has(key)) continue;
-      seen.add(key); ms.push({ key, id: m.id, peerId: m.peerId || undefined, peerName: m.peerName || undefined, title: m.title || '', claw: m.claw || '' });
+      if (!m.id || seen.has(memberKey(m))) continue;
+      seen.add(memberKey(m)); ms.push(memberRec(m));
     }
     if (ms.length < 2) throw new Error('至少选 2 个会话');
     let id; do id = 'gp:' + crypto.randomBytes(4).toString('hex'); while (this.map.has(id));
     const g = new Group(this, { id, name: String(name || '').trim().slice(0, 40), members: memberNames(ms) });
     this.map.set(id, g); this.save(g); this.syncOut(g);
     this.log('group create', id, ms.length + ' members');
+    return g;
+  }
+
+  // 改群名 / 加减成员（只在建群的电脑上改）：老成员名字不变，新成员名字不和现有的撞；被移出的对方不再有成员就让它删掉镜像
+  edit(id, { name, members } = {}) {
+    const g = this.get(id);
+    if (!g) throw new Error('这个群已经解散了');
+    if (g.mirror) throw new Error('群名和成员只能在建群的电脑上改');
+    const notes = [];
+    let list = null;
+    if (Array.isArray(members)) {
+      const seen = new Set(); list = [];
+      for (const m of members) { if (!m?.id || seen.has(memberKey(m))) continue; seen.add(memberKey(m)); list.push(g.members.find(x => x.key === memberKey(m)) || memberRec(m)); }
+      if (list.length < 2) throw new Error('群里至少要有 2 个会话');
+    }
+    if (typeof name === 'string' && name.trim().slice(0, 40) !== g.name) {
+      g.name = name.trim().slice(0, 40);
+      notes.push(g.name ? '群名改成「' + g.name + '」' : '群名改回默认（成员名）');
+    }
+    if (list) {
+      const keep = list.filter(m => m.name), fresh = list.filter(m => !m.name);
+      const named = memberNames(fresh, new Set(keep.map(m => m.name)));
+      const out = list.map(m => m.name ? m : named[fresh.indexOf(m)]);
+      const removed = g.members.filter(m => !out.some(x => x.key === m.key));
+      const oldPeers = g.peers();
+      g.members = out;
+      for (const m of removed) { delete g.q[m.key]; delete g.seen[m.key]; delete g.status[m.key]; }
+      if (named.length) notes.push('把 ' + named.map(m => m.name).join('、') + ' 加进群');
+      if (removed.length) notes.push('把 ' + removed.map(m => m.name).join('、') + ' 移出群');
+      for (const pid of oldPeers) if (!g.peers().includes(pid)) this.peerOp(pid, { op: 'dissolve', id: toWire(id) }).catch(e => this.log('group dissolve', pid, e.message));
+    }
+    this.save(g);
+    g.emit({ t: 'group.meta', id, title: g.title, members: g.membersView() });
+    for (const n of notes) this.add(g, { kind: 'sys', text: n });
+    if (!notes.length) this.syncOut(g);
     return g;
   }
 
@@ -263,6 +298,7 @@ export class Groups {
     for (const it of fresh) { g.emit({ t: 'group.msg', id, item: it }); if (!isNew) try { this.onItem(g, it); } catch {} }
     if (isNew && fresh.length) try { this.onItem(g, fresh[fresh.length - 1]); } catch {}   // 第一次同步：未读只记一条
     g.emit({ t: 'group.status', id, status: g.statusView() });
+    g.emit({ t: 'group.meta', id, title: g.title, members: g.membersView() });
     return g;
   }
   // 解散（从「最近」删）：两边都删。fromPeer：对方发来的解散（镜像只认主群，主群只认有成员的对方），不再回发给它

@@ -1265,7 +1265,9 @@ async function groupDeliver(m, text, o) {
   const g = groups.get(o.groupId), names = g ? g.members.map(x => x.name) : [];
   const from = '群聊「' + o.groupName + '」· ' + o.from;
   if (!m.peerId) {
-    const info = (await localSessions()).find(s => s.sessionId === m.id);
+    // 会话信息：开着的直接用；其他 Claw 只要 ID；Claude 没开着的才去列会话（慢一点）
+    const r0 = runnerOf(m.id);
+    const info = r0?.info?.cwd ? { ...r0.info, sessionId: m.id } : clawOf(m.id) ? { sessionId: m.id, claw: clawOf(m.id).id, title: m.title } : (await localSessions()).find(s => s.sessionId === m.id);
     if (!info) return { ok: false, error: '这个会话已经不在了' };
     if (localBusy.has(m.id) || peerBusy.has(m.id)) return { busy: true };
     localBusy.add(m.id);
@@ -1304,6 +1306,31 @@ function groupOnItem(g, it) {
   alertOut(g.id, 'reply', g.title, { title: g.title, body: (v.who?.name ? v.who.name + '：' : '') + snippet(v.text, '有新消息'), tag: 'grp-' + g.id, url: '/?s=' + encodeURIComponent(g.id), badge });
 }
 const groups = new Groups({ dir: path.join(DATA, 'groups'), log, deliver: groupDeliver, peerOp: groupPeerOp, onItem: groupOnItem });
+// 本机会话还在不在（不列全部会话，快）
+function localMemberOk(id) {
+  if (runnerOf(id)) return true;
+  const c = clawOf(id);
+  if (c) { try { return c.exists ? !!c.exists(id) : true; } catch { return false; } }
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
+  const root = path.join(HOME, '.claude', 'projects');
+  try { return fs.readdirSync(root).some(d => fs.existsSync(path.join(root, d, id + '.jsonl'))); } catch { return false; }
+}
+// 网页选的成员 → 群成员：已在群里的原样保留；本机的查一下还在；协同的只认对方列出来的（开放给本机的）
+async function groupMembers(want, g) {
+  const c = loadPeer(), out = [], lists = new Map();
+  for (const w of (Array.isArray(want) ? want : []).slice(0, 20)) {
+    if (!w || typeof w.id !== 'string') continue;
+    const old = g?.members.find(m => m.id === w.id && (m.peerId || '') === (w.peerId || ''));
+    if (old) { out.push(old); continue; }
+    if (!w.peerId) { if (localMemberOk(w.id)) out.push({ id: w.id, claw: clawOf(w.id)?.id || 'claude', title: String(w.title || '').slice(0, 80) }); continue; }
+    const p = c.peers.find(x => x.id === w.peerId);
+    if (!p) continue;
+    if (!lists.has(p.id)) lists.set(p.id, await peerCall(c, p, '/sessions', { ms: 8000 }).then(j => j?.sessions || [], () => []));
+    const s = lists.get(p.id).find(x => x.id === w.id);
+    if (s) out.push({ id: s.id, peerId: p.id, peerName: p.name, claw: s.claw || '', title: s.title || s.id });
+  }
+  return out;
+}
 
 // ---------- 协同发件箱：对方连不上就排队重发（规则见 peerqueue.mjs，和对方商定的同一套）----------
 const peerOutbox = new DiskMap(path.join(DATA, 'peer-outbox.json'));   // msg_id → { at, kind: send|reply, peerId, fromId, body, tries, busyTries, next, lastError }
@@ -2843,32 +2870,32 @@ const handler = async (req, res) => {
       try { saveRecent(); } catch (e) { return sendJson(res, 500, { error: e.message }); }
       return sendJson(res, 200, { ok: true });
     }
-    // 建群：可选的成员（本机所有会话 + 各对方开放给本机的会话）
-    if (url.pathname === '/api/group/candidates' && req.method === 'GET') {
-      const local = (await localSessions().catch(() => [])).filter(x => x.title || x.cwd)
-        .sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0)).slice(0, 300)
-        .map(x => ({ id: x.sessionId, claw: x.claw, title: String(x.title || '').replace(/\s+/g, ' ').slice(0, 80) || '(无标题)', cwd: relPath(x.cwd || '', null), at: x.lastModified || 0 }));
+    // 建群 / 改群：本机的会话由网页按 Claw 用 /api/sessions 取；这里给已配对的对方（不连它，快）和某个对方开放的会话
+    if (url.pathname === '/api/group/peers' && req.method === 'GET') {
       const c = loadPeer();
-      const peers = c.enabled ? await Promise.all(c.peers.filter(p => p.inbox && p.theirToken).map(p =>
-        peerCall(c, p, '/sessions', { ms: 8000 }).then(j => ({ peerId: p.id, name: p.name, ok: !!j.ok, sessions: j.sessions || [], error: j.ok ? undefined : j.error }), e => ({ peerId: p.id, name: p.name, ok: false, sessions: [], error: e.message })))) : [];
-      return sendJson(res, 200, { local, peers });
+      return sendJson(res, 200, c.enabled ? c.peers.filter(p => p.inbox && p.theirToken).map(p => ({ peerId: p.id, name: p.name })) : []);
     }
-    if (url.pathname === '/api/group/create' && req.method === 'POST') {
+    if (url.pathname === '/api/group/peer-sessions' && req.method === 'GET') {
+      const c = loadPeer(), p = c.enabled && c.peers.find(x => x.id === url.searchParams.get('peer'));
+      if (!p) return sendJson(res, 404, { ok: false, error: '没有这个对方' });
+      const j = await peerCall(c, p, '/sessions', { ms: 8000 }).catch(e => ({ ok: false, error: e.message }));
+      return sendJson(res, 200, { ok: !!j?.ok, sessions: j?.sessions || [], error: j?.ok ? undefined : j?.error || '连不上' });
+    }
+    if (url.pathname === '/api/group/info' && req.method === 'GET') {
+      const g = groups.get(url.searchParams.get('id') || '');
+      if (!g) return sendJson(res, 404, { error: '这个群已经解散了' });
+      return sendJson(res, 200, { id: g.id, name: g.name, title: g.title, mirror: !!g.mirror, members: g.mirror ? [] : g.members.map(m => ({ id: m.id, peerId: m.peerId, peerName: m.peerName, title: m.title, claw: m.claw, name: m.name })) });
+    }
+    if ((url.pathname === '/api/group/create' || url.pathname === '/api/group/edit') && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const b = await jsonBody(req, 64 * 1024);
-      const want = Array.isArray(b.members) ? b.members.slice(0, 20) : [];
-      const local = await localSessions().catch(() => []), c = loadPeer(), members = [];
-      for (const w of want) {
-        if (!w || typeof w.id !== 'string') continue;
-        if (!w.peerId) { const s = local.find(x => x.sessionId === w.id); if (s) members.push({ id: s.sessionId, claw: s.claw, title: s.title || relPath(s.cwd || '', null) }); continue; }
-        const p = c.peers.find(x => x.id === w.peerId);   // 协同成员：只认对方列出来的会话（开放给本机的）
-        if (!p) continue;
-        const j = await peerCall(c, p, '/sessions', { ms: 8000 }).catch(() => null);
-        const s = (j?.sessions || []).find(x => x.id === w.id);
-        if (s) members.push({ id: s.id, peerId: p.id, peerName: p.name, claw: s.claw || '', title: s.title || s.id });
-      }
-      try { const g = groups.create({ name: b.name, members }); return sendJson(res, 200, { ok: true, id: g.id }); }
-      catch (e) { return sendJson(res, 400, { error: e.message }); }
+      try {
+        if (url.pathname === '/api/group/create') { const g = groups.create({ name: b.name, members: await groupMembers(b.members) }); return sendJson(res, 200, { ok: true, id: g.id }); }
+        const g0 = groups.get(String(b.id || ''));
+        if (!g0) return sendJson(res, 404, { error: '这个群已经解散了' });
+        const g = groups.edit(g0.id, { name: typeof b.name === 'string' ? b.name : undefined, members: Array.isArray(b.members) ? await groupMembers(b.members, g0) : undefined });
+        return sendJson(res, 200, { ok: true, id: g.id, title: g.title });
+      } catch (e) { return sendJson(res, 400, { error: e.message }); }
     }
     if (url.pathname === '/api/recent/hide' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });

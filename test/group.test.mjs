@@ -212,3 +212,18 @@ test('评审修复：重名序号不撞名；成员名以「全体」开头不�
   assert.deepEqual(parseMentions('@全体项目 看下', ms2), ['a']);
   assert.deepEqual(parseMentions('@全体 看下', ms2), ['a', 'b']);
 });
+
+test('改群名、加减成员：保留老成员的名字，新成员名字不撞；少于 2 个不行；不再有成员的对方收到解散', async () => {
+  const { groups, ops } = setup(async () => ({ ok: true, reply: 'ok' }));
+  const g = groups.create({ members: [M('s1', '后端'), M('s2', '前端'), M('a1', '需求', { peerId: 'P15' })] });
+  groups.edit(g.id, { name: '项目组' });
+  assert.equal(g.title, '项目组');
+  assert.ok(g.items.at(-1).kind === 'sys' && /项目组/.test(g.items.at(-1).text));
+  groups.edit(g.id, { members: [M('s1', '后端'), M('s2', '前端'), M('s3', '后端')] });
+  assert.deepEqual(g.members.map(m => m.name), ['后端', '前端', '后端2']);
+  assert.ok(g.items.some(x => x.kind === 'sys' && /加进群/.test(x.text) && /后端2/.test(x.text)));
+  assert.ok(g.items.some(x => x.kind === 'sys' && /移出群/.test(x.text) && /需求/.test(x.text)));
+  assert.ok(ops.some(o => o.peerId === 'P15' && o.body.op === 'dissolve'));
+  assert.throws(() => groups.edit(g.id, { members: [M('s1', '后端')] }));
+  assert.equal(g.members.length, 3);
+});
