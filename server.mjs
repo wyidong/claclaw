@@ -1226,6 +1226,8 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
       else if (m.t === 'ai.delta') cur += m.text || '';
       else if (m.t === 'ai.end') { if (cur.trim()) reply = cur; cur = ''; }
       else if (m.t === 'ai.full') { if (m.text?.trim()) reply = m.text; }
+      else if (group?.gid && m.t === 'perm.request') groups.permOpen(group.gid, id, group.self, m);   // 群这一轮要确认：群里也弹出来
+      else if (group?.gid && (m.t === 'perm.done' || m.t === 'perm.cancel')) groups.permClose(group.gid, m.requestId, m);
       else if (m.t === 'turn.done') {
         const out = (cur.trim() || reply).trim();
         // 额度用完时 Claude Code 把「You've hit your session limit · resets 6:10pm」当普通回复吐出来，
@@ -1235,7 +1237,7 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
         end(200, { ok: m.subtype === 'success', reply: out, error: m.error });
       }
     } };
-    const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); if (group) setTimeout(() => { r.quietTurn = false; }, 0); resolve([code, obj]); };
+    const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); if (group?.gid) groups.permEnd(group.gid, id); if (group) setTimeout(() => { r.quietTurn = false; }, 0); resolve([code, obj]); };
     if (group) r.quietTurn = true;   // 群投递的这一轮：回复贴回群里、由群推送，成员会话自己不再记未读、不推送（要确认的照推）
     const timer = setTimeout(() => end(504, { ok: false, error: '30 分钟内没等到回复', partial: (cur || reply).trim() }), 30 * 60 * 1000);   // 对方早已拿到 202，这里只是兜底
     r.subscribe(sub);
@@ -1275,7 +1277,7 @@ async function groupDeliver(m, text, o) {
     if (localBusy.has(m.id) || peerBusy.has(m.id)) return { busy: true };
     localBusy.add(m.id);
     try {
-      const [code, obj] = await peerDeliver(info, text, from, null, { local: true, group: { name: o.groupName, members: names, self: m.name, host: o.host, asUser: o.asUser, log: groups.logFile(o.groupId) } });
+      const [code, obj] = await peerDeliver(info, text, from, null, { local: true, group: { gid: o.groupId, name: o.groupName, members: names, self: m.name, host: o.host, asUser: o.asUser, log: groups.logFile(o.groupId) } });
       if (code === 409) return { busy: true };
       return obj.ok ? { ok: true, reply: obj.reply } : { ok: false, error: obj.error || 'HTTP ' + code };
     } finally { localBusy.delete(m.id); }
@@ -1308,7 +1310,7 @@ function groupOnItem(g, it) {
   const v = g.view(it);
   alertOut(g.id, 'reply', g.title, { title: g.title, body: (v.who?.name ? v.who.name + '：' : '') + snippet(v.text, '有新消息'), tag: 'grp-' + g.id, url: '/?s=' + encodeURIComponent(g.id), badge });
 }
-const groups = new Groups({ dir: path.join(DATA, 'groups'), logDir: GROUP_LOGS, log, deliver: groupDeliver, peerOp: groupPeerOp, onItem: groupOnItem });
+const groups = new Groups({ dir: path.join(DATA, 'groups'), logDir: GROUP_LOGS, log, deliver: groupDeliver, peerOp: groupPeerOp, onItem: groupOnItem, permReply: (sid, rid, decision, answers) => runnerOf(sid)?.replyPermission(rid, decision, answers) });
 // 本机会话还在不在（不列全部会话，快）
 function localMemberOk(id) {
   if (runnerOf(id)) return true;
@@ -1478,6 +1480,7 @@ async function peerHandler(req, res) {
       const gid = fromWire(b.id);
       if (!gid) return out(400, { ok: false, error: '缺群编号' });
       if (b.op === 'post') { const ok = groups.peerPost(gid, peer.id, String(b.text || '').slice(0, 8000), peer.name); log('group post in', peer.name, gid, ok ? 'ok' : 'rejected'); return out(ok ? 200 : 404, { ok }); }
+      if (b.op === 'permstat') { const ok = groups.peerPermStatus(gid, peer.id, peer.name, String(b.sid || '').slice(0, 80), !!b.on); return out(ok ? 200 : 404, { ok }); }
       if (b.op === 'dissolve') { const ok = groups.dissolve(gid, { fromPeer: peer.id }); if (ok) clearUnread(gid); return out(200, { ok }); }
       return out(400, { ok: false, error: '不认识的操作' });
     }
@@ -1504,7 +1507,7 @@ async function peerHandler(req, res) {
       return out(ok ? 200 : 404, ok ? { ok: true, reply: '' } : { ok: false, error: '没有这个会话' });
     }
     // 群投递：只有本机确实有对方那个群的镜像时才按群消息处理（群的说明、不单独推送）；否则当普通协同消息
-    const grp = jb.group && typeof jb.group === 'object' && groups.isMirrorOf(fromWire(fromSession), peer.id) ? { name: String(jb.group.name || '').slice(0, 40), members: (Array.isArray(jb.group.members) ? jb.group.members : []).slice(0, 20).map(x => String(x).slice(0, 20)), self: String(jb.group.self || '').slice(0, 20), host: jb.group.host === true, log: groups.logFile(fromWire(fromSession)) } : null;
+    const grp = jb.group && typeof jb.group === 'object' && groups.isMirrorOf(fromWire(fromSession), peer.id) ? { name: String(jb.group.name || '').slice(0, 40), members: (Array.isArray(jb.group.members) ? jb.group.members : []).slice(0, 20).map(x => String(x).slice(0, 20)), self: String(jb.group.self || '').slice(0, 20), host: jb.group.host === true, gid: fromWire(fromSession), log: groups.logFile(fromWire(fromSession)) } : null;
     const info = want ? infos.find(s => s.sessionId.toLowerCase().startsWith(want.toLowerCase())) : infos.length === 1 ? infos[0] : null;
     if (!info) return out(400, { ok: false, error: want ? '没有这个会话' : '有多个会话，用 session 指定一个', sessions: brief });
     if (peerBusy.has(info.sessionId)) return out(429, { ok: false, error: '上一条还在处理，稍后再发' });
@@ -3312,7 +3315,7 @@ wss.on('connection', (ws, req) => {
           t: 'session.opened', id: m.id, title: g.title, cwd: '', cwdShort: g.members.length + ' 个成员：' + g.members.map(x => x.name + (x.name === g.hostName ? '（主理人）' : '')).join('、'), claw: 'group',
           group: { members: g.membersView(), mirror: !!g.mirror, status: g.statusView() },
           mode: 'default', modes: ['default'], busy: false, history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
-          pending: [], suggestion: null, commands: [],
+          pending: g.pendingPerms(), suggestion: null, commands: [],
         });
       } else if (m.t === 'session.open' && clawOf(m.id)?.acp) {
         const c = clawOf(m.id);

@@ -65,7 +65,7 @@ class Group {
   constructor(store, d) {
     this.store = store;
     Object.assign(this, { name: '', created: Date.now(), members: [], items: [], seen: {}, pending: {}, seqMax: 0, mirror: null, status: {}, host: '' }, d);
-    this.subs = new Set(); this.q = {}; this.running = {}; this.closed = false;
+    this.subs = new Set(); this.q = {}; this.running = {}; this.closed = false; this.perms = new Map();   // perms：本机成员这一轮在等的确认（只在内存）
     this.busy = false; this.queue = [];
   }
   get title() { return this.mirror ? (this.mirrorTitle || this.name || '群聊') : this.name || cut(this.members.map(m => m.name).join('、'), 24) || '群聊'; }
@@ -79,7 +79,9 @@ class Group {
   emit(o) { const s = JSON.stringify(o); for (const ws of this.subs) if (ws.readyState === 1) ws.send(s); }
   send(text) { return this.store.post(this.id, text); }
   async interrupt() {}
-  replyPermission() {}
+  // 在群里点了允许 / 拒绝：交给那个成员会话（只有本机成员的确认会出现在本机的群里）
+  replyPermission(requestId, decision, answers) { const p = this.perms.get(requestId); if (p) this.store.permReply(p.sid, requestId, decision, answers); }
+  pendingPerms() { return [...this.perms.values()].map(p => p.req); }
   view(it, viewer) {
     if (this.mirror) return it;
     const m = it.who && this.members.find(x => x.key === it.who);
@@ -103,8 +105,8 @@ const memberView = (m, viewer) => ({ name: m.name, claw: m.claw || '', collab: v
 
 export class Groups {
   // logDir：群记录文件（给成员会话读的纯文本）放这里；不要放在数据目录里，那里对协同那一轮算敏感位置
-  constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
-    Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, retryMs, retryFor, syncDelay });
+  constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, permReply = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
+    Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, permReply, retryMs, retryFor, syncDelay });
     this.map = new Map(); this.syncT = new Map();
     fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(logDir, { recursive: true });
     // 解散过的群（墓碑，留 30 天）：之后晚到的同步、消息、回复一律不收，镜像不会被「复活」
@@ -272,6 +274,40 @@ export class Groups {
       } else this.add(g, { kind: 'sys', text: '「' + m.name + '」没收到：' + (r?.error || '未知错误') });
       return;
     }
+  }
+
+  // 本机成员处理群消息时要确认：群里也弹出来（标上是谁），在群里就能点；主群顺带把这个成员的状态改成「等你确认」，镜像告诉主群
+  permOpen(id, sid, name, req) {
+    const g = this.get(id);
+    if (!g || g.perms.has(req.requestId)) return;
+    const r = { ...req, who: name || undefined, sessionId: id };
+    g.perms.set(req.requestId, { sid, req: r });
+    g.emit(r);
+    this.permStatus(g, sid, true);
+  }
+  permClose(id, requestId, ev) {
+    const g = this.get(id), p = g?.perms.get(requestId);
+    if (!p) return;
+    g.perms.delete(requestId);
+    g.emit({ ...ev, sessionId: id });
+    if (![...g.perms.values()].some(x => x.sid === p.sid)) this.permStatus(g, p.sid, false);
+  }
+  // 这个会话这一轮结束了：还挂着的确认都撤掉
+  permEnd(id, sid) { const g = this.get(id); for (const [rid, p] of g?.perms || []) if (p.sid === sid) this.permClose(id, rid, { t: 'perm.cancel', requestId: rid, toolUseID: p.req.toolUseID }); }
+  permStatus(g, sid, on) {
+    if (g.mirror) { this.peerOp(g.mirror.peerId, { op: 'permstat', id: toWire(g.id), sid, on }).catch(e => this.log('group permstat', e.message)); return; }
+    const m = g.members.find(x => !x.peerId && x.id === sid);
+    if (m && g.running[m.key]) this.setStatus(g, m.key, on ? '等你确认' : '正在回复…');
+  }
+  // 镜像那边（peerId）的成员在等确认：主群里显示它在哪台电脑上等
+  peerPermStatus(id, peerId, peerName, sid, on) {
+    const g = this.get(id); sid = String(sid || '').toLowerCase();
+    if (!g || g.mirror || !sid) return false;
+    const m = g.members.find(x => x.peerId === peerId && sid.startsWith(String(x.id).toLowerCase()));
+    if (!m) return false;
+    if (on) this.setStatus(g, m.key, '等你在 ' + (peerName || '对方') + ' 上确认');
+    else if (/^等你在/.test(g.status[m.key] || '')) this.setStatus(g, m.key, g.running[m.key] ? '正在回复…' : '已收到，回复稍后到');
+    return true;
   }
 
   // 协同成员先回了 202，回复稍后以「回复 <编号>」单独发来：只收自己发过、同一个对方的编号，一个编号只收一次

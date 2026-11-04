@@ -255,3 +255,35 @@ test('主理人：用户没 @ 人由主理人接，@ 了谁只给谁；成员没
   await flush();
   assert.equal(calls.length, 2, '没有主理人：不 @ 不触发');
 });
+
+test('群里转确认：本机成员要确认时群里弹出（标名字），群里点的交给成员会话；这一轮结束撤掉；协同成员的状态由镜像报给主群', async () => {
+  let release;
+  const { groups } = setup(() => new Promise(r => { release = r; }));
+  const replies = []; groups.permReply = (...a) => replies.push(a);
+  const g = groups.create({ members: [M('s1', '后端'), M('abcd1234', '前端', { peerId: 'P15', peerName: '15' })] });
+  const seen = []; g.subscribe({ readyState: 1, send: s => seen.push(JSON.parse(s)) });
+  groups.post(g.id, '@后端 查一下');
+  await flush();
+  groups.permOpen(g.id, 's1', '后端', { t: 'perm.request', requestId: 'r1', toolUseID: 't1', name: 'Bash' });
+  assert.ok(seen.some(x => x.t === 'perm.request' && x.who === '后端' && x.sessionId === g.id));
+  assert.equal(g.status.s1, '等你确认');
+  assert.deepEqual(g.pendingPerms().map(p => p.requestId), ['r1']);
+  g.replyPermission('r1', 'allow');
+  assert.deepEqual(replies, [['s1', 'r1', 'allow', undefined]]);
+  groups.permClose(g.id, 'r1', { t: 'perm.done', requestId: 'r1', toolUseID: 't1', decision: 'allow' });
+  assert.equal(g.status.s1, '正在回复…'); assert.equal(g.pendingPerms().length, 0);
+  groups.permOpen(g.id, 's1', '后端', { t: 'perm.request', requestId: 'r2', toolUseID: 't2', name: 'Bash' });
+  groups.permEnd(g.id, 's1');
+  assert.ok(seen.some(x => x.t === 'perm.cancel' && x.requestId === 'r2'));
+  release({ ok: true, reply: '好' }); await flush();
+  // 协同成员：只认群里有它的那台、会话 id 前缀对得上
+  assert.ok(!groups.peerPermStatus(g.id, 'P99', 'x', 'abcd1234ffff', true));
+  assert.ok(groups.peerPermStatus(g.id, 'P15', '15', 'ABCD1234ffff', true));
+  assert.equal(g.status['P15/abcd1234'], '等你在 15 上确认');
+  // 镜像那边：转给主群
+  const { groups: g2, ops: ops2 } = setup(async () => ({ ok: true }));
+  const snap = groups.snapshotFor(g.id, 'P15');
+  const mg = g2.applyMirror('P15', snap);
+  g2.permOpen(mg.id, 'abcd1234ffff', '前端', { t: 'perm.request', requestId: 'r3', toolUseID: 't3', name: 'Bash' });
+  assert.ok(ops2.some(o => o.peerId === 'P15' && o.body.op === 'permstat' && o.body.on === true && o.body.sid === 'abcd1234ffff'));
+});

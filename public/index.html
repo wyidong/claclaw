@@ -3029,7 +3029,7 @@ function showPerm(){
   if(!p){setDock(busy?'busy':'idle');return}
   if(p.questions){showAsk(p);return}
   var verb=p.name==='Bash'?'运行这条命令':/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(p.name)?'修改这个文件':p.name==='ExitPlanMode'?'按这个计划开始动手':'使用 '+p.displayName;
-  $('#permTitle').textContent=p.title||('允许'+verb+'？');
+  $('#permTitle').textContent=(p.who?'「'+p.who+'」':'')+(p.title||('允许'+verb+'？'));   // 群里：标上是哪个成员要确认
   var sub=p.target||p.description||'';
   var c=cards[p.toolUseID];
   if(c&&c.stat)sub+='　'+c.stat;
@@ -3131,6 +3131,7 @@ function dropPerm(requestId,label){
   if(c){
     if(label==='deny'){c.status('no','已拒绝');c.collapse()}
     else if(label==='cancel'){c.status('no','已取消');c.collapse()}
+    else if(session&&session.group){c.status('ok','已允许');c.collapse()}   // 群里只转确认，不跟着显示运行结果
     else c.status('run','运行中');
   }
   showPerm();
