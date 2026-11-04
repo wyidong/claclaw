@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-export const HOPS = 2, CTX_MAX = 20, ITEM_CUT = 300, LIMIT = 4000, KEEP = 500, SNAP = 200;
+export const HOPS = 2, INLINE = 400, CUR_MAX = 1500, KEEP = 500, SNAP = 200, LOG_MAX = 4e6;
 export const isGroupId = id => /^gp:[0-9a-f]{8}$/.test(String(id || ''));
 export const toWire = id => 'gp-' + String(id).slice(3);   // 对方会把 from_session 里 [\w-] 以外的字符去掉
 export const fromWire = s => /^gp-[0-9a-f]{8}$/.test(String(s || '')) ? 'gp:' + String(s).slice(3) : null;
@@ -40,18 +40,25 @@ export function parseMentions(text, members) {
   return [...new Set(hits.sort((a, b) => a[0] - b[0]).map(h => h[1]))];
 }
 
-const speaker = (it, members) => it.kind === 'user' ? '用户' + (it.via ? '（在 ' + it.via + ' 上）' : '') : (members.find(m => m.key === it.who)?.name || '成员');
+const speaker = (it, members) => it.kind === 'user' ? '用户' + (it.via ? '（在 ' + it.via + ' 上）' : '') : it.kind === 'sys' ? '（群通知）'
+  : ((it.who && typeof it.who === 'object' ? it.who.name : members.find(m => m.key === it.who)?.name) || '成员');
 const cut = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
+const pad = n => String(n).padStart(2, '0');
+const stamp = t => { const d = new Date(t); return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+// 群记录文件里的一条：「#序号 时间 谁：内容」，成员要前文自己去读
+export const logLine = (it, members) => '#' + it.seq + ' ' + stamp(it.at || Date.now()) + ' ' + speaker(it, members) + '：' + String(it.text || '') + '\n';
+const LOG_HEAD = '# 群聊记录：每条以「#序号 时间 谁：」开头，新的在后面（只读需要的部分，比如最后几十行）\n';
 
-// 发给某个成员的正文：它上次之后的群记录（不含它自己的话、最多 20 条）+ 本条；总长不超过 limit，旧的先截短再丢，本条原样
-export function composeDelivery({ items, since, upto, selfKey, members, current, limit = LIMIT }) {
-  const cur = speaker(current, members) + '：' + current.text;
-  let ctx = items.filter(i => i.seq > since && i.seq < upto && i.kind !== 'sys' && i.who !== selfKey).slice(-CTX_MAX)
-    .map(i => speaker(i, members) + '：' + cut(String(i.text || '').replace(/\n{3,}/g, '\n\n'), ITEM_CUT));
-  const build = () => ctx.length ? '[群里你上次之后的消息]\n' + ctx.join('\n') + '\n[这一条]\n' + cur : cur;
-  while (ctx.length && build().length > limit) ctx.shift();
-  const t = build();
-  return t.length > limit ? t.slice(0, limit) : t;
+// 发给某个成员的正文：本条（太长截断）+ 它上次之后别人说的。别人说的很短就直接带上，长了只说有几条、谁说的，要前文让它去读群记录
+export function composeDelivery({ items, since, upto, selfKey, members, current }) {
+  const t = String(current.text || '');
+  const cur = '#' + current.seq + ' ' + speaker(current, members) + '：' + (t.length > CUR_MAX ? t.slice(0, CUR_MAX) + '…（太长，全文看群记录 #' + current.seq + '）' : t);
+  const un = items.filter(i => i.seq > since && i.seq < upto && i.kind !== 'sys' && i.who !== selfKey);
+  if (!un.length) return cur;
+  const full = un.map(i => '#' + i.seq + ' ' + speaker(i, members) + '：' + String(i.text || '')).join('\n');
+  if (full.length <= INLINE) return '[群里你上次之后的消息]\n' + full + '\n[这一条]\n' + cur;
+  const cnt = new Map(); for (const i of un) { const k = speaker(i, members); cnt.set(k, (cnt.get(k) || 0) + 1); }
+  return '[群里你上次之后还有 ' + un.length + ' 条（#' + un[0].seq + '～#' + un[un.length - 1].seq + '，' + [...cnt].map(([k, n]) => k + ' ' + n + ' 条').join('、') + '）没贴过来，要前文就读群记录]\n[这一条]\n' + cur;
 }
 
 class Group {
@@ -93,10 +100,11 @@ class Group {
 const memberView = (m, viewer) => ({ name: m.name, claw: m.claw || '', collab: viewer === undefined ? !!m.peerId : m.peerId !== viewer, peer: m.peerName || undefined });
 
 export class Groups {
-  constructor({ dir, log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
-    Object.assign(this, { dir, log, deliver, peerOp, onItem, retryMs, retryFor, syncDelay });
+  // logDir：群记录文件（给成员会话读的纯文本）放这里；不要放在数据目录里，那里对协同那一轮算敏感位置
+  constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
+    Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, retryMs, retryFor, syncDelay });
     this.map = new Map(); this.syncT = new Map();
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(logDir, { recursive: true });
     // 解散过的群（墓碑，留 30 天）：之后晚到的同步、消息、回复一律不收，镜像不会被「复活」
     this.goneFile = path.join(dir, 'gone.json');
     try { this.gone = JSON.parse(fs.readFileSync(this.goneFile, 'utf8')) || {}; } catch { this.gone = {}; }
@@ -105,6 +113,14 @@ export class Groups {
       if (!/^[0-9a-f]{8}\.json$/.test(f)) continue;
       try { const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); if (isGroupId(d.id)) this.map.set(d.id, new Group(this, d)); } catch {}
     }
+    for (const g of this.map.values()) if (!fs.existsSync(this.logFile(g.id))) this.writeLog(g);
+  }
+  logFile(id) { return isGroupId(id) ? path.join(this.logDir, id.slice(3) + '.md') : null; }
+  writeLog(g) { try { fs.writeFileSync(this.logFile(g.id), LOG_HEAD + g.items.map(it => logLine(it, g.members)).join('')); } catch (e) { this.log('group log', e.message); } }
+  appendLog(g, its) {
+    if (g.closed || !its.length) return;
+    const f = this.logFile(g.id);
+    try { if (fs.statSync(f).size > LOG_MAX) return this.writeLog(g); fs.appendFileSync(f, its.map(it => logLine(it, g.members)).join('')); } catch { this.writeLog(g); }
   }
   get(id) { return this.map.get(id) || null; }
   list() { return [...this.map.values()]; }
@@ -182,7 +198,7 @@ export class Groups {
     it = { seq: ++g.seqMax, at: Date.now(), ...it };
     g.items.push(it);
     if (g.items.length > KEEP) g.items.splice(0, g.items.length - KEEP);
-    this.save(g);
+    this.save(g); this.appendLog(g, [it]);
     g.emit({ t: 'group.msg', id: g.id, item: g.view(it) });
     try { this.onItem(g, it); } catch {}
     this.syncOut(g);
@@ -295,6 +311,7 @@ export class Groups {
     Object.assign(g, { name: str(snap.name, 40), mirrorTitle: str(snap.title, 60), members: snap.members, items: snap.items, status: snap.status });
     g.seqMax = snap.items.reduce((a, x) => Math.max(a, x.seq || 0), g.seqMax);
     this.save(g);
+    if (isNew) this.writeLog(g); else this.appendLog(g, fresh);
     for (const it of fresh) { g.emit({ t: 'group.msg', id, item: it }); if (!isNew) try { this.onItem(g, it); } catch {} }
     if (isNew && fresh.length) try { this.onItem(g, fresh[fresh.length - 1]); } catch {}   // 第一次同步：未读只记一条
     g.emit({ t: 'group.status', id, status: g.statusView() });
@@ -309,7 +326,7 @@ export class Groups {
     this.map.delete(id); g.closed = true;
     this.gone[id] = Date.now(); try { fs.writeFileSync(this.goneFile, JSON.stringify(this.gone)); } catch {}
     clearTimeout(this.syncT.get(id)); this.syncT.delete(id);
-    try { fs.rmSync(path.join(this.dir, id.slice(3) + '.json'), { force: true }); } catch {}
+    try { fs.rmSync(path.join(this.dir, id.slice(3) + '.json'), { force: true }); fs.rmSync(this.logFile(id), { force: true }); } catch {}
     g.emit({ t: 'group.gone', id });
     const to = g.mirror ? (fromPeer ? [] : [g.mirror.peerId]) : g.peers().filter(p => p !== fromPeer);
     for (const pid of to) this.peerOp(pid, { op: 'dissolve', id: toWire(id) }).catch(e => this.log('group dissolve', pid, e.message));

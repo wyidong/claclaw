@@ -32,25 +32,25 @@ test('@ 解析：最长名优先、@全体 = 全部、去重保序', () => {
   assert.deepEqual(parseMentions('没有 at', ms), []);
 });
 
-test('拼投递：带上次之后的群记录（不含自己的话、最多 20 条），总长不超过上限，本条原样', () => {
+test('拼投递：本条带序号；别人说的短就带上，长了只报条数让它去读群记录；本条太长截断', () => {
   const members = memberNames([{ key: 'a', title: '需求' }, { key: 'b', title: '后端' }]);
   const items = [];
   for (let i = 1; i <= 30; i++) items.push({ seq: i, kind: i % 2 ? 'user' : 'gm', who: i % 2 ? undefined : (i % 4 ? 'a' : 'b'), text: '消息' + i });
   const cur = { seq: 31, kind: 'user', text: '@后端 开始' };
-  const t = composeDelivery({ items, since: 5, upto: 31, selfKey: 'b', members, current: cur });
-  assert.ok(t.endsWith('用户：@后端 开始'));
+  // 短：直接带上，不含自己的话
+  const t = composeDelivery({ items, since: 26, upto: 31, selfKey: 'b', members, current: cur });
+  assert.ok(t.endsWith('#31 用户：@后端 开始'));
+  assert.ok(t.includes('#30 需求：消息30') && t.includes('#27 用户：消息27'));
   assert.ok(!/后端：/.test(t), '不带自己说过的');
-  assert.ok(t.includes('需求：消息30'));
-  assert.ok(!t.includes('消息5\n') && !t.includes('：消息3\n'), 'since 之前的不带');
-  const lines = t.split('\n').filter(l => /^(用户|需求)：消息/.test(l));
-  assert.ok(lines.length <= 20);
-  // 超长：旧的先截短 / 丢，本条原样
+  assert.ok(!t.includes('消息26'), 'since 之前的不带');
+  // 长：只报条数和谁说的
   const big = items.map(x => ({ ...x, text: 'x'.repeat(1000) }));
   const t2 = composeDelivery({ items: big, since: 0, upto: 31, selfKey: 'b', members, current: { ...cur, text: '@后端 ' + 'y'.repeat(2000) } });
-  assert.ok(t2.length <= 4000, 'len ' + t2.length);
-  assert.ok(t2.includes('y'.repeat(2000)));
+  assert.ok(!t2.includes('xxx'), '不贴长前文');
+  assert.match(t2, /还有 \d+ 条（#1～#30，用户 15 条、需求 \d+ 条）/);
+  assert.ok(t2.length < 1700 && t2.includes('全文看群记录 #31'), 'len ' + t2.length);
   // 没有可带的：只有本条
-  assert.equal(composeDelivery({ items: [], since: 0, upto: 1, selfKey: 'b', members, current: { seq: 1, kind: 'user', text: 'hi' } }), '用户：hi');
+  assert.equal(composeDelivery({ items: [], since: 0, upto: 1, selfKey: 'b', members, current: { seq: 1, kind: 'user', text: 'hi' } }), '#1 用户：hi');
 });
 
 function setup(deliverImpl, opts = {}) {
@@ -151,11 +151,18 @@ test('镜像：快照按对方视角标协同；对方那边建镜像、发消�
   const snap2 = host.ops.filter(o => o.body.op === 'sync').at(-1).body.group;
   peer.groups.applyMirror('PHOST', snap2);
   assert.equal(mg.items.length, snap2.items.length);
+  // 群记录文件：两边都有，每条「#序号 时间 谁：」，镜像这边跟着补
+  const hl = fs.readFileSync(host.groups.logFile(g.id), 'utf8'), pl = fs.readFileSync(peer.groups.logFile(g.id), 'utf8');
+  assert.match(hl, /\n#\d+ \d\d-\d\d \d\d:\d\d 用户（在 15 上）：@后端 hi\n/);
+  assert.match(hl, /后端：ok\n/);
+  assert.match(pl, /用户（在 15 上）：@后端 hi\n/);
+  assert.equal(pl.split('\n#').length, hl.split('\n#').length, '镜像记录条数和主群一样');
   // 别的对方不能改这个镜像
   assert.equal(peer.groups.applyMirror('POTHER', snap2), null);
   // 镜像这边解散：告诉主群
   peer.groups.dissolve(mg.id);
   assert.equal(peer.groups.get(mg.id), null);
+  assert.ok(!fs.existsSync(peer.groups.logFile(g.id)), '解散删记录文件');
   assert.deepEqual(peer.ops.at(-1), { peerId: 'PHOST', body: { op: 'dissolve', id: toWire(g.id) } });
   // 主群收到解散：删掉并通知其他对方（不回发给来源）
   host.groups.dissolve(g.id, { fromPeer: 'P15' });
