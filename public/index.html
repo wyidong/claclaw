@@ -5863,17 +5863,25 @@ function ttsSay(src,force){
   // 要用电脑合成、声音列表还没拉过（自动朗读关着时不预先拉）：先拉再念，不要落到浏览器自带的
   if(ttsWantSrv()&&!tts.srv&&!tts.srvTried){tts.srvTried=true;ttsLoadSrv().then(function(){ttsSay(src,force)});return}
   var sv=ttsSrvVoice();if(sv){srvSay(parts,sv);return}
-  ttsDbg('say via device: '+(tts.voice?tts.voice.name:'(默认)')+' want='+(tts.want||'-')+' srv='+(tts.srv?tts.srv.length:'-'));
-  var started=false;
-  parts.forEach(function(p){
-    var u=new SpeechSynthesisUtterance(p);
-    u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
-    u.onstart=function(){started=true;ttsClaim();ttsShowStop()};u.onend=u.onerror=function(e){if(e&&e.error)ttsDbg('device error: '+e.error);setTimeout(ttsShowStop,50)};
-    speechSynthesis.speak(u);
-  });
-  // 浏览器自带的卡住（一直「在念」却不出声）：8 秒还没开念就取消，免得停止键一直挂着
-  setTimeout(function(){if(!started&&(speechSynthesis.speaking||speechSynthesis.pending)){ttsDbg('device stuck, cancel');speechSynthesis.cancel();ttsShowStop()}},8000);
+  if(force)ttsDbg('say via device: '+(tts.voice?tts.voice.name:'(默认)')+' want='+(tts.want||'-')+' srv='+(tts.srv?tts.srv.length:'-'));
+  parts.forEach(function(p){devQ.push(p)});devPump();
   ttsShowStop();
+}
+// 浏览器自带的朗读：自己排队，一段念完再交下一段。一次全塞给浏览器的话，Edge 的在线声音（Online (Natural)）
+// 会让后一段把前一段打断（interrupted），只念出一两句
+var devQ=[],devBusy=false,devGen=0;
+function devPump(){
+  if(devBusy)return;
+  if(!devQ.length){setTimeout(ttsShowStop,50);return}
+  devBusy=true;
+  var gen=devGen,started=false,u=new SpeechSynthesisUtterance(devQ.shift());
+  u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
+  var done=function(){if(gen!==devGen)return;devBusy=false;devPump()};
+  u.onstart=function(){started=true;ttsClaim();ttsShowStop()};
+  u.onend=done;u.onerror=function(e){if(gen===devGen&&e&&e.error)ttsDbg('device error: '+e.error);done()};
+  speechSynthesis.speak(u);
+  // 卡住（一直「在念」却不出声）：8 秒还没开念就全部取消，免得停止键一直挂着
+  setTimeout(function(){if(gen===devGen&&devBusy&&!started){ttsDbg('device stuck, cancel');ttsStop()}},8000);
 }
 // P0：两条播放路径都要能立刻出声。服务端声音插队；系统语音只能 cancel 后重念 P0，
 // 被丢掉的正文不再接（设计评审允许这个降级）。
@@ -5881,7 +5889,7 @@ function ttsInterrupt(text){
   var t=ttsText(text);if(!t)return;
   var sv=ttsSrvVoice();
   if(sv){srvUnlock();srvInterrupt(t,sv);return}
-  if(ttsOk())speechSynthesis.cancel();
+  devGen++;devQ=[];devBusy=false;if(ttsOk())speechSynthesis.cancel();
   ttsSay(t,true);
 }
 // P0 提示音：WebAudio 现场合成，不引资源文件；只在页面可见时响
@@ -6128,7 +6136,7 @@ var TTS_IC={
   stop:'<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none"/></svg>',
   go:'<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>'
 };
-function ttsSpeaking(){return srvBusy||srvQ.length>0||srvPlaying()||(ttsOk()&&(speechSynthesis.speaking||speechSynthesis.pending))}
+function ttsSpeaking(){return srvBusy||srvQ.length>0||srvPlaying()||devBusy||devQ.length>0||(ttsOk()&&(speechSynthesis.speaking||speechSynthesis.pending))}
 // 在聊天页、有可念的回复时出现：没在念→播放三角（点了念最后一条回复）；在念→方块带动画（点了停）；被拦住→绿色播放键（点了接着念）
 // 输入区多高，朗读按钮就浮在它上面多少（输入框变高、键盘弹出都跟着走）
 var dockTopPut=function(){};
@@ -6160,7 +6168,7 @@ function ttsLastReply(){
   c.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,blockquote').forEach(function(x){x.append('\n')});
   return c.textContent;
 }
-function ttsStop(){srvStop();if(ttsOk())speechSynthesis.cancel();ttsManual=false;ttsShowStop()}
+function ttsStop(){srvStop();devGen++;devQ=[];devBusy=false;if(ttsOk())speechSynthesis.cancel();ttsManual=false;ttsShowStop()}
 // 开始出声时告诉服务器：别的页面（另一个标签 / clarelay 里嵌的）停下；手动点的优先，自动念的让给正在念的
 var ttsManual=false,ttsClaimed=false;
 function ttsClaim(){ttsClaimed=true;wsSend({t:'tts',on:1,manual:ttsManual?1:0})}
