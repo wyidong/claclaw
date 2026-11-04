@@ -722,6 +722,18 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
    没在念：播放三角，点了念最后一条回复；在念：方块（外圈呼吸），点了停；被 iPhone 拦住：绿色播放键 */
 #ttsStop{position:fixed;right:14px;bottom:calc(var(--dockTop,96px) + 10px);z-index:30;width:42px;height:42px;padding:0;border:.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:pointer;opacity:.92}
+#ttsStop,.gm-play{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+#ttsPick{display:none;position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.35);align-items:flex-end;justify-content:center}
+#ttsPick.on{display:flex}
+#ttsPick .tp-box{width:100%;max-width:640px;max-height:70vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding-bottom:env(safe-area-inset-bottom)}
+#ttsPick .tp-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px;font-weight:600}
+#ttsPick .tp-x{border:0;background:none;color:var(--muted);font-size:16px;padding:4px 8px;cursor:pointer}
+#ttsPick .tp-list{overflow:auto;padding:0 8px 10px}
+#ttsPick .tp-i{display:flex;gap:10px;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:10px 8px;border-radius:10px;font-size:15px;line-height:1.5;cursor:pointer}
+#ttsPick .tp-i:active,#ttsPick .tp-i:hover{background:var(--bg)}
+#ttsPick .tp-i.cur{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+#ttsPick .tp-i em{font-style:normal;color:var(--muted);min-width:1.6em;text-align:right;flex:none}
+@media (min-width:1000px){#ttsPick{align-items:center}#ttsPick .tp-box{border-radius:16px}}
 #ttsStop svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #ttsStop.on{color:var(--accent)}
 #ttsStop.on{animation:ttsw 1.4s ease-in-out infinite}
@@ -1781,7 +1793,8 @@ select.pe-in{text-align-last:right}
   </div>
 </div>
 
-<button type="button" id="ttsStop" hidden aria-label="朗读"></button>
+<button type="button" id="ttsStop" hidden aria-label="朗读" title="朗读（长按或右键：选从哪句开始）"></button>
+<div id="ttsPick"></div>
 <script>
 (function(){
 'use strict';
@@ -2515,17 +2528,21 @@ function addGm(it){
   if(it.text){var b=document.createElement('div');b.className='body md';b.innerHTML=md(it.text);e.appendChild(b);
     // 每条结尾一个播放键：只念这一条（离开回来挑着听）；在念时变方块，点了停
     var ft=document.createElement('div');ft.className='gm-foot';var pb=document.createElement('button');pb.type='button';pb.className='gm-play';pb.setAttribute('aria-label','朗读这条');pb.title='朗读这条';pb.innerHTML=GM_PLAY.say;
-    pb.addEventListener('click',function(){gmSay(pb,w.name,it.text)});ft.appendChild(pb);e.appendChild(ft)}
+    pb.addEventListener('click',function(){if(ttsLongFired(pb))return;gmSay(pb,w.name,it.text)});
+    ttsLongPress(pb,function(){ttsPickFrom((w.name?w.name+' 说：':'')+it.text,function(i){gmSay(pb,w.name,it.text,i)})});   // 长按 / 右键：选从哪句开始
+    ft.appendChild(pb);e.appendChild(ft)}
   if(it.att&&it.att.length)e.insertBefore(gAttBox(it.att),e.querySelector('.gm-foot'));   // 成员发的图片 / 文件
   feed.appendChild(e);gStatTail();scrollDown();
   return e;
 }
 var GM_PLAY={say:'<svg viewBox="0 0 24 24"><path d="M8.5 6v12l9.5-6z" fill="currentColor"/></svg>',stop:'<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>'},gmPlaying=null;
-function gmSay(btn,name,text){
-  var again=gmPlaying===btn&&ttsSpeaking();
+function gmSay(btn,name,text,from){
+  var again=gmPlaying===btn&&ttsSpeaking()&&from==null;
   ttsStop();ttsHush=false;if(again)return;
   tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
-  ttsManual=true;ttsSay((name?name+' 说：':'')+text,true);
+  var src=(name?name+' 说：':'')+text;
+  if(from==null){from=ttsResumeAt(src);if(from!=null)toast('接着第 '+(from+1)+' 句念（长按播放键可选从哪句开始）')}
+  ttsManual=true;ttsSay(src,true,from||0);
   gmPlaying=btn;gmPlayAt=Date.now();gmPlayGot=false;gmPlayShow();
 }
 // 成员回复上的播放键跟着朗读状态走：念完 / 停了变回三角
@@ -5786,7 +5803,13 @@ if(tts.on&&/^srv:/.test(tts.want))ttsLoadSrv();
 // 用 <audio> 而不是 Web Audio：iPhone 上 Web Audio 会被静音键、睡眠模式、来电打断等各种情况弄得没声音。
 var srvQ=[],srvBusy=false,srvBlocked=false,srvGen=0,srvLogAt=0,srvCur=null;
 var srvEls=[new Audio(),new Audio()],srvTurn=0;
-srvEls.forEach(function(a){a.preload='auto';a.addEventListener('ended',function(){if(a===srvCur){srvCur=null;srvBusy=false;srvNext()}})});
+srvEls.forEach(function(a){a.preload='auto';a.addEventListener('ended',function(){if(a===srvCur){srvCur=null;srvBusy=false;if(srvNow)ttsProgEnd(srvNow);srvNow=null;srvNext()}})});
+// 朗读进度：开念一句记下是第几句；最后一句念完算读完（下次点就从头）
+var ttsProg=null,srvNow=null;
+function ttsProgAt(x){if(x&&x.prog)x.prog.at=x.pi}
+function ttsProgEnd(x){if(x&&x.prog&&x.pi>=x.prog.n-1)x.prog.done=true}
+// 这条上次念到一半停了：返回从第几句接着念（没有就 null）
+function ttsResumeAt(src){return ttsProg&&ttsProg.src===src&&!ttsProg.done&&ttsProg.at>0?ttsProg.at:null}
 function srvFetch(it){
   if(!it.p)it.p=postJson('/api/tts',{text:it.text,voice:it.voice,rate:tts.rate})
     .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
@@ -5809,7 +5832,7 @@ function srvNext(){
     var nx=srvQ[1];if(nx)srvFetch(nx).then(function(){if(gen===srvGen&&nx.url){var b=srvEls[srvTurn];if(b!==srvCur){b.src=nx.url;b.load()}}}).catch(function(){});
     return a.play().then(function(){
       if(gen!==srvGen){try{a.pause()}catch(_){}return}
-      srvQ.shift();var prev=it;setTimeout(function(){srvFree(prev)},60000);ttsClaim();
+      srvQ.shift();var prev=it;setTimeout(function(){srvFree(prev)},60000);ttsClaim();ttsProgAt(it);srvNow=it;
       if(Date.now()-srvLogAt>10000){srvLogAt=Date.now();ttsDbg('playing <audio>')}
       ttsShowStop();
     },function(e){
@@ -5822,8 +5845,8 @@ function srvNext(){
   }).catch(function(e){if(gen!==srvGen)return;ttsDbg('fetch failed: '+(e&&e.message));srvQ.shift();srvBusy=false;srvNext()});
   ttsShowStop();
 }
-function srvSay(parts,voice){parts.forEach(function(p){srvQ.push({text:p,voice:voice})});srvNext()}
-function srvStop(){srvGen++;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
+function srvSay(parts,voice,base,prog){parts.forEach(function(p,k){srvQ.push({text:p,voice:voice,pi:(base||0)+k,prog:prog})});srvNext()}
+function srvStop(){srvGen++;srvNow=null;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
 // P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
 function srvInterrupt(text,voice){
   if(!text)return;
@@ -5913,16 +5936,21 @@ function ttsStream(raw,end){
   if(cut<0)return;
   var piece=raw.slice(ttsPos,cut);ttsPos=cut;ttsSay(piece);
 }
-function ttsSay(src,force){
+// 切成一句一句（太长的句子按 180 字再切）：排队念，也是「从哪句开始」的单位
+function ttsParts(src){var t=ttsText(src);return t?(t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t]).filter(function(p){return p.trim()}):[]}
+// from：从第几句开始（0 = 第一句）
+function ttsSay(src,force,from){
   if((!tts.on&&!force)||!ttsOk()||!pageVisible())return;   // 藏在 clarelay 后台的页面不念
-  var t=ttsText(src);if(!t)return;
   // 太长的切成几段排队念（有些浏览器一段太长会念到一半停）
-  var parts=t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t];
+  var parts=ttsParts(src).slice(from||0);if(!parts.length)return;
   // 要用电脑合成、声音列表还没拉过（自动朗读关着时不预先拉）：先拉再念，不要落到浏览器自带的
-  if(ttsWantSrv()&&!tts.srv&&!tts.srvTried){tts.srvTried=true;ttsLoadSrv().then(function(){ttsSay(src,force)});return}
-  var sv=ttsSrvVoice();if(sv){srvSay(parts,sv);return}
+  if(ttsWantSrv()&&!tts.srv&&!tts.srvTried){tts.srvTried=true;ttsLoadSrv().then(function(){ttsSay(src,force,from)});return}
+  // 手动点的朗读记进度：念到第几句；中途停了，再点同一条就从停下的那句接着念
+  var prog=null,base=from||0;
+  if(force&&ttsManual){prog=ttsProg={src:src,n:base+parts.length,at:base,done:false}}
+  var sv=ttsSrvVoice();if(sv){srvSay(parts,sv,base,prog);return}
   if(force)ttsDbg('say via device: '+(tts.voice?tts.voice.name:'(默认)')+' want='+(tts.want||'-')+' srv='+(tts.srv?tts.srv.length:'-'));
-  parts.forEach(function(p){devQ.push(p)});devPump();
+  parts.forEach(function(p,k){devQ.push({text:p,pi:base+k,prog:prog})});devPump();
   ttsShowStop();
 }
 // 浏览器自带的朗读：自己排队，一段念完再交下一段。一次全塞给浏览器的话，Edge 的在线声音（Online (Natural)）
@@ -5932,13 +5960,13 @@ function devPump(){
   if(devBusy)return;
   if(!devQ.length){setTimeout(ttsShowStop,50);return}
   devBusy=true;
-  var gen=devGen,started=false,u=new SpeechSynthesisUtterance(devQ.shift()),again=devAgain;devAgain=false;
+  var gen=devGen,started=false,dq=devQ.shift(),u=new SpeechSynthesisUtterance(dq.text),again=devAgain;devAgain=false;
   u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
-  var done=function(){if(gen!==devGen)return;devBusy=false;devPump()};
-  u.onstart=function(){started=true;ttsClaim();ttsShowStop()};
+  var done=function(){if(gen!==devGen)return;if(started)ttsProgEnd(dq);devBusy=false;devPump()};
+  u.onstart=function(){started=true;ttsProgAt(dq);ttsClaim();ttsShowStop()};
   u.onend=done;u.onerror=function(e){
     if(gen===devGen&&e&&e.error)ttsDbg('device error: '+e.error+(started?'':' (未开念)'));
-    if(gen===devGen&&!started&&e&&e.error==='interrupted'&&!again){devQ.unshift(u.text);devAgain=true}   // 还没开念就被打断：重念一次，不跳过
+    if(gen===devGen&&!started&&e&&e.error==='interrupted'&&!again){devQ.unshift(dq);devAgain=true}   // 还没开念就被打断：重念一次，不跳过
     done();
   };
   speechSynthesis.speak(u);
@@ -6298,14 +6326,48 @@ $('#setTtsRate').addEventListener('change',function(e){
   ttsRateLabel();tts.srvUnlocked=false;ttsUnlock();ttsPreview('现在是这个语速，听听合不合适。');
 });
 $('#ttsStop').addEventListener('click',function(){
+  if(ttsLongFired($('#ttsStop')))return;
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
   if(ttsSpeaking()){ttsStop();ttsHush=!!busy;if(narration&&narration.onUserStop)narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   // 浏览器自带的声音不用先念一个空格解锁：这次点击里马上就开念；Edge 上那个空格会把第一句打断
   tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
   ttsDbg('tap say '+(ttsSrvVoice()||'want='+(tts.want||'-'))+' srv='+(tts.srv?tts.srv.length:'-')+(DESKTOP.matches?' desk':' mob'));
-  ttsManual=true;ttsSay(ttsLastReply(),true);ttsShowStop();
+  var src=ttsLastReply(),at=ttsResumeAt(src);
+  if(at!=null)toast('接着第 '+(at+1)+' 句念（长按播放键可选从哪句开始）');
+  ttsManual=true;ttsSay(src,true,at||0);ttsShowStop();
 });
+ttsLongPress($('#ttsStop'),function(){
+  if(srvBlocked)return;
+  var src=ttsLastReply();
+  ttsPickFrom(src,function(i){
+    ttsStop();ttsHush=false;
+    tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+    ttsDbg('tap say from '+i);ttsManual=true;ttsSay(src,true,i);ttsShowStop();
+  });
+});
+// 长按（手机）/ 右键（电脑）播放键：弹出这条的句子列表，点哪句从哪句念；点一下播放键还是从第一句念
+var ttsLongEl=null;
+function ttsLongPress(el,fn){
+  var t=null,clr=function(){clearTimeout(t);t=null};
+  el.addEventListener('pointerdown',function(e){if(e.button>0)return;clr();t=setTimeout(function(){t=null;ttsLongEl=el;fn()},500)});
+  ['pointerup','pointerleave','pointercancel'].forEach(function(k){el.addEventListener(k,clr)});
+  el.addEventListener('contextmenu',function(e){e.preventDefault();if(ttsLongEl===el&&!t)return;clr();ttsLongEl=el;fn()});
+}
+// 长按刚弹过列表：松手时的那次 click 不算点播放
+function ttsLongFired(el){if(ttsLongEl!==el)return false;ttsLongEl=null;return true}
+function ttsPickFrom(src,go){
+  var parts=ttsParts(src);if(!parts.length){toast('没有能念的内容');return}
+  var p=$('#ttsPick'),last=ttsResumeAt(src);
+  p.innerHTML='<div class="tp-box" role="dialog" aria-label="从哪句开始念"><div class="tp-h">从哪句开始念<button type="button" class="tp-x" aria-label="关闭">✕</button></div><div class="tp-list"></div></div>';
+  var close=function(){p.classList.remove('on')},list=p.querySelector('.tp-list');
+  parts.forEach(function(s,i){var b=document.createElement('button');b.type='button';b.className='tp-i';b.innerHTML='<em></em><span></span>';b.querySelector('em').textContent=i+1;b.querySelector('span').textContent=s.trim();if(i===last){b.classList.add('cur');b.title='上次停在这句'}
+    b.addEventListener('click',function(){close();go(i)});list.appendChild(b)});
+  p.querySelector('.tp-x').addEventListener('click',close);
+  p.onclick=function(e){if(e.target===p)close()};
+  p.classList.add('on');
+  var cur=list.querySelector('.cur');if(cur)cur.scrollIntoView({block:'center'});
+}
 setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
 // 朗读出问题时把手机这边的情况记到电脑的日志里（没声音时好查是哪一步）
 var ttsDbgAt=0,ttsDbgLast='';
