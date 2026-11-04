@@ -5705,7 +5705,10 @@ function ttsLoadSrv(){
     tts.srv=(Array.isArray(list)?list:[]).filter(function(v){return /^edge:/.test(v.name)&&!/HK|yue/i.test(v.lang||'')}).sort(function(a,b){return srvScore(b)-srvScore(a)});ttsPickVoice();
   }).catch(function(){});
 }
-function ttsSrvVoice(){return /^srv:/.test(tts.want)&&(tts.srv||[]).some(function(v){return 'srv:'+v.name===tts.want})?tts.want.slice(4):''}
+// 用电脑合成的哪个声音：选过就用选的；没选过（这台浏览器第一次用）默认用最好的那个，不落到浏览器自带的（Mac 上的 Chrome 常常一声不响）
+// 选的是这台设备上的声音、但它现在没有了（换了浏览器 / 系统）也一样
+function ttsWantSrv(){return !tts.want||/^srv:/.test(tts.want)||!ttsVoices().some(function(v){return v.voiceURI===tts.want})}
+function ttsSrvVoice(){var w=/^srv:/.test(tts.want)?tts.want:ttsWantSrv()&&tts.srv&&tts.srv[0]?'srv:'+tts.srv[0].name:'';return w&&(tts.srv||[]).some(function(v){return 'srv:'+v.name===w})?w.slice(4):''}
 function ttsPickVoice(){
   var vs=ttsVoices(),srv=tts.srv||[];
   tts.voice=vs.find(function(v){return v.voiceURI===tts.want})||vs[0]||null;
@@ -5713,7 +5716,7 @@ function ttsPickVoice(){
   var dev=vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(ttsLabel(v))+'</option>'}).join('');
   var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(srvLabel(v))+'</option>'}).join('');
   sel.innerHTML=(pc?'<optgroup label="电脑合成（微软在线语音 / Mac 上的声音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
-  sel.value=ttsSrvVoice()?tts.want:tts.voice?tts.voice.voiceURI:'';
+  sel.value=ttsSrvVoice()?'srv:'+ttsSrvVoice():tts.voice?tts.voice.voiceURI:'';
   $('#setTtsVoiceSub').textContent=srv.length?'选了试听；电脑合成的更自然':'选了试听';
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
@@ -5856,13 +5859,19 @@ function ttsSay(src,force){
   var t=ttsText(src);if(!t)return;
   // 太长的切成几段排队念（有些浏览器一段太长会念到一半停）
   var parts=t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t];
+  // 要用电脑合成、声音列表还没拉过（自动朗读关着时不预先拉）：先拉再念，不要落到浏览器自带的
+  if(ttsWantSrv()&&!tts.srv&&!tts.srvTried){tts.srvTried=true;ttsLoadSrv().then(function(){ttsSay(src,force)});return}
   var sv=ttsSrvVoice();if(sv){srvSay(parts,sv);return}
+  ttsDbg('say via device: '+(tts.voice?tts.voice.name:'(默认)')+' want='+(tts.want||'-')+' srv='+(tts.srv?tts.srv.length:'-'));
+  var started=false;
   parts.forEach(function(p){
     var u=new SpeechSynthesisUtterance(p);
     u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
-    u.onstart=function(){ttsClaim();ttsShowStop()};u.onend=u.onerror=function(){setTimeout(ttsShowStop,50)};
+    u.onstart=function(){started=true;ttsClaim();ttsShowStop()};u.onend=u.onerror=function(e){if(e&&e.error)ttsDbg('device error: '+e.error);setTimeout(ttsShowStop,50)};
     speechSynthesis.speak(u);
   });
+  // 浏览器自带的卡住（一直「在念」却不出声）：8 秒还没开念就取消，免得停止键一直挂着
+  setTimeout(function(){if(!started&&(speechSynthesis.speaking||speechSynthesis.pending)){ttsDbg('device stuck, cancel');speechSynthesis.cancel();ttsShowStop()}},8000);
   ttsShowStop();
 }
 // P0：两条播放路径都要能立刻出声。服务端声音插队；系统语音只能 cancel 后重念 P0，
@@ -6221,14 +6230,14 @@ $('#ttsStop').addEventListener('click',function(){
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
   if(ttsSpeaking()){ttsStop();ttsHush=!!busy;if(narration&&narration.onUserStop)narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
-  tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice())srvUnlock(true);else ttsUnlock();
-  ttsDbg('tap say');
+  tts.unlocked=false;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);else ttsUnlock();
+  ttsDbg('tap say '+(ttsSrvVoice()||'want='+(tts.want||'-'))+' srv='+(tts.srv?tts.srv.length:'-')+(DESKTOP.matches?' desk':' mob'));
   ttsManual=true;ttsSay(ttsLastReply(),true);ttsShowStop();
 });
 setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
 // 朗读出问题时把手机这边的情况记到电脑的日志里（没声音时好查是哪一步）
-var ttsDbgAt=0;
-function ttsDbg(m){if(Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();postJson('/api/tts/log',{m:String(m).slice(0,200)}).catch(function(){})}
+var ttsDbgAt=0,ttsDbgLast='';
+function ttsDbg(m){if(m===ttsDbgLast&&Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();ttsDbgLast=m;postJson('/api/tts/log',{m:String(m).slice(0,200)}).catch(function(){})}
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){
     if(narration&&narration.onHidden)narration.onHidden();
