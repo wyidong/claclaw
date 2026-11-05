@@ -3881,7 +3881,8 @@ function mTab(t){
   var app=$('#app');
   if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
-  if(t!=='host'){hostView='';peerWatch(false)}
+  // 离开时停在子页（模型管理 / 协同 / 技能）：把子页内容一起清掉，不然下次进宿主页，在 /api/host 回来前（或回不来时）看到的还是那个子页
+  if(t!=='host'){if(hostView)$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';hostView='';peerWatch(false)}
   hostLive(t==='host');if(t==='claw'){loadClaws();mdlPeek();requestAnimationFrame(clawDsFit)}if(t==='set')loadSetData();
   $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railClaw').classList.toggle('on',t==='claw');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
