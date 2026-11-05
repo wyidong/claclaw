@@ -301,9 +301,9 @@ function sameProcess(holder) {
 }
 
 async function endHolders(sessionId) {
-  const holders = foreignHolders(sessionId);
+  // pid 已被别的进程复用的不碰：后面等它退出、强杀都只针对确认过的
+  const holders = foreignHolders(sessionId).filter(h => sameProcess(h) || (log('skip pid', h.pid, 'procStart mismatch'), false));
   for (const h of holders) {
-    if (!sameProcess(h)) { log('skip pid', h.pid, 'procStart mismatch'); continue; }
     log('takeover: SIGTERM', h.pid, h.entrypoint, h.name);
     try { process.kill(h.pid, 'SIGTERM'); } catch {}
   }
@@ -2251,7 +2251,8 @@ const webSessionAlive = id => runners.has(id);   // 网页里开着的（可能�
 function claudeHasMessages(dirs, id) {
   for (const d of dirs) {
     const f = path.join(HOME, '.claude', 'projects', d, id + '.jsonl');
-    try { if (CLAUDE_MSG.test(fs.readFileSync(f, 'utf8'))) return true; } catch {}
+    // 只看开头 1MB：空壳只有几行标题，有消息的文件开头就有；不把几十 MB 的长会话整个读进来
+    let fd; try { fd = fs.openSync(f, 'r'); const buf = Buffer.alloc(1 << 20); const n = fs.readSync(fd, buf, 0, buf.length, 0); if (CLAUDE_MSG.test(buf.toString('utf8', 0, n))) return true; } catch {} finally { if (fd != null) fs.closeSync(fd); }
   }
   return false;
 }
