@@ -6277,8 +6277,7 @@ function ttsShowStop(){
   var b=$('#ttsStop'),st=srvBlocked?'go':sp?'stop':'say';
   if(b.dataset.st!==st){b.dataset.st=st;b.innerHTML=TTS_IC[st];b.setAttribute('aria-label',st==='go'?'继续朗读':st==='stop'?'停止朗读':'朗读最后一条回复');b.title=b.getAttribute('aria-label')}
   b.classList.toggle('go',st==='go');b.classList.toggle('on',st==='stop');
-  var inChat=!!session&&!(mList&&!DESKTOP.matches)&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on');
-  b.hidden=!(st!=='say'||(tts.on&&inChat&&!ttsSessMuted()&&!!feed.querySelector('.msg.ai')));   // 这个会话关了播报就不显示   // 喇叭只在开了「自动朗读回复」时出现
+  b.hidden=!(st!=='say'||(tts.on&&ttsInChat()&&!ttsSessMuted()&&!!feed.querySelector('.msg.ai')));   // 这个会话关了播报就不显示   // 喇叭只在开了「自动朗读回复」时出现
 }
 // 最后一条回复的文字：从页面上取，代码块、表格换成简短说明
 function ttsLastReply(){
@@ -6436,7 +6435,11 @@ document.addEventListener('visibilitychange',function(){
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
 
 // 点麦克风、或正在语音输入时不解锁：解锁会放一小段静音，iPhone 一放声音就把刚开的语音识别打断（aborted）
-document.addEventListener('pointerdown',function(e){if(micRec||(micBtn&&micBtn.contains(e.target)))return;ttsUnlock()},{capture:true});
+// 正在看某个会话（不是列表、设置、宿主页）
+function ttsInChat(){return !!session&&!(mList&&!DESKTOP.matches)&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on')}
+// 点屏幕顺便解锁声音（iPhone 要用户手势才让放）：只在会话里点才解锁，这个会话关了播报也不解锁。
+// 解锁会放一段无声音频，iPhone 灵动岛会亮一下播放状态，在列表里点来点去不该亮
+document.addEventListener('pointerdown',function(e){if(micRec||(micBtn&&micBtn.contains(e.target)))return;if(!ttsInChat()||ttsSessMuted())return;ttsUnlock()},{capture:true});
 ttsSync();
 // 视频：本机保留天数、空间上限（存在这台设备上）
 (function(){
