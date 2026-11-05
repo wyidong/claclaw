@@ -2243,7 +2243,18 @@ function saveUnread(u) {
 function markUnread(id) { const u = unreadMap(); u[id] = (u[id] || 0) + 1; saveUnread(u); return unreadTotal(u); }
 function clearUnread(id) { const u = unreadMap(); if (!u[id]) return; delete u[id]; saveUnread(u); devRead(id); }
 // 兜底：会话已经不在了（别处删的、删除时没清到的）还挂着未读，红点和角标会一直亮着却找不到是哪个。
-// 启动时查一遍：Claude 看 ~/.claude/projects/*/<id>.jsonl 在不在，DeepSeek / OpenCode / Qwen / Codex 问各自的 exists；Kimi / OpenClaw 不好查，不动
+// 启动时和之后每 10 分钟查一遍：Claude 看 ~/.claude/projects/*/<id>.jsonl 在不在、里面有没有消息
+// （只剩 ai-title / custom-title 几行的空壳 listSessions 不列，未读挂在上面同样找不到），
+// DeepSeek / OpenCode / Qwen / Codex 问各自的 exists；Kimi / OpenClaw 不好查，不动
+const CLAUDE_MSG = /"type":"(user|assistant)"/;
+const webSessionAlive = id => runners.has(id);   // 网页里开着的（可能刚新建、还没落盘）不动
+function claudeHasMessages(dirs, id) {
+  for (const d of dirs) {
+    const f = path.join(HOME, '.claude', 'projects', d, id + '.jsonl');
+    try { if (CLAUDE_MSG.test(fs.readFileSync(f, 'utf8'))) return true; } catch {}
+  }
+  return false;
+}
 function pruneUnread() {
   const u = unreadMap(), ids = Object.keys(u);
   if (!ids.length) return;
@@ -2254,7 +2265,7 @@ function pruneUnread() {
     const c = clawOf(id);
     if (isGroupId(id)) gone = !groups.get(id);
     else if (c) { try { gone = !!c.exists && c.supported() && !c.exists(id); } catch {} }
-    else if (/^[0-9a-f-]{36}$/i.test(id)) gone = !dirs.some(d => fs.existsSync(path.join(HOME, '.claude', 'projects', d, id + '.jsonl')));
+    else if (/^[0-9a-f-]{36}$/i.test(id)) gone = !webSessionAlive(id) && !claudeHasMessages(dirs, id);
     if (gone) { clearUnread(id); log('unread pruned', id.slice(0, 11)); }
   }
 }
@@ -3218,6 +3229,7 @@ function sameOrigin(req) {
 
 const wss = new WebSocketServer({ noServer: true });
 try { pruneUnread(); } catch (e) { log('unread prune', e.message); }   // 要在 wss 之后：清未读会广播给已连的页面
+setInterval(() => { try { pruneUnread(); } catch (e) { log('unread prune', e.message); } }, 10 * 60 * 1000).unref();
 let ttsOwner = null, ttsOwnerAt = 0;   // 正在朗读的页面
 function onUpgrade(req, socket, head) {
   if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
