@@ -224,6 +224,14 @@ export async function fetchModels(p, { timeout = 8000, fetchImpl = envFetch } = 
     if (!/\/v\d+[a-z]*$/i.test(eps.openai)) tries.push(['OpenAI', eps.openai + '/v1/models', h]);
   }
   if (eps.anthropic) tries.push(['Anthropic', eps.anthropic.replace(/\/v1$/, '') + '/v1/models?limit=1000', { 'x-api-key': p.key, 'anthropic-version': '2023-06-01' }]);
+  // 只填了「…/anthropic」兼容地址（DeepSeek、Kimi、智谱等）：这些家的 Anthropic 兼容口没有模型列表（回 404），
+  // 列表在同一域名的 OpenAI 格式口上，Key 通用，所以去掉 /anthropic 再按 OpenAI 格式试一次
+  const anthBase = !eps.openai && eps.anthropic?.match(/^(https?:\/\/.+?)\/anthropic(?:\/v1)?\/?$/i)?.[1];
+  if (anthBase) {
+    const h = { authorization: 'Bearer ' + p.key };
+    tries.push(['OpenAI', anthBase + '/models', h]);
+    if (!/\/v\d+[a-z]*$/i.test(anthBase)) tries.push(['OpenAI', anthBase + '/v1/models', h]);
+  }
   if (eps.gemini) tries.push(['Gemini', (/\/v1(beta)?$/.test(eps.gemini) ? eps.gemini : eps.gemini + '/v1beta') + '/models?pageSize=1000', { 'x-goog-api-key': p.key }]);
   let last = '';
   for (const [fmt, url, headers] of tries) {

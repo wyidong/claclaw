@@ -160,6 +160,15 @@ test('从接口读模型：几种格式的返回、按顺序试、错误信息�
   await fetchModels({ key: KEY, endpoints: { anthropic: 'https://api.anthropic.com' } }, { fetchImpl: fake({ 'https://api.anthropic.com/v1/models?limit=1000': { data: [] } }) });
   assert.equal(seen[0][1]['x-api-key'], KEY);
   await assert.rejects(fetchModels(p, { fetchImpl: fake({}) }), e => e.user && /没读到模型列表（Anthropic 接口回 404）/.test(e.message) && !e.message.includes(KEY));
+  // 只填了 …/anthropic 兼容地址：Anthropic 口回 404，去掉 /anthropic 按 OpenAI 格式读
+  seen.length = 0;
+  const only = { key: KEY, endpoints: { anthropic: 'https://api.deepseek.com/anthropic' } };
+  assert.deepEqual(await fetchModels(only, { fetchImpl: fake({ 'https://api.deepseek.com/models': { data: [{ id: 'deepseek-v4-flash' }] } }) }), [{ id: 'deepseek-v4-flash' }]);
+  assert.deepEqual(seen.map(x => x[0]), ['https://api.deepseek.com/anthropic/v1/models?limit=1000', 'https://api.deepseek.com/models']);
+  assert.equal(seen[1][1].authorization, 'Bearer ' + KEY);
+  seen.length = 0;
+  await fetchModels({ key: KEY, endpoints: { anthropic: 'https://open.bigmodel.cn/api/anthropic' } }, { fetchImpl: fake({ 'https://open.bigmodel.cn/api/v1/models': { data: [{ id: 'glm-4.6' }] } }) });
+  assert.deepEqual(seen.map(x => x[0]).slice(1), ['https://open.bigmodel.cn/api/models', 'https://open.bigmodel.cn/api/v1/models']);
   await assert.rejects(fetchModels(p, { fetchImpl: async () => { throw new Error('boom ' + KEY); } }), e => e.user && /连不上/.test(e.message) && !e.message.includes(KEY));
   await assert.rejects(fetchModels({ endpoints: { openai: 'https://x' } }), /先填 Key/);
 });
