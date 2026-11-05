@@ -47,7 +47,7 @@ import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureD
 import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
 import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './peerguard.mjs';
-import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, BUSY_MAX, SEEN_TTL } from './peerqueue.mjs';
+import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_TTL } from './peerqueue.mjs';
 import { peerJudge } from './peerjudge.mjs';
 import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './modelstore.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
@@ -1437,7 +1437,7 @@ async function outboxRun() {
       if (!peerOutbox.has(id) || x.next > Date.now()) continue;   // 已取消 / 还没到时间
       const c = loadPeer(), p = c.peers.find(y => y.id === x.peerId);
       if (!c.enabled || !p?.inbox || !p.theirToken) { outboxDrop(x, '对方已不可联系（撤销了配对，或协同已关闭）'); continue; }
-      if (Date.now() - x.at > RETRY_MAX_AGE) { outboxDrop(x, '24 小时内一直连不上'); continue; }
+      if (Date.now() - x.at > RETRY_MAX_AGE) { outboxDrop(x, x.busyTries && !x.tries ? '24 小时内对方一直在忙' : '24 小时内一直连不上'); continue; }
       let j = null, err = null;
       try { j = await peerCall(c, p, '', { body: x.body, ms: 3 * 60e3 }); } catch (e) { err = e; }
       const kind = classify(j, err), why = err ? err.message : j.error || 'HTTP ' + j.status;
@@ -1450,10 +1450,10 @@ async function outboxRun() {
         continue;
       }
       if (kind === 'fail') { outboxDrop(x, why); continue; }
-      if (kind === 'busy') { if ((x.busyTries || 0) >= BUSY_MAX) { outboxDrop(x, '对方一直在忙：' + why); continue; } x.busyTries = (x.busyTries || 0) + 1; }
+      if (kind === 'busy') x.busyTries = (x.busyTries || 0) + 1;   // 忙就一直等它空下来（24 小时上限在上面）
       else x.tries = (x.tries || 0) + 1;
       x.lastError = String(why).slice(0, 200);
-      x.next = Date.now() + nextDelay(kind, x.tries);
+      x.next = Date.now() + nextDelay(kind, kind === 'busy' ? x.busyTries : x.tries);
       peerOutbox.set(id, x);
     }
   } finally { outboxRunning = false; }

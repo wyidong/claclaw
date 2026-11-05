@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_STEPS, RETRY_EVERY, BUSY_RETRY } from '../peerqueue.mjs';
+import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_STEPS, RETRY_EVERY, BUSY_RETRY, BUSY_MAX, BUSY_LATER } from '../peerqueue.mjs';
 
 test('发送结果归类：只有连不上才排队，对方明确拒绝的不重试', () => {
   assert.equal(classify({ ok: true, status: 200 }), 'ok');
@@ -21,6 +21,8 @@ test('重发间隔：1、2、5、10 分钟，之后每 10 分钟；忙就 1 分�
   const mid = () => 0.5;
   assert.deepEqual([0, 1, 2, 3, 4, 9].map(n => nextDelay('offline', n, mid)), [...RETRY_STEPS, RETRY_EVERY, RETRY_EVERY]);
   assert.equal(nextDelay('busy', 3, mid), BUSY_RETRY);
+  assert.equal(nextDelay('busy', BUSY_MAX, mid), BUSY_LATER);   // 忙久了不丢，改成每 2 分钟一次
+  assert.equal(nextDelay('busy', 40, mid), BUSY_LATER);
   assert.equal(nextDelay('offline', 0, () => 0), 0.8 * RETRY_STEPS[0]);
   assert.equal(nextDelay('offline', 0, () => 1), 1.2 * RETRY_STEPS[0]);
 });
