@@ -10,16 +10,25 @@ import { fileURLToPath } from 'node:url';
 import { DATA } from './auth.mjs';
 
 // ---------- 微软在线语音（Edge 的自然语音：晓伊、晓晓、云希…） ----------
-// 装了才有（tools/setup-edge-tts.sh：在 data/edge-tts 里建 Python 环境装 edge-tts）。常驻一个 Python 助手进程，一句约 2 秒。
-const EDGE_PY = path.join(DATA, 'edge-tts', 'venv', 'bin', 'python');
+// 装了才有（tools/setup-edge-tts.sh，Windows 上 tools/setup-edge-tts.ps1：在 data/edge-tts 里建 Python 环境装 edge-tts）。常驻一个 Python 助手进程，一句约 2 秒。
+// 没装 / 没有 Python：声音列表里没有微软的，网页自动用浏览器自带的声音念
+const EDGE_PY = process.platform === 'win32'
+  ? path.join(DATA, 'edge-tts', 'venv', 'Scripts', 'python.exe')
+  : path.join(DATA, 'edge-tts', 'venv', 'bin', 'python');
 const EDGE_HELPER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tools', 'edge-tts-helper.py');
 let edge = null, edgeSeq = 0, edgeVoices = { at: 0, list: [] };
 const edgePending = new Map();
 function edgeProc() {
   if (edge) return edge;
   if (!fs.existsSync(EDGE_PY)) return null;
-  const p = spawn(EDGE_PY, ['-I', EDGE_HELPER], { stdio: ['pipe', 'pipe', 'ignore'] });
+  let p;
+  try { p = spawn(EDGE_PY, ['-I', EDGE_HELPER], { stdio: ['pipe', 'pipe', 'ignore'] }); }
+  catch { return null; }   // Windows 上 python.exe 坏了时 spawn 直接同步抛（spawn UNKNOWN）：当没装
   let buf = '';
+  // 起不来（环境坏了、python.exe 被删）或中途退出：都不抛到进程级把服务弄崩，等着的请求一律回掉，下次再试着起
+  const gone = why => { if (edge === p) edge = null; for (const q of edgePending.values()) { clearTimeout(q.t); q.no(new Error(why)); } edgePending.clear(); };
+  p.on('error', e => gone('微软语音助手起不来：' + e.message));
+  p.stdin.on('error', () => {});   // 进程已经没了还往里写：EPIPE
   p.stdout.on('data', d => {
     buf += d;
     let i;
@@ -31,7 +40,7 @@ function edgeProc() {
       m.ok ? q.ok(m) : q.no(new Error(m.error || '微软语音合成失败'));
     }
   });
-  p.on('exit', () => { if (edge === p) edge = null; for (const q of edgePending.values()) { clearTimeout(q.t); q.no(new Error('微软语音助手退出了')); } edgePending.clear(); });
+  p.on('exit', () => gone('微软语音助手退出了'));
   edge = p;
   return p;
 }

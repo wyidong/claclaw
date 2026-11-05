@@ -275,7 +275,7 @@ push.mjs          推送通知（Web Push）
 passwd.mjs        命令行改登录账号
 public/           前端（单文件页面 + 登录页 + 主屏幕图标）
 tools/make-icons.py  生成主屏幕图标（python3 + Pillow）
-tools/setup-edge-tts.sh   装 / 升级微软在线语音（在 data/edge-tts 里建 Python 环境）
+tools/setup-edge-tts.sh   装 / 升级微软在线语音（在 data/edge-tts 里建 Python 环境；Windows 上用 setup-edge-tts.ps1；不装就用浏览器自带的声音）
 tools/edge-tts-helper.py  微软在线语音的常驻合成助手
 probe/            开发时用来核实 SDK 行为的探针脚本
 claude-session-demo.html  最初的纯前端交互演示（预设脚本，不连后端）
