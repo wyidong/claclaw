@@ -255,6 +255,11 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .msg.ai{align-self:stretch}
 .msg[data-ts]::after,.peer[data-ts]::after{content:attr(data-ts);display:block;margin-top:3px;font-size:11px;line-height:1.3;color:var(--muted);text-align:right;white-space:nowrap}
 .msg.ai[data-ts]::after{text-align:left}
+/* 每轮回复的播放键：放左边，和时间同一行、在时间前面 */
+.msg.ai>.gm-foot{justify-content:flex-start;margin:2px 0 -4px -6px}
+.msg.ai.has-play[data-ts]{position:relative}
+.msg.ai.has-play[data-ts]>.gm-foot{position:absolute;left:-6px;bottom:-8px;margin:0}
+.msg.ai.has-play[data-ts]::after{padding-left:26px}
 /* 用户消息、协同消息：时间放在气泡外面、下方右侧 */
 .msg.user[data-ts]:not(.queued),.peer[data-ts]{position:relative;margin-bottom:17px}
 .msg.user[data-ts]:not(.queued)::after,.peer[data-ts]::after{position:absolute;right:4px;top:100%;margin-top:3px;opacity:1}
@@ -6408,14 +6413,14 @@ function aiPlayMark(){
     if(cl.contains('user')){after=false;tail=false;continue}
     if(!cl.contains('ai'))continue;
     var want=!after&&!(tail&&busy),has=e.querySelector(':scope>.gm-foot');after=true;
-    if(want&&!has&&e.textContent.trim())aiPlayAdd(e);else if(!want&&has)has.remove();
+    if(want&&!has&&e.textContent.trim())aiPlayAdd(e);else if(!want&&has){has.remove();cl.remove('has-play')}
   }
 }
 function aiPlayAdd(e){
   var ft=document.createElement('div');ft.className='gm-foot';var pb=document.createElement('button');pb.type='button';pb.className='gm-play';pb.setAttribute('aria-label','朗读这一轮');pb.title='朗读这一轮';pb.innerHTML=GM_PLAY.say;
   pb.addEventListener('click',function(){if(ttsLongFired(pb))return;gmSay(pb,'',ttsElText(e))});
   ttsLongPress(pb,function(){var t=ttsElText(e);ttsPickFrom(t,function(i){gmSay(pb,'',t,i)})});
-  ft.appendChild(pb);e.appendChild(ft);
+  ft.appendChild(pb);e.appendChild(ft);e.classList.add('has-play');
 }
 var aiPlayT=0;
 new MutationObserver(function(){clearTimeout(aiPlayT);aiPlayT=setTimeout(aiPlayMark,60)}).observe(feed,{childList:true});
