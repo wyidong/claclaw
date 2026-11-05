@@ -7077,7 +7077,7 @@ function openDel(s){
     :k==='openclaw'?'会话会在 OpenClaw 里归档、从列表里消失'
     :k==='codex'?'会话会由 Codex 自己删除、从列表里消失'
     :'会话会从列表和 '+(CLAW_NAMES[k]||k)+' 里消失（文件移到 claclaw/data/trash，可以找回）';
-  $('#delU').value='';$('#delP').value='';$('#delErr').textContent='';$('#delGo').disabled=false;
+  $('#delU').value='';$('#delP').value='';$('#delErr').textContent='';$('#delGo').disabled=false;$('#delGo').textContent='删除';
   showDlg(delDlg,true);
   $('#delU').focus();
 }
@@ -7086,17 +7086,31 @@ $('#delNo').addEventListener('click',closeDel);
 delDlg.addEventListener('click',function(e){if(e.target===delDlg)closeDel()});
 $('#delForm').addEventListener('submit',function(e){
   e.preventDefault();if(!delTarget)return;
-  var t=delTarget;$('#delErr').textContent='';$('#delGo').disabled=true;
-  postJson('/api/sessions/delete',{id:t.id,username:$('#delU').value,password:$('#delP').value})
-  .then(function(r){if(r.status===401&&!r.headers.get('content-type'))location.replace('/login');return r.json().then(function(j){return {ok:r.ok,j:j}})})
-  .then(function(x){
-    if(!x.ok){$('#delErr').textContent=x.j.error||'删除失败';$('#delGo').disabled=false;return}
-    closeDel();
+  var t=delTarget,go=$('#delGo'),fin=false,tries=0,wt=0;$('#delErr').textContent='';go.disabled=true;go.textContent='删除中…';
+  var ok=function(){
+    if(fin)return;fin=true;clearTimeout(wt);
+    if(delTarget===t)closeDel();
     if(session&&session.id===t.id)localStorage.removeItem(hk('session'));
     else addSys('已删除会话「'+t.title+'」');
     openSheet();
-  })
-  .catch(function(){$('#delErr').textContent='连不上服务';$('#delGo').disabled=false});
+  };
+  var bad=function(msg){if(fin)return;fin=true;clearTimeout(wt);if(delTarget!==t)return;$('#delErr').textContent=msg;go.disabled=false;go.textContent='删除'};
+  // 删掉了、回复却在路上丢了（手机直连 / 中继正好断开时会这样），请求就一直挂着：隔一会儿去列表里看它还在不在，不在就是删掉了
+  // last：请求已经报错了，只看这一次，还在就报 last
+  var check=function(last){
+    if(fin)return;clearTimeout(wt);
+    var k=clawOf(t.id),again=function(){if(fin)return;if(last)bad(last);else if(++tries<3)wt=setTimeout(check,15000);else bad('没收到删除结果，网络可能断过。关掉后刷新列表看看删掉没有')};
+    fetch('/api/sessions'+(k==='claude'?'':'?claw='+k),{cache:'no-store'}).then(function(r){return r.json()}).then(function(arr){
+      if(fin)return;
+      if(Array.isArray(arr)&&!arr.some(function(s){return s.id===t.id}))return ok();
+      again();
+    },again);
+  };
+  wt=setTimeout(function(){check()},15000);
+  postJson('/api/sessions/delete',{id:t.id,username:$('#delU').value,password:$('#delP').value})
+  .then(function(r){if(r.status===401&&!r.headers.get('content-type'))location.replace('/login');return r.json().then(function(j){return {ok:r.ok,j:j}})})
+  .then(function(x){if(!x.ok)return bad(x.j.error||'删除失败');ok()})
+  .catch(function(){check('连不上服务')});
 });
 
 $('#bannerX').addEventListener('click',function(){$('#banner').hidden=true});
