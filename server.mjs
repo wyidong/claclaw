@@ -677,6 +677,42 @@ async function loadHistory(sessionId, cwd) {
 }
 
 // 文件大小 + 修改时间没变：上次的结果直接用（连最后一轮都不用再解析）
+// ---------- 只读打开：别处（终端 / VS Code）正在用的 Claude 会话 ----------
+// 不起 Claude 进程、不写会话文件（两边一起写会把对话写乱），只读会话文件来显示；
+// 每 3 秒看一眼：文件长了就把最新一页重发（网页按序号只补新的），原处关掉了就通知网页正常打开
+const RO_TICK = 3000;
+function roStop(ws) { if (ws.ro) { clearInterval(ws.ro.timer); ws.ro = null; } }
+const roInfo = el => ({ entrypoint: el.entrypoint, name: el.name, status: el.status, idleMin: el.idleMin, canTakeover: el.canTakeover, needMin: el.needMin });
+async function roPage(info, el) {
+  const hist = await loadHistoryCached(info.sessionId, info.cwd);
+  const pg = historyPage(hist, hist.total, HISTORY_PAGE);
+  return {
+    t: 'session.opened', id: info.sessionId, title: info.customTitle || info.summary, cwd: info.cwd,
+    cwdShort: relPath(info.cwd || '', null), branch: info.gitBranch === 'HEAD' ? '' : info.gitBranch || '', tokSum: usageOf(jsonlPathOf(info)),
+    mode: 'default', modes: ['default'], busy: false, readonly: roInfo(el),
+    history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more, pending: [], suggestion: null, commands: [],
+  };
+}
+async function roOpen(ws, send, info, el) {
+  roStop(ws);
+  const f = jsonlPathOf(info), sig = () => { try { const st = fs.statSync(f); return st.size + ':' + st.mtimeMs; } catch { return ''; } };
+  const ro = ws.ro = { info, sig: sig(), state: JSON.stringify(roInfo(el)), busy: false, timer: null };
+  send(await roPage(info, el));
+  ro.timer = setInterval(async () => {
+    if (ws.ro !== ro || ro.busy || ws.readyState !== 1) return;
+    ro.busy = true;
+    try {
+      const el2 = takeoverInfo(info.sessionId, f, liveRegistry());
+      if (ws.ro !== ro) return;
+      if (!el2) { roStop(ws); send({ t: 'ro.free', id: info.sessionId }); return; }   // 原处关了：网页正常打开
+      const s = sig(), st = JSON.stringify(roInfo(el2));
+      if (s === ro.sig && st === ro.state) return;
+      ro.sig = s; ro.state = st;
+      const pg = await roPage(info, el2);
+      if (ws.ro === ro) send(pg);
+    } catch (e) { log('readonly tick', e.message); } finally { ro.busy = false; }
+  }, RO_TICK);
+}
 async function loadHistoryCached(sessionId, cwd) {
   let key = null;
   try { const st = fs.statSync(jsonlPathOf({ sessionId, cwd })); key = st.size + ':' + st.mtimeMs; } catch {}
@@ -3237,10 +3273,16 @@ wss.on('connection', (ws, req) => {
       if (m.t === 'login.input') { try { loginInput(String(m.claw || ''), String(m.text || '')); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
       if (m.t === 'login.cancel') { loginCancel(String(m.claw || ''), log); return; }
       if (m.t === 'login.watch') { if (!loginWatch(String(m.claw || ''), ws)) send({ t: 'login.update', claw: m.claw, status: 'none' }); return; }
+      if (m.t === 'session.open' || m.t === 'session.new' || m.t === 'session.leave') roStop(ws);   // 换会话：只读的那个不再盯着
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
       if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }
       // 往上滑：要 before（绝对序号）之前的一页
       if (m.t === 'history.more') {
+        if (!runner && ws.ro) {   // 只读打开的：照样从会话文件里取更早的
+          const hist = await loadHistoryCached(ws.ro.info.sessionId, ws.ro.info.cwd);
+          const pg = historyPage(hist, Number(m.before) || 0, HISTORY_MORE);
+          return send({ t: 'history.page', id: ws.ro.info.sessionId, items: pg.items, start: pg.start, more: pg.more });
+        }
         if (!runner) return;
         if (runner instanceof AcpRunner || isGroupId(runner.id)) {
           const pg = historyPage(runner.history(), Number(m.before) || 0, HISTORY_MORE);
@@ -3432,8 +3474,14 @@ wss.on('connection', (ws, req) => {
         if (!runners.has(m.id)) {
           if (info.cwd && !fs.existsSync(info.cwd)) return send({ t: 'error', message: '会话目录已不存在：' + info.cwd });
           const el = takeoverInfo(m.id, jsonlPathOf(info), liveRegistry());
+          if (el && !m.takeover) {   // 正在终端 / VS Code 里用：只读打开（不起进程、不写会话文件），有新内容自动刷新
+            runner?.unsubscribe(ws); runner = null;
+            await roOpen(ws, send, info, el);
+            log('open readonly', m.id.slice(0, 8), el.entrypoint || '', el.status || '');
+            return;
+          }
           if (el) {
-            if (!m.takeover || !el.canTakeover) return send({ t: 'session.busy', id: m.id, ...el });
+            if (!el.canTakeover) return send({ t: 'session.busy', id: m.id, ...el });
             if (!(await endHolders(m.id))) return send({ t: 'error', message: '没能结束原处的会话进程，未接管' });
             log('takeover done', m.id.slice(0, 8));
           }
@@ -3478,7 +3526,7 @@ wss.on('connection', (ws, req) => {
           ...runner.modelInfo(),
         });
       } else if (!runner) {
-        send({ t: 'error', message: '还没有打开会话' });
+        send({ t: 'error', message: ws.ro ? '这个会话正在别处使用，网页端只能看，不能发消息' : '还没有打开会话' });
       } else if (m.t === 'message.send') {
         // 网页每条消息带一个编号 cid，重发时不变：连接卡住时网页会重连再发一遍，卡住的那份晚点又送到，同一条就进了两次（一份开新一轮、一份成了插话）
         const cid = typeof m.cid === 'string' && /^[a-z0-9]{8,40}$/.test(m.cid) ? m.cid : '';
@@ -3586,7 +3634,7 @@ wss.on('connection', (ws, req) => {
   ws.on('pong', () => { ws.isAlive = true; });
   ws.on('error', () => { try { ws.terminate(); } catch {} });
 
-  ws.on('close', (code, reason) => { runner?.unsubscribe(ws); loginUnsubscribe(ws); log('ws closed', wsIp, 'code ' + code, Math.round((Date.now() - wsAt) / 1000) + 's', String(reason || '').slice(0, 60)); });   // 排查「总是断开重连」：谁断的、连了多久
+  ws.on('close', (code, reason) => { runner?.unsubscribe(ws); roStop(ws); loginUnsubscribe(ws); log('ws closed', wsIp, 'code ' + code, Math.round((Date.now() - wsAt) / 1000) + 's', String(reason || '').slice(0, 60)); });   // 排查「总是断开重连」：谁断的、连了多久
 });
 
 // 每 30 秒 ping 一轮；连续两轮没有 pong 的连接直接 terminate

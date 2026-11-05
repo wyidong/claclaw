@@ -734,6 +734,11 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 #ttsPick .tp-i.cur{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 #ttsPick .tp-i em{font-style:normal;color:var(--muted);min-width:1.6em;text-align:right;flex:none}
 @media (min-width:1000px){#ttsPick{align-items:center}#ttsPick .tp-box{border-radius:16px}}
+#roBar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin:6px 10px 8px;border-radius:12px;background:var(--bg);color:var(--muted);font-size:14px;line-height:1.4}
+#roBar[hidden]{display:none}
+#roBar .ro-t{flex:1}
+#roBar .ro-go{border:0;border-radius:999px;padding:6px 14px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer}
+body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 #ttsStop svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #ttsStop.on{color:var(--accent)}
 #ttsStop.on{animation:ttsw 1.4s ease-in-out infinite}
@@ -1519,6 +1524,7 @@ select.pe-in{text-align-last:right}
     </div>
     <div id="cmdMenu" role="listbox" aria-label="斜杠命令" hidden></div>
     <div id="atts" hidden></div>
+    <div id="roBar" hidden><span class="ro-t"></span><button type="button" class="ro-go" hidden>接管</button></div>
     <div id="composer">
       <button type="button" id="attachBtn" aria-label="添加图片"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4.5v13M4.5 11h13"/></svg></button>
       <button type="button" id="micBtn" hidden aria-label="语音输入" title="语音输入（试验）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
@@ -1862,6 +1868,18 @@ function idleText(b){
   return where(b.entrypoint)+'中已闲置 '+fmtMin(b.idleMin);
 }
 function fmtMin(n){return n<60?n+' 分钟':n<1440?Math.floor(n/60)+' 小时':Math.floor(n/1440)+' 天'}
+// 只读打开（会话正在终端 / VS Code 里用）：输入框换成一行说明；原处闲置够久了给「接管」
+function roShow(){
+  var r=session&&session.readonly;
+  document.body.classList.toggle('ro',!!r);$('#roBar').hidden=!r;
+  if(!r)return;
+  $('#roBar .ro-t').textContent='只读 · '+idleText(r)+(r.canTakeover?'':'，原处闲置满 '+r.needMin+' 分钟后可接管');
+  $('#roBar .ro-go').hidden=!r.canTakeover;
+}
+$('#roBar .ro-go').addEventListener('click',function(){
+  var r=session&&session.readonly;if(!r)return;
+  if(confirmTakeover(r.name||session.title||shortId(session.id),r))wsSend({t:'session.open',id:session.id,mode:mode,takeover:true});
+});
 function confirmTakeover(title,b){
   return confirm('接管「'+title+'」？\n\n'+idleText(b)+'。\n接管会结束'+where(b.entrypoint)+'里这个会话的进程；之后在'+where(b.entrypoint)+'里重新打开它，网页端会自动退出。');
 }
@@ -3191,7 +3209,8 @@ function onEvent(m){
     var sameSess=!!(session&&session.id===m.id)&&!m.compacted,wasStick=stick;
     if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
     var keepDone=m.compacted&&session&&session.id===m.id?(session.ctxAsk?(m.ctx||-1):session.ctxDone||0):0;   // DeepSeek 压缩完会整页重开：接着显示压缩结果
-    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null,ctx:m.ctx||null,group:m.group||null};
+    session={id:m.id,title:m.title,cwd:m.cwd,cwdShort:m.cwdShort||'',branch:m.branch||'',usage:m.usage||null,ctx:m.ctx||null,group:m.group||null,readonly:m.readonly||null};
+    roShow();
     if(keepDone){session.ctxDone=keepDone;clearTimeout(ctxAskTimer)}
     ctxShow();lastSess={id:m.id,cwd:m.cwd};clearOpening();if(pendingOpen===m.id)pendingOpen=null;if(shellOpen===m.id){clog('shell open 已打开 '+m.id.slice(0,8));shellOpen=null}
     switchDraft(m.id);
@@ -3249,6 +3268,9 @@ function onEvent(m){
     if(merged){stick=wasStick;if(stick)scrollDown();else feed.scrollTop=keepTop}else scrollDown(true);
     try{var sp0=JSON.parse(sessionStorage.getItem('claclaw.scroll')||'null');sessionStorage.removeItem('claclaw.scroll');   // 「更新客户端」前在看的位置：刷新后回到那里
       if(sp0&&sp0.id===m.id&&!sp0.stick)setTimeout(function(){stick=false;feed.scrollTop=sp0.top},50)}catch(_){}   // 重连：在看上面的内容就停在原处
+    break;
+  case 'ro.free':   // 只读看着的会话，原处关掉了：正常打开（能发消息了）
+    if(session&&session.id===m.id){addSys('原处已经关掉了这个会话，网页端可以正常使用了');wsSend({t:'session.open',id:m.id,mode:mode})}
     break;
   case 'session.busy':
     if(shellOpen){clog('shell open 会话忙'+(m.canTakeover?'，可接管':''));shellOpen=null}   // 能接管的不退到「最近」，留着接管提示
@@ -4851,8 +4873,9 @@ function liveLastPrompt(id,text){
 // 点会话行：打开（别处占着的先确认接管）
 function rowOpen(s,row,b,bz){
   closeSheet();
-  if(bz&&!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
-  if(bz){if(confirmTakeover(s.title,bz))wsSend({t:'session.open',id:s.id,mode:mode,takeover:true});return}
+  if(bz&&NOT_CLAUDE.test(s.id)){   // 其他 Claw：还是要先接管才能打开；Claude 的直接只读打开（输入框处有说明和「接管」）
+    if(!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
+    if(confirmTakeover(s.title,bz))wsSend({t:'session.open',id:s.id,mode:mode,takeover:true});return}
   if(opening===s.id&&Date.now()-openingAt<4000)return;   // 正在打开：重复点不再发请求
   opening=s.id;openingAt=Date.now();row.classList.add('opening');
   document.querySelectorAll('#sList .s-item[aria-current]').forEach(function(x){x.removeAttribute('aria-current')});b.setAttribute('aria-current','true');   // 选中色马上换到点的这一行（顺序不动）
