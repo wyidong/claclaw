@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { WIN } from './util.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(ROOT, 'skills');
@@ -106,6 +107,9 @@ export function setupLocal(port, log) {
       if (!fs.existsSync(js)) continue;
       const bin = path.join(CLACLAW_HOME, 'bin', s.name);
       fs.writeFileSync(bin, '#!/bin/sh\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(js) + ' "$@"\n', { mode: 0o755 });
+      // Windows：上面那个 sh 脚本只有 Git Bash 认，cmd / PowerShell 里跑不了，
+      // 各 Claw 的 AI 多半用的是后者，所以再写一个同名的 .cmd
+      if (WIN) fs.writeFileSync(bin + '.cmd', '@echo off\r\n"' + process.execPath + '" "' + js + '" %*\r\n');
     }
   } catch (e) { log?.('local setup failed', e.message); }
 }

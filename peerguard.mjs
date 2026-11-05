@@ -16,14 +16,22 @@ export function sensitiveRoots(dataDir) {
 const SENSITIVE_NAME = /(^|\/)(\.env(\.[^/]*)?|id_(rsa|dsa|ecdsa|ed25519)[^/]*|[^/]*\.(pem|p12|pfx|key|keychain(-db)?)|[^/]*(credential|secret|token|passw|auth\.json|vapid)[^/]*|ssh_[^/]*|\.(bash_profile|bashrc|bash_login|profile|zshrc|zprofile|zshenv|zlogin|bash_history|zsh_history|python_history|node_repl_history|psql_history|mysql_history)|config\.fish)$/i;
 // 上面最后两组：shell 启动文件（常在这里 export *_KEY）和命令历史（敲过的 key、密码会留在里面）
 
+// Windows：path.resolve 给的是反斜杠路径，而上面的敏感名正则和下面的 inside() 都按 / 比，
+// 不统一的话 ~\.ssh\id_rsa、proj\.env、data\peer.json 全都判不出敏感（反斜杠被 [^/]* 吃掉）。
+// 统一成小写的 / 分隔再比（Windows 文件名不分大小写）；其他系统原样返回，行为不变 ——
+// macOS 的文件名里可以有反斜杠，不能跟着转。
+const WIN = process.platform === 'win32';
+const norm = p => WIN ? String(p || '').replace(/\\/g, '/').toLowerCase() : String(p || '');
+const NHOME = norm(HOME);
+const isRoot = p => p === '/' || (WIN && /^[a-z]:\/?$/.test(p));
 const expand = (p, cwd) => {
   let s = String(p || '').trim().replace(/^['"]|['"]$/g, '');
   if (!s) return '';
   if (s === '~' || s.startsWith('~/')) s = HOME + s.slice(1);
   else if (s.startsWith('$HOME')) s = HOME + s.slice(5);
-  return path.resolve(cwd || HOME, s);
+  return norm(path.resolve(cwd || HOME, s));
 };
-const inside = (p, root) => p === root || p.startsWith(root.endsWith('/') ? root : root + '/');
+const inside = (p, root) => { p = norm(p); root = norm(root); return p === root || p.startsWith(root.endsWith('/') ? root : root + '/'); };
 // 本身就是敏感内容：敏感文件，或在敏感目录里（不含「只是它们的上级」）
 const inSensitive = (a, roots) => SENSITIVE_NAME.test(a) || roots.some(r => inside(a, r));
 
@@ -32,7 +40,7 @@ export function touchesSensitive(p, cwd, roots) {
   const a = expand(p, cwd);
   if (!a) return false;
   if (SENSITIVE_NAME.test(a)) return true;
-  if (a === '/' || a === HOME || inside(HOME, a)) return true;
+  if (isRoot(a) || a === NHOME || inside(HOME, a)) return true;
   return roots.some(r => inside(a, r) || inside(r, a));
 }
 
@@ -53,7 +61,8 @@ const SAFE_VARS = new Set(['HOME', 'USER', 'LOGNAME', 'PWD', 'OLDPWD', 'SHELL', 
 // 跑的是仓库里提交过的代码——和「拉代码 + 重启」本来就会跑的一样，用户认可这是常规操作，不用每次确认。
 // 参数要一字不差，多带一个都不算；仓库里有没提交的改动（可能是这一轮刚改的）就照样确认，免得「先改代码再跑测试」绕过去。
 const ROUTINE_NPM = new Set(['test', 't', 'run check', 'run test', 'run restart']);
-const inRepo = (dir, repos) => repos.some(r => dir === r || inside(dir, path.join(r, '.worktrees')));
+// dir 可能已经过 expand() 归一化（cd 之后），repos 是调用方给的原始路径：两边都归一再比
+const inRepo = (dir, repos) => repos.some(r => norm(dir) === norm(r) || inside(dir, path.join(r, '.worktrees')));
 
 function words(seg) {
   // 粗分词：引号里的空格不拆，反斜杠转义下一个字符（和 shell 一样）。分错只会多问，不会少问（每一段都要单独过检查）
@@ -61,6 +70,10 @@ function words(seg) {
   for (let i = 0; i < seg.length; i++) {
     const ch = seg[i];
     if (q === "'") { if (ch === q) q = ''; else cur += ch; continue; }
+    // Windows：命令里常是 D:\Users\… 这种路径，反斜杠是分隔符不是转义符。照 shell 吃掉它，
+    // ~\.ssh\id_rsa 会变成 .sshid_rsa，敏感判断整个失效 —— 那是「少问」，正好和上面的原则相反。
+    // 所以引号外、下一个字符不是 shell 元字符时，反斜杠按字面留着（留着只会多问）。
+    if (ch === '\\' && i + 1 < seg.length && !q && WIN && /[^\s"'$`\\]/.test(seg[i + 1])) { cur += ch; continue; }
     if (ch === '\\' && i + 1 < seg.length && (!q || /["\\$`]/.test(seg[i + 1]))) { cur += seg[++i]; continue; }
     if (q) { if (ch === q) q = ''; else cur += ch; continue; }
     if (ch === '"' || ch === "'") { q = ch; continue; }
@@ -142,15 +155,15 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
     // 家目录、根目录及其上级、敏感目录本身还是要确认
     if (c === 'cd') {
       dir = expand(args[0] || '~', dir);
-      if (dir === '/' || dir === HOME || inside(HOME, dir) || inSensitive(dir, roots)) return '进入敏感目录';
+      if (isRoot(dir) || dir === NHOME || inside(HOME, dir) || inSensitive(dir, roots)) return '进入敏感目录';
       continue;
     }
     const paths = args.filter(a => !/^-/.test(a));
-    for (const a of paths) if (/[/~.]/.test(a) && touchesSensitive(a, dir, roots)) return '读敏感位置 ' + a;
+    for (const a of paths) if (/[/\\~.]/.test(a) && touchesSensitive(a, dir, roots)) return '读敏感位置 ' + a;
     for (const a of paths) if (SENSITIVE_NAME.test(a)) return '读敏感文件 ' + a;
     // 递归搜索没写路径：搜的是当前目录
     if (SEARCH_CMDS.has(c) && (c === 'rg' || c === 'find' || c === 'du' || c === 'tree' || args.some(a => /^-[a-zA-Z]*[rR]/.test(a)))
-      && !paths.some(a => /[/~.]/.test(a)) && touchesSensitive(dir, cwd, roots)) return '在含敏感内容的目录里搜索';
+      && !paths.some(a => /[/\\~.]/.test(a)) && touchesSensitive(dir, cwd, roots)) return '在含敏感内容的目录里搜索';
   }
   return null;
 }

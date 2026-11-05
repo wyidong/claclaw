@@ -43,9 +43,9 @@ setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(()
 setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
 import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
-import { relPath, findBin, readJson } from './util.mjs';
+import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
-import { findUserPath, openOnMac, previewType, READ_MAX } from './localfile.mjs';
+import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, BUSY_MAX, SEEN_TTL } from './peerqueue.mjs';
 import { peerJudge } from './peerjudge.mjs';
@@ -266,11 +266,10 @@ const childCache = new Map();   // pid → 父进程 pid（只记查成功的）
 function isOurChild(pid) {
   const hit = childCache.get(pid);
   if (hit != null) return hit === process.pid;
-  try {
-    const ppid = Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)]).toString().trim());
-    if (Number.isFinite(ppid)) childCache.set(pid, ppid);
-    return ppid === process.pid;
-  } catch { return false; }
+  const ppid = procPpid(pid);          // 跨平台：macOS 走 ps，Windows 走 PowerShell 的 CIM；查不到给 null
+  if (ppid == null) return false;      // 问不出来就当「不是我们起的」，和原来查失败时一致
+  childCache.set(pid, ppid);
+  return ppid === process.pid;
 }
 
 // 原处最近一次活跃：会话文件最后修改时间 和 登记表状态变化时间 取较晚的
@@ -293,13 +292,12 @@ function takeoverInfo(sessionId, jsonlPath, live) {
   };
 }
 
-// 防 pid 被复用：登记表里的 procStart 就是 UTC 下的 ps lstart
+// 防 pid 被复用：登记表里的 procStart，macOS 上是 UTC 下的 ps lstart，Windows 上是 FILETIME
 function sameProcess(holder) {
-  try {
-    const lstart = execFileSync('ps', ['-o', 'lstart=', '-p', String(holder.pid)], { env: { ...process.env, TZ: 'UTC' } }).toString();
-    const norm = x => String(x).replace(/\s+/g, ' ').trim();
-    return !holder.procStart || norm(lstart) === norm(holder.procStart);
-  } catch { return false; }
+  if (!holder.procStart) return true;          // 登记表没记，没法比，维持原来的「不拦」
+  const start = procStart(holder.pid);
+  if (!start) return false;                    // 查不到就不动它，宁可不接管也别杀错进程
+  return sameProcStart(start, holder.procStart);
 }
 
 async function endHolders(sessionId) {
@@ -2730,7 +2728,7 @@ const handler = async (req, res) => {
       if (!hit) return sendJson(res, 404, { error: '电脑上没有这个文件' });
       const name = path.basename(hit.abs);
       if (isLocalReq(req) && process.platform === 'darwin') {
-        try { const how = await openOnMac(hit.abs, hit.st); log('fs open', how, name); return sendJson(res, 200, { opened: how, name }); }
+        try { const how = await openLocal(hit.abs, hit.st); log('fs open', how, name); return sendJson(res, 200, { opened: how, name }); }
         catch (e) { return sendJson(res, 500, { error: '打不开：' + e.message }); }
       }
       return sendJson(res, 200, { name, path: hit.abs, size: hit.st.size, dir: hit.st.isDirectory() });
@@ -3663,6 +3661,10 @@ setInterval(() => {
   }
 }, WATCH_MS);
 
+// Windows：data/ 里有协同钥匙、登录凭据、模型库的 key，而那边 0o600 / 0o700 是空操作，
+// 只能靠 ACL 收紧（macOS / Linux 上是空函数，照旧靠文件权限位）
+try { fs.mkdirSync(DATA, { recursive: true, mode: 0o700 }); } catch {}
+if (secureDir(DATA, log)) log('data 目录已按 ACL 收紧为仅本人可访问');
 skills.setupLocal(PORT, log);
 skills.syncInstalled(log);
 // 端口被占 = 已经有一个 claclaw 在跑（两次重启撞在一起时会这样）。占不到主地址的这个必须退出：

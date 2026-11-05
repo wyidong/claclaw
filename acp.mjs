@@ -6,7 +6,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { storeNow, splitGroups } from './modelpick.mjs';
-import { HOME, tilde, oneLine, binEnv, readJson } from './util.mjs';
+import { HOME, tilde, oneLine, binEnv, binCall, readJson } from './util.mjs';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 export const flatOptions = opt => (opt?.options || []).flatMap(o => o.options ? o.options : [o]);
 export const optName = (cfg, id) => {
@@ -137,7 +137,8 @@ export class AcpAgent {
     if (!bin) return Promise.reject(new Error(this.missing));
     const prep = this.prepare?.(log) || {};
     this.sig = prep.sig || ''; this.stale = false;
-    const [cmd, args] = this.command(bin);
+    // binCall：Windows 上 npm 装的命令是 .cmd，spawn 不了，换成 node 跑它里面的 JS 入口（其他系统原样返回）
+    const { cmd, args } = binCall(...this.command(bin));
     const p = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: HOME, env: { ...binEnv(), ...(prep.env || {}) } });
     this.proc = p;
     let buf = '', errTail = '';

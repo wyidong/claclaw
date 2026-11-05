@@ -13,7 +13,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { AcpAgent, AcpRunner, localNames, stampTimes, stripTags } from './acp.mjs';
-import { HOME, tilde, oneLine, findBin, binEnv } from './util.mjs';
+import { HOME, tilde, oneLine, findBin, binEnv, binCall } from './util.mjs';
 import { storeNow, envName } from './modelpick.mjs';
 
 export const MM_PREFIX = 'mm:';
@@ -95,7 +95,8 @@ const mask = k => k ? k.slice(0, 4) + '****' + k.slice(-4) : '';
 const v1 = u => String(u).replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
 const mcode = (args, env = {}, log) => {
   const bin = mmBin();
-  try { return execFileSync(bin, args, { encoding: 'utf8', timeout: 60000, env: { ...binEnv(), ...env }, stdio: ['ignore', 'pipe', 'pipe'] }); }
+  const c = binCall(bin, args);
+  try { return execFileSync(c.cmd, c.args, { encoding: 'utf8', timeout: 60000, env: { ...binEnv(), ...env }, stdio: ['ignore', 'pipe', 'pipe'] }); }
   catch (e) { log?.('mcode ' + args.slice(0, 2).join(' ') + ' failed:', String(e.stderr || e.message).trim().split('\n').pop()); return null; }
 };
 // 进程起来前同步一次：现有的 claclaw- 供应商和模型库对不上就删了重加；模型库里没了的删掉。只碰 claclaw- 开头的
@@ -203,7 +204,8 @@ export function mmArchive(sid, { timeoutMs = 30000 } = {}) {
   const bin = mmBin();
   if (!bin) return Promise.reject(new Error('没找到 mcode'));
   return new Promise((resolve, reject) => {
-    const p = spawn(bin, ['app-server', '--stdio', '--foreground'], { env: binEnv(), stdio: ['pipe', 'pipe', 'ignore'] });
+    const as = binCall(bin, ['app-server', '--stdio', '--foreground']);
+    const p = spawn(as.cmd, as.args, { env: binEnv(), stdio: ['pipe', 'pipe', 'ignore'] });
     let buf = '', status = 0, body = '', settled = false;
     const send = m => p.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
     const done = (err, v) => { if (settled) return; settled = true; clearTimeout(tm); try { p.kill(); } catch {} err ? reject(err) : resolve(v); };

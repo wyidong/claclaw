@@ -34,12 +34,23 @@ test('相对路径：会话目录 → 下一层目录 → 主目录', () => {
 
 test('会执行代码的不直接打开，只在访达里选中', () => {
   const f = path.join(HOME, 'run.command'); fs.writeFileSync(f, 'echo hi');
-  const x = path.join(HOME, 'tool'); fs.writeFileSync(x, '#!/bin/sh'); fs.chmodSync(x, 0o755);
   const app = path.join(HOME, 'X.app'); fs.mkdirSync(app);
   const md = path.join(WS, 'top.txt');
   assert.deepEqual(openArgs(f, fs.statSync(f)), ['-R', f]);
-  assert.deepEqual(openArgs(x, fs.statSync(x)), ['-R', x]);
   assert.deepEqual(openArgs(app, fs.statSync(app)), ['-R', app]);
+  // 「会执行」在两边的判据不一样：POSIX 看执行位，Windows 看扩展名
+  // （Windows 上没有执行位，一个没扩展名的文件本来就不会被执行，直接打开才是对的）
+  if (process.platform === 'win32') {
+    for (const n of ['a.exe', 'a.bat', 'a.cmd', 'a.ps1']) {
+      const w = path.join(HOME, n); fs.writeFileSync(w, '');
+      assert.deepEqual(openArgs(w, fs.statSync(w)), ['-R', w], n);
+    }
+    const plain = path.join(HOME, 'tool'); fs.writeFileSync(plain, 'not executable here');
+    assert.deepEqual(openArgs(plain, fs.statSync(plain)), [plain]);
+  } else {
+    const x = path.join(HOME, 'tool'); fs.writeFileSync(x, '#!/bin/sh'); fs.chmodSync(x, 0o755);
+    assert.deepEqual(openArgs(x, fs.statSync(x)), ['-R', x]);
+  }
   assert.deepEqual(openArgs(md, fs.statSync(md)), [md]);
   assert.deepEqual(openArgs(WS, fs.statSync(WS)), [WS]);   // 普通文件夹：在访达里打开
 });

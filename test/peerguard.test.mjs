@@ -140,3 +140,24 @@ test('读环境变量算「读敏感内容」：一律确认，不交给小模�
   for (const c of ['git status', 'npm test', 'echo $HOME', 'ps aux', 'ps -ef', 'ps -o user -p 1', "grep -n 'environment' README.md", 'ls'])
     assert.notEqual(risk('Bash', { command: c })?.key, 'read-sensitive', c);
 });
+
+// Windows 专有：反斜杠路径曾经能完整绕过敏感判断 —— 分词器把引号外的反斜杠当 POSIX 转义吃掉，
+// ~\.ssh\id_rsa 被拆成 .sshid_rsa，匹配不上任何规则，对方发来的消息读私钥直接放行、不弹确认。
+// 正斜杠写法一直是拦得住的，所以这是反斜杠写法独有的洞。两层都要守住：分词保留分隔符 + 路径比较统一。
+test('Windows：反斜杠写的敏感路径照样拦得住', { skip: process.platform !== 'win32' && '只在 Windows 上有意义' }, () => {
+  const w = path.win32.join;
+  for (const p of [w(H, '.ssh', 'id_rsa'), w(H, '.ssh', 'id_ed25519'), w(proj, '.env'), w(proj, '.env.local'),
+    w(data, 'peer.json'), w(data, 'claude-token.json'), w(H, '.aws', 'credentials'), w(proj, 'server.pem')])
+    assert.ok(bash('cat ' + p), p);
+  // 进敏感目录、在敏感目录里递归搜索
+  assert.ok(bashRisk('cd ' + data + ' && ls', w(H, 'w'), roots), 'cd data');
+  assert.ok(bashRisk('cd ' + w(H, '.ssh') + ' && ls', w(H, 'w'), roots), 'cd .ssh');
+  // 同样的路径用正斜杠写：本来就该拦，别回归
+  for (const p of [w(H, '.ssh', 'id_rsa'), w(proj, '.env'), w(data, 'peer.json')])
+    assert.ok(bash('cat ' + p.replace(/\\/g, '/')), p);
+  // 项目里的普通文件不受影响：反斜杠写法不能把正常文件误判成敏感
+  for (const p of [w(proj, 'README.md'), w(proj, 'src', 'a.js')])
+    assert.equal(bash('cat ' + p), null, p);
+  // 引号外的反斜杠当路径分隔符，但转义空格、$、引号还要照旧
+  assert.equal(bash('cat ' + w(proj, 'a b.md').replace(' ', '\\ ')), null, '转义空格');
+});

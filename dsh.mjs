@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { DATA } from './auth.mjs';
 import { AcpAgent, AcpRunner, flatOptions } from './acp.mjs';
-import { HOME, tilde, tms, sleep, findBin } from './util.mjs';
+import { HOME, tilde, tms, sleep, findBin, binEnv, binCall } from './util.mjs';
 
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
 const ROOT = path.join(DSH_HOME, 'sessions');
@@ -302,9 +302,11 @@ function startDshWeb(log) {
   // 第一次用时从 dsh 自带的 web 模板建一个空壳；之后一直复用。
   if (!fs.existsSync(path.join(DSH_HOME, 'profiles', profile, 'package.json'))) args.push('--from-default-profile', 'web');
   args.push('--host', '127.0.0.1', '--port', '0', '--no-open');
-  const p = spawn(js ? process.execPath : bin, js ? [bin, ...args] : args, {
+  // js：bin 本身就是 node 脚本，直接用当前 node 跑；否则交给 binCall（Windows 的 .cmd 同样换成 node 跑）
+  const call = js ? { cmd: process.execPath, args: [bin, ...args] } : binCall(bin, args);
+  const p = spawn(call.cmd, call.args, {
     stdio: ['ignore', 'pipe', 'pipe'], cwd: HOME,
-    env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin'].join(':') },
+    env: binEnv(),
   });
   p.stdout.setEncoding('utf8');
   p.stderr.setEncoding('utf8');

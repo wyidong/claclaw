@@ -11,7 +11,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { storeNow, opencodeInject } from './modelpick.mjs';
 import { AcpAgent, AcpRunner, optName, toolTarget } from './acp.mjs';
-import { HOME, tilde, oneLine, tms, findBin, runBin as run } from './util.mjs';
+import { HOME, tilde, oneLine, tms, findBin, runBin as run, WIN, listenPort } from './util.mjs';
 
 const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(HOME, '.local', 'share'), 'opencode');
 const DB = path.join(DATA_DIR, 'opencode.db');
@@ -112,12 +112,17 @@ function etimeMs(s) {   // ps 的 etime：[[dd-]hh:]mm:ss
   while (p.length < 3) p.unshift(0);
   return (((Number(d) * 24 + p[0]) * 60 + p[1]) * 60 + p[2]) * 1000;
 }
+// Windows 上查不了「终端是不是正开着同一个会话」：认出 opencode 进程不难，难的是拿它的工作目录 ——
+// lsof -d cwd 没有等价物（要 NtQueryInformationProcess）。所以这里整个跳过，宁可不检测也不误判成占用。
+// 不检测 ≠ 没占用：对外用 opCanDetectHold 标明「无法检测」，别让界面说成「空闲，可打开」。
+export const opCanDetectHold = !WIN;
 let procCache = { at: 0, list: [] };
 function foreignProcs() {
+  if (WIN) return [];
   if (Date.now() - procCache.at < 3000) return procCache.list;
   const list = [];
   let out = '';
-  try { out = execFileSync('ps', ['-axo', 'pid=,ppid=,etime=,comm='], { encoding: 'utf8' }); } catch {}
+  try { out = execFileSync('ps', ['-axo', 'pid=,ppid=,etime=,comm='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch {}
   for (const line of out.split('\n')) {
     const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
     if (!m || !/(^|\/)opencode(\.exe)?$/.test(m[4].trim())) continue;
@@ -361,10 +366,8 @@ async function acpApiPort() {
   const proc = () => agent.proc;
   if (proc() && apiPort.pid === proc().pid) return apiPort.port;
   for (let i = 0; i < 20 && proc(); i++) {
-    let o = '';
-    try { o = execFileSync('lsof', ['-a', '-p', String(proc().pid), '-iTCP', '-sTCP:LISTEN', '-n', '-P', '-Fn'], { encoding: 'utf8' }); } catch {}
-    const m = o.match(/^n.*:(\d+)$/m);
-    if (m) { apiPort = { pid: proc().pid, port: Number(m[1]) }; return apiPort.port; }
+    const port = listenPort(proc().pid);   // macOS 走 lsof，Windows 走 netstat -ano
+    if (port) { apiPort = { pid: proc().pid, port }; return apiPort.port; }
     await new Promise(r => setTimeout(r, 250));
   }
   throw new Error('找不到 opencode 的本机接口');

@@ -68,15 +68,24 @@ export function findPeerByToken(c, token) {
   return c.peers.find(p => p.tokenHash && p.tokenHash.length === h.length && crypto.timingSafeEqual(Buffer.from(p.tokenHash), h)) || null;
 }
 
-// 局域网 IP：en* 网卡上的私有 IPv4
+// 局域网 IP：物理网卡上的私有 IPv4（macOS 的 en0…、Windows 的 WLAN / 以太网）
+// 不按网卡名认（各系统叫法不一样），改成「排除虚拟网卡」：WSL / Hyper-V / VirtualBox / VMware / Docker /
+// VPN 这些网卡也有私有地址，但对方连不上，选中了协同就开在一个没人能访问的地址上。
+// 剩下的按 en* → 192.168. → 10. → 172.16-31. 排序：macOS 上还是原来那块网卡，不改行为。
+const VIRTUAL_IF = /\b(wsl|hyper-?v|virtualbox|vmware|vethernet|docker|loopback|bluetooth|tailscale|zerotier|utun|bridge\d|awdl|llw)\b/i;
+const PRIVATE_IP = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 export function lanIp() {
+  const found = [];
   for (const [ifn, list] of Object.entries(os.networkInterfaces())) {
-    if (!/^en\d/.test(ifn)) continue;
+    if (VIRTUAL_IF.test(ifn)) continue;
     for (const a of list || []) {
-      if (a.family === 'IPv4' && !a.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address)) return a.address;
+      if (a.family !== 'IPv4' || a.internal || !PRIVATE_IP.test(a.address)) continue;
+      const rank = /^en\d/.test(ifn) ? 0 : a.address.startsWith('192.168.') ? 1 : a.address.startsWith('10.') ? 2 : 3;
+      found.push({ rank, ip: a.address });
     }
   }
-  return null;
+  found.sort((x, y) => x.rank - y.rank);
+  return found.length ? found[0].ip : null;
 }
 // 我们告诉对方的收件地址：设了中继地址（跨网络）就以它为主、局域网地址备用；没设就是局域网的名字地址 + IP 地址
 export const ourInbox = c => { const rs = ourRelays(c); return { inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c), ...(rs.length ? { relay: rs[0], relays: rs } : {}) }; };   // 局域网地址 + 中继地址（有的话），对方局域网优先
@@ -242,9 +251,15 @@ import dns from 'node:dns';
 
 const SVC = '_claclaw._tcp';
 let localHost = null;
+// 电脑名（用来拼「电脑名.local」）：macOS 问 scutil，其他系统用主机名（Windows 自带 mDNS，一般也答得上 .local）。
+// 名字解析不了也不要紧：配对时名字地址当主、IP 地址当备，peerCall 连不上名字会自动退回 IP 并记住（见下面「请求已配对的对方」）。
 export function localHostName() {
   if (localHost !== null) return localHost;
-  try { localHost = execFileSync('scutil', ['--get', 'LocalHostName'], { timeout: 3000 }).toString().trim(); } catch { localHost = ''; }
+  try {
+    localHost = process.platform === 'darwin'
+      ? execFileSync('scutil', ['--get', 'LocalHostName'], { timeout: 3000 }).toString().trim()
+      : os.hostname().split('.')[0].trim();
+  } catch { localHost = ''; }
   return localHost;
 }
 export const ourBaseName = c => { const h = localHostName(); return h ? 'http://' + h + '.local:' + c.port + PEER_BASE : ''; };

@@ -109,7 +109,9 @@ test('给网页看的不带 key，只有后 4 位；存盘权限 600', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ms-')), f = path.join(dir, 'models.json');
   try {
     saveStore(f, s);
-    assert.equal(fs.statSync(f).mode & 0o777, 0o600);
+    // Windows 不是 POSIX 权限位：Node 的 mode 只映射「只读」，写得出来的文件一律报 0o666。
+    // 那边护住 key 的是 data 目录的 ACL（启动时用 icacls 收紧），不是文件的 600。
+    if (process.platform !== 'win32') assert.equal(fs.statSync(f).mode & 0o777, 0o600);
     assert.deepEqual(loadStore(f), s);
     fs.writeFileSync(f, '{坏的');
     assert.deepEqual(loadStore(f), emptyStore());

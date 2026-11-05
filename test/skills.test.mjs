@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-skills-'));
+// os.homedir() 在 Windows 上不看 HOME，只看 USERPROFILE —— 只设 HOME 的话这组测试会写进
+// 使用者真实的 ~/.agents/skills、~/.claude/skills，把人家的技能目录弄脏。两个都要设。
 process.env.HOME = home;
+process.env.USERPROFILE = home;
 const skills = await import('../skills.mjs');
 
 test('技能装到共用目录、标记为 claclaw 装的，卸载只删自己装的', () => {

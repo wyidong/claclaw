@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { WIN } from './util.mjs';
 
 export const READ_MAX = 50 * 1024 * 1024;   // 和 send_file 一样
 
@@ -45,13 +46,25 @@ export function openArgs(abs, st) {
   if (RISKY.has(ext) || (st.mode & 0o111)) return ['-R', abs];
   return [abs];
 }
-// 返回 'open'（用默认 App 打开）或 'reveal'（在访达里选中）
-export function openOnMac(abs, st) {
+// 返回 'open'（用默认 App 打开）或 'reveal'（在访达 / 资源管理器里选中）
+export function openLocal(abs, st) {
   const args = openArgs(abs, st);
+  const reveal = args[0] === '-R';
   return new Promise((resolve, reject) => {
+    if (WIN) {
+      // Windows 用资源管理器，/select, 相当于访达的 -R（选中但不打开）。
+      // explorer.exe 的参数不按常规规则解析，必须自己加引号、关掉 Node 的转义（windowsVerbatimArguments）；
+      // Windows 路径里不可能有英文双引号，所以这样拼是安全的。
+      // 另外 explorer.exe 即使成功也常返回非 0 退出码，所以不看退出码，起得来就算成功。
+      const p = spawn('explorer.exe', [(reveal ? '/select,"' : '"') + abs + '"'],
+        { stdio: 'ignore', windowsVerbatimArguments: true, detached: true });
+      p.on('error', reject);
+      p.on('spawn', () => { p.unref(); resolve(reveal ? 'reveal' : 'open'); });
+      return;
+    }
     const p = spawn('/usr/bin/open', args, { stdio: 'ignore' });
     p.on('error', reject);
-    p.on('exit', code => code === 0 ? resolve(args[0] === '-R' ? 'reveal' : 'open') : reject(new Error('open 退出码 ' + code)));
+    p.on('exit', code => code === 0 ? resolve(reveal ? 'reveal' : 'open') : reject(new Error('open 退出码 ' + code)));
   });
 }
 

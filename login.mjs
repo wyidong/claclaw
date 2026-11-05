@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { HOME, findBin, binEnv, readJson } from './util.mjs';
+import { HOME, findBin, binEnv, binCall, readJson, WIN } from './util.mjs';
 import { DATA } from './auth.mjs';
 import { storeNow, libModels } from './modelpick.mjs';
 import { cpLoggedIn } from './copilot.mjs';
@@ -29,7 +29,7 @@ function qoderLoggedIn() {
   if (Date.now() - qoderCache.at < 60000) return qoderCache.ok;
   const bin = findBin('qodercli', QD_DIRS);
   let ok = null;
-  if (bin) { try { ok = !!JSON.parse(execFileSync(bin, ['status', '-o', 'json'], { encoding: 'utf8', timeout: 15000, env: binEnv(), stdio: ['ignore', 'pipe', 'ignore'] })).logged_in; } catch {} }
+  if (bin) { const c = binCall(bin, ['status', '-o', 'json']); try { ok = !!JSON.parse(execFileSync(c.cmd, c.args, { encoding: 'utf8', timeout: 15000, env: binEnv(), stdio: ['ignore', 'pipe', 'ignore'] })).logged_in; } catch {} }
   qoderCache = { at: Date.now(), ok };
   return ok;
 }
@@ -96,12 +96,19 @@ export const SPECS = {
 };
 
 // /api/claws 里每个 Claw 的登录情况：can（claclaw 能替它登）、key（要先填 key）、loggedIn、need（没登录、模型库也顶不上：用不了）、hint
+// 要套伪终端才能登录的（登录命令在管道里不打网址、或者直接退出）。
+// 伪终端走的是 python3 + tools/ptywrap.py，Windows 上没有这条链（多半也没装 python），
+// 所以那几个在 Windows 上停用，界面提示到电脑终端里登录；只写配置文件的（iFlow 填 key）照常可用。
+const ptyBlocked = s => WIN && !s.write;
+const WIN_HINT = 'Windows 上还不能在网页里登录，请在电脑的终端里运行它的登录命令，完成后回来刷新';
+
 export function loginInfo(claw) {
   const s = SPECS[claw];
   if (!s) return null;
   let loggedIn = null; try { loggedIn = s.loggedIn(); } catch {}
-  const can = !!(s.write || s.cmd?.());
-  return { can, key: !!(s.keyPrompt || s.write), keyLabel: s.keyLabel || '', loggedIn, need: loggedIn !== true && !s.libOk(), hint: s.hint, running: jobs.has(claw) };
+  const blocked = ptyBlocked(s);
+  const can = !blocked && !!(s.write || s.cmd?.());
+  return { can, key: !!(s.keyPrompt || s.write), keyLabel: s.keyLabel || '', loggedIn, need: loggedIn !== true && !s.libOk(), hint: blocked ? WIN_HINT : s.hint, running: jobs.has(claw) };
 }
 
 // ---------- 正在进行的登录 ----------
@@ -125,6 +132,7 @@ export function loginWatch(claw, ws) { const j = jobs.get(claw); if (j) { j.subs
 export function loginStart(claw, ws, { key = '', log } = {}) {
   const s = SPECS[claw];
   if (!s) throw new Error('这个 Claw 不能在这里登录');
+  if (ptyBlocked(s)) throw new Error(WIN_HINT);
   let j = jobs.get(claw);
   if (j?.status === 'running') { j.subs.add(ws); push(j); return j; }   // 正在跑：接上看进度
   if (j) jobs.delete(claw);   // 上次的结果：清掉，重新来
