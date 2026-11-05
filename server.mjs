@@ -1625,8 +1625,22 @@ function peerPublic(c, local) {
   };
 }
 setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c); }, 1000);
-// 协同端口没占到（比如被别的进程占着）：每分钟再试一次，占着的走了就接上
-setInterval(() => { const c = loadPeer(); if (c.enabled && !peerStatus().listening) applyListener(c, peerHandler, log); }, 60e3).unref();
+// 每 15 秒看一次：
+// - 协同端口没占到（比如被别的进程占着）：再试一次，占着的走了就接上
+// - 局域网 IP 换了（换 Wi-Fi、路由器重新分配）：监听是绑在具体 IP 上的，旧 IP 没了 socket 也不会报错，
+//   所以要主动换到新 IP 上；再找每个对方打个招呼，对方从来源地址记下我们的新 IP，下次找我们就走新地址
+let peerIpSeen = lanIp();
+setInterval(() => {
+  const c = loadPeer();
+  if (!c.enabled) return;
+  const ip = lanIp();
+  if (ip === peerIpSeen && peerStatus().listening) return;
+  const moved = ip && peerIpSeen && ip !== peerIpSeen;
+  if (moved) log('peer lan ip changed', peerIpSeen, '->', ip);
+  peerIpSeen = ip;
+  applyListener(c, peerHandler, log);
+  if (moved) for (const p of c.peers) if (p.theirToken) peerCall(c, p, '/sessions', { ms: 8000 }).catch(() => {});
+}, 15e3).unref();
 
 // ---------- 跨网络：经 clarelay 中继 ----------
 // 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
