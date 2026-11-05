@@ -1635,9 +1635,10 @@ setInterval(() => {
   if (!c.enabled) return;
   const ip = lanIp();
   if (ip === peerIpSeen && peerStatus().listening) return;
+  // 断网时 lanIp() 是 null：不覆盖上次的 IP，恢复后换了新 IP 照样算「换了」
   const moved = ip && peerIpSeen && ip !== peerIpSeen;
   if (moved) log('peer lan ip changed', peerIpSeen, '->', ip);
-  peerIpSeen = ip;
+  if (ip) peerIpSeen = ip;
   applyListener(c, peerHandler, log);
   if (moved) for (const p of c.peers) if (p.theirToken) peerCall(c, p, '/sessions', { ms: 8000 }).catch(() => {});
 }, 15e3).unref();
