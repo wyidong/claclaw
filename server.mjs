@@ -2122,9 +2122,10 @@ const WEB_SESSIONS = path.join(DATA, 'web-sessions.json');
 
 // ---------- 本机提示音 ----------
 // Edge / Chrome 在 Mac 上弹的网页通知常常不带声音。claclaw 就跑在这台电脑上，
-// 所以推送时可以顺便用系统直接响一声（只在 macOS 上有效）。开关存在 data/settings.json，网页上可开关。
+// 所以推送时可以顺便用系统直接响一声（macOS 用 afplay 放系统声音；Windows 用 PowerShell 的 SoundPlayer 放 C:\Windows\Media 里的 wav）。
+// 开关存在 data/settings.json，网页上可开关。其他系统不响，设置页不显示这一项
 const SETTINGS = path.join(DATA, 'settings.json');
-const SOUND_OK = process.platform === 'darwin';
+const SOUND_OK = process.platform === 'darwin' || process.platform === 'win32';
 function settings() { return readJson(SETTINGS); }
 function saveSettings(patch) {
   const next = { ...settings(), ...patch };
@@ -2140,9 +2141,11 @@ function clientPrefs() {
   if (p && typeof p === 'object') for (const k of PREF_KEYS) if (typeof p[k] === 'string') out[k] = p[k];
   return out;
 }
-const SOUND_DIR = '/System/Library/Sounds';
-const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.endsWith('.aiff')).map(f => f.slice(0, -5)).sort(); } catch { return []; } })() : [];
-const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soundName : 'Glass');
+const SOUND_DIR = process.platform === 'win32' ? path.join(process.env.WINDIR || 'C:\\Windows', 'Media') : '/System/Library/Sounds';
+const SOUND_EXT = process.platform === 'win32' ? '.wav' : '.aiff';
+const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.toLowerCase().endsWith(SOUND_EXT)).map(f => f.slice(0, -SOUND_EXT.length)).sort(); } catch { return []; } })() : [];
+const SOUND_DEFAULT = process.platform === 'win32' ? 'Windows Notify System Generic' : 'Glass';
+const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soundName : SOUNDS.includes(SOUND_DEFAULT) ? SOUND_DEFAULT : SOUNDS[0] || SOUND_DEFAULT);
 // ---------- 各会话正在做什么（会话列表实时显示）----------
 const activityMap = {};
 let activityTimer = null;
@@ -2341,7 +2344,11 @@ function localSound(force = false) {
   if (!SOUND_OK || (!force && !settings().localSound)) return;
   if (!force && Date.now() - lastSound < 1500) return; // 几条通知挤在一起时只响一声
   lastSound = Date.now();
-  execFile('afplay', [path.join(SOUND_DIR, soundName() + '.aiff')], () => {});
+  const file = path.join(SOUND_DIR, soundName() + SOUND_EXT);
+  if (process.platform !== 'win32') { execFile('afplay', [file], () => {}); return; }
+  // 文件路径走环境变量，不拼进命令（名字里有空格、引号也没事）；起不来就算了，不响
+  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(New-Object Media.SoundPlayer $env:CLACLAW_WAV).PlaySync()'],
+    { env: { ...process.env, CLACLAW_WAV: file }, windowsHide: true, timeout: 15000 }, () => {});
 }
 function webSessions() {
   try {
