@@ -18,8 +18,9 @@ import { HOME, tilde, tms, sleep, findBin, binEnv, binCall } from './util.mjs';
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
 const ROOT = path.join(DSH_HOME, 'sessions');
 const ATTACH = path.join(DSH_HOME, 'attachments', 'v1', 'objects');
-// dsh 0.2 升级会话时会另写一份 v4，旧的 v3 留着不再更新，所以新格式优先
-const LOG_NAMES = ['session.v4.jsonl.zstd', 'session.v3.jsonl.zstd'];
+// dsh 0.2 升级会话时会另写一份 v4，旧的 v3 留着不再更新，所以新格式优先。
+// 最早的 0.1（session.jsonl.zstd，头里 version 0）记录结构一样，最后兜底读它：从 0.1 升上来的电脑旧会话也能列出来
+const LOG_NAMES = ['session.v4.jsonl.zstd', 'session.v3.jsonl.zstd', 'session.jsonl.zstd'];
 
 // 当前 Node 有没有 zstd（读 dsh 会话记录要用；Node 22.15 才有）
 export const dsSupported = () => typeof zlib.zstdDecompressSync === 'function';
