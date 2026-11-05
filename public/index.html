@@ -3065,7 +3065,7 @@ function syncSend(){
 }
 function setBusy(b){
   if(b&&!busy){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
-  if(!b){clearInterval(workTimer);workTimer=null;workSince=0}
+  if(!b){clearInterval(workTimer);workTimer=null;workSince=0;setTimeout(aiPlayMark,0)}
   busy=b;if(b&&!lastEvt)lastEvt=Date.now();
   $('#sessBtn .dot').classList.toggle('busy',b);tickWork();
   if(b)cmdMenu.hidden=true;
@@ -6278,7 +6278,11 @@ function ttsShowStop(){
 // 最后一条回复的文字：从页面上取，代码块、表格换成简短说明
 function ttsLastReply(){
   var els=feed.querySelectorAll('.msg.ai');if(!els.length)return '';
-  var c=els[els.length-1].cloneNode(true);
+  return ttsElText(els[els.length-1]);
+}
+// 一段回复要念的文字：代码、表格略过，按钮（含结尾的播放键）不念
+function ttsElText(el){
+  var c=el.cloneNode(true);
   c.querySelectorAll('pre,.cb').forEach(function(x){x.replaceWith('，代码略，')});
   c.querySelectorAll('table,.tbl').forEach(function(x){x.replaceWith('，表格略，')});
   c.querySelectorAll('button').forEach(function(x){x.remove()});
@@ -6395,7 +6399,26 @@ function ttsPickFrom(src,go){
   p.classList.add('on');
   var cur=list.querySelector('.cur');if(cur)cur.scrollIntoView({block:'center'});
 }
-setInterval(function(){if(!document.hidden)ttsShowStop()},1000);
+setInterval(function(){if(!document.hidden){ttsShowStop();aiPlayMark()}},1000);
+// 每一轮最后一段回复的结尾放一个播放键（和群聊一样）：点了只念那一轮，长按 / 右键选从哪句开始；正在跑的那一轮跑完才放
+function aiPlayMark(){
+  var kids=feed.children,after=false,tail=true;   // after：往后（到下一条用户消息为止）已经有回复段了；tail：还在最后一轮里
+  for(var i=kids.length-1;i>=0;i--){
+    var e=kids[i],cl=e.classList;if(!cl.contains('msg'))continue;
+    if(cl.contains('user')){after=false;tail=false;continue}
+    if(!cl.contains('ai'))continue;
+    var want=!after&&!(tail&&busy),has=e.querySelector(':scope>.gm-foot');after=true;
+    if(want&&!has&&e.textContent.trim())aiPlayAdd(e);else if(!want&&has)has.remove();
+  }
+}
+function aiPlayAdd(e){
+  var ft=document.createElement('div');ft.className='gm-foot';var pb=document.createElement('button');pb.type='button';pb.className='gm-play';pb.setAttribute('aria-label','朗读这一轮');pb.title='朗读这一轮';pb.innerHTML=GM_PLAY.say;
+  pb.addEventListener('click',function(){if(ttsLongFired(pb))return;gmSay(pb,'',ttsElText(e))});
+  ttsLongPress(pb,function(){var t=ttsElText(e);ttsPickFrom(t,function(i){gmSay(pb,'',t,i)})});
+  ft.appendChild(pb);e.appendChild(ft);
+}
+var aiPlayT=0;
+new MutationObserver(function(){clearTimeout(aiPlayT);aiPlayT=setTimeout(aiPlayMark,60)}).observe(feed,{childList:true});
 // 朗读出问题时把手机这边的情况记到电脑的日志里（没声音时好查是哪一步）
 var ttsDbgAt=0,ttsDbgLast='';
 function ttsDbg(m){if(m===ttsDbgLast&&Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();ttsDbgLast=m;postJson('/api/tts/log',{m:String(m).slice(0,200)}).catch(function(){})}
