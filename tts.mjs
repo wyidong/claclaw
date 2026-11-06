@@ -87,13 +87,13 @@ const volcRes = speaker => /_uranus_/.test(speaker) ? 'seed-tts-2.0' : 'seed-tts
 const volcCfg = () => { try { return JSON.parse(fs.readFileSync(VOLC_FILE, 'utf8')) || {}; } catch { return {}; } };
 export function volcInfo() { const c = volcCfg(); return { set: !!c.key, tail: c.key ? String(c.key).slice(-4) : '', res: c.res || [] }; }
 // 合成一句：返回 mp3。出错的信息里不带 Key
-export async function volcSay(text, speaker, rate = 1, key = volcCfg().key, ms = 20000) {
+export async function volcSay(text, speaker, rate = 1, key = volcCfg().key, ms = 20000, signal = null) {
   if (!key) throw new Error('没填火山语音的 API Key');
   const r = await fetch(VOLC_URL, {
-    method: 'POST', signal: AbortSignal.timeout(ms),
+    method: 'POST', signal: signal && AbortSignal.any ? AbortSignal.any([AbortSignal.timeout(ms), signal]) : AbortSignal.timeout(ms),   // signal：网页那边停了就别再等（也别计费）
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'x-api-resource-id': volcRes(speaker), 'x-api-request-id': crypto.randomUUID() },
     body: JSON.stringify({ user: { uid: 'claclaw' }, req_params: { text, speaker, audio_params: { format: 'mp3', sample_rate: 24000, speech_rate: Math.max(-50, Math.min(100, Math.round((rate - 1) * 100))) } } }),
-  }).catch(e => { throw new Error('连不上火山语音：' + (e.name === 'TimeoutError' ? '超时' : e.message)); });
+  }).catch(e => { throw new Error(signal?.aborted ? '已取消' : '连不上火山语音：' + (e.name === 'TimeoutError' ? '超时' : e.message)); });
   const body = await r.text();
   const chunks = [];
   let err = '';
@@ -220,7 +220,7 @@ const waiters = [];
 const slot = () => running < 2 ? (running++, Promise.resolve()) : new Promise(ok => waiters.push(ok));
 const release = () => { const w = waiters.shift(); if (w) w(); else running--; };
 
-export async function ttsSynth(text, voice, rate) {
+export async function ttsSynth(text, voice, rate, signal = null) {
   text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 1000);
   if (!text) throw new Error('没有要念的文字');
   const voices = await ttsVoices();
@@ -229,7 +229,7 @@ export async function ttsSynth(text, voice, rate) {
   if (voice.startsWith('volc:')) {
     const key = crypto.createHash('sha1').update(voice + '|' + r + '|' + text).digest('hex');
     if (cache.has(key)) return cache.get(key);
-    const raw = await volcSay(text, voice.slice(5), r);
+    const raw = await volcSay(text, voice.slice(5), r, undefined, 20000, signal);
     const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;
     const out = trimmed ? { buf: trimmed, type: 'audio/mp4' } : { buf: raw, type: 'audio/mpeg' };
     cache.set(key, out);

@@ -5941,19 +5941,21 @@ function ttsProgAt(x){if(x&&x.prog)x.prog.at=x.pi}
 function ttsProgEnd(x){if(x&&x.prog&&x.pi>=x.prog.n-1)x.prog.done=true}
 // 这条上次念到一半停了：返回从第几句接着念（没有就 null）
 function ttsResumeAt(src){return ttsProg&&ttsProg.src===src&&!ttsProg.done&&ttsProg.at>0?ttsProg.at:null}
+// 合成是要钱的（豆包按字数计费）：只提前合成正在念的这句 + 后面两句，念完一句再多合成一句；停了就把还没合成完的取消掉
+var SRV_AHEAD=3;
 function srvFetch(it){
-  if(!it.p)it.p=postJson('/api/tts',{text:it.text,voice:it.voice,rate:tts.rate})
+  if(!it.p){it.ac=window.AbortController?new AbortController():null;it.p=fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:tts.rate}),signal:it.ac?it.ac.signal:undefined})
     .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
-    .then(function(b){it.url=URL.createObjectURL(b);return it});
+    .then(function(b){it.ac=null;it.url=URL.createObjectURL(b);return it})}
   return it.p;
 }
-function srvFree(it){if(it&&it.url){URL.revokeObjectURL(it.url);it.url=null}}
+function srvFree(it){if(!it)return;if(it.ac){try{it.ac.abort()}catch(_){}it.ac=null}if(it.url){URL.revokeObjectURL(it.url);it.url=null}}
 function srvNext(){
   if(srvBusy)return;
   var it=srvQ[0];if(!it){ttsShowStop();return}
   srvBusy=true;
   srvKeepIdle(true);   // 开念就点亮静音保活，整段只占一个媒体会话（见 srvKeepIdle）
-  srvQ.slice(0,4).forEach(function(x){srvFetch(x).catch(function(){})});   // 后面几句先并行合成，念完一句下一句已经好了
+  srvQ.slice(0,SRV_AHEAD).forEach(function(x){srvFetch(x).catch(function(){})});   // 这句和后面两句先并行合成；念完一句再往后多合成一句（不一口气全合成，省钱）
   var gen=srvGen;
   srvFetch(it).then(function(){
     if(gen!==srvGen)return;
