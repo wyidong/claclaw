@@ -63,7 +63,7 @@ window.__sc=(function(){
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
 (function(){
-  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang'],ls,pend={},n=0,t=0;
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsSessVoice','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang'],ls,pend={},n=0,t=0;
   try{ls=localStorage}catch(_){return}
   function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
   function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
@@ -728,7 +728,8 @@ body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
    没在念：播放三角，点了念最后一条回复；在念：方块（外圈呼吸），点了停；被 iPhone 拦住：绿色播放键 */
 #ttsStop{position:fixed;right:14px;bottom:calc(var(--dockTop,96px) + 10px);z-index:30;width:42px;height:42px;padding:0;border:.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:pointer;opacity:.92}
-#ttsStop,.gm-play{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+#ttsStop,.gm-play,#ttsMute{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+#ttsMute{position:relative}#ttsMute.cv::after{content:'';position:absolute;right:5px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
 #ttsPick{display:none;position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.35);align-items:flex-end;justify-content:center}
 #ttsPick.on{display:flex}
 #ttsPick .tp-box{width:100%;max-width:640px;max-height:70vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding-bottom:env(safe-area-inset-bottom)}
@@ -5831,17 +5832,21 @@ function ttsModeAllows(pri){
   return tts.mode==='steps'||tts.mode==='brief';
 }
 // 单个会话不播报：全局朗读开着时，标题栏的喇叭可以关掉这个会话的自动播报（只影响自动念；点浮动的播放键照样能念）
+// 会话单独的声音：{ 会话 id: 声音 id }（和「声音」下拉框的值一样）；没设的会话用设置里的默认声音
+var ttsSessV={};try{ttsSessV=JSON.parse(localStorage.getItem('claclaw.ttsSessVoice')||'{}')||{}}catch(_){}
+function ttsW(){var o=session&&ttsSessV[session.id];return o||tts.want}
+function ttsDevVoice(){var w=ttsW();return ttsVoices().find(function(v){return v.voiceURI===w})||tts.voice}
 var ttsMuted={};
 try{(JSON.parse(localStorage.getItem('claclaw.ttsMuted')||'[]')||[]).forEach(function(id){ttsMuted[id]=1})}catch(_){}
 function ttsSessMuted(){return !!(session&&ttsMuted[session.id])}
 var MUTE_IC={on:'<svg viewBox="0 0 24 24"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>',
   off:'<svg viewBox="0 0 24 24"><path transform="translate(4.5 0)" d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M4 4l16 16"/></svg>'};
-function ttsMuteShow(){
+function ttsMuteShow(force){
   var b=document.getElementById('ttsMute');if(!b||!tts)return;
   b.hidden=!(tts.on&&session);if(b.hidden)return;
-  var off=ttsSessMuted();if(b.dataset.st===(off?'off':'on'))return;
-  b.dataset.st=off?'off':'on';b.innerHTML=MUTE_IC[b.dataset.st];b.classList.toggle('off',off);
-  b.setAttribute('aria-label',off?'这个会话已关闭播报，点一下恢复':'这个会话正在播报，点一下关闭');b.title=b.getAttribute('aria-label');
+  var off=ttsSessMuted(),cv=!!ttsSessV[session.id];if(b.dataset.st===(off?'off':'on')&&b.classList.contains('cv')===cv&&!force)return;
+  b.dataset.st=off?'off':'on';b.innerHTML=MUTE_IC[b.dataset.st];b.classList.toggle('off',off);b.classList.toggle('cv',cv);   // cv：这个会话单独设了声音（角上一个小点）
+  b.setAttribute('aria-label',(off?'这个会话已关闭播报，点一下恢复':'这个会话正在播报，点一下关闭')+(COARSE.matches?'；长按':'；双击')+'选这个会话的声音');b.title=b.getAttribute('aria-label');
 }
 function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
 // 声音：列出这台设备上的中文语音，好听的排前面（和 dsh-tts-reader 的经验一样：默认取第一个中文语音往往最难听）。
@@ -5898,10 +5903,10 @@ function ttsLoadSrv(){
 // Edge 自带的「Microsoft Xiaoyi Online (Natural)」这类在线声音，和电脑合成的微软声音是同一个；Edge 网页里用它常常念一两句就断，
 // 换成电脑合成的同名声音来念（听起来一样）
 function ttsEdgeTwin(w){var m=/^Microsoft (\w+) Online \(Natural\) - Chinese \((Mainland|Taiwan)/.exec(w||'');return m?'edge:zh-'+(m[2]==='Taiwan'?'TW':'CN')+'-'+m[1]+'Neural':''}
-function ttsWantSrv(){return !tts.want||/^srv:/.test(tts.want)||!!ttsEdgeTwin(tts.want)||!ttsVoices().some(function(v){return v.voiceURI===tts.want})}
+function ttsWantSrv(){var w=ttsW();return !w||/^srv:/.test(w)||!!ttsEdgeTwin(w)||!ttsVoices().some(function(v){return v.voiceURI===w})}
 function ttsSrvVoice(){
-  var has=function(n){return (tts.srv||[]).some(function(v){return v.name===n})},tw=ttsEdgeTwin(tts.want);
-  if(/^srv:/.test(tts.want))return has(tts.want.slice(4))?tts.want.slice(4):'';
+  var w=ttsW(),has=function(n){return (tts.srv||[]).some(function(v){return v.name===n})},tw=ttsEdgeTwin(w);
+  if(/^srv:/.test(w))return has(w.slice(4))?w.slice(4):'';
   if(tw&&has(tw))return tw;
   var on=(tts.srv||[]).filter(function(v){return !vcOff('srv:'+v.name)})[0]||(tts.srv||[])[0];
   return ttsWantSrv()&&on?on.name:'';
@@ -5928,7 +5933,7 @@ function ttsPickVoice(){
 }
 if(ttsOk()){ttsPickVoice();speechSynthesis.addEventListener&&speechSynthesis.addEventListener('voiceschanged',ttsPickVoice)}
 // 电脑合成的声音列表：开着朗读且选的是电脑声音才在启动时拉，否则等进设置页再拉
-if(tts.on&&/^srv:/.test(tts.want))ttsLoadSrv();
+if(tts.on&&(/^srv:/.test(tts.want)||JSON.stringify(ttsSessV).indexOf('"srv:')>=0))ttsLoadSrv();
 // 电脑合成的播放：一句一句向电脑要音频（电脑已经把首尾静音裁掉、按标点留好了停顿），
 // 用两个 <audio> 轮流放：放这一句时，下一句已经在另一个里面加载好，这句一完立刻接上。
 // 用 <audio> 而不是 Web Audio：iPhone 上 Web Audio 会被静音键、睡眠模式、来电打断等各种情况弄得没声音。
@@ -6053,7 +6058,7 @@ function ttsText(src){
 // 代码块没写完时不切（等它写完整块念成「代码略」）；太短的碎句先攒着，和下一句一起念。
 var ttsPos=0,ttsWarmAt=0;
 // 开始回复时让电脑先连好微软语音（30 秒内只叫一次）
-function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(tts.want)||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
+function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(ttsW())||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
 var ttsHush=false;   // 用户点停止：这一轮正文不再自动念；P0/P1 仍播，下一轮恢复
 function ttsStream(raw,end){
   if(!tts.on||!ttsModeAllows(3)||ttsHush){if(end)ttsPos=raw.length;return}
@@ -6094,7 +6099,7 @@ function devPump(){
   if(!devQ.length){setTimeout(ttsShowStop,50);return}
   devBusy=true;
   var gen=devGen,started=false,dq=devQ.shift(),u=new SpeechSynthesisUtterance(dq.text),again=devAgain;devAgain=false;
-  u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;
+  u.lang='zh-CN';u.rate=tts.rate;var dv=ttsDevVoice();if(dv)u.voice=dv;
   var done=function(){if(gen!==devGen)return;if(started)ttsProgEnd(dq);devBusy=false;devPump()};
   u.onstart=function(){started=true;ttsProgAt(dq);ttsClaim();ttsShowStop()};
   u.onend=done;u.onerror=function(e){
@@ -6424,7 +6429,11 @@ function ttsSync(){
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
   ttsMuteShow();
 }
-$('#ttsMute').addEventListener('click',function(){
+// 喇叭：点一下开 / 关这个会话的播报；手机长按、电脑双击（或右键）选这个会话用的声音
+var muteClickT=0;
+$('#ttsMute').addEventListener('click',function(e){
+  if(ttsLongFired(this))return;
+  if(!COARSE.matches&&!e.ttsNow){var me0=this;clearTimeout(muteClickT);muteClickT=setTimeout(function(){var ev=new MouseEvent('click');ev.ttsNow=1;me0.dispatchEvent(ev)},260);return}   // 电脑：等一下看是不是双击
   if(!session||this.classList.contains('lock'))return;
   var me=this;me.classList.add('lock');setTimeout(function(){me.classList.remove('lock')},400);   // 防连击：边框闪一下就消失
   if(ttsMuted[session.id])delete ttsMuted[session.id];
@@ -6432,6 +6441,39 @@ $('#ttsMute').addEventListener('click',function(){
   try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
   ttsMuteShow();ttsShowStop();
 });
+$('#ttsMute').addEventListener('dblclick',function(e){e.preventDefault();clearTimeout(muteClickT);ttsSessPick()});
+ttsLongPress($('#ttsMute'),function(){ttsSessPick()});
+// 可选的声音（和设置里「声音」下拉框一样：语音管理里勾上的，带别名）
+function ttsChoices(){
+  var vs0=ttsVoices(),srv0=tts.srv||[];
+  var vs=vs0.filter(function(v){return !vcOff(v.voiceURI)}),srv=srv0.filter(function(v){return !vcOff('srv:'+v.name)});
+  if(!vs.length&&!srv.length){vs=vs0;srv=srv0}
+  return srv.map(function(v){return {id:'srv:'+v.name,label:vcAlias('srv:'+v.name)||srvLabel(v)}}).concat(vs.map(function(v){return {id:v.voiceURI,label:vcAlias(v.voiceURI)||ttsLabel(v)}}));
+}
+function ttsSessPick(){
+  if(!session)return;
+  var sid=session.id,go=function(){
+    var list=ttsChoices(),cur=ttsSessV[sid]||'',def=list.find(function(c){return c.id===tts.want});
+    var p=$('#ttsPick');
+    p.innerHTML='<div class="tp-box" role="dialog" aria-label="这个会话用的声音"><div class="tp-h">这个会话用的声音<button type="button" class="tp-x" aria-label="关闭">✕</button></div><div class="tp-list"></div></div>';
+    var close=function(){p.classList.remove('on')},box=p.querySelector('.tp-list');
+    [{id:'',label:'跟随默认'+(def?'（'+def.label+'）':'')}].concat(list).forEach(function(c){
+      var b=document.createElement('button');b.type='button';b.className='tp-i';b.innerHTML='<span></span>';b.querySelector('span').textContent=c.label;if(c.id===cur)b.classList.add('cur');
+      b.addEventListener('click',function(){
+        close();
+        if(c.id)ttsSessV[sid]=c.id;else delete ttsSessV[sid];
+        var ks=Object.keys(ttsSessV);if(ks.length>300)delete ttsSessV[ks[0]];
+        try{localStorage.setItem('claclaw.ttsSessVoice',JSON.stringify(ttsSessV))}catch(_){}
+        ttsMuteShow(true);toast(c.id?'这个会话改用「'+c.label+'」':'这个会话跟随默认声音');
+        if(session&&session.id===sid){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);ttsStop();ttsManual=true;var sv=ttsSrvVoice(),t='以后这个会话用这个声音念。';if(sv)srvSay([t],sv);else if(ttsOk()){var u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=tts.rate;var dv=ttsDevVoice();if(dv)u.voice=dv;speechSynthesis.speak(u)}}
+      });
+      box.appendChild(b);
+    });
+    p.querySelector('.tp-x').addEventListener('click',close);p.onclick=function(e){if(e.target===p)close()};
+    p.classList.add('on');var c0=box.querySelector('.cur');if(c0)c0.scrollIntoView({block:'center'});
+  };
+  if(tts.srv)go();else ttsLoadSrv().then(go,go);
+}
 (function(){
   var b=$('#setEnterSend');
   var ui=function(){b.hidden=!COARSE.matches;b.dataset.on=enterSend?'1':'';ta.setAttribute('enterkeyhint',kbSend()?'send':'enter');syncSend()};

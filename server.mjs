@@ -2150,7 +2150,7 @@ function saveSettings(patch) {
 }
 // 手机网页的个人设置（语音档位、压缩提示阈值、主题……）也在电脑上存一份：clarelay 外壳里 claclaw 嵌在别的网址里，
 // iOS 杀掉 App 后嵌入页的 localStorage 会丢。页面下发时塞进去，本机没有的项由页面补回
-const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsVoices', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang'];
+const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsVoices', 'ttsSessVoice', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang'];
 function clientPrefs() {
   const p = settings().clientPrefs, out = {};
   if (p && typeof p === 'object') for (const k of PREF_KEYS) if (typeof p[k] === 'string') out[k] = p[k];
