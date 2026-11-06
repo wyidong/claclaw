@@ -80,19 +80,30 @@ const VOLC_VOICES = [
   ['zh_female_vv_uranus_bigtts', 'Vivi', 'Female'], ['zh_female_xiaohe_uranus_bigtts', '小何', 'Female'],
   ['zh_female_shuangkuaisisi_uranus_bigtts', '爽快思思', 'Female'], ['zh_female_qingxinnvsheng_uranus_bigtts', '清新女声', 'Female'],
   ['zh_male_m191_uranus_bigtts', '云舟', 'Male'], ['zh_male_taocheng_uranus_bigtts', '小天', 'Male'], ['zh_male_ruyayichen_uranus_bigtts', '儒雅逸辰', 'Male'],
+  // 方言：音色 ID 后面接 @方言。Vivi 有官方方言参数（explicit_dialect，只支持东北 / 陕西 / 四川）；男声没有，用语音指令（context_texts）让它说四川话
+  ['zh_female_vv_uranus_bigtts@sichuan', 'Vivi · 四川话', 'Female'], ['zh_male_m191_uranus_bigtts@sichuan', '云舟 · 四川话', 'Male'],
   ['zh_female_shuangkuaisisi_moon_bigtts', '爽快思思 1.0', 'Female'], ['zh_female_tianmeitaozi_mars_bigtts', '甜美桃子', 'Female'],
   ['zh_female_qinqienvsheng_moon_bigtts', '亲切女声', 'Female'], ['zh_male_qingyiyuxuan_mars_bigtts', '清逸宇轩', 'Male'],
 ];
 const volcRes = speaker => /_uranus_/.test(speaker) ? 'seed-tts-2.0' : 'seed-tts-1.0';
+const DIALECT = { sichuan: '四川话', dongbei: '东北话', shaanxi: '陕西话' };
+const DIALECT_NATIVE = new Set(['zh_female_vv_uranus_bigtts']);   // 有官方方言参数的音色
+// 「音色@方言」拆成真正的音色 ID 和要附加的 additions（接口要求 additions 是 JSON 字符串）
+function volcSpeaker(id) {
+  const [sp, dia] = String(id).split('@');
+  if (!dia || !DIALECT[dia]) return { sp, additions: null };
+  return { sp, additions: JSON.stringify(DIALECT_NATIVE.has(sp) ? { explicit_dialect: dia } : { context_texts: ['请用' + DIALECT[dia] + '说'] }) };
+}
 const volcCfg = () => { try { return JSON.parse(fs.readFileSync(VOLC_FILE, 'utf8')) || {}; } catch { return {}; } };
 export function volcInfo() { const c = volcCfg(); return { set: !!c.key, tail: c.key ? String(c.key).slice(-4) : '', res: c.res || [] }; }
 // 合成一句：返回 mp3。出错的信息里不带 Key
 export async function volcSay(text, speaker, rate = 1, key = volcCfg().key, ms = 20000, signal = null) {
   if (!key) throw new Error('没填火山语音的 API Key');
+  const vs = volcSpeaker(speaker);
   const r = await fetch(VOLC_URL, {
     method: 'POST', signal: signal && AbortSignal.any ? AbortSignal.any([AbortSignal.timeout(ms), signal]) : AbortSignal.timeout(ms),   // signal：网页那边停了就别再等（也别计费）
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'x-api-resource-id': volcRes(speaker), 'x-api-request-id': crypto.randomUUID() },
-    body: JSON.stringify({ user: { uid: 'claclaw' }, req_params: { text, speaker, audio_params: { format: 'mp3', sample_rate: 24000, speech_rate: Math.max(-50, Math.min(100, Math.round((rate - 1) * 100))) } } }),
+    body: JSON.stringify({ user: { uid: 'claclaw' }, req_params: { text, speaker: vs.sp, ...(vs.additions ? { additions: vs.additions } : {}), audio_params: { format: 'mp3', sample_rate: 24000, speech_rate: Math.max(-50, Math.min(100, Math.round((rate - 1) * 100))) } } }),
   }).catch(e => { throw new Error(signal?.aborted ? '已取消' : '连不上火山语音：' + (e.name === 'TimeoutError' ? '超时' : e.message)); });
   const body = await r.text();
   const chunks = [];

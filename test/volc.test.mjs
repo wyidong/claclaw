@@ -66,3 +66,16 @@ test('念过的句子存盘，再念不再合成；7 天没用的清掉', async 
   await ttsSynth('缓存测试一句', v, 1);
   assert.equal(calls, 3);
 });
+
+test('方言：Vivi 用官方方言参数，男声用语音指令', async () => {
+  const seen = [];
+  globalThis.fetch = async (url, o) => { seen.push(JSON.parse(o.body).req_params); return reply(200, JSON.stringify({ code: 0, data: 'AA==' }) + JSON.stringify({ code: 20000000 })); };
+  await volcSay('你好', 'zh_female_vv_uranus_bigtts@sichuan', 1, KEY);
+  await volcSay('你好', 'zh_male_m191_uranus_bigtts@sichuan', 1, KEY);
+  await volcSay('你好', 'zh_male_m191_uranus_bigtts', 1, KEY);
+  assert.equal(seen[0].speaker, 'zh_female_vv_uranus_bigtts');
+  assert.deepEqual(JSON.parse(seen[0].additions), { explicit_dialect: 'sichuan' });
+  assert.equal(seen[1].speaker, 'zh_male_m191_uranus_bigtts');
+  assert.deepEqual(JSON.parse(seen[1].additions), { context_texts: ['请用四川话说'] });
+  assert.equal(seen[2].additions, undefined);
+});

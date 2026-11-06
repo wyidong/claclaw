@@ -5886,7 +5886,7 @@ function srvLabel(v){
   if(!SRV_NAMES[base]&&/TW/.test(v.lang))zh+=' · 台湾';else if(!SRV_NAMES[base]&&/HK/.test(v.lang))zh+=' · 香港';
   return zh+(tier?'（'+tier+'）':'');
 }
-function srvScore(v){var n=v.name;return (/^volc:/.test(n)?400+(/_vv_/.test(n)?20:0):0)+(/^edge:/.test(n)?200:0)+(/Xiaoyi/.test(n)?20:/Xiaoxiao/.test(n)?15:/Yunxi/.test(n)?10:0)-(/liaoning|shaanxi/.test(n)?50:0)+(/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
+function srvScore(v){var n=v.name;return (/^volc:/.test(n)?400+(/_vv_/.test(n)?20:0)-(/@/.test(n)?30:0):0)+(/^edge:/.test(n)?200:0)+(/Xiaoyi/.test(n)?20:/Xiaoxiao/.test(n)?15:/Yunxi/.test(n)?10:0)-(/liaoning|shaanxi/.test(n)?50:0)+(/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
 function ttsLoadSrv(){
   return fetch('/api/tts/voices').then(function(r){return r.ok?r.json():[]}).then(function(list){
     // 只留微软的声音（Mac 自带的那几个不好听），去掉所有粤语
