@@ -86,3 +86,12 @@ test('1.0 音色不带语气指令', async () => {
   await volcSay('你好', 'zh_female_tianmeitaozi_mars_bigtts', 1, KEY);
   assert.equal(seen[0].additions, undefined);
 });
+
+test('同一段朗读带 section_id（只 2.0），语气指令照带', async () => {
+  const seen = [];
+  globalThis.fetch = async (url, o) => { seen.push(JSON.parse(o.body).req_params); return reply(200, JSON.stringify({ code: 0, data: 'AA==' }) + JSON.stringify({ code: 20000000 })); };
+  await volcSay('你好', 'zh_male_m191_uranus_bigtts', 1, KEY, 20000, null, 'ccabc12345');
+  await volcSay('你好', 'zh_female_tianmeitaozi_mars_bigtts', 1, KEY, 20000, null, 'ccabc12345');
+  assert.deepEqual(JSON.parse(seen[0].additions), { context_texts: [VOLC_TONE], section_id: 'ccabc12345' });
+  assert.equal(seen[1].additions, undefined);
+});

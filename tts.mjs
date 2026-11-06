@@ -93,20 +93,22 @@ const DIALECT_NATIVE = new Set(['zh_female_vv_uranus_bigtts']);   // 有官方�
 // 2.0 音色一句一句分开合成时，每句的情绪各不相同（这句激动、下句低落）：每次都带同一条语音指令（context_texts，不计费）把语气定住。
 // 1.0 音色不认这个字段
 export const VOLC_TONE = '请用平稳自然、前后一致的语气说，不要有大的情绪起伏。';
-function volcSpeaker(id) {
+function volcSpeaker(id, sec = '') {
   const [sp, dia] = String(id).split('@');
   const v2 = volcRes(sp) === 'seed-tts-2.0';
   const add = {};
   if (dia && DIALECT[dia]) { if (DIALECT_NATIVE.has(sp)) add.explicit_dialect = dia; else add.context_texts = ['请用' + DIALECT[dia] + '说']; }
   if (v2 && !add.context_texts) add.context_texts = [VOLC_TONE];   // 只有第一条生效：方言指令优先
+  if (v2 && sec) add.section_id = sec;
   return { sp, additions: Object.keys(add).length ? JSON.stringify(add) : null };
 }
 const volcCfg = () => { try { return JSON.parse(fs.readFileSync(VOLC_FILE, 'utf8')) || {}; } catch { return {}; } };
 export function volcInfo() { const c = volcCfg(); return { set: !!c.key, tail: c.key ? String(c.key).slice(-4) : '', res: c.res || [] }; }
 // 合成一句：返回 mp3。出错的信息里不带 Key
-export async function volcSay(text, speaker, rate = 1, key = volcCfg().key, ms = 20000, signal = null) {
+// sec：同一段朗读的会话 ID（section_id，只 2.0 认）：豆包按它记住前面念过的，后面的语气接着来；请求要一句念完再发下一句（网页那边串着发）
+export async function volcSay(text, speaker, rate = 1, key = volcCfg().key, ms = 20000, signal = null, sec = '') {
   if (!key) throw new Error('没填火山语音的 API Key');
-  const vs = volcSpeaker(speaker);
+  const vs = volcSpeaker(speaker, sec);
   const r = await fetch(VOLC_URL, {
     method: 'POST', signal: signal && AbortSignal.any ? AbortSignal.any([AbortSignal.timeout(ms), signal]) : AbortSignal.timeout(ms),   // signal：网页那边停了就别再等（也别计费）
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'x-api-resource-id': volcRes(speaker), 'x-api-request-id': crypto.randomUUID() },
@@ -261,7 +263,7 @@ const waiters = [];
 const slot = () => running < 2 ? (running++, Promise.resolve()) : new Promise(ok => waiters.push(ok));
 const release = () => { const w = waiters.shift(); if (w) w(); else running--; };
 
-export async function ttsSynth(text, voice, rate, signal = null) {
+export async function ttsSynth(text, voice, rate, signal = null, sec = '') {
   text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 1000);
   if (!text) throw new Error('没有要念的文字');
   const voices = await ttsVoices();
@@ -270,7 +272,7 @@ export async function ttsSynth(text, voice, rate, signal = null) {
   if (voice.startsWith('volc:')) {
     const key = crypto.createHash('sha1').update(voice + '|' + r + '|' + VOLC_TONE + '|' + text).digest('hex');
     { const hit = cache.get(key); if (hit) return hit; }
-    const raw = await volcSay(text, voice.slice(5), r, undefined, 20000, signal);
+    const raw = await volcSay(text, voice.slice(5), r, undefined, 30000, signal, sec);
     const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;
     const out = trimmed ? { buf: trimmed, type: 'audio/mp4' } : { buf: raw, type: 'audio/mpeg' };
     cache.set(key, out);

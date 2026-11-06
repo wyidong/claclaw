@@ -5962,8 +5962,10 @@ function ttsProgEnd(x){if(x&&x.prog&&x.pi>=x.prog.n-1)x.prog.done=true}
 function ttsResumeAt(src){return ttsProg&&ttsProg.src===src&&!ttsProg.done&&ttsProg.at>0?ttsProg.at:null}
 // 合成是要钱的（豆包按字数计费）：只提前合成正在念的这句 + 后面两句，念完一句再多合成一句；停了就把还没合成完的取消掉
 var SRV_AHEAD=3;
+// 带 sec 的（豆包同一段朗读）：等前一句合成完再发，豆包才接得上前面的语气
 function srvFetch(it){
-  if(!it.p){it.ac=window.AbortController?new AbortController():null;it.p=fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:it.rate||tts.rate}),signal:it.ac?it.ac.signal:undefined})
+  if(!it.p){it.ac=window.AbortController?new AbortController():null;var pv=it.prev&&srvFetch(it.prev);it.prev=null;
+    it.p=(pv?pv.catch(function(){}):Promise.resolve()).then(function(){return fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec||undefined}),signal:it.ac?it.ac.signal:undefined})})
     .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
     .then(function(b){it.ac=null;it.url=URL.createObjectURL(b);return it})}
   return it.p;
@@ -5997,7 +5999,7 @@ function srvNext(){
   }).catch(function(e){if(gen!==srvGen)return;ttsDbg('fetch failed: '+(e&&e.message));srvQ.shift();srvBusy=false;srvNext()});
   ttsShowStop();
 }
-function srvSay(parts,voice,base,prog,rate){var r=rate||ttsR();parts.forEach(function(p,k){srvQ.push({text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog})});srvNext()}
+function srvSay(parts,voice,base,prog,rate){var r=rate||ttsR(),sec=/^volc:/.test(voice)&&parts.length>1?'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10):'',pv=null;parts.forEach(function(p,k){var it={text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog,sec:sec,prev:sec?pv:null};pv=it;srvQ.push(it)});srvNext()}
 function srvStop(){srvGen++;srvNow=null;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
 // P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
 function srvInterrupt(text,voice){
@@ -6091,11 +6093,13 @@ function ttsStream(raw,end){
 // 切成一句一句（太长的句子按 180 字再切）：排队念，也是「从哪句开始」的单位
 // 按句号切，再把太短的句子并到后面一句（一段至少 TTS_MIN 字、最多 TTS_MAX 字）：
 // 一句一合成时每句情绪各不相同，短句尤其明显（「好的。」「收到。」）；并起来念语气连贯，请求也少
-var TTS_MIN=40,TTS_MAX=220;
+// 豆包：第一段照旧短（开口快），后面的段做长（150～400 字）：同一次合成里语气最连贯，段与段之间再靠 section_id 接上
+var TTS_MIN=40,TTS_MAX=220,TTS_BIG_MIN=150,TTS_BIG_MAX=400;
+function ttsBig(){return /^volc:/.test(ttsSrvVoice()||'')}
 function ttsParts(src){
   var t=ttsText(src);if(!t)return [];
-  var ps=(t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t]).filter(function(p){return p.trim()}),out=[];
-  ps.forEach(function(p){var n=out.length;if(n&&out[n-1].trim().length<TTS_MIN&&out[n-1].length+p.length<=TTS_MAX)out[n-1]+=p;else out.push(p)});
+  var big=ttsBig(),ps=(t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t]).filter(function(p){return p.trim()}),out=[];
+  ps.forEach(function(p){var n=out.length,mn=big&&n>1?TTS_BIG_MIN:TTS_MIN,mx=big&&n>1?TTS_BIG_MAX:TTS_MAX;if(n&&out[n-1].trim().length<mn&&out[n-1].length+p.length<=mx)out[n-1]+=p;else out.push(p)});
   var n=out.length;if(n>1&&out[n-1].trim().length<TTS_MIN/2&&out[n-2].length+out[n-1].length<=TTS_MAX)out[n-2]+=out.pop();   // 最后剩个短尾巴：并到前面
   return out;
 }

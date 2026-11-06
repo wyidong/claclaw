@@ -3211,7 +3211,7 @@ const handler = async (req, res) => {
         const t0 = Date.now();
         const ac = new AbortController();
         res.on('close', () => { if (!res.writableFinished) ac.abort(); });   // 网页停了、不要这句了：付费的合成也跟着取消
-        const { buf, type } = await ttsSynth(b.text, String(b.voice || ''), b.rate, ac.signal);
+        const { buf, type } = await ttsSynth(b.text, String(b.voice || ''), b.rate, ac.signal, typeof b.sec === 'string' && /^[\w-]{8,64}$/.test(b.sec) ? b.sec : '');
         if (ac.signal.aborted) return;
         log('tts', String(b.voice || ''), String(b.text || '').length + '字', (Date.now() - t0) + 'ms');
         res.writeHead(200, { 'content-type': type, 'content-length': buf.length, 'cache-control': 'no-store' });
