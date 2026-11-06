@@ -90,10 +90,16 @@ const volcRes = speaker => /_uranus_/.test(speaker) ? 'seed-tts-2.0' : 'seed-tts
 const DIALECT = { sichuan: '四川话', dongbei: '东北话', shaanxi: '陕西话' };
 const DIALECT_NATIVE = new Set(['zh_female_vv_uranus_bigtts']);   // 有官方方言参数的音色
 // 「音色@方言」拆成真正的音色 ID 和要附加的 additions（接口要求 additions 是 JSON 字符串）
+// 2.0 音色一句一句分开合成时，每句的情绪各不相同（这句激动、下句低落）：每次都带同一条语音指令（context_texts，不计费）把语气定住。
+// 1.0 音色不认这个字段
+export const VOLC_TONE = '请用平稳自然、前后一致的语气说，不要有大的情绪起伏。';
 function volcSpeaker(id) {
   const [sp, dia] = String(id).split('@');
-  if (!dia || !DIALECT[dia]) return { sp, additions: null };
-  return { sp, additions: JSON.stringify(DIALECT_NATIVE.has(sp) ? { explicit_dialect: dia } : { context_texts: ['请用' + DIALECT[dia] + '说'] }) };
+  const v2 = volcRes(sp) === 'seed-tts-2.0';
+  const add = {};
+  if (dia && DIALECT[dia]) { if (DIALECT_NATIVE.has(sp)) add.explicit_dialect = dia; else add.context_texts = ['请用' + DIALECT[dia] + '说']; }
+  if (v2 && !add.context_texts) add.context_texts = [VOLC_TONE];   // 只有第一条生效：方言指令优先
+  return { sp, additions: Object.keys(add).length ? JSON.stringify(add) : null };
 }
 const volcCfg = () => { try { return JSON.parse(fs.readFileSync(VOLC_FILE, 'utf8')) || {}; } catch { return {}; } };
 export function volcInfo() { const c = volcCfg(); return { set: !!c.key, tail: c.key ? String(c.key).slice(-4) : '', res: c.res || [] }; }
@@ -262,7 +268,7 @@ export async function ttsSynth(text, voice, rate, signal = null) {
   if (!voices.some(v => v.name === voice)) throw new Error('电脑上没有这个声音：' + voice);
   const r = Math.min(2.2, Math.max(0.5, Number(rate) || 1));
   if (voice.startsWith('volc:')) {
-    const key = crypto.createHash('sha1').update(voice + '|' + r + '|' + text).digest('hex');
+    const key = crypto.createHash('sha1').update(voice + '|' + r + '|' + VOLC_TONE + '|' + text).digest('hex');
     { const hit = cache.get(key); if (hit) return hit; }
     const raw = await volcSay(text, voice.slice(5), r, undefined, 20000, signal);
     const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;

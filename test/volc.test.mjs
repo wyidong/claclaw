@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-volc-'));
 process.env.CLACLAW_DATA = DATA;
-const { volcSay, volcSetKey, volcInfo, ttsVoices, ttsSynth, ttsCachePrune, TTS_CACHE_DAYS } = await import('../tts.mjs');
+const { volcSay, volcSetKey, volcInfo, ttsVoices, ttsSynth, ttsCachePrune, TTS_CACHE_DAYS, VOLC_TONE } = await import('../tts.mjs');
 const realFetch = globalThis.fetch;
 after(() => { globalThis.fetch = realFetch; fs.rmSync(DATA, { recursive: true, force: true }); });
 const KEY = 'k-1234567890-abcd';
@@ -74,8 +74,15 @@ test('方言：Vivi 用官方方言参数，男声用语音指令', async () => 
   await volcSay('你好', 'zh_male_m191_uranus_bigtts@sichuan', 1, KEY);
   await volcSay('你好', 'zh_male_m191_uranus_bigtts', 1, KEY);
   assert.equal(seen[0].speaker, 'zh_female_vv_uranus_bigtts');
-  assert.deepEqual(JSON.parse(seen[0].additions), { explicit_dialect: 'sichuan' });
+  assert.deepEqual(JSON.parse(seen[0].additions), { explicit_dialect: 'sichuan', context_texts: [VOLC_TONE] });
   assert.equal(seen[1].speaker, 'zh_male_m191_uranus_bigtts');
-  assert.deepEqual(JSON.parse(seen[1].additions), { context_texts: ['请用四川话说'] });
-  assert.equal(seen[2].additions, undefined);
+  assert.deepEqual(JSON.parse(seen[1].additions), { context_texts: ['请用四川话说'] }, '方言指令优先（只有第一条生效）');
+  assert.deepEqual(JSON.parse(seen[2].additions), { context_texts: [VOLC_TONE] }, '2.0 音色每句都带同一条语气指令');
+});
+
+test('1.0 音色不带语气指令', async () => {
+  const seen = [];
+  globalThis.fetch = async (url, o) => { seen.push(JSON.parse(o.body).req_params); return reply(200, JSON.stringify({ code: 0, data: 'AA==' }) + JSON.stringify({ code: 20000000 })); };
+  await volcSay('你好', 'zh_female_tianmeitaozi_mars_bigtts', 1, KEY);
+  assert.equal(seen[0].additions, undefined);
 });
