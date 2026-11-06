@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-volc-'));
 process.env.CLACLAW_DATA = DATA;
-const { volcSay, volcSetKey, volcInfo, ttsVoices } = await import('../tts.mjs');
+const { volcSay, volcSetKey, volcInfo, ttsVoices, ttsSynth, ttsCachePrune, TTS_CACHE_DAYS } = await import('../tts.mjs');
 const realFetch = globalThis.fetch;
 after(() => { globalThis.fetch = realFetch; fs.rmSync(DATA, { recursive: true, force: true }); });
 const KEY = 'k-1234567890-abcd';
@@ -45,4 +45,24 @@ test('保存 Key：只记试通的资源，声音列表只列那一类；清空�
   globalThis.fetch = async () => reply(401, JSON.stringify({ header: { code: 45000010, message: 'Invalid X-Api-Key' } }));
   await assert.rejects(volcSetKey('bad'), /API Key 不对/);
   assert.equal(volcInfo().set, false);
+});
+
+test('念过的句子存盘，再念不再合成；7 天没用的清掉', async () => {
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return reply(200, JSON.stringify({ code: 0, data: Buffer.from('mp3data').toString('base64') }) + JSON.stringify({ code: 20000000 })); };
+  await volcSetKey(KEY);
+  calls = 0;
+  const v = 'volc:zh_female_vv_uranus_bigtts';
+  const a = await ttsSynth('缓存测试一句', v, 1);
+  const b = await ttsSynth('缓存测试一句', v, 1);
+  assert.equal(calls, 1);
+  assert.deepEqual(b.buf, a.buf);
+  await ttsSynth('缓存测试一句', v, 1.2);   // 语速不同算另一句
+  assert.equal(calls, 2);
+  const dir = path.join(DATA, 'tts-cache');
+  assert.equal(fs.readdirSync(dir).length, 2);
+  assert.equal(ttsCachePrune(Date.now() + (TTS_CACHE_DAYS - 1) * 86400e3), 0);
+  assert.equal(ttsCachePrune(Date.now() + (TTS_CACHE_DAYS + 1) * 86400e3), 2);
+  await ttsSynth('缓存测试一句', v, 1);
+  assert.equal(calls, 3);
 });

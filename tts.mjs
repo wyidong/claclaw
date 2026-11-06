@@ -213,8 +213,31 @@ async function trimAudio(buf, ext, text) {
   finally { for (const f of [src, wav, out]) fs.rm(f, { force: true }, () => {}); }
 }
 
-// 合成结果缓存（同一句重听不用再合成）；最多 60 条
-const cache = new Map();
+// 付费声音（豆包，按字数收费）的合成结果缓存：念过的每一句都存盘（data/tts-cache/<哈希>.m4a|mp3），同一个声音、语速、文字再念直接用，不再合成。
+// 免费的（微软、Mac）不缓存，每次现合成
+// 用到一次就续期；超过 7 天没用过的定时清掉
+const CACHE_DIR = path.join(DATA, 'tts-cache');
+export const TTS_CACHE_DAYS = 7;
+const EXT = { 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3' }, TYPE = { m4a: 'audio/mp4', mp3: 'audio/mpeg' };
+const cache = {
+  get(key) {
+    for (const e of Object.keys(TYPE)) {
+      const f = path.join(CACHE_DIR, key + '.' + e);
+      try { const buf = fs.readFileSync(f); const now = new Date(); fs.utimes(f, now, now, () => {}); return { buf, type: TYPE[e] }; } catch {}
+    }
+    return null;
+  },
+  set(key, out) {
+    try { fs.mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 }); const f = path.join(CACHE_DIR, key + '.' + (EXT[out.type] || 'mp3')); fs.writeFileSync(f + '.tmp', out.buf); fs.renameSync(f + '.tmp', f); } catch {}
+  },
+};
+export function ttsCachePrune(now = Date.now()) {
+  let n = 0;
+  try { for (const f of fs.readdirSync(CACHE_DIR)) { const p = path.join(CACHE_DIR, f); try { if (now - fs.statSync(p).mtimeMs > TTS_CACHE_DAYS * 86400e3) { fs.rmSync(p, { force: true }); n++; } } catch {} } } catch {}
+  return n;
+}
+setTimeout(ttsCachePrune, 30e3).unref?.();
+setInterval(ttsCachePrune, 6 * 3600e3).unref?.();
 let running = 0;
 const waiters = [];
 const slot = () => running < 2 ? (running++, Promise.resolve()) : new Promise(ok => waiters.push(ok));
@@ -228,38 +251,30 @@ export async function ttsSynth(text, voice, rate, signal = null) {
   const r = Math.min(2.2, Math.max(0.5, Number(rate) || 1));
   if (voice.startsWith('volc:')) {
     const key = crypto.createHash('sha1').update(voice + '|' + r + '|' + text).digest('hex');
-    if (cache.has(key)) return cache.get(key);
+    { const hit = cache.get(key); if (hit) return hit; }
     const raw = await volcSay(text, voice.slice(5), r, undefined, 20000, signal);
     const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;
     const out = trimmed ? { buf: trimmed, type: 'audio/mp4' } : { buf: raw, type: 'audio/mpeg' };
     cache.set(key, out);
-    while (cache.size > 60) cache.delete(cache.keys().next().value);
     return out;
   }
   if (voice.startsWith('edge:')) {
-    const key = crypto.createHash('sha1').update(voice + '|' + r + '|' + text).digest('hex');
-    if (cache.has(key)) return cache.get(key);
     const pct = Math.round((r - 1) * 100);
     const res = await edgeCall({ op: 'say', text, voice: voice.slice(5), rate: (pct >= 0 ? '+' : '') + pct + '%' });
     const raw = Buffer.from(res.audio, 'base64');
     if (!raw.length) throw new Error('微软语音没有返回声音');
     const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;
     const out = trimmed ? { buf: trimmed, type: 'audio/mp4' } : { buf: raw, type: 'audio/mpeg' };
-    cache.set(key, out);
-    while (cache.size > 60) cache.delete(cache.keys().next().value);
     return out;
   }
   const wpm = Math.round(Math.min(2.2, Math.max(0.5, Number(rate) || 1)) * 190);   // say 的语速是「每分钟词数」，190 约等于正常语速
   const key = crypto.createHash('sha1').update(voice + '|' + wpm + '|' + text).digest('hex');
-  if (cache.has(key)) { const b = cache.get(key); cache.delete(key); cache.set(key, b); return b; }
   await slot();
   const file = path.join(os.tmpdir(), 'claclaw-tts-' + key + '.m4a');
   try {
     // 文字放在 -- 之后，开头是 - 也不会被当成参数
     await run('say', ['-v', voice, '-r', String(wpm), '--file-format=m4af', '--data-format=aac', '-o', file, '--', text]);
     const out = { buf: (await trimAudio(fs.readFileSync(file), 'm4a', text)) || fs.readFileSync(file), type: 'audio/mp4' };
-    cache.set(key, out);
-    while (cache.size > 60) cache.delete(cache.keys().next().value);
     return out;
   } finally {
     release();
