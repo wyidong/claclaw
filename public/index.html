@@ -1734,6 +1734,7 @@ select.pe-in{text-align-last:right}
             <select id="setTtsMode"><option value="off">关（不朗读）</option><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
             <select id="setTtsVoice"></select></label>
+          <button type="button" class="set-item" id="setVolc"><span class="lb">豆包语音（火山引擎）<small id="setVolcSub">付费的自然语音，填 API Key 后在「声音」里选</small></span><span class="chev" aria-hidden="true"></span></button>
           <div class="set-item tts-rate"><span class="lb">语速<small id="setTtsRateV">1.10 倍</small></span>
             <span class="rate-row"><span class="rate-end">慢</span><input type="range" id="setTtsRate" min="0.6" max="2" step="0.05" value="1.1" aria-label="语速"><span class="rate-end">快</span></span></div>
         </div>
@@ -5792,17 +5793,18 @@ var SRV_NAMES={Tingting:'婷婷',Meijia:'美佳 · 台湾',Sinji:'善怡 · 粤�
 // 微软在线语音（Edge 的自然语音）：edge:zh-CN-XiaoyiNeural 这种
 var EDGE_NAMES={Xiaoxiao:'晓晓',Xiaoyi:'晓伊',Yunjian:'云健',Yunxi:'云希',Yunxia:'云夏',Yunyang:'云扬','liaoning-Xiaobei':'晓北 · 东北话','shaanxi-Xiaoni':'晓妮 · 陕西话',HiuGaai:'晓佳 · 粤语',HiuMaan:'晓曼 · 粤语',WanLung:'云龙 · 粤语',HsiaoChen:'晓臻 · 台湾',HsiaoYu:'晓雨 · 台湾',YunJhe:'云哲 · 台湾'};
 function srvLabel(v){
+  if(/^volc:/.test(v.name))return (v.label||v.name.slice(5))+'（豆包'+(v.gender==='Female'?' · 女':v.gender==='Male'?' · 男':'')+'）';
   if(/^edge:/.test(v.name)){var k=v.name.replace(/^edge:zh-[A-Z]{2}-/,'').replace(/Neural$/,'');return (EDGE_NAMES[k]||k)+'（微软'+(v.gender==='Female'?' · 女':v.gender==='Male'?' · 男':'')+'）'}
   var m=v.name.match(/^(.*?)\s*\((Enhanced|Premium)\)\s*$/i),base=m?m[1]:v.name,tier=m?(/premium/i.test(m[2])?'高级':'优化音质'):'';
   var zh=SRV_NAMES[base]||base;
   if(!SRV_NAMES[base]&&/TW/.test(v.lang))zh+=' · 台湾';else if(!SRV_NAMES[base]&&/HK/.test(v.lang))zh+=' · 香港';
   return zh+(tier?'（'+tier+'）':'');
 }
-function srvScore(v){var n=v.name;return (/^edge:/.test(n)?200:0)+(/Xiaoyi/.test(n)?20:/Xiaoxiao/.test(n)?15:/Yunxi/.test(n)?10:0)-(/liaoning|shaanxi/.test(n)?50:0)+(/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
+function srvScore(v){var n=v.name;return (/^volc:/.test(n)?400+(/_vv_/.test(n)?20:0):0)+(/^edge:/.test(n)?200:0)+(/Xiaoyi/.test(n)?20:/Xiaoxiao/.test(n)?15:/Yunxi/.test(n)?10:0)-(/liaoning|shaanxi/.test(n)?50:0)+(/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
 function ttsLoadSrv(){
   return fetch('/api/tts/voices').then(function(r){return r.ok?r.json():[]}).then(function(list){
     // 只留微软的声音（Mac 自带的那几个不好听），去掉所有粤语
-    tts.srv=(Array.isArray(list)?list:[]).filter(function(v){return /^edge:/.test(v.name)&&!/HK|yue/i.test(v.lang||'')}).sort(function(a,b){return srvScore(b)-srvScore(a)});ttsPickVoice();
+    tts.srv=(Array.isArray(list)?list:[]).filter(function(v){return /^(edge|volc):/.test(v.name)&&!/HK|yue/i.test(v.lang||'')}).sort(function(a,b){return srvScore(b)-srvScore(a)});ttsPickVoice();
   }).catch(function(){});
 }
 // 用电脑合成的哪个声音：选过就用选的；没选过（这台浏览器第一次用）默认用最好的那个，不落到浏览器自带的（Mac 上的 Chrome 常常一声不响）
@@ -5823,7 +5825,7 @@ function ttsPickVoice(){
   var sel=$('#setTtsVoice');if(!sel)return;
   var dev=vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(ttsLabel(v))+'</option>'}).join('');
   var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(srvLabel(v))+'</option>'}).join('');
-  sel.innerHTML=(pc?'<optgroup label="电脑合成（微软在线语音 / Mac 上的声音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
+  sel.innerHTML=(pc?'<optgroup label="电脑合成（豆包 / 微软在线语音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
   sel.value=ttsSrvVoice()?'srv:'+ttsSrvVoice():tts.voice?tts.voice.voiceURI:'';
   $('#setTtsVoiceSub').textContent=srv.length?'选了试听；电脑合成的更自然':'选了试听';
 }
@@ -6316,7 +6318,7 @@ function ttsSync(){
   $('#setTts').dataset.on=tts.on?'1':'';$('#setTtsRate').value=String(tts.rate);ttsRateLabel();
   var sel=$('#setTtsMode');if(sel)sel.value=tts.mode;
   // 朗读关着时，声音和语速用不上：一起收起来
-  $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
+  $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;$('#setVolc').hidden=!tts.on;
   var label={off:'不朗读',reply:'只念回复',steps:'念关键节点和回复',brief:'只念关键节点'};
   $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；锁屏后停':'关着';
   var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
@@ -6347,6 +6349,23 @@ $('#setTtsMode').addEventListener('change',function(e){
   var m=e.target.value;
   ttsModeSet(m);
   if(m!=='off')ttsPreview(m==='reply'?'只念回复':m==='steps'?'关键节点和回复':'只念关键节点');
+});
+// 豆包语音的 API Key：只存在电脑上（data/volc-tts.json），页面只看到末 4 位；保存时电脑先试合成一句，通了才存
+function volcShow(j){var s=$('#setVolcSub');if(!s||!j)return;s.textContent=j.set?'已填 Key（末 4 位 '+j.tail+'）· 可用 '+(j.res||[]).map(function(r){return r.replace('seed-tts-','')}).join(' / ')+'，点了可更换或清除':'付费的自然语音，填 API Key 后在「声音」里选'}
+fetch('/api/tts/volc').then(function(r){return r.ok?r.json():null}).then(volcShow).catch(function(){});
+$('#setVolc').addEventListener('click',function(){
+  var k=prompt('粘贴火山引擎「豆包语音」控制台里的 API Key（新版控制台 → API Key 管理）\n留空再确定 = 清除已填的 Key');
+  if(k==null)return;
+  toast(k.trim()?'正在用这个 Key 试合成一句…':'正在清除…');
+  postJson('/api/tts/volc',{key:k.trim()}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'保存失败');return j})}).then(function(j){
+    volcShow(j);
+    ttsLoadSrv().then(function(){
+      if(!j.set){toast('已清除');return}
+      var v=(tts.srv||[]).find(function(x){return /^volc:/.test(x.name)});
+      if(v){tts.want='srv:'+v.name;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}ttsPickVoice();tts.srvUnlocked=false;ttsUnlock();ttsPreview('你好，以后就用豆包的声音给你念回复。')}
+      toast('Key 可用，已换成豆包的声音（在「声音」里可以换）');
+    });
+  }).catch(function(e){toast(e.message,4000)});
 });
 $('#setTtsVoice').addEventListener('change',function(e){
   tts.want=e.target.value;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}

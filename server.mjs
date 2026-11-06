@@ -29,7 +29,7 @@ import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText, attKind, ATT_MA
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './copilot.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
-import { ttsVoices, ttsSynth, ttsWarm } from './tts.mjs';
+import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
@@ -3182,6 +3182,13 @@ const handler = async (req, res) => {
     }
     // 电脑合成语音：手机网页拿去播放（登录后才能用）
     if (url.pathname === '/api/tts/voices') return sendJson(res, 200, await ttsVoices());
+    // 火山语音的 API Key：GET 看填没填（只给末 4 位）；POST {key} 试通了才存，key 为空 = 清除
+    if (url.pathname === '/api/tts/volc') {
+      if (req.method !== 'POST') return sendJson(res, 200, volcInfo());
+      const b = await jsonBody(req, 4096);
+      try { const r = await volcSetKey(b.key); log('tts volc key', r.set ? 'saved ' + r.res.join(',') : 'cleared'); return sendJson(res, 200, r); }
+      catch (e) { log('tts volc key failed', e.message); return sendJson(res, 400, { error: e.message }); }
+    }
     if (url.pathname === '/api/tts/warm' && req.method === 'POST') { ttsWarm(); return sendJson(res, 200, { ok: true }); }
     if (url.pathname === '/api/tts/log' && req.method === 'POST') { let b = await jsonBody(req, 1024); log('tts client', String(b.m || '').replace(/\s+/g, ' ').slice(0, 200)); return sendJson(res, 200, { ok: true }); }
     if (url.pathname === '/api/tts' && req.method === 'POST') {
