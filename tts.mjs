@@ -104,6 +104,7 @@ export async function volcSay(text, speaker, rate = 1, key = volcCfg().key, ms =
   }
   if (!r.ok && !err) err = 'HTTP ' + r.status + ' ' + body.slice(0, 120);
   if (/^45000010\b/.test(err)) throw new Error('API Key 不对（火山说无效）');
+  if (/^45000030\b/.test(err)) throw new Error('Key 是对的，但账号还没开通「' + (volcRes(speaker) === 'seed-tts-2.0' ? '豆包语音合成模型 2.0' : '豆包语音合成模型 1.0') + '」（控制台 → 语音合成 → 开通）');
   if (/^45000000\b/.test(err)) throw new Error('这个账号没开通这类音色（' + volcRes(speaker) + '）');
   if (err) throw new Error('火山语音：' + err.split(key).join('***').slice(0, 200));
   const buf = Buffer.concat(chunks);
