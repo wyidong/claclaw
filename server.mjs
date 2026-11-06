@@ -1650,7 +1650,10 @@ setInterval(() => {
   if (moved) log('peer lan ip changed', peerIpSeen, '->', ip);
   if (ip) peerIpSeen = ip;
   applyListener(c, peerHandler, log);
-  if (moved) for (const p of c.peers) if (p.theirToken) peerCall(c, p, '/sessions', { ms: 8000 }).catch(() => {});
+  if (moved) {
+    applyRelay(c).catch(() => {});   // 中继隧道转给的是「局域网 IP:协同端口」，IP 换了隧道也要重接到新地址，不然经中继进来的都送到旧 IP 上
+    for (const p of c.peers) if (p.theirToken) peerCall(c, p, '/sessions', { ms: 8000 }).catch(() => {});
+  }
 }, 15e3).unref();
 
 // ---------- 跨网络：经 clarelay 中继 ----------
