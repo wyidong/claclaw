@@ -80,8 +80,9 @@ const VOLC_VOICES = [
   ['zh_female_vv_uranus_bigtts', 'Vivi', 'Female'], ['zh_female_xiaohe_uranus_bigtts', '小何', 'Female'],
   ['zh_female_shuangkuaisisi_uranus_bigtts', '爽快思思', 'Female'], ['zh_female_qingxinnvsheng_uranus_bigtts', '清新女声', 'Female'],
   ['zh_male_m191_uranus_bigtts', '云舟', 'Male'], ['zh_male_taocheng_uranus_bigtts', '小天', 'Male'], ['zh_male_ruyayichen_uranus_bigtts', '儒雅逸辰', 'Male'],
-  // 方言：音色 ID 后面接 @方言。Vivi 有官方方言参数（explicit_dialect，只支持东北 / 陕西 / 四川）；男声没有，用语音指令（context_texts）让它说四川话
-  ['zh_female_vv_uranus_bigtts@sichuan', 'Vivi · 四川话', 'Female'], ['zh_male_m191_uranus_bigtts@sichuan', '云舟 · 四川话', 'Male'],
+  // 方言：音色 ID 后面接 @方言。只有 Vivi 有官方方言参数（explicit_dialect：东北 / 陕西 / 四川）。
+  // 男声试过用语音指令（context_texts「请用四川话说」）：实听还是普通话，不提供
+  ['zh_female_vv_uranus_bigtts@sichuan', 'Vivi · 四川话', 'Female'],
   ['zh_female_shuangkuaisisi_moon_bigtts', '爽快思思 1.0', 'Female'], ['zh_female_tianmeitaozi_mars_bigtts', '甜美桃子', 'Female'],
   ['zh_female_qinqienvsheng_moon_bigtts', '亲切女声', 'Female'], ['zh_male_qingyiyuxuan_mars_bigtts', '清逸宇轩', 'Male'],
 ];
