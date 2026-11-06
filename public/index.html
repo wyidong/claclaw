@@ -4024,7 +4024,7 @@ function vcSec(name,tag,hint,rows,ids){
 function renderVoices(){
   if(hostView!=='voices')return;
   var h=pgHd('data-act="vc-back"','返回设置','语音管理')+'<div class="pe-err"'+(vcMsg?'':' hidden')+'>'+esc(vcMsg)+'</div>';
-  h+='<div class="vc-tip">勾上的声音出现在设置的「声音」列表里；别名可以改，清空就回到原名。点 ▶ 试听。</div>';
+  h+='<div class="vc-tip">勾上的声音出现在设置的「声音」列表和长按喇叭的列表里（默认只勾了几个常用的）；别名可以改，清空就回到原名。点 ▶ 试听。</div>';
   var dev=ttsVoices();
   h+=vcSec('本机','免费','这台设备（浏览器）自带的声音，不用配置',dev.map(function(v){return vcRow(v.voiceURI,ttsLabel(v))}).join('')||'<div class="h-row vc-hint">这台设备没有中文声音</div>',dev.map(function(v){return v.voiceURI}));
   if(!vcEng)h+='<div class="h-empty">加载中…</div>';
@@ -4065,13 +4065,13 @@ function vcAct(act,a){
 }
 $('#hostBody').addEventListener('change',function(e){
   var t=e.target;if(hostView!=='voices'||!t.dataset||!t.dataset.id)return;
-  if(t.classList.contains('vc-on')){vcSet(t.dataset.id,'off',t.checked?0:1);vcGrpSync()}
+  if(t.classList.contains('vc-on')){vcSetOn(t.dataset.id,t.checked);try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}ttsPickVoice();vcGrpSync()}
   else if(t.classList.contains('vc-al')){var v=t.value.trim(),d=t.dataset.def||'';if(!v)t.value=d;vcSet(t.dataset.id,'alias',v&&v!==d?v:'')}   // 清空 = 回到原名
 });
 // 全选：这一段的声音全开 / 全关
 $('#hostBody').addEventListener('change',function(e){
   var t=e.target;if(hostView!=='voices'||!t.classList||!t.classList.contains('vc-grp'))return;
-  (vcGroups[t.dataset.grp]||[]).forEach(function(id){var c=vcCfg[id]||{};if(t.checked)delete c.off;else c.off=1;if(Object.keys(c).length)vcCfg[id]=c;else delete vcCfg[id]});
+  (vcGroups[t.dataset.grp]||[]).forEach(function(id){vcSetOn(id,t.checked)});
   try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}
   ttsPickVoice();
   document.querySelectorAll('#hostBody .vc-on').forEach(function(c){if((vcGroups[t.dataset.grp]||[]).indexOf(c.dataset.id)>=0)c.checked=t.checked});
@@ -5913,7 +5913,10 @@ function ttsSrvVoice(){
 }
 // 语音管理里的设置：{ 声音 id: { off:1, alias:'别名' } }；声音 id 和「声音」下拉框的值一样（srv:… / 设备声音的 voiceURI）。默认全开
 var vcCfg={};try{vcCfg=JSON.parse(localStorage.getItem('claclaw.ttsVoices')||'{}')||{}}catch(_){}
-function vcOff(id){return !!(vcCfg[id]&&vcCfg[id].off)}
+// 默认只勾几个常用的（不然下拉框、长按喇叭的列表一长串）：豆包 Vivi / Vivi 四川话 / 小何 / 云舟 / 小天、微软 晓晓 / 晓伊 / 云希，加上正在用的默认声音；其他到语音管理里自己勾
+var VC_REC=['srv:volc:zh_female_vv_uranus_bigtts','srv:volc:zh_female_vv_uranus_bigtts@sichuan','srv:volc:zh_female_xiaohe_uranus_bigtts','srv:volc:zh_male_m191_uranus_bigtts','srv:volc:zh_male_taocheng_uranus_bigtts','srv:edge:zh-CN-XiaoxiaoNeural','srv:edge:zh-CN-XiaoyiNeural','srv:edge:zh-CN-YunxiNeural'];
+function vcOff(id){var c=vcCfg[id];if(c&&c.off)return true;if(c&&c.on)return false;return !(id===tts.want||VC_REC.indexOf(id)>=0)}
+function vcSetOn(id,on){var c=vcCfg[id]||{};if(on){c.on=1;delete c.off}else{c.off=1;delete c.on}vcCfg[id]=c}
 function vcAlias(id){return vcCfg[id]&&vcCfg[id].alias||''}
 function vcSet(id,k,v){var c=vcCfg[id]||{};if(v)c[k]=v;else delete c[k];if(Object.keys(c).length)vcCfg[id]=c;else delete vcCfg[id];try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}ttsPickVoice()}
 function ttsPickVoice(){
@@ -6454,6 +6457,7 @@ function ttsSessPick(){
   if(!session)return;
   var sid=session.id,go=function(){
     var list=ttsChoices(),cur=ttsSessV[sid]||'',def=list.find(function(c){return c.id===tts.want});
+    if(cur&&!list.some(function(c){return c.id===cur}))list.unshift({id:cur,label:cur.replace(/^srv:\w+:/,'')});   // 单独选过、后来在语音管理里取消勾选的：也列出来，免得看不出现在用的是哪个
     var p=$('#ttsPick');
     p.innerHTML='<div class="tp-box" role="dialog" aria-label="这个会话用的声音"><div class="tp-h">这个会话用的声音<button type="button" class="tp-x" aria-label="关闭">✕</button></div><div class="tp-list"></div></div>';
     var close=function(){p.classList.remove('on')},box=p.querySelector('.tp-list');
