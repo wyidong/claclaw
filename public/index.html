@@ -63,7 +63,7 @@ window.__sc=(function(){
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
 (function(){
-  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang'],ls,pend={},n=0,t=0;
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang'],ls,pend={},n=0,t=0;
   try{ls=localStorage}catch(_){return}
   function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
   function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
@@ -650,12 +650,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 @media (hover:hover){.ds-tb tbody.tn:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 body:has(#diss.on) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 @media (min-width:1000px){#diss,#fview{left:64px;right:8px;bottom:8px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
-/* 电脑：模型管理整页（像会话解剖）——中间栏铺满右边，聊天区让开；内容居中限宽 */
+/* 电脑：模型管理、语音管理整页（像会话解剖）——中间栏铺满右边，聊天区让开；内容居中限宽 */
 @media (min-width:1000px){
-  #app.host-on:has(#hostBody [data-act="mdl-back"]) #sheet{grid-column:2 / -1;z-index:6}
-  #app.host-on:has(#hostBody [data-act="mdl-back"]) :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
-  #app.host-on:has(#hostBody [data-act="mdl-back"]) #sheet::after{display:none}
-  #app.host-on:has(#hostBody [data-act="mdl-back"]) #hostBody{max-width:880px;margin:0 auto}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #sheet{grid-column:2 / -1;z-index:6}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #sheet::after{display:none}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #hostBody{max-width:880px;margin:0 auto}
 }
 @media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb{font-size:12.5px}.ds-tb th,.ds-tb td{padding:6px 8px}}
 /* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最大 180）；点开才是原图 */
@@ -1095,6 +1095,13 @@ select.pe-in{text-align-last:right}
 .pe-ss label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pe-ss small{flex:none;color:var(--muted);font-family:var(--mono);font-size:12px}
 .pe-btns{display:flex;gap:10px;flex-wrap:wrap;padding:12px 14px}
+.vc-tip{margin:0 4px 10px;font-size:13px;color:var(--muted)}
+.vc-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:6px;background:var(--surface);font-size:11px;line-height:18px;color:var(--muted)}.vc-tag.paid{color:#b45309}
+.h-row.vc-hint{font-size:13px;color:var(--muted);min-height:0}
+.h-row.vc-row{gap:8px}.h-row.vc-row .vc-on{flex:none;width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.h-row.vc-row .vc-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-row.vc-row .vc-al{flex:none;width:34%;max-width:200px;margin-left:0;text-align:left}
+.vc-try{flex:none;width:30px;height:30px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}.vc-try svg{width:18px;height:18px}
 .pe-btn{height:34px;padding:0 14px;border:0;border-radius:9px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
 .pe-btn.pri{background:var(--accent);color:var(--accent-ink);font-weight:600}
 .pe-btn.del{color:var(--deny)}
@@ -1734,7 +1741,7 @@ select.pe-in{text-align-last:right}
             <select id="setTtsMode"><option value="off">关（不朗读）</option><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
             <select id="setTtsVoice"></select></label>
-          <button type="button" class="set-item" id="setVolc"><span class="lb">豆包语音（火山引擎）<small id="setVolcSub">付费的自然语音，填 API Key 后在「声音」里选</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setVoices"><span class="lb">语音管理<small id="setVoicesSub">本机、微软免费；豆包要填 API Key</small></span><span class="chev" aria-hidden="true"></span></button>
           <div class="set-item tts-rate"><span class="lb">语速<small id="setTtsRateV">1.10 倍</small></span>
             <span class="rate-row"><span class="rate-end">慢</span><input type="range" id="setTtsRate" min="0.6" max="2" step="0.05" value="1.1" aria-label="语速"><span class="rate-end">快</span></span></div>
         </div>
@@ -3993,6 +4000,67 @@ function skillPost(op,name,target){
     if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
   }).catch(function(e){toast(e.message)});
 }
+// ---------- 设置 › 语音管理：按平台列声音，勾选哪些进「声音」列表、起别名；豆包在这里填 / 换 Key ----------
+// 平台：本机（这台设备 / 浏览器自带，网页自己列）+ 电脑合成的几家（/api/tts/engines）。以后加平台，服务端 ttsEngines 加一项即可
+var vcEng=null,vcMsg='',vcKeyEdit=false;
+function openVoices(){mTab('host');hostView='voices';vcMsg='';vcKeyEdit=false;renderVoices();vcLoad()}
+function vcLoad(){
+  fetch('/api/tts/engines').then(function(r){return r.ok?r.json():null}).then(function(j){if(Array.isArray(j)){vcEng=j;vcSum()}return ttsLoadSrv()}).then(function(){renderVoices()}).catch(function(){});
+}
+function vcSum(){var el=$('#setVoicesSub');if(!el||!vcEng)return;var v=vcEng.find(function(e){return e.id==='volc'});el.textContent='本机、微软免费；豆包'+(v&&v.ready?'已填 Key':'要填 API Key')}
+function vcRow(id,name){
+  return '<div class="h-row vc-row"><input type="checkbox" class="vc-on" data-id="'+esc(id)+'"'+(vcOff(id)?'':' checked')+' aria-label="放进声音列表"><span class="k vc-n">'+esc(name)+'</span>'+
+    '<input class="pe-in vc-al" data-id="'+esc(id)+'" maxlength="20" autocomplete="off" placeholder="别名" value="'+esc(vcAlias(id))+'">'+
+    '<button type="button" class="vc-try" data-act="vc-try" data-id="'+esc(id)+'" aria-label="试听" title="试听">'+GM_PLAY.say+'</button></div>'}
+function vcSec(name,tag,hint,rows){return '<div><div class="h-h">'+esc(name)+' <span class="vc-tag'+(tag==='付费'?' paid':'')+'">'+tag+'</span></div><div class="h-card"><div class="h-row vc-hint">'+esc(hint)+'</div>'+rows+'</div></div>'}
+function renderVoices(){
+  if(hostView!=='voices')return;
+  var h=pgHd('data-act="vc-back"','返回设置','语音管理')+'<div class="pe-err"'+(vcMsg?'':' hidden')+'>'+esc(vcMsg)+'</div>';
+  h+='<div class="vc-tip">勾上的声音出现在设置的「声音」列表里，别名不填就用原名。点 ▶ 试听。</div>';
+  var dev=ttsVoices();
+  h+=vcSec('本机','免费','这台设备（浏览器）自带的声音，不用配置',dev.map(function(v){return vcRow(v.voiceURI,ttsLabel(v))}).join('')||'<div class="h-row vc-hint">这台设备没有中文声音</div>');
+  if(!vcEng)h+='<div class="h-empty">加载中…</div>';
+  (vcEng||[]).forEach(function(e){
+    var list=(tts.srv||[]).filter(function(v){return v.name.indexOf(e.id+':')===0}),top='';
+    if(e.needKey){
+      var k=e.key||{};
+      if(k.set&&!vcKeyEdit)top='<div class="h-row"><span class="k">API Key</span><span class="v pe-mono">••••'+esc(k.tail)+'</span></div>'+
+        '<div class="h-row"><span class="k">已开通</span><span class="v">'+esc((k.res||[]).join('、')||'—')+'</span></div>'+
+        '<div class="pe-btns"><button type="button" class="pe-btn" data-act="vc-key-edit">更换 Key</button><button type="button" class="pe-btn del" data-act="vc-key-del">清除 Key</button></div>';
+      else top='<div class="h-row md-solo"><input id="vcKey" class="pe-in left mono" type="password" maxlength="1000" autocomplete="off" placeholder="粘贴 API Key（火山控制台 → 豆包语音 → API Key 管理）"></div>'+
+        '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="vc-key-save">保存</button>'+(k.set?'<button type="button" class="pe-btn" data-act="vc-key-cancel">取消</button>':'')+'</div>';
+    }else if(!e.ready)top='<div class="h-row vc-hint">电脑上还没装（在电脑上运行 tools/setup-edge-tts.sh）</div>';
+    h+=vcSec(e.name,e.free?'免费':'付费',e.hint,top+list.map(function(v){return vcRow('srv:'+v.name,srvLabel(v))}).join(''));
+  });
+  $('#hostBody').innerHTML=h;
+}
+function vcAct(act,a){
+  if(act==='vc-back'){hostView='';mTab('set');return}
+  if(act==='vc-try'){
+    var id=a.dataset.id,t='你好，这是我的声音，听听合不合适。';ttsStop();ttsManual=true;
+    if(/^srv:/.test(id)){tts.srvUnlocked=false;srvUnlock(true);srvSay([t],id.slice(4));return}
+    var v=ttsVoices().find(function(x){return x.voiceURI===id});if(!v||!ttsOk())return;
+    var u=new SpeechSynthesisUtterance(t);u.lang=v.lang||'zh-CN';u.rate=tts.rate;u.voice=v;speechSynthesis.speak(u);return;
+  }
+  if(act==='vc-key-edit'){vcKeyEdit=true;renderVoices();var i=$('#vcKey');if(i)i.focus();return}
+  if(act==='vc-key-cancel'){vcKeyEdit=false;renderVoices();return}
+  if(act==='vc-key-save'||act==='vc-key-del'){
+    var key=act==='vc-key-del'?'':(($('#vcKey')||{}).value||'').trim();
+    if(act==='vc-key-save'&&!key){vcMsg='先粘贴 API Key';renderVoices();return}
+    if(act==='vc-key-del'&&!confirm('清除豆包语音的 API Key？清除后豆包的声音不能用了'))return;
+    vcMsg='';toast(key?'正在用这个 Key 试合成一句…':'正在清除…');
+    postJson('/api/tts/volc',{key:key}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'保存失败');return j})}).then(function(j){
+      vcKeyEdit=false;toast(j.set?'Key 可用，已保存':'已清除');vcLoad();
+    }).catch(function(e){vcMsg=e.message;renderVoices()});
+  }
+}
+$('#hostBody').addEventListener('change',function(e){
+  var t=e.target;if(hostView!=='voices'||!t.dataset||!t.dataset.id)return;
+  if(t.classList.contains('vc-on'))vcSet(t.dataset.id,'off',t.checked?0:1);
+  else if(t.classList.contains('vc-al'))vcSet(t.dataset.id,'alias',t.value.trim());
+});
+$('#setVoices').addEventListener('click',openVoices);
+fetch('/api/tts/engines').then(function(r){return r.ok?r.json():null}).then(function(j){if(Array.isArray(j)){vcEng=j;vcSum()}}).catch(function(){});
 var BACK_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
 function pgHd(attrs,label,title){return '<div class="pg-hd"><button type="button" class="pe-back" '+attrs+' aria-label="'+label+'">'+BACK_SVG+'</button><div class="pg-t">'+esc(title||'')+'</div></div>'}
 function renderSkills(){
@@ -4238,6 +4306,7 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='skills'){hostView='skills';skillMsg={};renderSkills();loadSkills();return}
   if(act==='models'){openModels('host');return}
   if(/^mdl-/.test(act)){mdlAct(act,a);return}
+  if(/^vc-/.test(act)){vcAct(act,a);return}
   if(act==='skill-install'||act==='skill-remove'){skillPost(act==='skill-install'?'install':'uninstall',a.dataset.name,a.dataset.target);return}
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
   if(act==='peer-on'){if(!(peerCfg.sessions||[]).length){peerGo('pool');peerMsg={err:peerCfg.canAssign?'先勾选要加入协同的会话，再开启':'还没有加入协同的会话：要先在这台电脑上用 127.0.0.1 打开网页加'};paintPeerMsg();return}peerPost('',peerForm(true),'协同已开启')}
@@ -5817,15 +5886,26 @@ function ttsSrvVoice(){
   var has=function(n){return (tts.srv||[]).some(function(v){return v.name===n})},tw=ttsEdgeTwin(tts.want);
   if(/^srv:/.test(tts.want))return has(tts.want.slice(4))?tts.want.slice(4):'';
   if(tw&&has(tw))return tw;
-  return ttsWantSrv()&&tts.srv&&tts.srv[0]?tts.srv[0].name:'';
+  var on=(tts.srv||[]).filter(function(v){return !vcOff('srv:'+v.name)})[0]||(tts.srv||[])[0];
+  return ttsWantSrv()&&on?on.name:'';
 }
+// 语音管理里的设置：{ 声音 id: { off:1, alias:'别名' } }；声音 id 和「声音」下拉框的值一样（srv:… / 设备声音的 voiceURI）。默认全开
+var vcCfg={};try{vcCfg=JSON.parse(localStorage.getItem('claclaw.ttsVoices')||'{}')||{}}catch(_){}
+function vcOff(id){return !!(vcCfg[id]&&vcCfg[id].off)}
+function vcAlias(id){return vcCfg[id]&&vcCfg[id].alias||''}
+function vcSet(id,k,v){var c=vcCfg[id]||{};if(v)c[k]=v;else delete c[k];if(Object.keys(c).length)vcCfg[id]=c;else delete vcCfg[id];try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}ttsPickVoice()}
 function ttsPickVoice(){
-  var vs=ttsVoices(),srv=tts.srv||[];
+  var vs0=ttsVoices(),srv0=tts.srv||[];
+  // 列表里只放勾选的；全关了就当没设（不能一个都没有）
+  var vs=vs0.filter(function(v){return !vcOff(v.voiceURI)}),srv=srv0.filter(function(v){return !vcOff('srv:'+v.name)});
+  if(!vs.length&&!srv.length){vs=vs0;srv=srv0}
+  // 正在用的那个被关掉了：换成列表里的第一个
+  if(tts.want&&vcOff(tts.want)){var nx=srv[0]?'srv:'+srv[0].name:vs[0]?vs[0].voiceURI:'';if(nx&&nx!==tts.want){tts.want=nx;try{localStorage.setItem('claclaw.ttsVoice',nx)}catch(_){}}}
   tts.voice=vs.find(function(v){return v.voiceURI===tts.want})||vs[0]||null;
   var sel=$('#setTtsVoice');if(!sel)return;
-  var dev=vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(ttsLabel(v))+'</option>'}).join('');
-  var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(srvLabel(v))+'</option>'}).join('');
-  sel.innerHTML=(pc?'<optgroup label="电脑合成（豆包 / 微软在线语音）">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
+  var dev=vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(vcAlias(v.voiceURI)||ttsLabel(v))+'</option>'}).join('');
+  var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(vcAlias('srv:'+v.name)||srvLabel(v))+'</option>'}).join('');
+  sel.innerHTML=(pc?'<optgroup label="电脑合成">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
   sel.value=ttsSrvVoice()?'srv:'+ttsSrvVoice():tts.voice?tts.voice.voiceURI:'';
   $('#setTtsVoiceSub').textContent=srv.length?'选了试听；电脑合成的更自然':'选了试听';
 }
@@ -6318,7 +6398,7 @@ function ttsSync(){
   $('#setTts').dataset.on=tts.on?'1':'';$('#setTtsRate').value=String(tts.rate);ttsRateLabel();
   var sel=$('#setTtsMode');if(sel)sel.value=tts.mode;
   // 朗读关着时，声音和语速用不上：一起收起来
-  $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;$('#setVolc').hidden=!tts.on;
+  $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
   var label={off:'不朗读',reply:'只念回复',steps:'念关键节点和回复',brief:'只念关键节点'};
   $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；锁屏后停':'关着';
   var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
@@ -6349,23 +6429,6 @@ $('#setTtsMode').addEventListener('change',function(e){
   var m=e.target.value;
   ttsModeSet(m);
   if(m!=='off')ttsPreview(m==='reply'?'只念回复':m==='steps'?'关键节点和回复':'只念关键节点');
-});
-// 豆包语音的 API Key：只存在电脑上（data/volc-tts.json），页面只看到末 4 位；保存时电脑先试合成一句，通了才存
-function volcShow(j){var s=$('#setVolcSub');if(!s||!j)return;s.textContent=j.set?'已填 Key（末 4 位 '+j.tail+'）· 可用 '+(j.res||[]).map(function(r){return r.replace('seed-tts-','')}).join(' / ')+'，点了可更换或清除':'付费的自然语音，填 API Key 后在「声音」里选'}
-fetch('/api/tts/volc').then(function(r){return r.ok?r.json():null}).then(volcShow).catch(function(){});
-$('#setVolc').addEventListener('click',function(){
-  var k=prompt('粘贴火山引擎「豆包语音」控制台里的 API Key（新版控制台 → API Key 管理）\n留空再确定 = 清除已填的 Key');
-  if(k==null)return;
-  toast(k.trim()?'正在用这个 Key 试合成一句…':'正在清除…');
-  postJson('/api/tts/volc',{key:k.trim()}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'保存失败');return j})}).then(function(j){
-    volcShow(j);
-    ttsLoadSrv().then(function(){
-      if(!j.set){toast('已清除');return}
-      var v=(tts.srv||[]).find(function(x){return /^volc:/.test(x.name)});
-      if(v){tts.want='srv:'+v.name;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}ttsPickVoice();tts.srvUnlocked=false;ttsUnlock();ttsPreview('你好，以后就用豆包的声音给你念回复。')}
-      toast('Key 可用，已换成豆包的声音（在「声音」里可以换）');
-    });
-  }).catch(function(e){toast(e.message,4000)});
 });
 $('#setTtsVoice').addEventListener('change',function(e){
   tts.want=e.target.value;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}

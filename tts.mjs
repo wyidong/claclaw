@@ -140,6 +140,15 @@ function volcVoices() {
   return VOLC_VOICES.filter(([sp]) => res.includes(volcRes(sp))).map(([sp, label, gender]) => ({ name: 'volc:' + sp, label, lang: 'zh-CN', gender, engine: 'volc' }));
 }
 
+// 语音平台（语音管理页用）：本机（设备自带）由网页自己列；这里给电脑合成的几家。以后加平台在这里加一项
+export function ttsEngines() {
+  const v = volcInfo();
+  return [
+    { id: 'edge', name: '微软', free: true, ready: fs.existsSync(EDGE_PY), hint: '电脑联网合成，免费' },
+    { id: 'volc', name: '豆包', free: false, needKey: true, ready: v.set, key: v, hint: '火山引擎豆包语音，按字数付费' },
+  ];
+}
+
 let voiceCache = { at: 0, list: [] };
 // 中文（普通话 / 台湾 / 香港）语音；1 分钟内复用（Mac 上新下载了语音，过一会儿就能出现在列表里）
 export async function ttsVoices() {

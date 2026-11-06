@@ -29,7 +29,7 @@ import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText, attKind, ATT_MA
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './copilot.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
-import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey } from './tts.mjs';
+import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey, ttsEngines } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
@@ -2150,7 +2150,7 @@ function saveSettings(patch) {
 }
 // 手机网页的个人设置（语音档位、压缩提示阈值、主题……）也在电脑上存一份：clarelay 外壳里 claclaw 嵌在别的网址里，
 // iOS 杀掉 App 后嵌入页的 localStorage 会丢。页面下发时塞进去，本机没有的项由页面补回
-const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang'];
+const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsVoices', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang'];
 function clientPrefs() {
   const p = settings().clientPrefs, out = {};
   if (p && typeof p === 'object') for (const k of PREF_KEYS) if (typeof p[k] === 'string') out[k] = p[k];
@@ -3182,6 +3182,7 @@ const handler = async (req, res) => {
     }
     // 电脑合成语音：手机网页拿去播放（登录后才能用）
     if (url.pathname === '/api/tts/voices') return sendJson(res, 200, await ttsVoices());
+    if (url.pathname === '/api/tts/engines') return sendJson(res, 200, ttsEngines());
     // 火山语音的 API Key：GET 看填没填（只给末 4 位）；POST {key} 试通了才存，key 为空 = 清除
     if (url.pathname === '/api/tts/volc') {
       if (req.method !== 'POST') return sendJson(res, 200, volcInfo());
