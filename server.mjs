@@ -29,7 +29,7 @@ import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText, attKind, ATT_MA
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './copilot.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
-import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey, ttsEngines } from './tts.mjs';
+import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
@@ -3205,6 +3205,27 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/tts/warm' && req.method === 'POST') { ttsWarm(); return sendJson(res, 200, { ok: true }); }
     if (url.pathname === '/api/tts/log' && req.method === 'POST') { let b = await jsonBody(req, 1024); log('tts client', String(b.m || '').replace(/\s+/g, ' ').slice(0, 200)); return sendJson(res, 200, { ok: true }); }
+    // 连续朗读（豆包）：先建任务（整段的句子），再让 <audio> 取 /api/tts/stream 这一条流；锁屏也能念完
+    if (url.pathname === '/api/tts/job' && req.method === 'POST') {
+      const b = await jsonBody(req, 256 * 1024);
+      try {
+        const voices = await ttsVoices();
+        if (!voices.some(v => v.name === String(b?.voice || ''))) throw new Error('电脑上没有这个声音：' + b?.voice);
+        const id = ttsJob(b || {});
+        log('tts job', String(b.voice), (b.parts || []).length + '段', (b.parts || []).join('').length + '字');
+        return sendJson(res, 200, { id });
+      } catch (e) { return sendJson(res, 400, { error: e.message }); }
+    }
+    if (url.pathname === '/api/tts/job' && req.method === 'GET') {
+      const j = ttsJobInfo(url.searchParams.get('id') || '');
+      return j ? sendJson(res, 200, j) : sendJson(res, 404, { error: '没有这个朗读' });
+    }
+    if (url.pathname === '/api/tts/stream' && req.method === 'GET') {
+      const t0 = Date.now(), id = url.searchParams.get('id') || '';
+      const n = await ttsStream(id, res, { log });
+      log('tts stream', id.slice(0, 6), n + '段', Math.round((Date.now() - t0) / 1000) + 's', req.headers.range ? 'range ' + req.headers.range : '');
+      return;
+    }
     if (url.pathname === '/api/tts' && req.method === 'POST') {
       let b = await jsonBody(req, 8192);
       try {

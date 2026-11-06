@@ -263,6 +263,81 @@ const waiters = [];
 const slot = () => running < 2 ? (running++, Promise.resolve()) : new Promise(ok => waiters.push(ok));
 const release = () => { const w = waiters.shift(); if (w) w(); else running--; };
 
+// ── 连续朗读（豆包）：一整段做成一条连续的 mp3 流 ─────────────────────────────
+// 一句一个文件时，下一句要靠网页的 JS 去取；手机锁屏后网页停了（经 clarelay 直连时连通道也断），念完这句就断。
+// 改成浏览器自己取一条流：锁屏后 <audio> 照样往下读、往下放，跟听播客一样。
+// 服务端按顺序一句句合成（带 section_id，语气接得上），合成好的接着写进流；只比实际播放领先 STREAM_AHEAD 秒（停了不白花钱）。
+// 同一条流浏览器可能连着请求两次（先探一下再正式取）：合成结果存在任务里，重来的直接从头回放，不重复计费。
+export const STREAM_AHEAD = 45;
+const jobs = new Map();
+// mp3 时长：数帧（MPEG1/2/2.5 Layer III）；开头的 ID3 标签跳过
+export function mp3Dur(buf) {
+  let i = 0, sec = 0;
+  if (buf.length > 10 && buf.toString('latin1', 0, 3) === 'ID3') i = 10 + ((buf[6] & 0x7f) << 21 | (buf[7] & 0x7f) << 14 | (buf[8] & 0x7f) << 7 | (buf[9] & 0x7f));
+  const BR = { 1: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320], 2: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160] };
+  const SR = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
+  while (i + 4 <= buf.length) {
+    if (buf[i] !== 0xff || (buf[i + 1] & 0xe0) !== 0xe0) { i++; continue; }
+    const ver = (buf[i + 1] >> 3) & 3, layer = (buf[i + 1] >> 1) & 3, bri = buf[i + 2] >> 4, sri = (buf[i + 2] >> 2) & 3, pad = (buf[i + 2] >> 1) & 1;
+    if (ver === 1 || layer !== 1 || bri === 0 || bri === 15 || sri === 3) { i++; continue; }
+    const sr = SR[ver][sri], br = BR[ver === 3 ? 1 : 2][bri] * 1000, spf = ver === 3 ? 1152 : 576;
+    const len = Math.floor((spf / 8) * br / sr) + pad;
+    if (len < 4) { i++; continue; }
+    sec += spf / sr; i += len;
+  }
+  return sec;
+}
+export function ttsJob({ parts, voice, rate, sec } = {}) {
+  voice = String(voice || '');
+  if (!voice.startsWith('volc:')) throw new Error('只有豆包的声音能连续朗读');
+  parts = (Array.isArray(parts) ? parts : []).map(p => String(p || '').replace(/\s+/g, ' ').trim().slice(0, 1000)).filter(Boolean).slice(0, 300);
+  if (!parts.length) throw new Error('没有要念的文字');
+  for (const [k, j] of jobs) if (Date.now() - j.at > 3 * 3600e3 || jobs.size > 8) { j.ac.abort(); jobs.delete(k); }
+  const id = crypto.randomBytes(12).toString('base64url');
+  jobs.set(id, { parts, sp: voice.slice(5), rate: Math.min(2.2, Math.max(0.5, Number(rate) || 1)), sec: /^[\w-]{8,64}$/.test(String(sec || '')) ? String(sec) : '', at: Date.now(), bufs: [], durs: [], made: [], readers: 0, lastRead: Date.now(), t0: 0, done: false, error: '', ac: new AbortController() });
+  return id;
+}
+// 播到哪了：每句的时长（秒），网页拿它把 currentTime 换成「第几句」
+export function ttsJobInfo(id) { const j = jobs.get(id); return j && { n: j.parts.length, durs: j.durs, done: j.done, error: j.error }; }
+// 第 i 句：按顺序合成（前一句好了才合成这一句，section_id 才接得上），领先播放太多就等着；没人在听超过 20 秒就放弃
+function jobPart(j, i, synth) {
+  return j.made[i] ||= (async () => {
+    if (i > 0) await jobPart(j, i - 1, synth);
+    for (;;) {
+      if (j.ac.signal.aborted) throw new Error('已取消');
+      const ahead = j.durs.reduce((a, b) => a + b, 0) - (j.t0 ? (Date.now() - j.t0) / 1000 : 0);
+      if (!j.readers && Date.now() - j.lastRead > 20000) { j.ac.abort(); throw new Error('没人在听了'); }
+      if (i === 0 || (j.readers && ahead < STREAM_AHEAD)) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    const buf = await synth(j.parts[i], j.sp, j.rate, undefined, 30000, j.ac.signal, j.sec);
+    j.bufs[i] = buf; j.durs[i] = mp3Dur(buf);
+    return buf;
+  })();
+}
+// 把任务写进 HTTP 响应（audio/mpeg，不给长度，边合成边写）；返回写了几句
+export async function ttsStream(id, res, { synth = volcSay, log = () => {} } = {}) {
+  const j = jobs.get(id);
+  if (!j) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('没有这个朗读（过期了）'); return 0; }
+  res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store', 'accept-ranges': 'none', 'x-accel-buffering': 'no' });
+  j.readers++; let closed = false, n = 0;
+  res.on('close', () => { closed = true; });
+  try {
+    for (let i = 0; i < j.parts.length && !closed; i++) {
+      let buf;
+      try { buf = await jobPart(j, i, synth); }
+      catch (e) { if (!j.ac.signal.aborted) { j.error = e.message; log('tts stream', i + 1 + '/' + j.parts.length, e.message); } break; }
+      if (closed) break;
+      if (!j.t0) j.t0 = Date.now();
+      j.lastRead = Date.now();
+      if (!res.write(buf)) await new Promise(r => { res.once('drain', r); res.once('close', r); });
+      n++;
+    }
+    if (n === j.parts.length) j.done = true;
+  } finally { j.readers--; j.lastRead = Date.now(); if (!closed) res.end(); }
+  return n;
+}
+
 export async function ttsSynth(text, voice, rate, signal = null, sec = '') {
   text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 1000);
   if (!text) throw new Error('没有要念的文字');

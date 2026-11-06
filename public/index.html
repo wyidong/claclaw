@@ -5953,7 +5953,17 @@ if(tts.on&&(/^srv:/.test(tts.want)||JSON.stringify(ttsSessV).indexOf('"srv:')>=0
 // 用 <audio> 而不是 Web Audio：iPhone 上 Web Audio 会被静音键、睡眠模式、来电打断等各种情况弄得没声音。
 var srvQ=[],srvBusy=false,srvBlocked=false,srvGen=0,srvLogAt=0,srvCur=null;
 var srvEls=[new Audio(),new Audio()],srvTurn=0;
-srvEls.forEach(function(a){a.preload='auto';a.addEventListener('ended',function(){if(a===srvCur){srvCur=null;srvBusy=false;if(srvNow)ttsProgEnd(srvNow);srvNow=null;srvNext()}})});
+srvEls.forEach(function(a){a.preload='auto';a.addEventListener('ended',function(){if(a===srvCur){srvCur=null;srvBusy=false;if(srvNow){if(srvNow.stream)srvNow.pi=srvNow.base+srvNow.parts.length-1;ttsProgEnd(srvNow)}srvNow=null;srvNext()}})});
+// 连续朗读的进度：按服务端报的每段时长，把 currentTime 换成「念到第几段」（手动点的朗读要记住停在哪段）
+srvEls.forEach(function(a){a.addEventListener('timeupdate',function(){
+  var it=srvNow;if(a!==srvCur||!it||!it.stream||!it.job)return;
+  var at=function(){var t=a.currentTime,s=0,k=0;for(;k<(it.durs||[]).length;k++){s+=it.durs[k];if(t<s)break}it.pi=it.base+Math.min(k,it.parts.length-1);ttsProgAt(it)};
+  at();
+  var cov=(it.durs||[]).reduce(function(x,y){return x+y},0);
+  if(document.hidden||it.infoBusy||(it.durs&&it.durs.length>=it.parts.length)||(a.currentTime<cov-1&&Date.now()-(it.infoAt||0)<15000))return;
+  it.infoBusy=true;it.infoAt=Date.now();
+  fetch('/api/tts/job?id='+encodeURIComponent(it.job)).then(function(r){return r.json()}).then(function(j){if(j&&j.durs)it.durs=j.durs;at()}).catch(function(){}).then(function(){it.infoBusy=false});
+})});
 // 朗读进度：开念一句记下是第几句；最后一句念完算读完（下次点就从头）
 var ttsProg=null,srvNow=null;
 function ttsProgAt(x){if(x&&x.prog)x.prog.at=x.pi}
@@ -5964,13 +5974,17 @@ function ttsResumeAt(src){return ttsProg&&ttsProg.src===src&&!ttsProg.done&&ttsP
 var SRV_AHEAD=3;
 // 带 sec 的（豆包同一段朗读）：等前一句合成完再发，豆包才接得上前面的语气
 function srvFetch(it){
+  if(!it.p&&it.stream){it.ac=window.AbortController?new AbortController():null;
+    it.p=fetch('/api/tts/job',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({parts:it.parts,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec}),signal:it.ac?it.ac.signal:undefined})
+      .then(function(r){return r.json().then(function(j){if(!r.ok||!j.id)throw new Error('朗读任务没建成：'+(j.error||r.status));return j})})
+      .then(function(j){it.ac=null;it.job=j.id;it.url='/api/tts/stream?id='+encodeURIComponent(j.id);return it})}
   if(!it.p){it.ac=window.AbortController?new AbortController():null;var pv=it.prev&&srvFetch(it.prev);it.prev=null;
     it.p=(pv?pv.catch(function(){}):Promise.resolve()).then(function(){return fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec||undefined}),signal:it.ac?it.ac.signal:undefined})})
     .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
     .then(function(b){it.ac=null;it.url=URL.createObjectURL(b);return it})}
   return it.p;
 }
-function srvFree(it){if(!it)return;if(it.ac){try{it.ac.abort()}catch(_){}it.ac=null}if(it.url){URL.revokeObjectURL(it.url);it.url=null}}
+function srvFree(it){if(!it)return;if(it.ac){try{it.ac.abort()}catch(_){}it.ac=null}if(it.url){if(!it.stream)URL.revokeObjectURL(it.url);it.url=null}}
 function srvNext(){
   if(srvBusy)return;
   var it=srvQ[0];if(!it){ttsShowStop();return}
@@ -5980,10 +5994,12 @@ function srvNext(){
   var gen=srvGen;
   srvFetch(it).then(function(){
     if(gen!==srvGen)return;
-    var a=srvEls[srvTurn];srvTurn=1-srvTurn;
-    a.src=it.url;srvCur=a;
-    // 下一句提前装进另一个 <audio>，切换时不用再加载
-    var nx=srvQ[1];if(nx)srvFetch(nx).then(function(){if(gen===srvGen&&nx.url){var b=srvEls[srvTurn];if(b!==srvCur){b.src=nx.url;b.load()}}}).catch(function(){});
+    var a;
+    if(it.resumeEl){a=it.resumeEl;it.resumeEl=null;srvTurn=1-srvEls.indexOf(a)}   // 被插队打断的连续朗读：同一个 <audio> 接着放
+    else{a=srvEls[srvTurn];srvTurn=1-srvTurn;a.src=it.url}
+    srvCur=a;
+    // 下一句提前装进另一个 <audio>，切换时不用再加载（连续朗读的流不预装：一装就开始合成）
+    var nx=srvQ[1];if(nx&&!nx.stream)srvFetch(nx).then(function(){if(gen===srvGen&&nx.url){var b=srvEls[srvTurn];if(b!==srvCur){b.src=nx.url;b.load()}}}).catch(function(){});
     return a.play().then(function(){
       if(gen!==srvGen){try{a.pause()}catch(_){}return}
       srvQ.shift();var prev=it;setTimeout(function(){srvFree(prev)},60000);ttsClaim();ttsProgAt(it);srvNow=it;
@@ -5999,13 +6015,19 @@ function srvNext(){
   }).catch(function(e){if(gen!==srvGen)return;ttsDbg('fetch failed: '+(e&&e.message));srvQ.shift();srvBusy=false;srvNext()});
   ttsShowStop();
 }
-function srvSay(parts,voice,base,prog,rate){var r=rate||ttsR(),sec=/^volc:/.test(voice)&&parts.length>1?'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10):'',pv=null;parts.forEach(function(p,k){var it={text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog,sec:sec,prev:sec?pv:null};pv=it;srvQ.push(it)});srvNext()}
-function srvStop(){srvGen++;srvNow=null;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause()}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
+// 豆包、不止一段：整段做成一条连续的流（见 /api/tts/stream），锁屏也能念完；进度按每段时长换算
+function srvSay(parts,voice,base,prog,rate){
+  if(/^volc:/.test(voice)&&parts.length>1){srvQ.push({stream:true,parts:parts.slice(),text:parts.join(''),voice:voice,rate:rate||ttsR(),base:base||0,pi:base||0,prog:prog,sec:'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10)});srvNext();return}
+  srvSay1(parts,voice,base,prog,rate);
+}
+function srvSay1(parts,voice,base,prog,rate){var r=rate||ttsR(),sec=/^volc:/.test(voice)&&parts.length>1?'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10):'',pv=null;parts.forEach(function(p,k){var it={text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog,sec:sec,prev:sec?pv:null};pv=it;srvQ.push(it)});srvNext()}
+function srvStop(){srvGen++;srvNow=null;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause();if(/\/api\/tts\/stream/.test(a.src)){a.removeAttribute('src');a.load()}}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
 // P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
 function srvInterrupt(text,voice){
   if(!text)return;
   try{if(srvCur)srvCur.pause()}catch(_){}
   srvGen++;                       // 让正在进行的 play/fetch 回调失效
+  if(srvNow&&srvNow.stream&&srvCur){srvNow.resumeEl=srvCur;srvQ.unshift(srvNow)}   // 连续朗读：插的这句念完，同一条流接着放
   srvCur=null;srvBusy=false;
   srvQ.unshift({text:text,voice:voice,rate:ttsR()});
   srvNext();
@@ -6058,7 +6080,7 @@ function srvUnlock(force){
   if(tts.srvUnlocked&&!force)return;
   if(srvPlaying())return;
   tts.srvUnlocked=true;
-  srvEls.forEach(function(a){try{if(a===srvCur)return;a.src=SILENT_SRC;var p=a.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}});
+  srvEls.forEach(function(a){try{if(a===srvCur||srvQ.some(function(x){return x.resumeEl===a}))return;a.src=SILENT_SRC;var p=a.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}});
 }
 function ttsText(src){
   return String(src||'')
