@@ -125,6 +125,54 @@ test('协同成员先回 202：回复稍后按编号落回群里，别的对方�
   assert.equal(groups.remoteReply(g.id, 'P15', 'm-1', '回复 m-1\n再来'), false, '一个编号只收一次');
 });
 
+test('不装 claclaw 的协同成员：202 还没回回复就先到也认；只写「回复 <编号>」、或只有一条在等时不写编号也认', async () => {
+  // 对方先把回复发来，我们这边过一会儿才拿到 202
+  let release;
+  const { groups, calls } = setup(async (m, text, o) => { if (m.peerId) { await new Promise(r => { release = r; }); return { accepted: true, msgId: o.msgId }; } return { ok: true, reply: '收到' }; });
+  const g = groups.create({ members: [M('s1', '后端'), M('abc12345', '需求', { peerId: 'P15' })] });
+  groups.post(g.id, '@需求 整理一下');
+  await flush();
+  const id = calls.at(-1).o.msgId;
+  assert.equal(groups.remoteReply(g.id, 'P15', id, '回复 ' + id + '\n先到的'), true);
+  await flush();
+  release(); for (let i = 0; i < 5; i++) await flush();
+  assert.equal(g.items.filter(x => x.kind === 'gm').length, 1);
+  assert.equal(g.items.at(-1).text, '先到的');
+  assert.deepEqual(g.pending, {}, '先到的回复用掉了编号，202 不再挂等待');
+  // 编号只写在正文开头
+  const b = setup(async () => ({ accepted: true, msgId: 'm-2' }));
+  const g2 = b.groups.create({ members: [M('s1', '后端'), M('abc12345', '需求', { peerId: 'P15' })] });
+  b.groups.post(g2.id, '@需求 x'); await flush();
+  assert.equal(b.groups.remoteReply(g2.id, 'P15', '', '回复 m-2\n好了'), true);
+  await flush();
+  assert.equal(g2.items.at(-1).text, '好了');
+  // 不写编号、只有一条在等：就是它的回复
+  b.groups.post(g2.id, '@需求 y'); await flush();
+  assert.equal(b.groups.remoteReply(g2.id, 'P15', '', '也好了'), true);
+  await flush();
+  assert.equal(g2.items.at(-1).text, '也好了');
+  assert.deepEqual(g2.pending, {});
+});
+
+test('不装 claclaw 的协同成员：不带编号发到群 = 主动说话，@ 谁转给谁；不是成员不收；能按序号读群记录', async () => {
+  const { groups, calls } = setup(async () => ({ ok: true, reply: '收到' }));
+  const g = groups.create({ members: [M('s1', '后端'), M('abc12345', '需求', { peerId: 'P15' })] });
+  assert.equal(groups.remoteReply(g.id, 'P99', '', '@后端 hi'), false);
+  assert.equal(groups.remoteReply(g.id, 'P15', '', '@后端 接口好了吗', undefined, 'abc12345'), true);
+  for (let i = 0; i < 5; i++) await flush();
+  const said = g.items.find(x => x.text === '@后端 接口好了吗');
+  assert.equal(said.who, g.members.find(m => m.peerId === 'P15').key);
+  assert.equal(calls.at(-1).key, g.members.find(m => m.id === 's1').key);
+  assert.equal(g.items.at(-1).text, '收到');
+  assert.equal(groups.historyFor(g.id, 'P99'), null);
+  const all = groups.historyFor(g.id, 'P15');
+  assert.ok(all.text.includes('接口好了吗') && all.text.includes('收到') && all.last === g.seqMax && !all.more);
+  const tail = groups.historyFor(g.id, 'P15', said.seq, 1);
+  assert.equal(tail.text.split('\n').filter(Boolean).length, 1);
+  assert.ok(tail.text.includes('收到'));
+  assert.equal(groups.historyFor(g.id, 'P15', 0, 1).more, true);
+});
+
 test('镜像：快照按对方视角标协同；对方那边建镜像、发消息转回主群；解散两边都删', async () => {
   const host = setup(async () => ({ ok: true, reply: 'ok' }));
   const g = host.groups.create({ members: [M('s1', '后端'), M('abc12345', '需求', { peerId: 'P15' })] });

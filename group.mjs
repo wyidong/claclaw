@@ -118,6 +118,9 @@ export class Groups {
   constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, permReply = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
     Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, permReply, retryMs, retryFor, syncDelay });
     this.map = new Map(); this.syncT = new Map();
+    // 正在发给协同成员、还没等到对方回话（202 / 回复）的：`群id|编号` → { key, depth, peerId, answered }。
+    // 对方可能在我们这边还等着 202 时就把回复发来了（不装 claclaw 的对方常这样），这时也要认
+    this.inflight = new Map();
     fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(logDir, { recursive: true });
     // 解散过的群（墓碑，留 30 天）：之后晚到的同步、消息、回复一律不收，镜像不会被「复活」
     this.goneFile = path.join(dir, 'gone.json');
@@ -308,9 +311,14 @@ export class Groups {
       this.setStatus(g, key, '正在回复…');
       let r;
       job.msgId ||= crypto.randomUUID();   // 重试用同一个编号：对方据此去重，不会把同一条处理两遍
+      const fk = m.peerId ? g.id + '|' + job.msgId : '';
+      if (fk) this.inflight.set(fk, { key, depth: job.depth + 1, peerId: m.peerId });
       try { r = await this.deliver(m, text, { att: m.peerId ? trig.att : undefined, host: key === g.host, asUser: job.asUser, groupId: g.id, groupName: g.title, from: speaker(trig, g.members), msgId: job.msgId }); }
       catch (e) { r = { ok: false, error: e.message }; }
+      const early = fk && this.inflight.get(fk)?.answered;
+      if (fk) this.inflight.delete(fk);
       if (g.closed) return;
+      if (early) { g.seen[key] = Math.max(g.seen[key] || 0, job.trigger); this.save(g); return; }   // 回复已经先到、贴过了
       if (r?.busy) {
         if (Date.now() - job.firstAt >= this.retryFor) { this.setStatus(g, key, ''); this.add(g, { kind: 'sys', text: '「' + m.name + '」一直在忙，这条没送到' }); return; }
         this.setStatus(g, key, r.offline ? '连不上，排队重试中' : '在忙，排队中');
@@ -320,7 +328,7 @@ export class Groups {
       }
       if (r?.accepted) {
         g.seen[key] = Math.max(g.seen[key] || 0, job.trigger);
-        g.pending[r.msgId] = { key, depth: job.depth + 1, peerId: m.peerId, at: Date.now() };
+        g.pending[r.msgId] = { key, depth: job.depth + 1, peerId: m.peerId, at: Date.now(), ...(r.msgId !== job.msgId ? { alt: job.msgId } : {}) };   // 对方回的编号和我们发的不同：两个都认
         this.save(g); this.setStatus(g, key, '已收到，回复稍后到');
         return;
       }
@@ -370,14 +378,32 @@ export class Groups {
     return true;
   }
 
-  // 协同成员先回了 202，回复稍后以「回复 <编号>」单独发来：只收自己发过、同一个对方的编号，一个编号只收一次
-  // att：回复带的附件（在对方那台上），先拉过来再贴
-  remoteReply(id, peerId, replyTo, text, att) {
+  // 协同成员发到群（gp-…）的消息：
+  // - 回复：编号来自 reply_to 或正文开头「回复 <编号>」；只收自己发过、同一个对方的编号，一个编号只收一次。
+  //   我们还在等对方 202 时回复就先到了，也认（inflight）。没写编号、这个对方又正好只有一条在等回复：就当是它的回复
+  // - 没写编号、也没有在等的回复：当成这个对方的成员在群里主动说话（@ 谁照样转给谁）。写了编号却对不上：不收
+  // att：附件（在对方那台上），先拉过来再贴
+  remoteReply(id, peerId, replyTo, text, att, fromSession) {
     const g = this.get(id);
-    if (!g || g.mirror) return false;
-    const p = g.pending[replyTo];
-    if (!p || p.peerId !== peerId) return false;
-    delete g.pending[replyTo];
+    if (!g || g.mirror || !g.peers().includes(peerId)) return false;
+    const rid = String(replyTo || '') || (String(text || '').match(/^回复 (\S+)/) || [])[1] || '';
+    const mine = Object.entries(g.pending).filter(([, x]) => x.peerId === peerId);
+    const fl = [...this.inflight].filter(([k, x]) => k.startsWith(id + '|') && x.peerId === peerId && !x.answered);
+    let p = null;
+    if (rid) {
+      const hit = mine.find(([k, x]) => k === rid || x.alt === rid);
+      if (hit) { p = hit[1]; delete g.pending[hit[0]]; }
+      else { const f = this.inflight.get(id + '|' + rid); if (f && f.peerId === peerId && !f.answered) { f.answered = true; p = f; } }
+      if (!p) return false;
+    } else if (mine.length + fl.length === 1) {
+      if (mine.length) { p = mine[0][1]; delete g.pending[mine[0][0]]; } else { p = fl[0][1]; p.answered = true; }
+    } else {
+      const ms = g.members.filter(x => x.peerId === peerId), fsid = String(fromSession || '').toLowerCase();
+      const m = (fsid && ms.find(x => { const k = String(x.id).toLowerCase(); return k.startsWith(fsid) || fsid.startsWith(k); })) || (ms.length === 1 ? ms[0] : null);
+      if (!m) return false;
+      p = { key: m.key, depth: 1 };
+    }
+    this.save(g);
     att = cleanAtt(att);
     (async () => {
       let note = '';
@@ -390,6 +416,15 @@ export class Groups {
       this.route(g, it);
     })().catch(e => this.log('group reply', e.message));
     return true;
+  }
+  // 协同成员（没有镜像、读不到本机群记录文件的）来读群记录：after 之后的（最多 limit 条）；不给 after 就是最近 limit 条
+  historyFor(id, peerId, after, limit = 50) {
+    const g = this.get(id);
+    if (!g || g.mirror || !g.peers().includes(peerId)) return null;
+    limit = Math.max(1, Math.min(200, Number(limit) || 50));
+    const n = Number(after);
+    const its = Number.isFinite(n) && String(after ?? '') !== '' ? g.items.filter(it => it.seq > n).slice(0, limit) : g.items.slice(-limit);
+    return { ok: true, name: g.title, members: g.members.map(m => m.name), last: g.seqMax, more: its.length ? g.items.some(it => it.seq > its[its.length - 1].seq) : false, text: its.map(it => logLine(it, g.members)).join('') };
   }
 
   // 镜像：给某个对方看的快照（collab 按对方的视角）

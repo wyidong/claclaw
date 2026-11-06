@@ -1302,6 +1302,7 @@ async function peerReplyLater(peerId, info, toSession, id, code, obj) {
 }
 
 // ---------- 群聊（group.mjs）：本机成员走 peerDeliver(local)，协同成员走 peerCall；群的变化同步给有成员的对方（镜像） ----------
+const peerMirrorOk = new Set();   // 收得下群镜像的对方（装了 claclaw 的）：同步成功过就算
 async function groupDeliver(m, text, o) {
   const g = groups.get(o.groupId), names = g ? g.members.map(x => x.name) : [];
   const from = '群聊「' + o.groupName + '」· ' + o.from;
@@ -1323,6 +1324,8 @@ async function groupDeliver(m, text, o) {
   const c = loadPeer(), p = c.peers.find(x => x.id === m.peerId);
   if (!c.enabled || !p?.inbox || !p.theirToken) return { ok: false, error: '对方联系不上（协同没开，或已解除配对）' };
   const msgId = o.msgId || crypto.randomUUID();
+  // 对方没有群镜像（不装 claclaw 的）：读不到本机的群记录文件，告诉它怎么经协同接口读、怎么回到群里
+  if (!peerMirrorOk.has(p.id)) text += '\n\n[群编号 ' + toWire(o.groupId) + '。读群记录：GET 协同地址/group?id=' + toWire(o.groupId) + '&after=序号（不带 after 给最近 50 条）；回复发到 session=' + toWire(o.groupId) + '，带 reply_to=' + msgId + '；想在群里主动说话也发到这个 session，不带 reply_to，@成员名 就会转给谁]';
   const body = { msg_id: msgId, sent_at: isoLocal(), from, from_session: toWire(o.groupId), text, session: m.id, group: { name: o.groupName, members: names, self: m.name, host: o.host || undefined, att: o.att || undefined } };
   let j = null, err = null;
   try { j = await peerCall(c, p, '', { body }); } catch (e) { err = e; }
@@ -1359,6 +1362,7 @@ async function groupPeerOp(peerId, body) {
   const c = loadPeer(), p = c.peers.find(x => x.id === peerId);
   if (!c.enabled || !p?.inbox || !p.theirToken) return { ok: false };
   const j = await peerCall(c, p, '/group', { body, ms: body.op === 'post' && body.att?.length ? 180000 : 30000 });   // 带附件的要等对方把附件拉完
+  if (body.op === 'sync') { if (j?.ok) peerMirrorOk.add(peerId); else if (j?.status === 404) peerMirrorOk.delete(peerId); }
   if (!j?.ok) log('group peer', body.op, '→', p.name, j?.error || 'HTTP ' + j?.status);
   return j;
 }
@@ -1534,9 +1538,15 @@ async function peerHandler(req, res) {
     const infos = await peerSessionInfos(c, peer);
     const brief = infos.map(s => ({ id: peerShortId(s.sessionId), title: s.title, claw: s.claw, busy: !!runnerOf(s.sessionId)?.busy }));
     if (route === '/sessions') return out(200, { ok: true, name: myName(c), sessions: brief });
+    // 读群记录（不装 claclaw、没有镜像的协同成员用）：GET /group?id=gp-…&after=序号&limit=条数
+    if (route === '/group' && req.method === 'GET') {
+      const gid = fromWire(u.searchParams.get('id')), h = gid && groups.historyFor(gid, peer.id, u.searchParams.get('after'), u.searchParams.get('limit'));
+      return h ? out(200, h) : out(404, { ok: false, error: gid ? '没有这个群，或群里没有你的会话' : '缺群编号（id=gp-…）' });
+    }
     // 群聊镜像：主群推快照（sync）、镜像里发消息（post）、任一边解散（dissolve）
     if (route === '/group' && req.method === 'POST') {
       let b = {}; try { b = JSON.parse(await readBody(req, 4 * 1024 * 1024)); } catch { return out(400, { ok: false, error: '格式不对' }); }
+      peerMirrorOk.add(peer.id);   // 会发群镜像操作的，就是装了 claclaw 的
       if (b.op === 'sync') { const g = groups.applyMirror(peer.id, b.group); return out(g ? 200 : 409, { ok: !!g }); }
       const gid = fromWire(b.id);
       if (!gid) return out(400, { ok: false, error: '缺群编号' });
@@ -1561,12 +1571,12 @@ async function peerHandler(req, res) {
     if (!text) return out(400, { ok: false, error: '消息是空的' });
     if (text.length > 4000) return out(413, { ok: false, error: '消息太长（最多 4000 字）' });
     let jb = {}; try { jb = JSON.parse(body) || {}; } catch {}
-    // 发到群（gp-…）的只能是群发出去的消息的回复（先回过 202 的协同成员）
+    // 发到群（gp-…）：群发给它的消息的回复（reply_to / 正文开头「回复 <编号>」），或它在群里主动说话（得是群成员）
     const gid = fromWire(want);
     if (gid) {
-      const ok = groups.remoteReply(gid, peer.id, String(jb.reply_to || ''), text, jb.att);
+      const ok = groups.remoteReply(gid, peer.id, String(jb.reply_to || ''), text, jb.att, fromSession);
       log('group reply in', peer.name, gid, ok ? 'ok' : 'rejected');
-      return out(ok ? 200 : 404, ok ? { ok: true, reply: '' } : { ok: false, error: '没有这个会话' });
+      return out(ok ? 200 : 404, ok ? { ok: true, reply: '' } : { ok: false, error: groups.get(gid) ? '这个群里没有你的会话，或这条回复的编号对不上（已经回过 / 不是发给你的）' : '没有这个群' });
     }
     // 群投递：只有本机确实有对方那个群的镜像时才按群消息处理（群的说明、不单独推送）；否则当普通协同消息
     const grp = jb.group && typeof jb.group === 'object' && groups.isMirrorOf(fromWire(fromSession), peer.id) ? { name: String(jb.group.name || '').slice(0, 40), members: (Array.isArray(jb.group.members) ? jb.group.members : []).slice(0, 20).map(x => String(x).slice(0, 20)), self: String(jb.group.self || '').slice(0, 20), host: jb.group.host === true, gid: fromWire(fromSession), log: groups.logFile(fromWire(fromSession)) } : null;
