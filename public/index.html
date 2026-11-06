@@ -6445,7 +6445,7 @@ $('#ttsMute').addEventListener('click',function(e){
   ttsMuteShow();ttsShowStop();
 });
 $('#ttsMute').addEventListener('dblclick',function(e){e.preventDefault();clearTimeout(muteClickT);ttsSessPick()});
-ttsLongPress($('#ttsMute'),function(){ttsSessPick()});
+ttsLongPress($('#ttsMute'),function(){if(COARSE.matches&&$('#ttsMute').dataset.st!=='on')return;ttsSessPick()});   // 手机上播报关着时长按是开关重力滚动（见标题栏圆球），不选声音
 // 可选的声音（和设置里「声音」下拉框一样：语音管理里勾上的，带别名）
 function ttsChoices(){
   var vs0=ttsVoices(),srv0=tts.srv||[];
@@ -6620,6 +6620,8 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
 (function(){
   var balls=[$('#ctxBtn'),$('#ttsMute')],ncAt=0,tilt=null,asked=false,raf=0,lastT=0,drag=null;
   balls.forEach(function(b){b._o=0;b._v=0});
+  // 喇叭在播报开着时不能拖、不跟着重力滚（长按留给「选这个会话的声音」）；关了播报照旧能拖
+  function fixed(b){return b.id==='ttsMute'&&b.dataset.st==='on'}
   function on(){return !DESKTOP.matches}
   function vis(){return balls.filter(function(b){return !b.hidden&&b.offsetParent})}
   function put(b){b.style.transform=b._o?'translateX('+b._o.toFixed(1)+'px)':''}
@@ -6641,14 +6643,14 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
     var it=items();if(!on()||!it.length){lastT=0;return}
     var a=acc(),moving=!!drag||!!tilt;
     it.forEach(function(o){
-      var b=o.b;if(b===drag)return;
+      var b=o.b;if(b===drag||fixed(b)){b._v=0;return}
       b._v+=a*dt;b._v*=Math.pow(.25,dt);if(Math.abs(b._v)<4&&!a)b._v=0;
       b._o+=b._v*dt;clamp(o);if(b._v)moving=true;
     });
     for(var i=0;i+1<it.length;i++){   // 两个球相撞：推开、交换速度
       var L=it[i],R=it[i+1],ov=(L.n+L.b._o+L.w+4)-(R.n+R.b._o);
       if(ov>0){
-        if(L.b===drag)R.b._o+=ov;else if(R.b===drag)L.b._o-=ov;else{L.b._o-=ov/2;R.b._o+=ov/2}
+        if(L.b===drag||fixed(L.b))R.b._o+=ov;else if(R.b===drag||fixed(R.b))L.b._o-=ov;else{L.b._o-=ov/2;R.b._o+=ov/2}
         var v=L.b._v;L.b._v=R.b._v*.8;R.b._v=v*.8;
       }
     }
@@ -6681,7 +6683,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   if(pref()==='on'&&on())ask(true);
   balls.forEach(function(b){
     var sx=0,so=0,px=0,pt=0,moved=false,id=null,lp=0,lpd=false;
-    b.addEventListener('pointerdown',function(e){if(!on()||e.button)return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false;lpd=false;
+    b.addEventListener('pointerdown',function(e){if(!on()||e.button||fixed(b))return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false;lpd=false;
       clearTimeout(lp);lp=setTimeout(function(){lpd=true;b._nc=true;try{b.setPointerCapture(id)}catch(_){}toast(live?'松手关闭重力滚动':'松手开启重力滚动')},550)});   // 长按不动：松手时开关重力滚动（iOS 要在 touchend 里请求授权才弹框）
     b.addEventListener('pointermove',function(e){
       if(e.pointerId!==id)return;var dx=e.clientX-sx;
