@@ -3878,7 +3878,7 @@ var notifOffMap={};
 function notifShow(){var b=$('#cfgNotif');if(!b||!session)return;var on=!notifOffMap[session.id];b.setAttribute('aria-checked',on?'true':'false');$('#cfgNotifSub').textContent=on?'回复完、出错、来消息时推送通知':'已关：不推送、不响提示音（要你确认权限时照样通知）'}
 $('#cfgNotif').addEventListener('click',function(){
   if(!session)return;var sid=session.id,off=!notifOffMap[sid];
-  postJson('/api/notif-off',{id:sid,off:off}).then(function(r){return r.json()}).then(function(j){notifOffMap=j||{};notifShow();toast(off?'这个会话的通知已关闭':'这个会话的通知已打开')}).catch(function(e){toast('没改成：'+e.message)});
+  postJson('/api/notif-off',{id:sid,off:off}).then(function(r){if(r.status===404)throw new Error('电脑上的 claclaw 还没更新到这个功能，等它重启后再试');return r.json().catch(function(){throw new Error('电脑返回的不对（HTTP '+r.status+'）')}).then(function(j){if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j})}).then(function(j){notifOffMap=j||{};notifShow();toast(off?'这个会话的通知已关闭':'这个会话的通知已打开')}).catch(function(e){toast('没改成：'+e.message)});
 });
 function closeCfg(){var d=$('#cfgDlg');showDlg(d,false)}
 $('#cfgGo').addEventListener('click',openCfg);
