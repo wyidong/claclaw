@@ -946,6 +946,7 @@ var I18N={dict:{
 "📄 文件":"📄 File",
 "（原速）":"(normal)",
 "跟随默认":"Use default",
+"从哪段开始念":"Start from which paragraph",
 "这个会话的声音和语速":"Voice & speed for this session",
 "这个会话的语速":"Speed for this session",
 "这个会话跟随默认语速":"This session uses the default speed",

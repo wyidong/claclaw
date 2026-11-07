@@ -6112,17 +6112,37 @@ function ttsStream(raw,end){
   if(cut<0)return;
   var piece=raw.slice(ttsPos,cut);ttsPos=cut;ttsSay(piece);
 }
-// 切成一句一句（太长的句子按 180 字再切）：排队念，也是「从哪句开始」的单位
-// 按句号切，再把太短的句子并到后面一句（一段至少 TTS_MIN 字、最多 TTS_MAX 字）：
-// 一句一合成时每句情绪各不相同，短句尤其明显（「好的。」「收到。」）；并起来念语气连贯，请求也少
-// 豆包：第一段照旧短（开口快），后面的段做长（150～400 字）：同一次合成里语气最连贯，段与段之间再靠 section_id 接上
-var TTS_MIN=40,TTS_MAX=220,TTS_BIG_MIN=150,TTS_BIG_MAX=400;
+// 朗读的分段跟着文字的段落走（和屏幕上的段落对得上，「从哪段开始念」一眼就知道是哪段）：一段文字念成一段。
+// 太短的段（不到 TTS_MIN 字，比如「先读原文：」这种引子）并到后面一段一起念；太长的段（超过上限）在句号处切成差不多长的几份。
+// 上限：豆包 400 字（同一次合成里语气最连贯，段与段之间再靠 section_id 接上），其他 220 字（有的浏览器一段太长会念到一半停）
+var TTS_MIN=40,TTS_MAX=220,TTS_BIG_MAX=400;
 function ttsBig(){return /^volc:/.test(ttsSrvVoice()||'')}
+// 文字的段落（换行分开；去掉 Markdown 记号，同 ttsText），没有句末标点的补个句号，念的时候段与段之间有停顿
+function ttsParas(src){
+  return String(src||'')
+    .replace(/```[\s\S]*?```/g,'，代码略，')
+    .replace(/^\s*\|.*\|\s*$/gm,'').replace(/^\s*[-:| ]{3,}\s*$/gm,'')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
+    .replace(/https?:\/\/\S+/g,'链接')
+    .replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|~~/g,'')
+    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'')
+    .split(/\n+/).map(function(p){p=p.replace(/\s+/g,' ').trim().replace(/^[，,]+|[，,]+$/g,'');if(p&&!/[。！？!?；;：:…」”"’）)]$/.test(p))p+='。';return p}).filter(function(p){return /[^\s。，,]/.test(p)});
+}
+// 太长的一段：按句子切成 ceil(长度/上限) 份，每份差不多长
+function ttsCut(p,mx){
+  if(p.length<=mx)return [p];
+  var ss=p.match(/[^。！？!?]{1,180}[。！？!?]*[」”"’）)]?/g)||[p],goal=p.length/Math.ceil(p.length/mx),out=[''];
+  ss.forEach(function(x){var l=out.length-1;if(out[l]&&(out[l].length+x.length>mx||out[l].length>=goal))out.push(x);else out[l]+=x});
+  return out;
+}
 function ttsParts(src){
-  var t=ttsText(src);if(!t)return [];
-  var big=ttsBig(),ps=(t.match(/[^。！？!?]{1,180}[。！？!?]?/g)||[t]).filter(function(p){return p.trim()}),out=[];
-  ps.forEach(function(p){var n=out.length,mn=big&&n>1?TTS_BIG_MIN:TTS_MIN,mx=big&&n>1?TTS_BIG_MAX:TTS_MAX;if(n&&out[n-1].trim().length<mn&&out[n-1].length+p.length<=mx)out[n-1]+=p;else out.push(p)});
-  var n=out.length;if(n>1&&out[n-1].trim().length<TTS_MIN/2&&out[n-2].length+out[n-1].length<=TTS_MAX)out[n-2]+=out.pop();   // 最后剩个短尾巴：并到前面
+  var mx=ttsBig()?TTS_BIG_MAX:TTS_MAX,out=[];
+  ttsParas(src).forEach(function(p){
+    var ps=ttsCut(p,mx),n=out.length;
+    if(n&&out[n-1].length<TTS_MIN&&out[n-1].length+ps[0].length<=mx)out[n-1]+=ps.shift();   // 前一段太短：和这段（的第一份）一起念
+    ps.forEach(function(x){out.push(x)});
+  });
+  var n=out.length;if(n>1&&out[n-1].length<TTS_MIN/2&&out[n-2].length+out[n-1].length<=mx)out[n-2]+=out.pop();   // 最后剩个短尾巴：并到前面
   return out;
 }
 // from：从第几句开始（0 = 第一句）
@@ -6605,7 +6625,7 @@ function ttsLongFired(el){if(ttsLongEl!==el)return false;ttsLongEl=null;return t
 function ttsPickFrom(src,go){
   var parts=ttsParts(src);if(!parts.length){toast('没有能念的内容');return}
   var p=$('#ttsPick'),last=ttsResumeAt(src);
-  p.innerHTML='<div class="tp-box" role="dialog" aria-label="从哪句开始念"><div class="tp-h">从哪句开始念<button type="button" class="tp-x" aria-label="关闭">✕</button></div><div class="tp-list"></div></div>';
+  p.innerHTML='<div class="tp-box" role="dialog" aria-label="从哪段开始念"><div class="tp-h">从哪段开始念<button type="button" class="tp-x" aria-label="关闭">✕</button></div><div class="tp-list"></div></div>';
   var close=function(){p.classList.remove('on')},list=p.querySelector('.tp-list');
   parts.forEach(function(s,i){var b=document.createElement('button');b.type='button';b.className='tp-i';b.innerHTML='<em></em><span></span>';b.querySelector('em').textContent=i+1;b.querySelector('span').textContent=s.trim();if(i===last){b.classList.add('cur');b.title='上次停在这句'}
     b.addEventListener('click',function(){close();go(i)});list.appendChild(b)});
