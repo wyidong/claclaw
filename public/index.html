@@ -846,6 +846,9 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .cfg-tog .sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
 .cfg-tog[aria-checked="true"] .sw{background:var(--allow)}.cfg-tog[aria-checked="true"] .sw::after{transform:translateX(18px)}
 .cfg-tog small{color:var(--muted);font-size:12.5px}
+.cfg-sel select{flex:none;max-width:60%;border:0;background:none;color:var(--ink);font:inherit;font-size:15px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;cursor:pointer}
+.cfg-sel,.cfg-rate{box-sizing:border-box}.cfg-sel .tx{flex:1}.cfg-rate{flex-direction:column;align-items:stretch;gap:6px;cursor:default}.cfg-rh{display:flex;align-items:center;gap:8px;width:100%}.cfg-rate input{accent-color:var(--accent)}.cfg-rh span{color:var(--muted);font-size:13px}
+.cfg-rh button{margin-left:auto;border:0;background:none;color:var(--accent);font:inherit;font-size:13px;cursor:pointer}.cfg-rate .rate-row{display:flex;align-items:center;gap:8px;width:100%}.cfg-rate input{flex:1}.cfg-rate .rate-end{flex:none;font-size:12.5px;color:var(--muted)}
 .cfg-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
 .cfg-opt .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .cfg-opt .t{font-size:15.5px;font-weight:600}
@@ -1608,6 +1611,11 @@ select.pe-in{text-align-last:right}
       <section id="cfgEffortSec" hidden><h4>推理强度<span id="cfgEffortNote"></span></h4><div class="cfg-seg" id="cfgEfforts" role="radiogroup" aria-label="推理强度"></div></section>
       <section id="cfgModeSec"><h4>权限</h4><div class="cfg-list" id="cfgModes" role="radiogroup" aria-label="权限"></div></section>
       <!-- 只管这个会话的设置（以后更多全局设置会逐步放到这里按会话单独设） -->
+      <section id="cfgTtsSec"><h4>朗读<span>只管这个会话</span></h4><div class="cfg-list">
+        <label class="cfg-opt cfg-sel"><span class="tx"><b>声音</b></span><select id="cfgVoice" aria-label="这个会话的声音"></select></label>
+        <div class="cfg-opt cfg-rate"><div class="cfg-rh"><b>语速</b><span id="cfgRateV"></span><button type="button" id="cfgRateD">跟随默认</button></div>
+          <span class="rate-row"><span class="rate-end">慢</span><input type="range" id="cfgRate" min="0.6" max="2" step="0.05" aria-label="这个会话的语速"><span class="rate-end">快</span></span></div>
+      </div></section>
       <section id="cfgNotifSec"><h4>通知</h4><button type="button" class="cfg-opt cfg-tog" id="cfgNotif" role="switch"><span class="tx"><b>这个会话的通知</b><small id="cfgNotifSub"></small></span><span class="sw" aria-hidden="true"></span></button></section>
     </div>
   </div>
@@ -3872,7 +3880,7 @@ function renderCfg(){
     mb.appendChild(b);
   });
 }
-function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();notifShow();fetch('/api/notif-off').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){notifOffMap=j;notifShow()}}).catch(function(){})}
+function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();notifShow();renderCfgTts();fetch('/api/notif-off').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){notifOffMap=j;notifShow()}}).catch(function(){})}
 // 会话设置 › 通知：关了这个会话回复完、出错、来消息都不推送、不响；要你确认权限时照样通知
 var notifOffMap={};
 function notifShow(){var b=$('#cfgNotif');if(!b||!session)return;var on=!notifOffMap[session.id];b.setAttribute('aria-checked',on?'true':'false');$('#cfgNotifSub').textContent=on?'回复完、出错、来消息时推送通知':'已关：不推送、不响提示音（要你确认权限时照样通知）'}
@@ -6535,46 +6543,37 @@ function ttsChoices(){
 // 用当前会话的声音、语速念一句（选完声音 / 调完语速试听）
 function ttsSessSay(t){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);ttsStop();ttsManual=true;var sv=ttsSrvVoice();if(sv)srvSay([t],sv);else if(ttsOk()){var u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=ttsR();var dv=ttsDevVoice();if(dv)u.voice=dv;speechSynthesis.speak(u)}}
 function ttsSessRateSave(){var ks=Object.keys(ttsSessR);if(ks.length>300)delete ttsSessR[ks[0]];try{localStorage.setItem('claclaw.ttsSessRate',JSON.stringify(ttsSessR))}catch(_){}}
-function ttsSessPick(){
-  if(!session)return;
+// 这个会话的声音和语速：放在会话设置里（标题栏右边 › →「朗读」）；长按 / 双击喇叭直接打开会话设置并滚到这一栏
+function ttsSessPick(){if(!session||/^gp[:-]/.test(session.id))return;openCfg();var sec=$('#cfgTtsSec');if(sec)setTimeout(function(){sec.scrollIntoView({block:'start',behavior:'smooth'})},120)}
+function renderCfgTts(){
+  var sel=$('#cfgVoice');if(!sel||!session)return;
   var sid=session.id,go=function(){
+    if(!session||session.id!==sid)return;
     var list=ttsChoices(),cur=ttsSessV[sid]||'',def=list.find(function(c){return c.id===tts.want});
-    if(cur&&!list.some(function(c){return c.id===cur}))list.unshift({id:cur,label:cur.replace(/^srv:\w+:/,'')});   // 单独选过、后来在语音管理里取消勾选的：也列出来，免得看不出现在用的是哪个
-    var p=$('#ttsPick');
-    p.innerHTML='<div class="tp-box" role="dialog" aria-label="这个会话的声音和语速"><div class="tp-h">这个会话的声音和语速<button type="button" class="tp-x" aria-label="关闭">✕</button></div>'+
-      '<div class="tp-rate"><div class="tp-rh"><span>语速</span><span class="tp-rv"></span><button type="button" class="tp-rd">跟随默认</button></div>'+
-      '<span class="rate-row"><span class="rate-end">慢</span><input type="range" min="0.6" max="2" step="0.05" aria-label="这个会话的语速"><span class="rate-end">快</span></span></div>'+
-      '<div class="tp-sub">声音</div><div class="tp-list"></div></div>';
-    var close=function(){p.classList.remove('on')},box=p.querySelector('.tp-list');
-    // 语速：拖动只改显示，松手才存、试听；「跟随默认」= 去掉这个会话单独的语速
-    var rg=p.querySelector('.tp-rate input'),rv=p.querySelector('.tp-rv'),rd=p.querySelector('.tp-rd');
-    var rateUi=function(){var own=+ttsSessR[sid]>0,r=+rg.value;rv.textContent=r.toFixed(2)+' 倍'+(own?'':'（默认）');rd.hidden=!own};
-    rg.value=String(ttsR(sid));rateUi();
-    rg.addEventListener('input',function(){rv.textContent=(+rg.value).toFixed(2)+' 倍'});
-    rg.addEventListener('change',function(){
-      ttsSessR[sid]=+rg.value;ttsSessRateSave();rateUi();ttsMuteShow(true);
-      if(session&&session.id===sid)ttsSessSay('现在是这个语速，听听合不合适。');
-    });
-    rd.addEventListener('click',function(){
-      delete ttsSessR[sid];ttsSessRateSave();rg.value=String(tts.rate);rateUi();ttsMuteShow(true);toast('这个会话跟随默认语速');
-    });
-    [{id:'',label:'跟随默认'+(def?'（'+def.label+'）':'')}].concat(list).forEach(function(c){
-      var b=document.createElement('button');b.type='button';b.className='tp-i';b.innerHTML='<span></span>';b.querySelector('span').textContent=c.label;if(c.id===cur)b.classList.add('cur');
-      b.addEventListener('click',function(){
-        close();
-        if(c.id)ttsSessV[sid]=c.id;else delete ttsSessV[sid];
-        var ks=Object.keys(ttsSessV);if(ks.length>300)delete ttsSessV[ks[0]];
-        try{localStorage.setItem('claclaw.ttsSessVoice',JSON.stringify(ttsSessV))}catch(_){}
-        ttsMuteShow(true);toast(c.id?'这个会话改用「'+c.label+'」':'这个会话跟随默认声音');
-        if(session&&session.id===sid)ttsSessSay('以后这个会话用这个声音念。');
-      });
-      box.appendChild(b);
-    });
-    p.querySelector('.tp-x').addEventListener('click',close);p.onclick=function(e){if(e.target===p)close()};
-    p.classList.add('on');var c0=box.querySelector('.cur');if(c0)c0.scrollIntoView({block:'center'});
+    if(cur&&!list.some(function(c){return c.id===cur}))list.unshift({id:cur,label:cur.replace(/^srv:\w+:/,'')});   // 单独选过、后来在语音管理里取消勾选的：也列出来
+    sel.innerHTML='<option value="">跟随默认'+(def?'（'+esc(def.label)+'）':'')+'</option>'+list.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.label)+'</option>'}).join('');
+    sel.value=cur;
   };
   if(tts.srv)go();else ttsLoadSrv().then(go,go);
+  var rg=$('#cfgRate');rg.value=String(ttsR(sid));cfgRateUi();
 }
+function cfgRateUi(){if(!session)return;var own=+ttsSessR[session.id]>0,r=+$('#cfgRate').value;$('#cfgRateV').textContent=r.toFixed(2)+' 倍'+(own?'':'（默认）');$('#cfgRateD').hidden=!own}
+$('#cfgVoice').addEventListener('change',function(e){
+  if(!session)return;var sid=session.id,v=e.target.value,lab=e.target.options[e.target.selectedIndex].textContent;
+  if(v)ttsSessV[sid]=v;else delete ttsSessV[sid];
+  var ks=Object.keys(ttsSessV);if(ks.length>300)delete ttsSessV[ks[0]];
+  try{localStorage.setItem('claclaw.ttsSessVoice',JSON.stringify(ttsSessV))}catch(_){}
+  ttsMuteShow(true);toast(v?'这个会话改用「'+lab+'」':'这个会话跟随默认声音');
+  ttsSessSay('以后这个会话用这个声音念。');
+});
+$('#cfgRate').addEventListener('input',function(){$('#cfgRateV').textContent=(+this.value).toFixed(2)+' 倍'});
+$('#cfgRate').addEventListener('change',function(){
+  if(!session)return;ttsSessR[session.id]=+this.value;ttsSessRateSave();cfgRateUi();ttsMuteShow(true);
+  ttsSessSay('现在是这个语速，听听合不合适。');
+});
+$('#cfgRateD').addEventListener('click',function(){
+  if(!session)return;delete ttsSessR[session.id];ttsSessRateSave();$('#cfgRate').value=String(tts.rate);cfgRateUi();ttsMuteShow(true);toast('这个会话跟随默认语速');
+});
 (function(){
   var b=$('#setEnterSend');
   var ui=function(){b.hidden=!COARSE.matches;b.dataset.on=enterSend?'1':'';ta.setAttribute('enterkeyhint',kbSend()?'send':'enter');syncSend()};
