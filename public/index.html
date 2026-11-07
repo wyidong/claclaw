@@ -842,6 +842,10 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .cfg-p h4{display:flex;align-items:baseline;gap:8px;margin:16px 2px 8px;font-size:13px;font-weight:600;color:var(--muted)}
 .cfg-p h4 span{font-weight:400;font-size:12.5px}
 .cfg-list{display:flex;flex-direction:column;gap:8px}
+.cfg-tog .sw{flex:none;position:relative;width:46px;height:28px;border-radius:14px;background:var(--line);transition:background .2s}
+.cfg-tog .sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.cfg-tog[aria-checked="true"] .sw{background:var(--allow)}.cfg-tog[aria-checked="true"] .sw::after{transform:translateX(18px)}
+.cfg-tog small{color:var(--muted);font-size:12.5px}
 .cfg-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
 .cfg-opt .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .cfg-opt .t{font-size:15.5px;font-weight:600}
@@ -1603,6 +1607,8 @@ select.pe-in{text-align-last:right}
       <section id="cfgModelSec" hidden><h4>模型</h4><div class="cfg-list" id="cfgModels" role="radiogroup" aria-label="模型"></div></section>
       <section id="cfgEffortSec" hidden><h4>推理强度<span id="cfgEffortNote"></span></h4><div class="cfg-seg" id="cfgEfforts" role="radiogroup" aria-label="推理强度"></div></section>
       <section id="cfgModeSec"><h4>权限</h4><div class="cfg-list" id="cfgModes" role="radiogroup" aria-label="权限"></div></section>
+      <!-- 只管这个会话的设置（以后更多全局设置会逐步放到这里按会话单独设） -->
+      <section id="cfgNotifSec"><h4>通知</h4><button type="button" class="cfg-opt cfg-tog" id="cfgNotif" role="switch"><span class="tx"><b>这个会话的通知</b><small id="cfgNotifSub"></small></span><span class="sw" aria-hidden="true"></span></button></section>
     </div>
   </div>
 
@@ -3866,7 +3872,14 @@ function renderCfg(){
     mb.appendChild(b);
   });
 }
-function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg()}
+function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();notifShow();fetch('/api/notif-off').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){notifOffMap=j;notifShow()}}).catch(function(){})}
+// 会话设置 › 通知：关了这个会话回复完、出错、来消息都不推送、不响；要你确认权限时照样通知
+var notifOffMap={};
+function notifShow(){var b=$('#cfgNotif');if(!b||!session)return;var on=!notifOffMap[session.id];b.setAttribute('aria-checked',on?'true':'false');$('#cfgNotifSub').textContent=on?'回复完、出错、来消息时推送通知':'已关：不推送、不响提示音（要你确认权限时照样通知）'}
+$('#cfgNotif').addEventListener('click',function(){
+  if(!session)return;var sid=session.id,off=!notifOffMap[sid];
+  postJson('/api/notif-off',{id:sid,off:off}).then(function(r){return r.json()}).then(function(j){notifOffMap=j||{};notifShow();toast(off?'这个会话的通知已关闭':'这个会话的通知已打开')}).catch(function(e){toast('没改成：'+e.message)});
+});
 function closeCfg(){var d=$('#cfgDlg');showDlg(d,false)}
 $('#cfgGo').addEventListener('click',openCfg);
 $('#cfgX').addEventListener('click',closeCfg);
