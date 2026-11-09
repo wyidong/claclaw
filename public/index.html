@@ -332,6 +332,9 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 @media (min-width:1000px){   /* 电脑：新建、群、语音管理、协同挨着排在左边，清空最近在最右；左边栏不再放协同 */
   #gNew,#rClear,#sVoice,#sPeer{width:34px;height:32px;margin:0;border-radius:8px}
   #gNew:hover,#rClear:hover,#sVoice:hover,#sPeer:hover{background:var(--bg)}
+  /* 图标之间的空白 = 第一个图标离列表左边的距离（12px）：按钮 = 图标宽 + 两边各 6px，再用负边距抵掉 8px 的 gap */
+  #gNew{width:36px}#sPeer{width:34px}#sVoice{width:33px}
+  #gNew,#sPeer,#sVoice{margin-left:-8px}
   #railPeer{display:none!important}
 }
 #grpPane{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35)}
@@ -697,7 +700,12 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #sList .s-grp:first-child{margin-top:0}
 /* 目录行前面：合着是关着的文件夹，展开是打开的文件夹（打开的那个右转 90 度）；和顶上「新建会话」的图标竖着对齐 */
 #sList .s-grp{gap:8px}
-#sList .s-grp .fd{flex:none;width:20px;height:20px}
+#sList .s-grp .fdw{position:relative;flex:none;width:20px;height:20px}
+#sList .s-grp .fd{display:block;width:20px;height:20px}
+/* 文件夹右上角的小圆点：目录里有没看的回复 = 红点；有会话正在干活 = 绿点闪烁（优先于红点；干完了还有没看的就变回红点） */
+#sList .s-grp .fdw::after{content:'';display:none;position:absolute;top:-1px;right:-2px;width:8px;height:8px;border-radius:50%}
+#sList .s-grp.unread .fdw::after{display:block;background:#F23C3C}
+#sList .s-grp.working .fdw::after{display:block;background:var(--allow);animation:pulse 1.2s infinite}
 #sList .s-grp .fd-o,#sList .s-grp[aria-expanded="true"] .fd-c{display:none}
 #sList .s-grp[aria-expanded="true"] .fd-o{display:block}
 #sList .s-grp .gn{flex:0 1 auto;min-width:0;font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -718,9 +726,6 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 .s-row.working .s-item .when::before{content:'';display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:currentColor;vertical-align:middle;animation:pulse 1.2s infinite}
 .s-row.waiting .s-item{border-color:var(--warn)!important}
 .s-row.waiting .s-item .when{color:var(--warn)}
-#sList .s-grp.unread .gn::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
-/* 目录里有会话正在干活：目录名前绿点闪烁（优先于红点；干完了还有没看的就变回红点） */
-#sList .s-grp.working .gn::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:var(--allow);vertical-align:middle;animation:pulse 1.2s infinite}
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
 #setPane .set-sec{margin:0 0 20px}
 /* 设置：一组一张圆角卡片，每行左边名称 + 灰色说明，右边开关或「当前值 ›」，行间细线（参考常见 App 的设置页） */
@@ -954,7 +959,10 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
      新版 iOS 会在「顶到状态栏的可滚动区域」上加一层渐变模糊，整页滚动时顶部会一直发虚 */
   #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
   #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--strip)}
-  #app.m-list #sNew{margin-left:-7px}   /* 往左挪 7px：和下面目录行的文件夹图标竖着对齐 */
+  #app.m-list #sNew{width:34px;margin-left:-5px}   /* 图标离左边 14px：和下面目录行的文件夹图标竖着对齐 */
+  /* 图标之间的空白 = 第一个图标离左边的距离（14px）：按钮 = 图标宽 + 两边各 7px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
+  #app.m-list #gNew{width:38px}#app.m-list #sPeer{width:36px}#app.m-list #sVoice{width:35px}
+  #app.m-list #gNew,#app.m-list #sPeer,#app.m-list #sVoice{margin-left:-6px}
   #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
@@ -5352,8 +5360,8 @@ function openSheet(silent){
   }).catch(function(e){if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
 // 会话列表目录行的图标：关着 / 打开（打开的右转 90 度），线条风格同顶上的工具图标（24 格、1.8 线宽、圆角）
-var FOLDER_IC='<svg class="fd fd-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 17.5v-11a2 2 0 0 1 2-2h3.4a2 2 0 0 1 1.6.8L11.8 7h6.7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 10.5h17"/></svg>'
-  +'<svg class="fd fd-o" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(90 12 12)"><path d="M5 19.5h-.3a1.2 1.2 0 0 1-1.2-1.2V6.5a2 2 0 0 1 2-2h3.4a2 2 0 0 1 1.6.8L11.8 7H16.5a2 2 0 0 1 2 2v2"/><path d="M5 19.5l2.3-6.6A2 2 0 0 1 9.2 11.5h10.6a1.3 1.3 0 0 1 1.2 1.8l-2.1 5a2 2 0 0 1-1.8 1.2z"/></g></svg>';
+var FOLDER_IC='<span class="fdw"><svg class="fd fd-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 17.5v-11a2 2 0 0 1 2-2h3.4a2 2 0 0 1 1.6.8L11.8 7h6.7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 10.5h17"/></svg>'
+  +'<svg class="fd fd-o" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(90 12 12)"><path d="M5 19.5h-.3a1.2 1.2 0 0 1-1.2-1.2V6.5a2 2 0 0 1 2-2h3.4a2 2 0 0 1 1.6.8L11.8 7H16.5a2 2 0 0 1 2 2v2"/><path d="M5 19.5l2.3-6.6A2 2 0 0 1 9.2 11.5h10.6a1.3 1.3 0 0 1 1.2 1.8l-2.1 5a2 2 0 0 1-1.8 1.2z"/></g></svg></span>';
 function drawList(arr,claw){
     var list=$('#sList');
     if(claw!==clawSel)return;   // 加载途中换了 Claw
