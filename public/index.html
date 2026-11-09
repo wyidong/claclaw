@@ -832,6 +832,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .dlg p{margin:0 0 12px;font-size:13px;color:var(--muted)}
 .dlg label{display:block;font-size:14px;margin:10px 0 4px}
 .dlg input{width:100%;box-sizing:border-box;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit}
+.dlg input:focus{outline:none;border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}   /* 不要浏览器默认的粗黑焦点框 */
 .dlg .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .dlg .err{min-height:1.4em;margin-top:10px;color:var(--deny);font-size:14px}
 .dlg .chips{display:flex;flex-wrap:wrap;gap:6px}
