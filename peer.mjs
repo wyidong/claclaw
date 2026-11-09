@@ -371,6 +371,9 @@ export async function peerCall(c, p, sub, opts) {
     const viaRelay = isRelayAddr(url), t0 = Date.now();
     try {
       const j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p) }, connectMs: viaRelay ? 0 : 3000 });
+      // 中继自己回的「对方隧道没连着这台中继」（502，请求根本没转给对方）：和连不上一样，换下一台中继再试，
+      // 不然主中继上对方的隧道断了，明明备用中继能通，也一直显示离线
+      if (viaRelay && j?.status === 502 && /隧道没连着中继/.test(String(j.error || ''))) throw Object.assign(new Error('对方没连着这台中继'), { connect: true, code: 'TUNNEL_OFFLINE' });
       trail.push((viaRelay ? '中继 ' : '局域网 ') + hostOf(url) + ' ok ' + (Date.now() - t0) + 'ms');
       peerRoute.set(p.id, { via: viaRelay ? 'relay' : 'lan', at: Date.now(), ms: Date.now() - t0, trail: trail.join(' → ') });
       if (viaRelay) { if (lan.length) lanDownUntil.set(p.id, Date.now() + 5 * 60e3); }
