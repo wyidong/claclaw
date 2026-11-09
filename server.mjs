@@ -2947,6 +2947,7 @@ const handler = async (req, res) => {
     // 帮用户装第一个 Agent（见 install.mjs）：GET 取进度，POST {claw} 开始装（只能装 INSTALLS 里列的）
     if (url.pathname === '/api/claws/install') {
       if (req.method === 'POST') {
+        if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         const b = await jsonBody(req, 1024);
         const id = String(b?.claw || '');
