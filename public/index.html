@@ -369,7 +369,11 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #grpPane .gp-node.open>.gp-nh>.gp-chev{transform:rotate(90deg)}
 #grpPane .gp-nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #grpPane .gp-nn{flex:none;font-style:normal;font-size:12px;color:var(--muted)}
-#grpPane .gp-fold{flex:none;color:var(--muted)}
+/* 目录这一级：没有箭头，文件夹图标表示开合（关着 / 打开右转 90 度），和会话列表的目录行同一套图标 */
+#grpPane .gp-nh .fdw{flex:none;width:18px;height:18px;color:var(--muted)}
+#grpPane .gp-nh .fd{display:block;width:18px;height:18px}
+#grpPane .gp-nh .fd-o,#grpPane .gp-node.open>.gp-nh .fd-c{display:none}
+#grpPane .gp-node.open>.gp-nh .fd-o{display:block}
 #grpPane .gp-kids{padding-left:18px}
 #grpPane .gp-ft{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 #grpPane .gp-ft button{height:36px;padding:0 16px;border-radius:9px;border:0;font:inherit;font-size:14.5px;cursor:pointer}
@@ -5239,9 +5243,10 @@ function openGroupPick(gid){
     return l;
   };
   // 一个可展开的节点：标题行 + 子内容（第一次展开时才生成）
-  var node=function(box,headHtml,fill,open){
+  // noChev：目录这一级不要箭头，前面的文件夹图标自己表示开合（和会话列表的目录行一样）
+  var node=function(box,headHtml,fill,open,noChev){
     var d=document.createElement('div');d.className='gp-node';
-    var h=document.createElement('button');h.type='button';h.className='gp-nh';h.innerHTML='<svg class="gp-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>'+headHtml;
+    var h=document.createElement('button');h.type='button';h.className='gp-nh';h.innerHTML=(noChev?'':'<svg class="gp-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>')+headHtml;
     var kids=document.createElement('div');kids.className='gp-kids';kids.hidden=true;
     var filled=false;h.addEventListener('click',function(){if(!filled){filled=true;fill(kids)}kids.hidden=!kids.hidden;d.classList.toggle('open',!kids.hidden)});
     d.appendChild(h);d.appendChild(kids);box.appendChild(d);
@@ -5257,7 +5262,7 @@ function openGroupPick(gid){
       var dirs={},keys=[];
       arr.forEach(function(s){var dk=k==='openclaw'?'':dirName(s);if(!dirs[dk]){dirs[dk]=[];keys.push(dk)}dirs[dk].push(s)});
       if(keys.length===1&&!keys[0]){dirs[''].forEach(function(s){kids.appendChild(row(s,null))});return}
-      keys.forEach(function(dk){var dd=node(kids,'<svg class="gp-fold" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'+label('',dirs[dk].length),function(k2){dirs[dk].forEach(function(s){k2.appendChild(row(s,null))})});setText(dd,dk)});
+      keys.forEach(function(dk){var dd=node(kids,FOLDER_IC+label('',dirs[dk].length),function(k2){dirs[dk].forEach(function(s){k2.appendChild(row(s,null))})},false,true);setText(dd,dk)});
     });
     setText(d,CLAW_NAMES[k]||k);
   };
