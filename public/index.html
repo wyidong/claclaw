@@ -34,7 +34,7 @@ window.__sc=(function(){
     r.classList.remove('sc-img');if(!on||ok[z]===false)return;
     var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z)img(z)};im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg';
   }
-  var VARS=['--sc-img','--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-f','--sc-m','--sc-on','--sc-t','--sc-th','--bg','--line','--user-bg'];
+  var VARS=['--sc-img','--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-f','--sc-m','--sc-on','--sc-t','--sc-th','--bg','--line','--user-bg','--code-bg'];
   function rgb(h){return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]}
   function hex(c){return '#'+c.map(function(v){return ('0'+Math.round(v).toString(16)).slice(-2)}).join('').toUpperCase()}
   function mix(a,b,t){return [0,1,2].map(function(i){return a[i]+(b[i]-a[i])*t})}
@@ -52,7 +52,7 @@ window.__sc=(function(){
     var n=now(),b=rgb(ZC[n.z]),f=rgb(ZF[n.z]),acc=deepen(b,W,4.5),s=document.documentElement.style,lt=lum(f)>.5;
     var v={'--accent':hex(acc),'--accent-ink':'#FFFFFF','--allow':hex(acc),'--on-allow':'#FFFFFF','--sc-b':hex(b),'--sc-f':hex(f),'--sc-m':hex(mix(f,b,.35)),
       '--sc-on':lt?'rgba(255,255,255,.18)':'rgba(0,0,0,.08)','--sc-t':hex(deepen(rgb(GC[n.g]),W,4.5)),'--sc-th':hex(onBg(rgb(GC[n.g]),b,4.5)),
-      '--bg':hex(mix(b,W,.9)),'--line':hex(mix(b,W,.7)),'--user-bg':hex(mix(b,W,.75))};
+      '--bg':hex(mix(b,W,.92)),'--line':hex(mix(b,W,.8)),'--user-bg':hex(mix(b,W,.82)),'--code-bg':hex(mix(b,W,.9))};
     for(var k in v)s.setProperty(k,v[k]);
     img(n.z);   // 时辰背景：图片 / 纯色（默认纯色）
     return n.name;
@@ -77,7 +77,7 @@ window.__sc=(function(){
 })();
 // 界面语言：默认中文；设置里选了 English 就先加载 /i18n/en.js（词典 + 翻译引擎，看着页面把界面文字换成英文）
 (function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
-(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){window.__sc.apply();var b=document.documentElement.style.getPropertyValue('--sc-b');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
+(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){window.__sc.apply();var b=document.documentElement.style.getPropertyValue('--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
@@ -135,34 +135,30 @@ window.__sc=(function(){
 :root[data-theme="ziwei"] .pe-back{color:var(--accent)}
 
 :root[data-theme="ziwei"] #setTop button,:root[data-theme="ziwei"] #backBtn{color:var(--accent)}
-/* 流变时辰：照九紫离火的路子衔接——
-   导航区（手机底部菜单、电脑最左栏）和所有顶栏（会话标头、列表搜索栏、设置页头）铺满当前地支色，状态栏也染成这个色，上下连成一个框；
-   列表 / 设置 / 宿主 / Claw 页的底用地支色的淡色，上面是白卡片细边；聊天内容区保持普通主题的底。
-   标题、名字、分组标题用天干色（--sc-t）。变量都由 window.__sc 按时辰算好：
-   --sc-b 地支色 / --sc-f 地支底上的字色 / --sc-m 没选中的字色 / --sc-on 选中格的底 / --sc-t 天干色 / --bg --line --user-bg 地支淡色 */
-:root[data-theme="shichen"] #app.m-list #mtabs,:root[data-theme="shichen"] #rail,:root[data-theme="shichen"] header,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app.m-list.set-on #setTop,:root[data-theme="shichen"] #app.m-list.host-on #hostPane .pg-hd{background:var(--sc-b);border-color:transparent}
-:root[data-theme="shichen"]{--strip:var(--sc-b);--strip-line:transparent}
-/* 时辰背景选「图片」：列表 / Claw / 设置 / 宿主页整页铺这个时辰的图（聊天内容区不铺）；中间几层底变透明，顶栏 / 底栏 / 左栏变半透明毛玻璃浮在图上，卡片仍是白底 */
-:root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
-:root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
-:root[data-theme="shichen"].sc-img{--strip:color-mix(in srgb,var(--sc-b) 55%,transparent)}
-:root[data-theme="shichen"].sc-img #app.m-list #mtabs,:root[data-theme="shichen"].sc-img #rail,:root[data-theme="shichen"].sc-img header,:root[data-theme="shichen"].sc-img #app #sTop,:root[data-theme="shichen"].sc-img #app.m-list.set-on #setTop,:root[data-theme="shichen"].sc-img #app.m-list.host-on #hostPane .pg-hd{background:color-mix(in srgb,var(--sc-b) 55%,transparent);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%)}
-:root[data-theme="shichen"] #mtabs button,:root[data-theme="shichen"] #rail button{color:var(--sc-m)}
-:root[data-theme="shichen"] #mtabs button.on,:root[data-theme="shichen"] #rail button.on,:root[data-theme="shichen"] #rail button:hover{color:var(--sc-f);background:var(--sc-on)}
-:root[data-theme="shichen"] header #backBtn,:root[data-theme="shichen"] header #nm,:root[data-theme="shichen"] header #sessBtn,:root[data-theme="shichen"] header .hd-ic,:root[data-theme="shichen"] header #cfgBtn .c1,:root[data-theme="shichen"] header #cfgBtn .c2,:root[data-theme="shichen"] header #cfgGo,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #hostPane .pg-hd,:root[data-theme="shichen"] #hostPane .pe-back{color:var(--sc-th)}   /* 设置 / 宿主页标题栏：标题和返回键用天干色，和页面里的标题同色（在地支底上调到看得清） */
-:root[data-theme="shichen"] header .sid,:root[data-theme="shichen"] header .where,:root[data-theme="shichen"] header #cfgBtn{color:var(--sc-m)}
-:root[data-theme="shichen"] #sSearch{background:#FFFFFF;border-color:transparent}
-/* 卡片、列表行：白底细边；列表 / 设置 / 宿主页的底换成地支淡色 */
-:root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .claw-tool,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row{background:#FFFFFF;border:1px solid var(--line)}
-:root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg);border-color:var(--line)}
+/* 流变时辰：照九紫离火的配色，只是颜色跟着时辰换——
+   整页一个淡底（地支色的淡色 --bg）：顶栏、左栏、列表、设置页都是它，不铺浓的地支色；上面是白卡片细边（--line）；
+   字是重点：标题 / 名字用天干色（--sc-t），说明用石板灰，正文近黑；按钮、选中用地支色调深的强调色（--accent）。
+   变量都由 window.__sc 按时辰算好：--sc-b 地支色 / --sc-t 天干色 / --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
+:root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface)}
+:root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .claw-tool,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row,:root[data-theme="shichen"] #sSearch{background:#FFFFFF;border:1px solid var(--line)}
+:root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg)}
 :root[data-theme="shichen"] #sList .s-row.wx .s-item{border:0}
-:root[data-theme="shichen"] #app #sheet,:root[data-theme="shichen"] #app #sheet .sheet-p,:root[data-theme="shichen"] #app #hostPane{background:var(--bg)}
-/* 聊天内容区：普通主题的底 */
-:root[data-theme="shichen"] #feed,:root[data-theme="shichen"] #banner{background:#F1F3F5}
+:root[data-theme="shichen"] #app #sheet,:root[data-theme="shichen"] #app #sheet .sheet-p,:root[data-theme="shichen"] #app #hostPane,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app #setTop{background:var(--bg)}
 /* 字：标题、名字、分组标题用天干色 */
-:root[data-theme="shichen"] .lb,:root[data-theme="shichen"] .claw-tx b,:root[data-theme="shichen"] .claw-r b,:root[data-theme="shichen"] .s-item .t,:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .pg-hd,:root[data-theme="shichen"] .h-h,:root[data-theme="shichen"] .h-row .k{color:var(--sc-t)}
+:root[data-theme="shichen"] .lb,:root[data-theme="shichen"] .claw-tx b,:root[data-theme="shichen"] .claw-r b,:root[data-theme="shichen"] .s-item .t,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #nm,:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .pg-hd,:root[data-theme="shichen"] .h-h,:root[data-theme="shichen"] .h-row .k{color:var(--sc-t)}
 :root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .h-h{font-weight:600}
-:root[data-theme="shichen"] .pe-back{color:var(--accent)}
+:root[data-theme="shichen"] .pe-back,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #backBtn{color:var(--accent)}
+/* 时辰背景选「图片」：图铺在整页最底下；列表 / 设置 / 宿主页的底变透明露出图，顶栏 / 底栏 / 左栏是半透明的淡底毛玻璃，卡片仍是白底 */
+:root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
+:root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane,:root[data-theme="shichen"].sc-img #app.m-list #sTop,:root[data-theme="shichen"].sc-img #app.m-list.set-on #setTop{background:transparent!important}
+:root[data-theme="shichen"].sc-img{--strip:color-mix(in srgb,var(--bg) 70%,transparent)}
+:root[data-theme="shichen"].sc-img #app:not(.m-list){background:var(--strip)}   /* 聊天页：整页一层半透明淡底盖在图上，聊天内容、输入区都透出图 */
+:root[data-theme="shichen"].sc-img :is(#feed,#banner,#dock){background:transparent}
+@media (min-width:1000px){   /* 电脑：图铺满整个窗口——左栏、列表、标题栏、聊天区、输入区都是同一层半透明淡底（#app 的底），不再各叠一层（叠了就出现深一块的边）；卡片仍是白底 */
+  :root[data-theme="shichen"].sc-img :is(#rail,header,#app #sTop,#app #sheet,#app #sheet .sheet-p,#app #hostPane,#app.set-on #setTop,#app.host-on #hostPane .pg-hd){background:transparent!important}
+  :root[data-theme="shichen"].sc-img #app::after{box-shadow:none}
+}
+:root[data-theme="shichen"].sc-img #app.m-list #mtabs,:root[data-theme="shichen"].sc-img #rail,:root[data-theme="shichen"].sc-img header,:root[data-theme="shichen"].sc-img #app #sTop,:root[data-theme="shichen"].sc-img #app.m-list.set-on #setTop,:root[data-theme="shichen"].sc-img #app.m-list.host-on #hostPane .pg-hd{background:var(--strip);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
 /* 页面本身不许滚：iOS 弹键盘时会把整个页面往上推，收起后不一定推回来，顶栏就一直压在状态栏下面被模糊。
@@ -5881,7 +5877,7 @@ function scTick(force){
   if(!on){if(scName){window.__sc.clear();scName=''}return}
   var n=window.__sc.now().name;if(n===scName&&!force)return;
   scName=window.__sc.apply();
-  var sb=scVar('--sc-b');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});
+  var sb=scVar('--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏：和顶栏同一个淡底
   if(!force)postTheme();
   var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='流变时辰（'+scName+'时）';
 }
@@ -5948,7 +5944,7 @@ setTimeout(function(){var q=window.__clq||[];window.__clq=null;q.forEach(functio
 function postTheme(){
   if(window.parent===window)return;
   var t=document.documentElement.getAttribute('data-theme');
-  if(t==='shichen'){var f=scVar('--sc-f');try{window.parent.postMessage({clarelay:1,type:'theme',top:scVar('--sc-b'),fg:titleColor(),scheme:f==='#FFFFFF'?'dark':'light'},'*')}catch(e){}return}
+  if(t==='shichen'){try{window.parent.postMessage({clarelay:1,type:'theme',top:scVar('--bg'),fg:titleColor(),scheme:'light'},'*')}catch(e){}return}
   var dark=t?t==='dark':!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
   try{window.parent.postMessage({clarelay:1,type:'theme',top:stripColor(),fg:titleColor(),scheme:dark?'dark':'light'},'*')}catch(e){}
 }
