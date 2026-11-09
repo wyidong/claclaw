@@ -5239,8 +5239,8 @@ function openGroupPick(gid){
   var unpick=function(k){delete picked[k];order=order.filter(function(x){return x!==k});if(host===k)host='';sync()};
   var row=function(x,peer){
     var k=keyOf(x,peer),l=document.createElement('label');l.className='gp-row';
-    // 会话行不画图标：本机的已经在所属 Claw 下面，协同的已经在对方名下（上一级都标过了）
-    l.innerHTML='<input type="checkbox"><span class="gp-t"><b></b><small></small></span>';
+    // 本机的会话不画图标（已经在所属 Claw 下面）；协同对方的会话按对方分组，要画出是哪个 Agent（不再加协同标记，已在对方名下）
+    l.innerHTML='<input type="checkbox">'+(peer?'<span class="gp-av">'+gmAv({claw:x.claw})+'</span>':'')+'<span class="gp-t"><b></b><small></small></span>';
     l.querySelector('b').textContent=x.title||'(无标题)';
     var sub=peer?(x.busy?'正在干活':''):wxTime(x.lastModified||x.at);   // 协同的不再写「协同 · 对方名」（已在对方名下）
     if(sub)l.querySelector('small').textContent=sub;else l.querySelector('small').remove();
