@@ -3655,7 +3655,7 @@ function run(text){
     if(text||images.length){outbox={text:text,images:images,videoPending:video&&video.kind!=='file'?vidName(video.name):'',filePending:video&&video.kind==='file'?vidName(video.name):'',videoFile:video,sid:session.id};outboxShow();host=outbox.el;trySend()}
     if(video)startVideoJob(video,session.id,host);
   }
-  ttsUnlock();ttsHush=false;
+  if(!ttsSessMuted())ttsUnlock();ttsHush=false;   // 这个会话关了播报：发消息时不去「解锁」声音（iPhone 解锁会放一小段静音，灵动岛亮一下，白折腾）
 }
 // 待确认的消息：发出去后要等服务器回显（'user' 事件）才算送达。
 // 手机切后台、换网络后 WebSocket 常常「看着连着、其实已断」，消息会被悄悄吞掉：
@@ -5239,7 +5239,8 @@ function openGroupPick(gid){
   var unpick=function(k){delete picked[k];order=order.filter(function(x){return x!==k});if(host===k)host='';sync()};
   var row=function(x,peer){
     var k=keyOf(x,peer),l=document.createElement('label');l.className='gp-row';
-    l.innerHTML='<input type="checkbox"><span class="gp-av">'+gmAv({claw:x.claw,collab:!!peer})+'</span><span class="gp-t"><b></b><small></small></span>';
+    // 本机的会话已经在所属 Claw 下面，不再重复画 Claw 图标；协同对方的会话按对方分组，图标仍标出是哪个 Claw
+    l.innerHTML='<input type="checkbox">'+(peer?'<span class="gp-av">'+gmAv({claw:x.claw,collab:true})+'</span>':'')+'<span class="gp-t"><b></b><small></small></span>';
     l.querySelector('b').textContent=x.title||'(无标题)';
     l.querySelector('small').textContent=peer?'协同 · '+peer.name:wxTime(x.lastModified||x.at);
     var cb=l.querySelector('input');cb.dataset.k=k;cb.checked=!!picked[k];
