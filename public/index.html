@@ -321,7 +321,8 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #gStat{align-self:flex-start;font-size:12.5px;color:var(--muted);padding:2px 4px}
 #gStat div::before{content:'· '}
 #gNew{flex:none;width:46px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
-#gNew:hover{color:var(--accent)}
+#gNew:hover,#gNew[aria-pressed="true"]{color:var(--accent)}#gNew[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.s-gadd{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:8px 0 4px;padding:14px;border:1px dashed var(--line);border-radius:12px;background:none;color:var(--accent);font:inherit;font-size:15px;cursor:pointer}.s-gadd:hover{border-color:var(--accent)}.s-gadd b{font-size:20px;font-weight:400;line-height:1}
 #gNew[hidden]{display:none}
 #grpPane{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35)}
 #grpPane.on{display:flex}
@@ -1656,7 +1657,7 @@ select.pe-in{text-align-last:right}
     <div id="sheetGrip" title="拖动调整宽度，双击恢复默认" aria-hidden="true"></div>
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2>会话</h2>
-      <div id="sTop"><div id="tmpTh"></div><button type="button" id="gNew" aria-label="建群" title="建群（把几个会话拉进一个群）" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5 1.2 0 2.3.3 3.2.8"/><path d="M18 13v6M15 16h6"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M15.5 4.9a3.2 3.2 0 0 1 0 6.2"/><path d="M17.5 13.8c2 .7 3.5 2.6 3.5 5.2"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -3922,7 +3923,7 @@ function railTab(set){mTab(set?'set':listMode==='recent'?'recent':'chats')}
 // 底部菜单：claw（选择哪种助手）/ chats（会话列表）/ set（设置，子页面）
 function mTab(t){
   var app=$('#app');
-  if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
+  if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){if(grpOnly)setGrpOnly(false,true);listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   // 离开时停在子页（模型管理 / 协同 / 技能）：把子页内容一起清掉，不然下次进宿主页，在 /api/host 回来前（或回不来时）看到的还是那个子页
   if(t!=='host'){if(hostView)$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';hostView='';peerWatch(false)}
@@ -4915,10 +4916,11 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
   if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
   mTab(t);
   if(t==='chats'&&(!clawSel||!$('#sList .s-row')))openSheet();
+  if(t==='recent'&&grpOnly)setGrpOnly(false);   // 群列表里再点「最近」：回到最近
   if(t==='recent'&&!$('#sList .s-row'))openSheet();   // 一打开停在 Claw 页、还没加载过会话：点「会话」时再加载；还没选 Claw 就立刻显示「先选 Claw」（不取数据）
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
-$('#railChats').addEventListener('click',function(){var ch=listMode!=='recent';mTab('recent');if(ch)openSheet()});
+$('#railChats').addEventListener('click',function(){var ch=listMode!=='recent';mTab('recent');if(ch)openSheet();else if(grpOnly)setGrpOnly(false)});
 $('#setRecentClear').addEventListener('click',function(){
   if(!confirm('清空「最近」列表？\n只清空列表，不会删除任何会话；群聊留着，要删在群上左滑删除。'))return;
   postJson('/api/recent/clear',{}).then(function(r){return r.json()}).then(function(j){
@@ -5045,6 +5047,11 @@ function drawRecent(arr){
     lastList=arr;
     var sp=mList?$('#sList'):$('.sheet-p'),keepTop=sp.scrollTop;
     list.innerHTML='';
+    if(grpOnly){   // 群列表：只列群，最下面一行「＋ 建新群」
+      arr=arr.filter(function(s){return s.group});
+      var ga=document.createElement('button');ga.type='button';ga.className='s-gadd';ga.innerHTML='<b>＋</b>建新群';ga.addEventListener('click',function(){openGroupPick(null)});
+      if(!arr.length){list.innerHTML='<div class="s-empty">还没有群。把几个会话拉进一个群，它们就能一起讨论。</div>';list.appendChild(ga);return}
+    }
     if(!arr.length){list.innerHTML='<div class="s-empty">「最近」是空的。<br>任意 Claw 里有新动静的会话会出现在这里</div>';return}
     setTimeout(function(){sp.scrollTop=keepTop},0);
     arr.forEach(function(s){
@@ -5083,6 +5090,7 @@ function drawRecent(arr){
       b.addEventListener('contextmenu',function(e){if(TOUCH&&!DESKTOP.matches)return;e.preventDefault();ctxMenu(e.clientX,e.clientY,[['从最近里删除',hideIt,'danger']])});
       list.appendChild(row);
     });
+    if(grpOnly)list.appendChild(ga);
     applySearch();renderUnread();renderActivity();
 }
 function applySearch(){
@@ -5213,7 +5221,16 @@ function openGroupPick(gid){
     }).catch(function(e){alert('没保存成功：'+e.message);sync()});
   });
 }
-$('#gNew').addEventListener('click',function(){openGroupPick(null)});
+var grpOnly=false;   // 「最近」里点群图标：只看群
+function setGrpOnly(on,quiet){
+  on=!!on;if(on===grpOnly)return;grpOnly=on;
+  var g=$('#gNew');g.setAttribute('aria-pressed',on?'true':'false');g.title=on?'回到最近':'群列表（只看群；再点回到最近）';
+  $('#sSearch').placeholder=on?'搜索群':'搜索会话、ID、目录';
+  if(quiet||listMode!=='recent')return;
+  $('#sList').innerHTML='';var old=lastList||listSaved('recent');if(old)drawRecent(old);
+  (mList?$('#sList'):$('.sheet-p')).scrollTop=0;loadRecent();
+}
+$('#gNew').addEventListener('click',function(){setGrpOnly(!grpOnly)});
 function openSheet(silent){
   var list=$('#sList');
   var rec=listMode==='recent';
