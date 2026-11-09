@@ -963,12 +963,12 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
      新版 iOS 会在「顶到状态栏的可滚动区域」上加一层渐变模糊，整页滚动时顶部会一直发虚 */
   #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
   #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--strip)}
-  /* 手机顶栏图标放大到和外壳的 home 图标差不多大（看得见的部分约 21px）；新建图标的中心仍对准下面目录行的文件夹图标 */
+  /* 手机顶栏图标放大到和外壳的 home 图标差不多大（看得见的部分约 21px） */
   #app.m-list #sNew svg{width:25px;height:25px}#app.m-list #gNew svg{width:26px;height:26px}
   #app.m-list #sPeer svg,#app.m-list #sVoice svg,#app.m-list #rClear svg{width:27px;height:27px}
-  #app.m-list #sNew{width:38px;margin-left:-7px}
-  /* 图标之间的空白 = 第一个图标离左边的距离（约 12px）：按钮 = 图标宽 + 两边各 6.5px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
-  #app.m-list #gNew{width:39px}#app.m-list #sPeer{width:40px}#app.m-list #sVoice{width:40px}#app.m-list #rClear{width:40px;margin-right:-7px}
+  #app.m-list #sNew{width:45px;margin-left:-10px}   /* 图标离左边 12px */
+  /* 图标之间空 20px：按钮 = 图标宽 + 两边各 10px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
+  #app.m-list #gNew{width:46px}#app.m-list #sPeer{width:47px}#app.m-list #sVoice{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
   #app.m-list #gNew,#app.m-list #sPeer,#app.m-list #sVoice{margin-left:-6px}
   #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
