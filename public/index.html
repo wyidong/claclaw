@@ -1021,7 +1021,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
-@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select){font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
+@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#grpPane input.gp-in,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select){font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
 .pe-in.left,.pe-in.left::placeholder{text-align:left}
 .md-sub{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 /* 模型管理：Key 列表、Key 详情、接口格式下拉、「更多」、从接口读到的模型 */
