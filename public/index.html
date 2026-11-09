@@ -324,6 +324,11 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #gNew:hover,#gNew[aria-pressed="true"]{color:var(--accent)}#gNew[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .s-gadd{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:8px 0 4px;padding:14px;border:1px dashed var(--line);border-radius:12px;background:none;color:var(--accent);font:inherit;font-size:15px;cursor:pointer}.s-gadd:hover{border-color:var(--accent)}.s-gadd b{font-size:20px;font-weight:400;line-height:1}
 #gNew[hidden]{display:none}
+#rClear{flex:none;width:34px;height:38px;margin-left:-6px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#rClear:hover{color:var(--danger,#d33)}#rClear[hidden]{display:none}
+#sSearch[hidden]{display:none}.s-gap{flex:1}
+#sPeer{flex:none;position:relative;width:40px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sPeer:hover{color:var(--accent)}#sPeer.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}
+#sVoice{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover{color:var(--accent)}
+@media (min-width:1000px){#sPeer,#sVoice{display:none}}
 #grpPane{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35)}
 #grpPane.on{display:flex}
 #grpPane .gp-card{width:100%;max-width:520px;max-height:86vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box}
@@ -1657,7 +1662,7 @@ select.pe-in{text-align-last:right}
     <div id="sheetGrip" title="拖动调整宽度，双击恢复默认" aria-hidden="true"></div>
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2>会话</h2>
-      <div id="sTop"><div id="tmpTh"></div><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M15.5 4.9a3.2 3.2 0 0 1 0 6.2"/><path d="M17.5 13.8c2 .7 3.5 2.6 3.5 5.2"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false"><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M15.5 4.9a3.2 3.2 0 0 1 0 6.2"/><path d="M17.5 13.8c2 .7 3.5 2.6 3.5 5.2"/></svg></button><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话；群留着）" hidden><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 4l-7.5 7.5"/><path d="M9.6 10.4l4 4c-.6 2.6-2.6 5-5.6 5.6H4.5c0-3.6 1.4-6.7 5.1-9.6z"/><path d="M7.5 20c.2-1.6.8-3 1.8-4.2"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18.3 6.5a7.5 7.5 0 0 1 0 11"/></svg></button><button type="button" id="sPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -3924,6 +3929,7 @@ function railTab(set){mTab(set?'set':listMode==='recent'?'recent':'chats')}
 function mTab(t){
   var app=$('#app');
   if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){if(grpOnly)setGrpOnly(false,true);listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
+  if(t!=='host')peerFromList='';   // 从列表进语音管理 / 协同后改点了别的：返回不再回列表
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   // 离开时停在子页（模型管理 / 协同 / 技能）：把子页内容一起清掉，不然下次进宿主页，在 /api/host 回来前（或回不来时）看到的还是那个子页
   if(t!=='host'){if(hostView)$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';hostView='';peerWatch(false)}
@@ -4052,7 +4058,7 @@ function vcSec(name,tag,hint,rows,ids){
   return '<div><div class="h-h">'+esc(name)+' <span class="vc-tag'+(tag==='付费'?' paid':'')+'">'+tag+'</span></div><div class="h-card"><div class="h-row vc-hint"><span class="vc-ht">'+esc(hint)+'</span>'+all+'</div>'+rows+'</div></div>'}
 function renderVoices(){
   if(hostView!=='voices')return;
-  var h=pgHd('data-act="vc-back"','返回设置','语音管理')+'<div class="pe-err"'+(vcMsg?'':' hidden')+'>'+esc(vcMsg)+'</div>';
+  var h=pgHd('data-act="vc-back"',peerFromList?'返回':'返回设置','语音管理')+'<div class="pe-err"'+(vcMsg?'':' hidden')+'>'+esc(vcMsg)+'</div>';
   h+='<div class="vc-tip">勾上的声音出现在设置的「声音」列表和长按喇叭的列表里（默认只勾了几个常用的）；别名可以改，清空就回到原名。点 ▶ 试听。</div>';
   var dev=ttsVoices();
   h+=vcSec('本机','免费','这台设备（浏览器）自带的声音，不用配置',dev.map(function(v){return vcRow(v.voiceURI,ttsLabel(v))}).join('')||'<div class="h-row vc-hint">这台设备没有中文声音</div>',dev.map(function(v){return v.voiceURI}));
@@ -4073,6 +4079,7 @@ function renderVoices(){
   document.querySelectorAll('#hostBody .vc-grp[data-mixed]').forEach(function(c){c.indeterminate=true});
 }
 function vcAct(act,a){
+  if(act==='vc-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
   if(act==='vc-back'){hostView='';mTab('set');return}
   if(act==='vc-try'){
     var id=a.dataset.id,t='你好，这是我的声音，听听合不合适。';ttsStop();ttsManual=true;
@@ -4349,6 +4356,7 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-sub'){peerGo(a.dataset.sub);return}
   if(act==='pool-claw'){peerPoolClaw=a.dataset.claw;poolPaint();document.querySelectorAll('.pe-seg button').forEach(function(b){b.classList.toggle('on',b.dataset.claw===peerPoolClaw)});return}
   if(act==='pool-del'){poolSave((peerCfg.sessions||[]).filter(function(x){return x!==a.dataset.id}));return}
+  if(act==='peer-back'&&peerFromList){var fl=peerFromList;peerFromList='';hostView='';peerWatch(false);$('#railPeer').classList.remove('on');mTab(fl);openSheet(true);return}
   if(act==='peer-back'){hostView='';peerWatch(false);$('#railPeer').classList.remove('on');$('#railSet').classList.add('on');$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return}
   if(act==='skills'){hostView='skills';skillMsg={};renderSkills();loadSkills();return}
   if(act==='models'){openModels('host');return}
@@ -4435,7 +4443,7 @@ function peerCheckNow(){
 // 页面开着时来了配对申请：顶部横幅（App 在前台时系统通知往往不弹），15 秒后自动收起
 var pairBannerT=null;
 function pairBanner(m){
-  if(!($('#app').classList.contains('host-on')&&hostView==='peer'))$('#railPeer').classList.add('dot');   // 左边栏「协同」也标红点
+  if(!($('#app').classList.contains('host-on')&&hostView==='peer')){$('#railPeer').classList.add('dot');$('#sPeer').classList.add('dot')}   // 左边栏「协同」也标红点
   var el=$('#pairBanner');
   if(!el){el=document.createElement('button');el.type='button';el.id='pairBanner';document.body.appendChild(el);
     el.addEventListener('click',function(){el.classList.remove('on');openPeerView()})}
@@ -4450,8 +4458,13 @@ function openPeerView(){
   mTab('host');hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();
 }
 // 左边栏的「协同」快捷入口：在协同页时亮起（这时「设置」不亮）；有配对申请时带红点
-function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#railSet').classList.remove('on')}}
-$('#railPeer').addEventListener('click',openPeerView);
+function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#sPeer').classList.remove('dot');$('#railSet').classList.remove('on')}}
+$('#railPeer').addEventListener('click',function(){peerFromList='';openPeerView()});
+// 手机列表顶上的「语音管理」「协同」：从列表进的，返回时回到列表（不是设置 / 宿主页）
+var peerFromList='';
+var listTab=function(){return listMode==='recent'?'recent':'chats'};
+$('#sPeer').addEventListener('click',function(){peerFromList=listTab();openPeerView()});
+$('#sVoice').addEventListener('click',function(){var t=listTab();peerFromList=t;openVoices()});
 // 电脑左栏的「模型管理」快捷入口：直接打开 宿主 → 模型管理，在模型管理页时亮起
 // 附近的 claclaw（局域网里开着协同的电脑，Bonjour 广播找到的）
 function peerScan(){
@@ -4781,7 +4794,7 @@ function renderPeer(){
   if(peerSub.indexOf('p:')===0){p=(c.peers||[]).find(function(x){return 'p:'+x.id===peerSub});if(!p)peerSub=''}   // 对方已经撤销：回主页
   if(peerSub==='add'&&!c.local)peerSub='';
   var titles={add:'添加对方',pool:'协同会话',net:'本机与网络'};
-  var h=peerSub?pgHd('data-act="peer-sub" data-sub=""','返回协同',titles[peerSub]||(p?p.name:'协同')):pgHd('data-act="peer-back"','返回宿主','claclaw 协同');
+  var h=peerSub?pgHd('data-act="peer-sub" data-sub=""','返回协同',titles[peerSub]||(p?p.name:'协同')):pgHd('data-act="peer-back"',peerFromList?'返回':'返回宿主','claclaw 协同');
   h+='<div id="peMsg"></div>';
   h+=p?peerDetailHtml(c,p):peerSub==='add'?peerAddHtml(c):peerSub==='pool'?peerPoolHtml(c):peerSub==='net'?peerNetHtml(c):peerMainHtml(c);
   $('#hostBody').innerHTML=h;paintPeerMsg();
@@ -4966,14 +4979,16 @@ document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListene
 })});
 $('#setBack').addEventListener('click',function(){if(history.state&&history.state.set)history.back();else railTab(false)});
 $('#railChats').addEventListener('click',function(){var ch=listMode!=='recent';mTab('recent');if(ch)openSheet();else if(grpOnly)setGrpOnly(false)});
-$('#setRecentClear').addEventListener('click',function(){
+function recentClear(){
   if(!confirm('清空「最近」列表？\n只清空列表，不会删除任何会话；群聊留着，要删在群上左滑删除。'))return;
   postJson('/api/recent/clear',{}).then(function(r){return r.json()}).then(function(j){
     if(!j.ok){alert(j.error||'清空失败');return}
     listSave('recent',(listSaved('recent')||[]).filter(function(x){return x.claw==='group'}));   // 缓存也只留群，免得先画出清掉的旧列表
     toast('已清空最近（群聊保留）');if(listMode==='recent'){lastList=null;$('#sList').innerHTML='';loadRecent()}   // 重新拉：群聊还在
   }).catch(function(e){alert('清空失败：'+e.message)});
-});
+}
+$('#setRecentClear').addEventListener('click',recentClear);
+$('#rClear').addEventListener('click',recentClear);   // 「最近」顶上群图标右边的快捷清空
 // 背景里的「更新客户端」圈（手机的最近 / 会话 / Claw 页）：只在页面内容没盖到它的时候显示、能点
 (function(){
   var btn=$('#bgReload'),sp=$('.sheet-p'),q=0;
@@ -5271,6 +5286,7 @@ function setGrpOnly(on,quiet){
   on=!!on;if(on===grpOnly)return;grpOnly=on;
   var g=$('#gNew');g.setAttribute('aria-pressed',on?'true':'false');g.title=on?'回到最近':'群列表（只看群；再点回到最近）';
   $('#sSearch').placeholder=on?'搜索群':'搜索会话、ID、目录';
+  $('#rClear').hidden=on||listMode!=='recent';
   if(quiet||listMode!=='recent')return;
   $('#sList').innerHTML='';var old=lastList||listSaved('recent');if(old)drawRecent(old);
   (mList?$('#sList'):$('.sheet-p')).scrollTop=0;loadRecent();
@@ -5281,6 +5297,7 @@ function openSheet(silent){
   var rec=listMode==='recent';
   $('#sTop').style.display=!DESKTOP.matches&&!clawSel&&!rec?'none':'';
   $('#gNew').hidden=!rec;   // 建群只在「最近」里
+  $('#rClear').hidden=!rec||grpOnly;   // 清空最近：群列表里不显示（群不受清空影响）
   $('#sNew').hidden=rec;   // 「最近」里不新建：新建要先选 Claw   // 手机还没选 Claw：没有可搜、可新建的会话，搜索框和 ⊕ 一起藏起来
   if(!rec&&!DESKTOP.matches&&!clawSel){   // 手机：还没选 Claw，会话列表不加载任何会话
     list.innerHTML='<div class="s-empty claw-need">还没选择 Claw。<br>先选一个，会话列表才会显示对应的会话。<br><button type="button" class="claw-go">去选择</button></div>';
