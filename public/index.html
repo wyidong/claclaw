@@ -286,7 +286,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .md th{background:var(--code-bg);font-weight:600;white-space:nowrap}
 .md .mdh{margin:0 0 .7em;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.md [style]{max-width:100%}
 .md img.mdimg{display:block;max-width:100%;max-height:320px;margin:.3em 0;border-radius:10px;cursor:zoom-in}
-.peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:3px solid var(--muted);border-radius:4px 10px 10px 4px;background:var(--code-bg);font-size:14px;line-height:1.5}
+.peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:2px solid var(--muted);border-radius:3px 10px 10px 3px;background:var(--code-bg);font-size:14px;line-height:1.5}
 .md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px}
 .md li>.cb{margin:.4em 0 .5em}
 .cp{position:absolute;top:5px;right:6px;display:flex;align-items:center;justify-content:center;width:30px;height:28px;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:0;border-radius:7px}
@@ -4554,7 +4554,8 @@ var peerSub='';
 function peerGo(sub){peerSub=sub||'';peerMsg={};renderPeer();var sp=$('.sheet-p');if(sp)sp.scrollTop=0}
 function fmtMs(ms){return ms<1000?ms+' 毫秒':(ms/1000).toFixed(1)+' 秒'}
 function peerDot(p){var o=peerOnline[p.id];return p.canCall?'<i class="h-dot'+(!o?' wait':o.online?' on':'')+'" title="'+(!o?'检查中':o.online?'在线':'离线')+'"></i>':''}
-function peerRouteTag(p){var o=peerOnline[p.id];return o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+(o.route==='relay'?'中继':'局域网')+'</em>':''}
+function routeName(r){return r==='relay'?'中继':r==='direct'?'直连':'局域网'}
+function peerRouteTag(p){var o=peerOnline[p.id];return o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+routeName(o.route)+'</em>':''}
 var RELAY_ST={online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上',off:'没开'};
 function relayStateText(c){   // 主中继的状态（有备用的话带上个数）
   if(!c.relayInvite)return c.relay?'已设置地址':'没设置';
@@ -4609,11 +4610,18 @@ function peerPeersHtml(c){
 // 对方详情里会随在线检查变的部分（每 10 秒刷新，不动下面的勾选框）
 function peerDetailLive(c,p){
   var o=peerOnline[p.id],rs=o&&o.relay;
-  var st=!p.canCall?'单向：只能对方找我们':!o?'检查中…':o.online?'在线'+(o.route?' · 走'+(o.route==='relay'?'中继':'局域网'):''):'离线'+(o.error?'：'+esc(o.error):'');
+  var st=!p.canCall?'单向：只能对方找我们':!o?'检查中…':o.online?'在线'+(o.route?' · 走'+routeName(o.route):''):'离线'+(o.error?'：'+esc(o.error):'');
   var one=function(x){return x.ok?'可用（约 '+fmtMs(x.ms)+'）':'不通：'+esc(x.error||'')};
   var rl=!p.relay?'没有中继地址：离开局域网就联系不上':!o||!rs?'检查中…':!Array.isArray(rs)?one(rs):rs.length===1?one(rs[0]):rs.map(function(x,i){return (i?'备':'主')+' '+one(x)}).join('<br>');
   var ss=o&&o.online&&o.sessions||[];
-  return hRow('状态',st)+hRow('中继',rl)+
+  // 各条路的表现（每分钟量一次）：通的按快慢排，最快的就是现在走的
+  var VIA={lan:'局域网',wan:'外网',tailscale:'Tailscale'};
+  var ch=o&&Array.isArray(o.chans)?o.chans.slice():[];
+  if(o&&o.direct&&!o.direct.open&&!ch.some(function(x){return x.key==='direct'}))ch.push({key:'direct',ok:false,none:1});
+  ch.sort(function(a,b){return (a.ok?a.ms||9e5:1e9)-(b.ok?b.ms||9e5:1e9)});
+  var chName=function(k){return k==='direct'?'直连'+(o.direct&&o.direct.open&&o.direct.via?'（'+(VIA[o.direct.via]||o.direct.via)+'）':''):k.replace(/^lan /,'局域网 ').replace(/^relay /,'中继 ')};
+  var chs=ch.length?ch.map(function(x){return '<span class="pe-mono">'+esc(chName(x.key))+'</span>：'+(x.ok?(x.ms?fmtMs(x.ms):'通'):x.none?'还没打通':'不通')}).join('<br>'):'';
+  return hRow('状态',st)+(chs?hRow('各条路',chs):'')+hRow('中继',rl)+
     (o&&o.online?'<div class="h-row pe-col"><span class="k">对方开放的会话</span>'+(ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'<span class="v pe-left">没有</span>')+'</div>':'');
 }
 function peerDetailHtml(c,p){

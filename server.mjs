@@ -30,7 +30,8 @@ import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpA
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
-import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE } from './peer.mjs';
+import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
+import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAddr } from './peerrtc.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
@@ -1535,7 +1536,16 @@ async function peerHandler(req, res) {
       const rs = parseRelaysHeader(req.headers[RELAYS_HEADER]);
       if (rs && JSON.stringify(rs) !== JSON.stringify(peerRelays({ relays: peer.relays, relay: peer.relay }))) { peer.relays = rs; delete peer.relay; dirty = true; log('peer relays updated', peer.name, rs.length); }
     }
-    if (dirty || peer.ip !== ip || Date.now() - (peer.lastSeen || 0) > 60000) { peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
+    // 只记局域网地址：经中继 / 直连从外网进来的是公网 IP，拿它拼「局域网地址」只会白等 3 秒
+    const ipLan = classifyAddr(ip) === 'lan' && ip !== lanIp();
+    if (dirty || (ipLan && peer.ip !== ip) || Date.now() - (peer.lastSeen || 0) > 60000) { if (ipLan) peer.ip = ip; peer.lastSeen = Date.now(); savePeer(c); }
+    if (route === '/ping') return out(200, { ok: true });   // 量各条路的来回时间（见 peerProbeAll）
+    // 直连牵线：对方（已凭钥匙认出）发来 offer，回 answer（见 peerrtc.mjs）
+    if (route === '/rtc' && req.method === 'POST') {
+      const b = await readJson() || {};
+      try { return out(200, { ok: true, sdp: await rtcAnswer(peer.id, b.sdp) }); }
+      catch (e) { return out(e.status || 500, { ok: false, error: e.message }); }
+    }
     const infos = await peerSessionInfos(c, peer);
     const brief = infos.map(s => ({ id: peerShortId(s.sessionId), title: s.title, claw: s.claw, busy: !!runnerOf(s.sessionId)?.busy }));
     if (route === '/sessions') return out(200, { ok: true, name: myName(c), sessions: brief });
@@ -1636,6 +1646,49 @@ function peerPublic(c, local) {
   };
 }
 setTimeout(() => { const c = loadPeer(); applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c); }, 1000);
+// ---------- 直连（打洞）和各条路的定时探测 ----------
+// 每分钟把每个对方的每条路（局域网各地址、直连、各中继）各量一次，peerCall 按结果挑最好的走；
+// 直连没通就试着打一条（牵线走当前最好的那条路），打不通按 2 分钟起翻倍、最多 30 分钟再试；对方没这功能（老版本 / 没装库）6 小时后再问
+rtcConfig({ target: () => ourBase(loadPeer()) || '', log, base: PEER_BASE });
+setDirect({ open: pid => rtcOpen(pid) });
+const directTry = new Map();   // 对方 id → { next, fails, busy }
+async function directEnsure(c, p) {
+  if (!p.theirToken || rtcOpen(p.id)) return;
+  const st = directTry.get(p.id) || { next: 0, fails: 0, busy: false };
+  directTry.set(p.id, st);
+  if (st.busy || Date.now() < st.next || !(await rtcLib())) return;
+  st.busy = true;
+  try {
+    // 两边的定时器可能同一刻都来发起：错开几秒，对方先打过来了就不用再打
+    await new Promise(r => setTimeout(r, Math.random() * 8000));
+    if (rtcOpen(p.id)) return;
+    await rtcConnect(p.id, async sdp => {
+      const j = await peerCall(c, p, '/rtc', { body: { sdp }, ms: 15000 });
+      if (j.ok && j.sdp) return j.sdp;
+      throw Object.assign(new Error(j.error || 'HTTP ' + j.status), { old: j.status === 404 || j.status === 501 });
+    });
+    st.fails = 0; st.next = 0;
+  } catch (e) {
+    st.fails++;
+    st.next = Date.now() + (e.old ? 6 * 3600e3 : Math.min(2 * 60e3 * 2 ** (st.fails - 1), 30 * 60e3));
+    if (st.fails <= 3 || e.old) log('peer direct failed', p.name, String(e.message).slice(0, 120), e.old ? '(对方不支持直连，6 小时后再问)' : '');
+  } finally { st.busy = false; }
+}
+let probing = false;
+async function peerProbeAll() {
+  const c = loadPeer();
+  if (!c.enabled || probing) return;
+  probing = true;
+  try {
+    await Promise.all(c.peers.filter(p => p.theirToken).map(async p => {
+      await Promise.all([...peerLanUrls(p), ...peerRelays(p)].map(u => probeChan(c, p, u)));
+      const d = rtcOpen(p.id); if (d?.rtt) noteChan(p.id, DIRECT, true, d.rtt);
+      await directEnsure(c, p);
+    }));
+  } catch (e) { log('peer probe error', e.message); } finally { probing = false; }
+}
+setTimeout(() => peerProbeAll(), 15e3 + Math.random() * 15e3).unref?.();
+setInterval(() => peerProbeAll(), 60e3).unref?.();
 // 每 15 秒看一次：
 // - 协同端口没占到（比如被别的进程占着）：再试一次，占着的走了就接上
 // - 局域网 IP 换了（换 Wi-Fi、路由器重新分配）：监听是绑在具体 IP 上的，旧 IP 没了 socket 也不会报错，
@@ -3140,7 +3193,7 @@ const handler = async (req, res) => {
             peerCall(c, p, '/sessions', { ms: 6000 }).then(j => ({ online: !!j.ok, sessions: j.sessions || [], error: j.ok ? undefined : j.error }), e => ({ online: false, error: e.message })),
             probeRelay(p),
           ]);
-          return { id: p.id, ...main, route: main.online ? peerRoute.get(p.id)?.via : undefined, relay };
+          return { id: p.id, ...main, route: main.online ? peerRoute.get(p.id)?.via : undefined, relay, chans: chanList(p.id), direct: rtcState(p.id) };
         }));
         return sendJson(res, 200, out);
       }
