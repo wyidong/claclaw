@@ -2418,9 +2418,9 @@ async function recentList() {
       out.push(it);
     }
   }
-  // 群聊也在「最近」里（从「最近」删 = 解散）
+  // 群聊：全部列出（网页的群列表也用这份）；清空「最近」之后没新消息的标 cleared，「最近」里不显示（群列表照样有）
   const unread = unreadMap();
-  for (const g of groups.list()) out.push({ id: g.id, claw: 'group', title: g.title, at: g.lastAt, lastModified: g.lastAt, lastPrompt: g.preview() || undefined, unread: unread[g.id] || 0, group: { n: g.members.length, mirror: !!g.mirror } });
+  for (const g of groups.list()) out.push({ id: g.id, claw: 'group', title: g.title, at: g.lastAt, lastModified: g.lastAt, lastPrompt: g.preview() || undefined, unread: unread[g.id] || 0, group: { n: g.members.length, mirror: !!g.mirror }, cleared: (g.lastAt || 0) <= recentCleared || undefined });
   return peerMark(out.sort((a, b) => b.at - a.at));
 }
 
