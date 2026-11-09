@@ -2420,7 +2420,7 @@ async function recentList() {
   }
   // 群聊：全部列出（网页的群列表也用这份）；清空「最近」之后没新消息的标 cleared，「最近」里不显示（群列表照样有）
   const unread = unreadMap();
-  for (const g of groups.list()) out.push({ id: g.id, claw: 'group', title: g.title, at: g.lastAt, lastModified: g.lastAt, lastPrompt: g.preview() || undefined, unread: unread[g.id] || 0, group: { n: g.members.length, mirror: !!g.mirror }, cleared: (g.lastAt || 0) <= recentCleared || undefined });
+  for (const g of groups.list()) out.push({ id: g.id, claw: 'group', title: g.title, at: g.lastAt, lastModified: g.lastAt, lastPrompt: g.preview() || undefined, unread: unread[g.id] || 0, group: { n: g.members.length, mirror: !!g.mirror }, cleared: (g.lastAt || 0) <= Math.max(recentCleared, recentHidden[g.id] || 0) || undefined });
   return peerMark(out.sort((a, b) => b.at - a.at));
 }
 
@@ -3117,6 +3117,16 @@ const handler = async (req, res) => {
         const g = groups.edit(g0.id, { name: typeof b.name === 'string' ? b.name : undefined, members: Array.isArray(b.members) ? await groupMembers(b.members, g0) : undefined, host: typeof b.host === 'string' ? b.host : undefined });
         return sendJson(res, 200, { ok: true, id: g.id, title: g.title });
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
+    }
+    // 群从「最近」里拿掉（不解散，群列表里照样有；有新消息再回来）。/api/recent/hide 对群仍是解散（群列表左滑用）
+    if (url.pathname === '/api/recent/unlist' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      const b = await jsonBody(req, 1024);
+      const id = String(b?.id || '').slice(0, 200);
+      if (!id) return sendJson(res, 400, { error: '缺会话 id' });
+      recentHidden[id] = Date.now();
+      try { saveRecent(); } catch (e) { return sendJson(res, 500, { error: e.message }); }
+      return sendJson(res, 200, { ok: true });
     }
     if (url.pathname === '/api/recent/hide' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });

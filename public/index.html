@@ -5144,17 +5144,21 @@ function drawRecent(arr){
       b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
       // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
       var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
+      // 群：「最近」里左滑只从最近拿掉（群列表里还在）；群列表里左滑才是解散
+      var dissolve=!!(s.group&&grpOnly);
+      if(dissolve){hd.innerHTML='<span>解散</span>';hd.setAttribute('aria-label','解散群')}
       var hideIt=function(){
-        if(s.group&&!confirm('解散「'+s.title+'」？'+(s.group.mirror?'建群的电脑上':'对方电脑上')+'的这个群也会一起删除（成员会话本身不受影响）。'))return;
-        postJson('/api/recent/hide',{id:s.id}).then(function(r){return r.json()}).then(function(j){
+        if(dissolve&&!confirm('解散「'+s.title+'」？'+(s.group.mirror?'建群的电脑上':'对方电脑上')+'的这个群也会一起删除（成员会话本身不受影响）。'))return;
+        postJson(s.group&&!dissolve?'/api/recent/unlist':'/api/recent/hide',{id:s.id}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){
           if(!j.ok){toast(j.error||'删除失败');return}
+          if(s.group&&!dissolve){s.cleared=true;row.remove();toast('已从最近里拿掉（群列表里还在）');return}
           row.remove();if(lastList)lastList=lastList.filter(function(x){return x.id!==s.id});toast(j.dissolved?'群已解散':'已从最近里删除');
         }).catch(function(){toast('删除失败')});
       };
       hd.addEventListener('click',function(e){e.stopPropagation();hideIt()});
       row.appendChild(hd);
       // 电脑：右键弹出「从最近里删除」
-      b.addEventListener('contextmenu',function(e){if(TOUCH&&!DESKTOP.matches)return;e.preventDefault();ctxMenu(e.clientX,e.clientY,[['从最近里删除',hideIt,'danger']])});
+      b.addEventListener('contextmenu',function(e){if(TOUCH&&!DESKTOP.matches)return;e.preventDefault();ctxMenu(e.clientX,e.clientY,[[dissolve?'解散群':'从最近里删除',hideIt,'danger']])});
       list.appendChild(row);
     });
     if(grpOnly)list.appendChild(ga);
