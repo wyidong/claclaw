@@ -323,6 +323,11 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #rClear{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#rClear:hover{color:var(--danger,#d33)}#rClear[hidden]{display:none}
 #sSearch[hidden]{display:none}.s-gap{flex:1}
 #sPeer{flex:none;position:relative;width:40px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sPeer:hover{color:var(--accent)}#sPeer.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}
+#sReload{display:none}   /* 只在手机的最近 / 会话页顶栏显示 */
+#sReload.dot::after,#railReload.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 有新版本：点一下刷新 */
+#railReload{position:relative}
+#sReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
+#sVoice[hidden]{display:none}
 #sVoice{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover{color:var(--accent)}
 #rClear:disabled{opacity:.35;cursor:default}#rClear:disabled:hover{color:var(--muted);background:none}
 @media (min-width:1000px){   /* 电脑：新建、群、语音管理、协同挨着排在左边，清空最近在最右；左边栏不再放协同 */
@@ -966,7 +971,9 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
   /* 手机顶栏图标放大到和外壳的 home 图标差不多大（看得见的部分约 21px） */
   #app.m-list #sNew svg{width:25px;height:25px}#app.m-list #gNew svg{width:26px;height:26px}
   #app.m-list #sPeer svg,#app.m-list #sVoice svg,#app.m-list #rClear svg{width:27px;height:27px}
-  #app.m-list #sNew{width:45px;margin-left:-10px}   /* 图标离左边 12px */
+  #app.m-list #sReload{flex:none;position:relative;display:grid;place-items:center;width:42px;height:38px;margin-left:-6px;border:0;border-radius:10px;background:none;color:var(--muted);cursor:pointer}
+  #app.m-list #sReload svg{width:22px;height:22px}   /* 这个图标线条撑满画布，同尺寸看着比别的大，缩一点 */
+  #app.m-list #sNew{width:45px;margin-left:-4px}   /* 图标离左边 18px */
   /* 图标之间空 20px：按钮 = 图标宽 + 两边各 10px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
   #app.m-list #gNew{width:46px}#app.m-list #sPeer{width:47px}#app.m-list #sVoice{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
   #app.m-list #gNew,#app.m-list #sPeer,#app.m-list #sVoice{margin-left:-6px}
@@ -1599,7 +1606,7 @@ select.pe-in{text-align-last:right}
   </div>
 
   <!-- 手机底部菜单（只在列表页显示，进入聊天隐藏，像微信） -->
-  <!-- 手机：最近 / 会话 / Claw 页背景里的「更新客户端」圈，和 clarelay 顶上的房子上下对称；被列表内容盖住时隐藏 -->
+  <!-- 手机：Claw 页背景里的「更新客户端」圈，和 clarelay 顶上的房子上下对称；被列表内容盖住时隐藏 -->
   <button type="button" id="bgReload" aria-label="更新客户端" title="更新客户端" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button>
   <nav id="mtabs" aria-label="底部菜单">
     <button type="button" data-tab="recent"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle class="f" cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg><span>最近</span></button>
@@ -1686,7 +1693,7 @@ select.pe-in{text-align-last:right}
     <div id="sheetGrip" title="拖动调整宽度，双击恢复默认" aria-hidden="true"></div>
     <div class="sheet-p" role="dialog" aria-label="恢复会话">
       <h2>会话</h2>
-      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M15.5 4.9a3.2 3.2 0 0 1 0 6.2"/><path d="M17.5 13.8c2 .7 3.5 2.6 3.5 5.2"/></svg></button><button type="button" id="sPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18.3 6.5a7.5 7.5 0 0 1 0 11"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M15.5 4.9a3.2 3.2 0 0 1 0 6.2"/><path d="M17.5 13.8c2 .7 3.5 2.6 3.5 5.2"/></svg></button><button type="button" id="sPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18.3 6.5a7.5 7.5 0 0 1 0 11"/></svg></button><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -2710,7 +2717,7 @@ var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[
 function checkVersion(){
   fetch('/',{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){
     var v=(h.match(/页面版本 ([0-9a-f]{7})/)||[])[1];
-    if(v&&PAGE_VER&&v!==PAGE_VER){updateReady=true;$('#bgReload').classList.add('new');banner('claclaw 已更新 · 点这里刷新使用新版本');$('#bannerT').classList.add('link')}
+    if(v&&PAGE_VER&&v!==PAGE_VER){updateReady=true;$('#sReload').classList.add('dot');$('#railReload').classList.add('dot')}   // 不再出黄条：手机顶栏 / 电脑左栏的刷新图标上亮红点
   }).catch(function(){});
 }
 setInterval(function(){if(!document.hidden&&!updateReady)checkVersion()},300000);
@@ -5013,14 +5020,14 @@ function recentClear(){
 }
 $('#setRecentClear').addEventListener('click',recentClear);
 $('#rClear').addEventListener('click',recentClear);   // 「最近」顶上群图标右边的快捷清空
-// 背景里的「更新客户端」圈（手机的最近 / 会话 / Claw 页）：只在页面内容没盖到它的时候显示、能点
+// 背景里的「更新客户端」圈（手机的 Claw 页；最近 / 会话页的刷新在顶栏）：只在页面内容没盖到它的时候显示、能点
 (function(){
   var btn=$('#bgReload'),sp=$('.sheet-p'),q=0;
   function lastBottom(box){for(var el=box.lastElementChild;el;el=el.previousElementSibling){var r=el.getClientRects();if(r.length)return el.getBoundingClientRect().bottom}return box.getBoundingClientRect().top}
   function upd(){
     q=0;var app=$('#app');
-    var on=!DESKTOP.matches&&app.classList.contains('m-list')&&!app.classList.contains('set-on')&&!app.classList.contains('host-on');
-    if(on){btn.hidden=false;var top=btn.getBoundingClientRect().top;on=lastBottom(app.classList.contains('claw-on')?$('#clawPane'):$('#sList'))<top-6}
+    var on=!DESKTOP.matches&&app.classList.contains('m-list')&&app.classList.contains('claw-on')&&!app.classList.contains('set-on')&&!app.classList.contains('host-on');   // 最近 / 会话页的刷新挪到了顶栏
+    if(on){btn.hidden=false;var top=btn.getBoundingClientRect().top;on=lastBottom($('#clawPane'))<top-6}
     btn.hidden=!on;
   }
   function later(){if(!q)q=requestAnimationFrame(upd)}
@@ -5028,6 +5035,7 @@ $('#rClear').addEventListener('click',recentClear);   // 「最近」顶上群�
   new MutationObserver(later).observe($('#app'),{attributes:true,attributeFilter:['class']});
   new MutationObserver(later).observe(sp,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class']});
   btn.addEventListener('click',function(){if(btn.classList.contains('spin'))return;btn.classList.add('spin');setTimeout(function(){$('#railReload').click()},150)});
+  var sb=$('#sReload');sb.addEventListener('click',function(){if(sb.classList.contains('spin'))return;sb.classList.add('spin');setTimeout(function(){$('#railReload').click()},150)});
   later();
 })();
 var reloadTo='',reloadToSet=false;try{reloadTo=sessionStorage.getItem('claclaw.reloadTo')||'';reloadToSet=reloadTo==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
@@ -6639,6 +6647,7 @@ function ttsSync(){
   var sel=$('#setTtsMode');if(sel)sel.value=tts.mode;
   // 朗读关着时，声音和语速用不上：一起收起来
   $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
+  $('#sVoice').hidden=!tts.on;   // 列表顶栏的语音管理图标：朗读没开就不显示
   var label={off:'不朗读',reply:'只念回复',steps:'念关键节点和回复',brief:'只念关键节点'};
   $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；锁屏后停':'关着';
   var ms=$('#setTtsModeSub');if(ms)ms.textContent=label[tts.mode]||label.reply;
