@@ -45,6 +45,7 @@ import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeC
 import { readBody, jsonBody } from './httpbody.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
+import { INSTALLS, installStart, installState } from './install.mjs';
 import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_TTL } from './peerqueue.mjs';
@@ -2943,10 +2944,23 @@ const handler = async (req, res) => {
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
       return sendJson(res, 200, skills.list(installed));
     }
+    // 帮用户装第一个 Agent（见 install.mjs）：GET 取进度，POST {claw} 开始装（只能装 INSTALLS 里列的）
+    if (url.pathname === '/api/claws/install') {
+      if (req.method === 'POST') {
+        if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+        const b = await jsonBody(req, 1024);
+        const id = String(b?.claw || '');
+        if (id === 'deepseek' && !dsSupported()) return sendJson(res, 400, { error: dsUnsupportedReason() });
+        try { return sendJson(res, 200, installStart(id, { log })); } catch (e) { return sendJson(res, 400, { error: e.message }); }
+      }
+      return sendJson(res, 200, installState() || { status: 'none' });
+    }
     if (url.pathname === '/api/claws') {
       // running：装了但没启动的（OpenClaw 网关没开）手机上灰着显示、电脑上不显示；其他 Claw 用的时候才拉起进程，装了就算可用
       const list = detectClaws();
       for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.id === 'claude') c.login = { can: true, ctok: claudeTokenPublic(req) }; else if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）；Claude 只有长期令牌这一项
+      // 一个都没装：能在网页上一键装的（DeepSeek）标上 canInstall，网页显示它的卡片和「安装」按钮
+      if (!list.some(c => c.installed)) for (const c of list) if (INSTALLS[c.id] && c.supported) c.canInstall = true;
       return sendJson(res, 200, list);
     }
     if (url.pathname === '/api/sound') {

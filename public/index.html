@@ -4841,10 +4841,14 @@ function applyClaws(list){
     var down=c.installed&&c.supported&&c.running===false;   // 装了但没启动（OpenClaw 网关没开）：手机上灰着显示、不能选；电脑上不显示
     var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported||down;
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
-    card.hidden=!c.installed||(down&&DESKTOP.matches);if(!card.hidden)any=true;
-    card.disabled=!c.supported||down;card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):down?'已安装，没有启动':'';
+    card.hidden=!(c.installed||c.canInstall)||(down&&DESKTOP.matches);if(!card.hidden)any=true;
+    card.disabled=!c.supported||down;card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):down?'已安装，没有启动':c.canInstall?'还没安装，点「安装」帮你装好':'';
+    // 一个 Claw 都没装：这张卡片（DeepSeek）带「安装」按钮，点卡片也是装
+    var ib=card.querySelector('.claw-install');
+    if(c.canInstall){if(!ib){ib=document.createElement('span');ib.className='claw-login claw-install';ib.setAttribute('role','button');ib.textContent='安装';ib.addEventListener('click',function(e){e.stopPropagation();openInstall(c.id)});card.appendChild(ib)}ib.hidden=false}
+    else if(ib)ib.hidden=true;
     // 登录：没登录（模型库也顶不上）就写「未登录」；claclaw 能替它登的加个「登录」小按钮（已登录的写「换账号」）
-    var lg=c.login,lb=card.querySelector('.claw-login');
+    var lg=c.login,lb=card.querySelector('.claw-login:not(.claw-install)');
     if(c.supported&&!down&&lg&&lg.need)card.querySelector('.claw-st').textContent=lg.can?'未登录':'未登录（要在电脑上登录）';
     if(c.supported&&!down&&lg&&lg.can){
       if(!lb){lb=document.createElement('span');lb.className='claw-login';lb.setAttribute('role','button');lb.addEventListener('click',function(e){e.stopPropagation();openLogin(c.id)});card.appendChild(lb)}
@@ -4873,6 +4877,7 @@ function openLogin(claw){
   var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc((lg.loggedIn===true?'重新登录 ':'登录 ')+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
     +(lg.hint?'<p class="lg-hint">'+esc(lg.hint)+'</p>':'')
+    +(lg.keyUrl?'<div class="lg-key"><a class="lg-btn ghost" href="'+esc(lg.keyUrl)+'" target="_blank" rel="noopener">打开平台网页拿 key</a></div>':'')
     +(lg.key?'<div class="lg-key"><input type="password" class="lg-in" placeholder="'+esc(lg.keyLabel||'API key')+'" autocomplete="off"><button type="button" class="lg-btn lg-start">开始</button></div>':'')
     +'<div class="lg-body"><div class="lg-st">'+(lg.key?'先填上 key':'正在启动登录命令…')+'</div></div>'
     +'<div class="lg-ft"><button type="button" class="lg-btn ghost lg-cancel">取消</button></div></div>';
@@ -4906,7 +4911,39 @@ function pickClaw(id){
   clawSel=id;try{localStorage.setItem(hk('claw'),clawSel)}catch(_){}
   showClawSel();renderUnread();mTab('chats');openSheet();
 }
-document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(!c.disabled)pickClaw(c.dataset.claw)})});
+document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(c.disabled)return;var i=clawInfo[c.dataset.claw];if(i&&i.canInstall&&!i.installed)openInstall(c.dataset.claw);else pickClaw(c.dataset.claw)})});
+// ---------- 帮用户装第一个 Agent（一个都没装时的 DeepSeek 卡片；见 install.mjs）：装完接着填 API key ----------
+var instTimer=null;
+function openInstall(claw){
+  var nm=CLAW_NAMES[claw]||claw;
+  var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
+  loginClaw=null;
+  p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc('安装 '+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
+    +'<p class="lg-hint">在这台电脑上安装 '+esc(nm)+'，大约几分钟。装好后再填 API key 就能用了。</p>'
+    +'<div class="lg-body"><div class="lg-st">正在开始…</div></div>'
+    +'<div class="lg-ft"><button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';
+  p.classList.add('on');
+  var stop=function(){clearInterval(instTimer);instTimer=null;closeLogin()};
+  p.querySelector('.lg-x').addEventListener('click',stop);p.querySelector('.lg-cancel').addEventListener('click',stop);
+  var paint=function(j){
+    if(!p.classList.contains('on'))return clearInterval(instTimer);
+    var b=p.querySelector('.lg-body');
+    if(j.error&&j.status!=='fail'){b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error)+'</div>';return clearInterval(instTimer)}
+    if(j.status==='ok'){
+      clearInterval(instTimer);instTimer=null;
+      b.innerHTML='<div class="lg-st ok">✓ 安装完成</div><div class="lg-key"><button type="button" class="lg-btn lg-next">下一步：填 API key</button></div>';
+      b.querySelector('.lg-next').addEventListener('click',function(){
+        fetch('/api/claws').then(function(r){return r.json()}).then(function(list){applyClaws(list);var i=clawInfo[claw];if(i&&i.login&&i.login.key)openLogin(claw);else{closeLogin();pickClaw(claw)}}).catch(function(e){toast(e.message)});
+      });
+      return;
+    }
+    if(j.status==='fail'){clearInterval(instTimer);instTimer=null;b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error||'没装上')+'</div><div class="lg-key"><button type="button" class="lg-btn lg-retry">再试一次</button></div>';b.querySelector('.lg-retry').addEventListener('click',function(){openInstall(claw)});return}
+    b.innerHTML='<div class="lg-st">'+esc(j.tail||'正在安装…')+'</div>';
+  };
+  var poll=function(){fetch('/api/claws/install').then(function(r){return r.json()}).then(function(j){if(j.claw===claw||j.status!=='none')paint(j)}).catch(function(){})};
+  clearInterval(instTimer);
+  postJson('/api/claws/install',{claw:claw}).then(function(r){return r.json()}).then(function(j){paint(j);if(j.status==='running')instTimer=setInterval(poll,2000)}).catch(function(e){paint({status:'fail',error:e.message})});
+}
 document.querySelectorAll('#rail .rclaw').forEach(function(b){b.addEventListener('click',function(){pickClaw(b.dataset.claw)})});
 $('#rclawMore').addEventListener('click',function(){$('#rclaws').classList.toggle('open');renderRailClaws()});
 $('#railCur').addEventListener('click',function(){pickClaw(curClaw()||'claude')});

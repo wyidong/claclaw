@@ -35,12 +35,53 @@ function qoderLoggedIn() {
 }
 const iflowSettings = () => readJson(path.join(process.env.IFLOW_HOME || path.join(HOME, '.iflow'), 'settings.json'), {});
 
+// DeepSeek Harness 的 key 存在 $DSH_HOME/.credentials.yaml：
+//   version: 1
+//   refs:
+//     DEEPSEEK_API_KEY: sk-…
+// 只改 DEEPSEEK_API_KEY 这一行（没有就加在 refs 下面），别的 refs（比如 ARK_API_KEY）原样留着
+const DSH_CRED = () => path.join(process.env.DSH_HOME || path.join(HOME, '.dsh'), '.credentials.yaml');
+export const DS_KEY_RE = /^sk-[A-Za-z0-9_-]{16,200}$/;
+export function dsWriteKey(key, file = DSH_CRED()) {
+  key = String(key || '').trim();
+  if (!DS_KEY_RE.test(key)) throw new Error('这不像 DeepSeek 的 API key（应该以 sk- 开头）');
+  let lines = [];
+  try { lines = fs.readFileSync(file, 'utf8').split(/\r?\n/); } catch {}
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  if (!lines.length) lines = ['version: 1', 'refs:'];
+  const row = '  DEEPSEEK_API_KEY: ' + key;
+  const at = lines.findIndex(l => /^\s+DEEPSEEK_API_KEY\s*:/.test(l));
+  if (at >= 0) lines[at] = row;
+  else {
+    let r = lines.findIndex(l => /^refs\s*:/.test(l));
+    if (r < 0) { lines.push('refs:'); r = lines.length - 1; }
+    else if (/^refs\s*:\s*\{\s*\}\s*$/.test(lines[r])) lines[r] = 'refs:';
+    lines.splice(r + 1, 0, row);
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + '.claclaw-' + process.pid;
+  fs.writeFileSync(tmp, lines.join('\n') + '\n', { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+// 有没有可用的 key：环境变量，或者 credentials 里有任何一个非空的 ref（用别家模型的也算登录过）
+export function dsHasKey(file = DSH_CRED()) {
+  if (process.env.DEEPSEEK_API_KEY) return true;
+  try { return /^\s+[A-Z][A-Z0-9_]*\s*:\s*\S/m.test(fs.readFileSync(file, 'utf8')); } catch { return false; }
+}
+
 // 每个能登录的 Claw：label；cmd()：[程序, 参数]（程序找不到返回 null）；cwd；
 // steps：看到什么就自动输什么（终端界面型）；keyPrompt：要先填 key（看到这个提示就把 key 喂进去）；paste：要用户粘贴授权码的提示；
 // doneWhen(text)：进程不会自己退出的（CodeBuddy）怎么算成功；write(key)：不起命令、直接写文件的
 // loggedIn()：true / false / null（判断不了）；libOk()：模型库能顶上、不登录也能用
 const QD_BIN = () => findBin('qodercli', QD_DIRS);
 export const SPECS = {
+  deepseek: {
+    label: 'DeepSeek', keyLabel: 'DeepSeek 的 API key（sk- 开头）',
+    keyUrl: 'https://platform.deepseek.com/api_keys',
+    write: key => dsWriteKey(key),
+    loggedIn: () => dsHasKey(), libOk: () => false,
+    hint: '还没有 key：点下面的链接，用手机号注册 / 登录 DeepSeek 开放平台，充值后在「API keys」里创建一个，复制回来粘贴到这里',
+  },
   qoder: {
     label: 'Qoder', cmd: () => { const b = QD_BIN(); return b && [b, ['login']]; },
     loggedIn: qoderLoggedIn, libOk: () => false,
@@ -108,7 +149,7 @@ export function loginInfo(claw) {
   let loggedIn = null; try { loggedIn = s.loggedIn(); } catch {}
   const blocked = ptyBlocked(s);
   const can = !blocked && !!(s.write || s.cmd?.());
-  return { can, key: !!(s.keyPrompt || s.write), keyLabel: s.keyLabel || '', loggedIn, need: loggedIn !== true && !s.libOk(), hint: blocked ? WIN_HINT : s.hint, running: jobs.has(claw) };
+  return { can, key: !!(s.keyPrompt || s.write), keyLabel: s.keyLabel || '', keyUrl: s.keyUrl || '', loggedIn, need: loggedIn !== true && !s.libOk(), hint: blocked ? WIN_HINT : s.hint, running: jobs.has(claw) };
 }
 
 // ---------- 正在进行的登录 ----------
