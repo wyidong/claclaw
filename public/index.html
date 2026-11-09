@@ -1332,6 +1332,7 @@ select.pe-in{text-align-last:right}
      圆角外面那一小块用同色的外阴影盖住（只扩 6px，盖不到图标栏的按钮） */
   #app{position:relative;box-sizing:border-box;padding:0 8px 8px 0;background:var(--strip)}
   #app::after{content:'';position:absolute;top:0;left:64px;right:8px;bottom:8px;border:1px solid var(--line);border-radius:12px;box-shadow:0 0 0 6px var(--strip);pointer-events:none;z-index:20}
+  #newDlg,#delDlg,#keyDlg,#cfgDlg,#lightbox,#vplayer,#fview,#diss{z-index:21}   /* 弹框 / 全屏查看盖在这圈边框上面：整屏一起变暗，不留一圈亮边 */
   /* 聊天区滚动条：位置始终留着（内容不跟着跳），没有底色 */
   #feed{scrollbar-gutter:stable}
   #feed::-webkit-scrollbar{width:8px}
@@ -5179,6 +5180,7 @@ $('#sNew').addEventListener('click',function(){
   if(listMode==='recent'){   // 「最近」：参照当前打开的会话，没有就用列表里最近的一个（群除外）
     var ok=function(x){return x&&x.id&&!x.group&&clawOf(x.id)!=='group'&&(x.cwd||clawOf(x.id)==='openclaw')};
     var r0=ok(session)?session:(lastList||[]).find(ok);
+    if(!r0&&!lastList&&!this.dataset.retry){var me=this;me.dataset.retry=1;fetch('/api/recent').then(function(r){return r.json()}).then(function(a){if(Array.isArray(a)&&!lastList)lastList=a;me.click()}).catch(function(){}).then(function(){delete me.dataset.retry});return}   // 列表还没取回：取一次再来
     if(!r0){alert('「最近」里还没有会话可参照：先到某个 Claw 的会话列表里新建');return}
     var k0=r0.claw&&r0.claw!=='group'?r0.claw:clawOf(r0.id);
     if(k0==='openclaw'){newSibling({id:'',cwd:'',claw:'openclaw'});return}
