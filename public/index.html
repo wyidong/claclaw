@@ -1963,7 +1963,7 @@ var CLAW_T=[
   {id:'qwen',p:'qw',name:'Qwen',long:'Qwen Code',strip:/^qw:/,acp:true},
   {id:'codex',p:'cx',name:'Codex',long:'Codex',strip:/^cx:/,acp:true},
   {id:'glm',p:'gl',name:'GLM',long:'GLM Agent',strip:/^gl:/,acp:true},
-  {id:'mini',p:'mi',name:'Mini',long:'Mini',strip:/^mi:/,acp:true},
+  {id:'mini',p:'mi',name:'Mini',long:'Mini',strip:/^mi:/,acp:true,dissect:true},
   {id:'iflow',p:'if',name:'iFlow',long:'iFlow CLI',strip:/^if:/,acp:true},
   {id:'minimax',p:'mm',name:'MiniMax',long:'MiniMax Code',strip:/^mm:(mvs_)?/,acp:true},
   {id:'codebuddy',p:'cb',name:'CodeBuddy',long:'CodeBuddy Code',strip:/^cb:/,acp:true},
@@ -2392,6 +2392,18 @@ function dsTk(n){n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$
 function dsNum(n){return Math.round(+n||0).toLocaleString('en-US')}
 function dsVal(n,known){return known===false?'--':dsTk(n)}   // 全程没上报过的桶：-- 不补 0
 function dsDur(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1 秒':'0 秒';if(s<60)return s+' 秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h+' 小时 '+(m%60)+' 分';return m+' 分 '+(s%60)+' 秒'}
+function dsSec(ms){ms=+ms||0;return (ms/1000).toFixed(ms<10000?2:1)+' 秒'}
+// Mini 这一轮怎么问的：接口、模型、参数、发了几条历史、系统提示；最后出错 / 没写完的说明
+function dsMiniAsk(mi){
+  var c=['<span class="ds-chip">'+esc(mi.api||'openai')+(mi.host?' · '+esc(mi.host):'')+'</span>','<span class="ds-chip">思考 <b>'+(mi.think?'开':'关')+'</b>'+(mi.noOff?'（这个模型关不掉）':'')+'</span>',
+    '<span class="ds-chip">发了 <b>'+mi.sent+'</b> 条对话'+(mi.dropped?'，更早的 '+mi.dropped+' 条已省略':'')+'</span>'];
+  if(mi.maxOut)c.push('<span class="ds-chip">输出上限 <b>'+dsN(mi.maxOut)+'</b> tok</span>');
+  var h='<div class="ds-sec">怎么问的<small>每次请求 = 系统提示 + 发出的对话</small></div><div class="ds-chips">'+c.join('')+'</div>';
+  if(mi.sys)h+='<details class="ds-files"><summary>系统提示 '+dsN(mi.sys.length)+' 字</summary><div class="ds-tx" style="white-space:pre-wrap">'+esc(mi.sys)+'</div></details>';
+  if(mi.error)h+='<div class="ds-files" style="color:var(--deny)">出错：'+esc(mi.error)+'</div>';
+  if(mi.note)h+='<div class="ds-files">'+esc(mi.note)+'</div>';
+  return h;
+}
 function dsWhen(ms,multi){if(!ms)return '';var d=new Date(ms),hm=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);return multi?(d.getMonth()+1)+'/'+d.getDate()+' '+hm:hm}
 function dsModel(m){return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,'')}
 function dsTool(n){return String(n||'').replace(/^mcp__/,'').replace(/^plugin_[a-z0-9-]+_([a-z0-9-]+)__/i,'$1__').replace('__','·')}   // mcp__plugin_playwright_playwright__browser_x → playwright·browser_x
@@ -2425,7 +2437,7 @@ function dsMarkHeavy(j){
   ts.forEach(function(t){t.heavy=t.nSteps>=mSteps*2+2||t.nTools>=mTools*2+4||t.durMs>=mDur*2+60000||t.out>=mOut*2+2000});
 }
 function dsMarks(t){
-  var m=[];if(t.queued)m.push('插话');if(t.images)m.push('图 ×'+t.images);if(t.interrupted)m.push('<u>被打断</u>');if(t.errors)m.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)m.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)m.push('重试 '+t.retries);if(t.compact)m.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)m.push('子代理 '+t.subagents);if(t.waitMs)m.push('等你 '+dsDur(t.waitMs));
+  var m=[];if(t.queued)m.push('插话');if(t.images)m.push('图 ×'+t.images);if(t.interrupted)m.push('<u>被打断</u>');if(t.errors)m.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)m.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)m.push('重试 '+t.retries);var mi=t.mini;if(mi){if(mi.error)m.push('<u>出错</u>');if(mi.parts>1)m.push('分 '+mi.parts+' 段');if(mi.stop==='length')m.push('<i>没写完</i>');else if(mi.stop&&mi.stop!=='stop')m.push('<u>被拦下 '+mi.stop+'</u>')}if(t.compact)m.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)m.push('子代理 '+t.subagents);if(t.waitMs)m.push('等你 '+dsDur(t.waitMs));
   return m;
 }
 function dsLegend(o,s){
@@ -2474,6 +2486,10 @@ function showSession(restore){
     +'</div>';
   h+='<div class="ds-meta2">'+esc(((s.models||[]).filter(function(m){return m!=='<synthetic>'}).map(dsModel).join(' · ')||s.model||'')+(j.cwdShort?' · '+j.cwdShort:'')+(j.branch?' · '+j.branch:'')+(s.firstAt?' · '+dsWhen(s.firstAt,true)+' → '+dsWhen(s.lastAt,true):''))+'</div>';
   if(s.toolsBy&&s.toolsBy.length)h+='<div class="ds-sec">用到的工具<small>次数</small></div><div class="ds-chips tl">'+s.toolsBy.map(function(x){return '<span class="ds-chip" title="'+esc(x[0])+'">'+esc(dsTool(x[0]))+' <b>'+x[1]+'</b></span>'}).join('')+'</div>';
+  if(s.miniModels&&s.miniModels.length){   // Mini：按模型看快不快、出错多不多（挑模型用）
+    h+='<div class="ds-sec">模型表现<small>每次请求算一次；首字、速度只算成功的</small></div><div class="ds-tw"><table class="ds-tb"><thead><tr><th>模型</th><th>请求</th><th>出错</th><th>平均首字</th><th>平均速度</th><th class="col-out">输出</th></tr></thead><tbody>'
+      +s.miniModels.map(function(m){return '<tr><td>'+esc(m.model)+'</td><td>'+m.calls+'</td><td'+(m.errors?' style="color:var(--deny)"':'')+'>'+(m.errors||'')+'</td><td>'+(m.ttftMs!=null?dsSec(m.ttftMs):'--')+'</td><td>'+(m.tps!=null?m.tps+' tok/s':'--')+'</td><td class="col-out">'+dsTk(m.out)+'</td></tr>'}).join('')+'</tbody></table></div>';
+  }
   h+='<div class="ds-sec">每一轮<small>一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；红圈 = 工具出错。点球进那一轮</small><button type="button" class="ds-tg" data-tg="beads">'+(dissBeadsOpen?'收起':'展开全部 '+ts.length+' 轮')+'</button></div><div class="ds-beads'+(dissBeadsOpen?'':' one')+'">';
   var hi=ts.length-dissPage*DS_PAGE,lo=Math.max(0,hi-DS_PAGE);   // 当前页：倒序，第一页是最新的几轮；球还是按时间从左到右
   ts.forEach(function(t,k){h+=dsBead(t,max,k<lo||k>=hi)});
@@ -2507,15 +2523,16 @@ function showTurn(i){
   h+='<div class="ds-sec">你说的<small>'+dsN(t.chars)+' 字'+(t.queued?' · 干活中插的话':'')+'</small></div><div class="ds-q">'+(t.text?esc(t.text):'<span style="color:var(--muted)">（接着上一轮，没有新的话）</span>')+'</div>';
   h+='<div class="ds-sec">这一轮做了什么</div><div class="ds-chips"><span class="ds-chip"><b>'+t.nSteps+'</b> 步</span><span class="ds-chip"><b>'+t.nTools+'</b> 次工具</span>'+(t.reads?'<span class="ds-chip">读 <b>'+t.reads+'</b> 个文件</span>':'')+(t.writes?'<span class="ds-chip">改 <b>'+t.writes+'</b> 个文件</span>':'')+(t.cmds?'<span class="ds-chip"><b>'+t.cmds+'</b> 条命令</span>':'')+(t.subagents?'<span class="ds-chip">子代理 <b>'+t.subagents+'</b></span>':'')+(t.replyChars?'<span class="ds-chip">回复 <b>'+dsN(t.replyChars)+'</b> 字</span>':'')+'</div>'
     +(t.files&&t.files.length?'<div class="ds-files">改了：'+t.files.map(esc).join('，')+'</div>':'');
+  if(t.mini)h+=dsMiniAsk(t.mini);
   h+='<div class="ds-sec">逐步<small>一步 = 一次模型调用；点一步看它调了什么。工具调用本身不另算 token（算在这一步的输出里），所以只给次数</small></div>';
   h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>步</th><th>模型</th><th>模型耗时</th><th class="col-inp">输入</th><th class="col-cw ds-opt">缓存写</th><th class="col-cr">缓存读</th><th class="col-out">输出</th><th class="ds-opt">思考</th><th>工具</th><th>合计</th></tr></thead><tbody>';
   (t.steps||[]).forEach(function(st,k){
     var errs=st.tools.filter(function(u){return u.err}).length;
-    h+='<tr class="r s" data-k="'+k+'"><td class="no'+(errs?' err':'')+'">'+(k+1)+'</td><td>'+esc(dsModel(st.model))+'</td><td>'+dsDur(st.latMs)+'</td><td class="col-inp">'+dsTk(st.inp)+'</td><td class="col-cw ds-opt">'+(st.cw==null?'--':dsTk(st.cw))+'</td><td class="col-cr">'+(st.cr==null?'--':dsTk(st.cr))+'</td><td class="col-out">'+dsTk(st.out)+'</td><td class="ds-opt">'+(st.think?dsTk(st.think):'')+'</td><td>'+(st.tools.length||'')+'</td><td><b>'+dsTk(st.total)+'</b></td></tr>';
+    h+='<tr class="r s" data-k="'+k+'"><td class="no'+(errs?' err':'')+'">'+(k+1)+'</td><td>'+esc(dsModel(st.model))+'</td><td>'+(st.ttftMs!==undefined?dsSec(st.latMs):dsDur(st.latMs))+'</td><td class="col-inp">'+dsTk(st.inp)+'</td><td class="col-cw ds-opt">'+(st.cw==null?'--':dsTk(st.cw))+'</td><td class="col-cr">'+(st.cr==null?'--':dsTk(st.cr))+'</td><td class="col-out">'+dsTk(st.out)+'</td><td class="ds-opt">'+(st.think?dsTk(st.think):'')+'</td><td>'+(st.tools.length||'')+'</td><td><b>'+dsTk(st.total)+'</b></td></tr>';
     var d='';
     st.tools.forEach(function(u){d+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(dsTool(u.name))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?(u.wait?'等你 ':'')+dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
     if(st.text)d+='<div class="ds-tx">'+esc(st.text)+'</div>';
-    d+='<div class="ds-note">这一步的上下文 '+dsTk(st.ctx)+'（输入 '+dsTk(st.inp)+(st.cr!=null?' + 缓存读 '+dsTk(st.cr):'')+(st.cw!=null?' + 缓存写 '+dsTk(st.cw):'')+'）· 输出 '+dsTk(st.out)+(st.think?'（其中思考 '+dsTk(st.think)+'，已含在输出里）':'')+(st.stop?' · 结束原因 '+esc(st.stop):'')+'</div>';
+    d+='<div class="ds-note">这一步的上下文 '+dsTk(st.ctx)+'（输入 '+dsTk(st.inp)+(st.cr!=null?' + 缓存读 '+dsTk(st.cr):'')+(st.cw!=null?' + 缓存写 '+dsTk(st.cw):'')+'）· 输出 '+dsTk(st.out)+(st.think?'（其中思考 '+dsTk(st.think)+'，已含在输出里）':'')+(st.stop?' · 结束原因 '+esc(st.stop):'')+(st.ttftMs!==undefined?(st.ttftMs!=null?' · 首字 '+dsSec(st.ttftMs):'')+(st.tps?' · '+st.tps+' tok/s':'')+(st.retry?' · 去掉调参（temperature / 关思考）重试的':''):'')+'</div>'+(st.err?'<div class="ds-note" style="color:var(--deny)">'+esc(st.err)+'</div>':'');
     h+='<tr class="d" hidden><td colspan="10">'+(d||'这一步没有记录')+'</td></tr>';
   });
   h+='</tbody><tfoot><tr><td>Σ本轮</td><td></td><td>'+dsDur(t.durMs)+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td class="ds-opt">'+(t.think?dsTk(t.think):'')+'</td><td>'+(t.nTools||'')+'</td><td>'+dsTk(t.total)+'</td></tr></tfoot></table></div>';

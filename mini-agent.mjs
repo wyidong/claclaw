@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 const BASE = (process.env.MINI_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
 const KEY = process.env.MINI_API_KEY || 'none';
 const FORMAT = ['anthropic', 'gemini'].includes(process.env.MINI_FORMAT) ? process.env.MINI_FORMAT : 'openai';
+const hostOf = u => { try { return new URL(u).host; } catch { return ''; } };
 const MODELS = (process.env.MINI_MODELS || '').split(',').map(s => s.trim()).filter(Boolean);
 const DEFAULT_MODEL = process.env.MINI_MODEL || MODELS[0] || 'qwen3:1.7b';
 const DIR = process.env.MINI_DIR || path.join(os.homedir(), '.claclaw-mini', 'sessions');
@@ -129,23 +130,24 @@ async function post(s, signal, extra) {
     throw new Error('连不上模型服务 ' + BASE + (e.cause?.code ? '（' + e.cause.code + '）' : '：' + e.message));
   }
 }
-// 流里的一条 → { text, thought, usage: { in, out } }（各格式的字段不一样，统一成这个样子）
+// 流里的一条 → { text, thought, usage: { in（输入合计，含缓存）, cr（缓存读）, cw（缓存写）, out（输出，含思考）, think（其中思考） }, stop }
+// 各格式的字段不一样，统一成这个样子；没报的项不给（解剖时显示 --，不补 0）
 function pieceOf(j) {
   if (j.error) throw new Error('模型服务出错：' + String(j.error.message || JSON.stringify(j.error)).slice(0, 300));
   if (FORMAT === 'anthropic') {
     if (j.type === 'content_block_delta') return j.delta?.type === 'thinking_delta' ? { thought: true } : { text: j.delta?.text || '' };
-    if (j.type === 'message_start') { const u = j.message?.usage || {}; return { usage: { in: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) } }; }
+    if (j.type === 'message_start') { const u = j.message?.usage || {}; return { usage: { in: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), cr: u.cache_read_input_tokens, cw: u.cache_creation_input_tokens } }; }
     if (j.type === 'message_delta') return { usage: j.usage ? { out: j.usage.output_tokens } : null, stop: stopOf(j.delta?.stop_reason) };
     return {};
   }
   if (FORMAT === 'gemini') {
     const c = j.candidates?.[0], parts = c?.content?.parts || [], u = j.usageMetadata;
     return { text: parts.filter(x => !x.thought).map(x => x.text || '').join(''), thought: parts.some(x => x.thought),
-      usage: u ? { in: u.promptTokenCount, out: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0) } : null,
+      usage: u ? { in: u.promptTokenCount, cr: u.cachedContentTokenCount, out: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0), think: u.thoughtsTokenCount } : null,
       stop: stopOf(c?.finishReason || j.promptFeedback?.blockReason) };
   }
   const dl = j.choices?.[0]?.delta;
-  return { text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), usage: j.usage ? { in: j.usage.prompt_tokens, out: j.usage.completion_tokens } : null,
+  return { text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), usage: j.usage ? { in: j.usage.prompt_tokens, cr: j.usage.prompt_tokens_details?.cached_tokens, out: j.usage.completion_tokens, think: j.usage.completion_tokens_details?.reasoning_tokens } : null,
     stop: stopOf(j.choices?.[0]?.finish_reason) };
 }
 // 各家的结束原因 → 'stop'（正常写完）| 'length'（到了输出上限，没写完）| 其他原样（被过滤拦下之类：RECITATION / SAFETY / content_filter / refusal…）
@@ -182,38 +184,53 @@ function dayReset(now = new Date()) {
   const hm = at.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   return (at.toDateString() === now.toDateString() ? '今天 ' : '明天 ') + hm + '（太平洋时间 0 点）';
 }
-async function chat(s, signal, onText, onThought, extra) {
+// 每次请求记一条进 calls（给会话解剖用）：{ at, status, ms, ttftMs, inp, cr, cw, out, think, stop, chars, plain, err }
+async function chat(s, signal, onText, onThought, extra, calls = []) {
   const t0 = Date.now();
-  let r = await post(s, signal, extra);
-  if (r.status === 400 && !s.plain) {
-    const first = await r.text();
-    s.plain = true;
+  let call = { at: t0 }; calls.push(call);
+  const fail = (c, e) => { c.ms = Date.now() - c.at; if (e.name === 'AbortError') c.cancelled = true; else c.err = String(e.message).slice(0, 300); };
+  let r;
+  try {
     r = await post(s, signal, extra);
-    if (!r.ok) { s.plain = false; throw new Error(errOf(400, first)); }
-  }
-  if (!r.ok) throw new Error(errOf(r.status, await r.text(), r.headers));
-  let text = '', tin = 0, tout = 0, buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻
-  const dec = new TextDecoder();
-  for await (const chunk of r.body) {
-    buf += dec.decode(chunk, { stream: true });
-    let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-      if (!line.startsWith('data:')) continue;
-      const d = line.slice(5).trim();
-      if (!d || d === '[DONE]') continue;
-      let j; try { j = JSON.parse(d); } catch { continue; }
-      const x = pieceOf(j);
-      if (x.usage?.in) tin = x.usage.in;
-      if (x.usage?.out) tout = x.usage.out;
-      if (x.stop) stop = x.stop;
-      if ((x.text || x.thought) && !first) first = Date.now();
-      if (x.thought) onThought();
-      if (x.text) { text += x.text; onText(text); }
+    if (r.status === 400 && !s.plain) {
+      const first = await r.text();
+      Object.assign(call, { status: 400, ms: Date.now() - call.at, err: errOf(400, first).slice(0, 300), plain: false });
+      s.plain = true;
+      call = { at: Date.now(), retry: true }; calls.push(call);
+      r = await post(s, signal, extra);
+      if (!r.ok) { s.plain = false; call.status = r.status; throw new Error(errOf(400, first)); }
     }
-  }
-  return { text: clean(text), tin, tout, leaked: text.includes('</think>'), stop, t0, first, end: Date.now() };
+    call.status = r.status; call.plain = !!s.plain;
+    if (!r.ok) throw new Error(errOf(r.status, await r.text(), r.headers));
+  } catch (e) { fail(call, e); throw e; }
+  let text = '', buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻
+  const u = {};
+  const dec = new TextDecoder();
+  try {
+    for await (const chunk of r.body) {
+      buf += dec.decode(chunk, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        const d = line.slice(5).trim();
+        if (!d || d === '[DONE]') continue;
+        let j; try { j = JSON.parse(d); } catch { continue; }
+        const x = pieceOf(j);
+        if (x.usage) for (const k of ['in', 'cr', 'cw', 'out', 'think']) if (x.usage[k] != null) u[k] = x.usage[k];
+        if (x.stop) stop = x.stop;
+        if ((x.text || x.thought) && !first) first = Date.now();
+        if (x.thought) onThought();
+        if (x.text) { text += x.text; onText(text); }
+      }
+    }
+  } catch (e) { Object.assign(call, usageRec(u), { chars: clean(text).length }); fail(call, e); throw e; }
+  const end = Date.now();
+  Object.assign(call, { ms: end - call.at, ttftMs: first ? first - call.at : null, ...usageRec(u), stop, chars: clean(text).length });
+  return { text: clean(text), tin: u.in || 0, tout: u.out || 0, leaked: text.includes('</think>'), stop, t0, first, end };
 }
+// 用量 → 记录里的字段：inp 是输入合计（含缓存）；没报的项不写
+const usageRec = u => Object.fromEntries([['inp', u.in], ['cr', u.cr], ['cw', u.cw], ['out', u.out], ['think', u.think]].filter(([, v]) => v != null));
 
 // ---------- 一轮 ----------
 // 回复到了输出上限（没写完）就自动接着写，最多 MAX_PARTS 段，拼成同一条回复
@@ -229,14 +246,17 @@ function noteOf(stop) {
 }
 async function prompt(s, text) {
   const ac = new AbortController(); s.abort = ac;
-  s.messages.push({ role: 'user', content: text });
+  const um = { role: 'user', content: text, at: Date.now() };
+  s.messages.push(um);
   if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50); update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
   let full = '', parts = 0;
   const say = t => update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
   let kept = false;
-  const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, ...(parts > 1 ? { parts } : {}) }); } };
+  const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, at: Date.now(), ...(parts > 1 ? { parts } : {}) }); } };
   try {
     trim(s);
+    // 这一轮怎么答的（给会话解剖、调 Mini 用）：用的哪个模型、什么接口和参数、发了几条历史、丢了几条、系统提示，以及每次请求的明细
+    const run = um.run = { model: s.model, api: FORMAT, host: hostOf(BASE), think: !!s.think, noOff: !!s.noOff, maxOut: MAX_OUT, sys: systemOf(s), sent: history(s).length, dropped: s.from, calls: [] };
     let tin = 0, tout = 0, gen = 0, t0 = 0, first = 0, end = 0, stop = null;
     while (parts < MAX_PARTS) {
       parts++;
@@ -246,7 +266,7 @@ async function prompt(s, text) {
         const now = base + clean(raw);
         if (!cut && raw.includes('</think>')) { cut = true; sent = base.length; }   // 刚发现思考混在正文里：已经流出去的没法收回，从这一段开头重新算
         if (now.length > sent) { say(now.slice(sent)); sent = now.length; }
-      }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }), extra);
+      }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }), extra, run.calls);
       if (r.leaked && !s.noOff && !s.think) s.noOff = true;
       full = base + r.text;
       if (full.length > sent) say(full.slice(sent));
@@ -255,6 +275,7 @@ async function prompt(s, text) {
       if (r.first) gen += (r.end - r.first) / 1000;
       if (stop !== 'length' || !r.text) break;
     }
+    Object.assign(run, { endAt: Date.now(), parts, stop, ...(noteOf(stop) ? { note: noteOf(stop) } : {}) });
     keep(); save(s);
     // 生成速度只算第一个字之后的；输出太短（< 8 tok）算出的速度没意义，不报；没有 usage 的服务不报速度（估出来的不准，调试时会误导）
     const stats = { model: s.model, ttft: first ? (first - t0) / 1000 : null, outTokens: tout || null, tps: tout >= 8 && gen > 0.05 ? tout / gen : null, total: (end - t0) / 1000,
@@ -262,6 +283,7 @@ async function prompt(s, text) {
     update(s.id, { sessionUpdate: 'usage_update', used: tin ? tin + tout : 0, size: BUDGET, _meta: { mini: stats } });
     return 'end_turn';
   } catch (e) {
+    if (um.run) Object.assign(um.run, { endAt: Date.now(), parts }, e.name === 'AbortError' ? { cancelled: true } : { error: String(e.message).slice(0, 500) });
     keep(); save(s);   // 停掉、出错时已经写出来的那部分也留着（网页上已经显示了）
     if (e.name === 'AbortError') return 'cancelled';
     throw e;

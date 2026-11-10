@@ -36,7 +36,7 @@ import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAd
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
-import { userTextOf, dissectClaude, dissectDs, dissectKimi } from './dissect.mjs';
+import { userTextOf, dissectClaude, dissectDs, dissectKimi, dissectMini } from './dissect.mjs';
 import { opModelsChanged } from './opencode.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opTokSum } from './opencode.mjs';
 const STARTED_AT = Date.now();
@@ -3079,6 +3079,12 @@ const handler = async (req, res) => {
           for (const ln of fs.readFileSync(f, 'utf8').split('\n')) { if (ln) try { recs.push(JSON.parse(ln)); } catch {} }
           const r = dissectKimi(recs, info.cwd || '');
           return sendJson(res, 200, { claw: 'kimi', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r });
+        }
+        if (isMi(id)) {
+          const info = miInfo(id);
+          if (!info?.file) return sendJson(res, 404, { error: '找不到这个会话' });
+          const r = dissectMini(JSON.parse(fs.readFileSync(info.file, 'utf8')));
+          return sendJson(res, 200, { claw: 'mini', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r });
         }
         if (/^(op|oc):/.test(id)) return sendJson(res, 501, { error: '这个 Claw 还不支持解剖' });
         if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(res, 400, { error: '会话 ID 不对' });

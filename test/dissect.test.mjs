@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { dissectClaudeLines, dissectClaude, dissectDs, dissectKimi, toolBrief, toolKind, userTextOf } from '../dissect.mjs';
+import { dissectClaudeLines, dissectClaude, dissectDs, dissectKimi, dissectMini, toolBrief, toolKind, userTextOf } from '../dissect.mjs';
 
 const T0 = Date.parse('2026-10-26T12:00:00Z');
 const iso = (ms) => new Date(T0 + ms).toISOString();
@@ -184,4 +184,35 @@ test('Kimi wire.jsonl：按轮拆、用量取 step.end、技能注入不算一�
   assert.equal(a.inp, 120); assert.equal(a.cr, 200); assert.equal(a.out, 15);
   assert.equal(a.reply, '好了'); assert.equal(a.durMs, 902);
   assert.equal(b.interrupted, true);
+});
+
+test('Mini 解剖：一轮 = 用户一句话，一步 = 一次请求（400 重试、接着写各算一步）；四桶、首字、速度、出错都对上；旧记录只有文字', () => {
+  const o = { model: 'q1', cwd: '/tmp', messages: [
+    // 旧版本：没有 run、没有时间，还有工具结果
+    { role: 'user', content: '旧问题' }, { role: 'assistant', content: '<run>ls</run>' }, { role: 'user', tool: true, content: '<result>a</result>' }, { role: 'assistant', content: '旧回答' },
+    // 400 去掉调参重试 → 到了输出上限接着写 → 写完
+    { role: 'user', content: '讲长一点', at: T0, run: { model: 'gemini-2.5-flash', api: 'gemini', host: 'x.googleapis.com', think: false, maxOut: 4096, sys: '你是答疑助手', sent: 3, dropped: 2, parts: 2, stop: 'stop', endAt: T0 + 9000, calls: [
+      { at: T0, status: 400, ms: 300, err: '模型服务返回 400：bad temperature', plain: false },
+      { at: T0 + 300, retry: true, status: 200, plain: true, ms: 4000, ttftMs: 1000, inp: 500, cr: 200, out: 300, think: 30, stop: 'length', chars: 280 },
+      { at: T0 + 4400, status: 200, plain: true, ms: 4500, ttftMs: 500, inp: 900, out: 40, stop: 'stop', chars: 50 }] } },
+    { role: 'assistant', content: '第一段第二段', model: 'gemini-2.5-flash', at: T0 + 9000, parts: 2 },
+    // 额度超限
+    { role: 'user', content: '再问', at: T0 + 60000, run: { model: 'gemini-2.5-flash', api: 'gemini', sent: 5, dropped: 2, endAt: T0 + 60400, error: '模型服务说额度或频率超限（429）：约 37 秒后恢复', calls: [{ at: T0 + 60000, status: 429, ms: 400, err: '额度超限' }] } },
+  ] };
+  const r = dissectMini(o);
+  assert.equal(r.summary.turns, 3); assert.equal(r.summary.apiErrors, 1);
+  const [a, b, c] = r.turns;
+  assert.equal(a.text, '旧问题'); assert.equal(a.nSteps, 2); assert.equal(a.reply, '旧回答'); assert.equal(a.steps[0].model, 'q1');
+  assert.equal(b.nSteps, 3); assert.equal(b.retries, 1); assert.equal(b.durMs, 9000);
+  assert.equal(b.steps[0].stop, 'HTTP 400'); assert.match(b.steps[0].err, /bad temperature/);
+  const s1 = b.steps[1];
+  assert.equal(s1.inp, 300); assert.equal(s1.cr, 200); assert.equal(s1.cw, null); assert.equal(s1.out, 300); assert.equal(s1.think, 30);
+  assert.equal(s1.ttftMs, 1000); assert.equal(s1.tps, 100); assert.equal(s1.stop, '到了输出上限'); assert.equal(b.steps[2].stop, '写完'); assert.ok(s1.retry && s1.plain);
+  assert.equal(b.steps[2].cr, null); assert.equal(b.steps[2].inp, 900);
+  assert.equal(b.reply, '第一段第二段'); assert.equal(b.inp, 1200); assert.equal(b.out, 340);
+  assert.deepEqual({ api: b.mini.api, sent: b.mini.sent, dropped: b.mini.dropped, parts: b.mini.parts, sys: b.mini.sys }, { api: 'gemini', sent: 3, dropped: 2, parts: 2, sys: '你是答疑助手' });
+  assert.equal(c.nSteps, 1); assert.equal(c.steps[0].stop, 'HTTP 429'); assert.match(c.mini.error, /429/); assert.equal(c.reply, '');
+  assert.deepEqual(r.summary.models.sort(), ['gemini-2.5-flash', 'q1']);
+  // 模型表现：只算有 run 的；2 次出错（400、429），首字 / 速度只算成功的
+  assert.deepEqual(r.summary.miniModels, [{ model: 'gemini-2.5-flash', calls: 4, errors: 2, out: 340, ttftMs: 750, tps: 55 }]);   // 速度 (100 + 10) / 2
 });

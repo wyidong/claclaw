@@ -416,3 +416,22 @@ test('Mini agent：接口报错只取说明；429 写明多久恢复（Gemini �
     assert.match(await err(), /：等一会儿再试，或者换个模型。原话：too many$/);
   } finally { a.stop(); srv.close(); }
 });
+
+test('Mini agent：每轮在用户那条消息上记 run（模型、接口、发了几条、系统提示、每次请求的明细），回复带时间', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await strictModel();
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a, n.sessionId, 'hi');
+    const msgs = JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).messages;
+    const u = msgs[0], r = u.run;
+    assert.ok(u.at > 0 && msgs[1].at >= u.at);
+    assert.equal(r.model, 'mx'); assert.equal(r.api, 'openai'); assert.match(r.host, /^127\.0\.0\.1:\d+$/); assert.equal(r.sent, 1); assert.equal(r.dropped, 0);
+    assert.match(r.sys, /你是答疑助手/); assert.equal(r.parts, 1); assert.equal(r.stop, null); assert.ok(r.endAt >= u.at);
+    assert.equal(r.calls.length, 2);
+    assert.equal(r.calls[0].status, 400); assert.match(r.calls[0].err, /temperature/);
+    assert.equal(r.calls[1].status, 200); assert.ok(r.calls[1].retry && r.calls[1].plain); assert.equal(r.calls[1].chars, 2); assert.ok(r.calls[1].ttftMs >= 0);
+  } finally { a.stop(); m.srv.close(); }
+});

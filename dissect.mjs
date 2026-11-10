@@ -1,6 +1,6 @@
 // 会话解剖：把一个会话按「轮」拆开（一轮 = 用户发的一句话，到下一句话之前），
 // 每轮里有几步（模型调用）、调了哪些工具、花了多少 token / 时间，给用户看每句提示词让 AI 花了多少力气。
-// Claude 读 ~/.claude/projects 下的会话文件（jsonl）；DeepSeek 读 dsh 的会话记录。
+// Claude 读 ~/.claude/projects 下的会话文件（jsonl）；DeepSeek 读 dsh 的会话记录；Mini 读它自己的会话文件（data/mini-sessions/<id>.json）。
 // 数字纪律：只用记录里实报的数；拿不到的不补 0、不估、不摊（缓存读 / 缓存写全程没上报过就标 known=false，页面显示 --）。
 // 四桶：inp 未命中输入 · cr 缓存读 · cw 缓存写 · out 输出（含思考 think）。合计 = 四桶相加；上下文大小 = inp + cr + cw。
 import fs from 'node:fs';
@@ -362,4 +362,62 @@ export function dissectKimi(recs, cwd) {
     }
   }
   return finish(st.turns, { model }, cwd || '');
+}
+
+// ---------- Mini：会话文件 { model, messages: [...] } ----------
+// 用户那条消息上有 run（这一轮怎么答的：模型、接口和参数、发了几条历史、丢了几条、系统提示、每次请求的明细 calls）；
+// 一步 = 一次请求（到了输出上限接着写、400 去掉参数重试都各算一步）。没有 run 的旧记录：只有文字，一条回复算一步
+export function dissectMini(o) {
+  const turns = [];
+  let cur = null;
+  for (const m of (o && Array.isArray(o.messages) ? o.messages : [])) {
+    if (!m || typeof m.content !== 'string') continue;
+    if (m.role === 'user') {
+      if (m.tool) continue;   // 旧版本（还能调工具时）的工具结果
+      const r = m.run && typeof m.run === 'object' ? m.run : null;
+      cur = newTurn(Number(m.at) || 0, m.content, {});
+      turns.push(cur);
+      if (!r) continue;
+      cur.endAt = Math.max(cur.at, Number(r.endAt) || 0);
+      for (const c of Array.isArray(r.calls) ? r.calls : []) {
+        const s = newStep(Number(c.at) || cur.at, r.model);
+        s.cr = num(c.cr); s.cw = num(c.cw);
+        s.inp = Math.max(0, (Number(c.inp) || 0) - (s.cr || 0) - (s.cw || 0)); s.out = Number(c.out) || 0; s.think = Number(c.think) || 0;
+        s.latMs = Number(c.ms) || 0; s.ttftMs = c.ttftMs == null ? null : Number(c.ttftMs);
+        // 生成速度只算第一个字之后的；输出太短（< 8 tok）不算
+        const gen = s.ttftMs == null ? 0 : s.latMs - s.ttftMs;
+        s.tps = s.out >= 8 && gen > 50 ? Math.round(s.out / gen * 10000) / 10 : null;
+        s.stop = c.cancelled ? '停掉了' : c.status && c.status !== 200 ? 'HTTP ' + c.status : c.stop === 'length' ? '到了输出上限' : c.stop === 'stop' ? '写完' : c.stop || '';
+        s.err = c.err ? String(c.err) : ''; s.retry = !!c.retry; s.plain = !!c.plain; s.chars = Number(c.chars) || 0;
+        cur.steps.push(s);
+        if (c.retry) cur.retries++;
+      }
+      if (r.cancelled) cur.interrupted = true;
+      cur.mini = { api: String(r.api || ''), host: String(r.host || ''), think: !!r.think, noOff: !!r.noOff, maxOut: Number(r.maxOut) || 0, sent: Number(r.sent) || 0, dropped: Number(r.dropped) || 0,
+        sys: String(r.sys || ''), parts: Number(r.parts) || 0, stop: String(r.stop || ''), note: String(r.note || ''), error: String(r.error || '') };
+    } else if (m.role === 'assistant' && cur) {
+      // 回复文字放到最后一步上；旧记录没有 run，一条回复补一步
+      let s = cur.mini ? cur.steps[cur.steps.length - 1] : null;
+      if (!s) { s = newStep(Number(m.at) || cur.at, m.model || o.model); cur.steps.push(s); }
+      s.text = m.content; s.chars = m.content.length; if (!s.model) s.model = m.model || o.model || '';
+      if (m.at) cur.endAt = Math.max(cur.endAt, Number(m.at));
+    }
+  }
+  const r = finish(turns, {}, (o && o.cwd) || '');
+  r.summary.apiErrors = r.turns.filter((t) => t.mini && t.mini.error).length;   // 这一轮最后出错了（额度超限、连不上之类）
+  // 模型表现（挑模型用）：每个模型请求几次、出错几次、平均首字 / 生成速度（只算成功、有数的请求）
+  const by = new Map();
+  for (const t of r.turns) for (const s of t.steps) {
+    if (!t.mini) continue;
+    const k = s.model || '?', m = by.get(k) || { model: k, calls: 0, errors: 0, out: 0, ttft: [], tps: [] };
+    m.calls++; m.out += s.out;
+    if (s.err) m.errors++;
+    if (s.ttftMs != null && !s.err) m.ttft.push(s.ttftMs);
+    if (s.tps) m.tps.push(s.tps);
+    by.set(k, m);
+  }
+  const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  r.summary.miniModels = [...by.values()].map((m) => ({ model: m.model, calls: m.calls, errors: m.errors, out: m.out,
+    ttftMs: avg(m.ttft) == null ? null : Math.round(avg(m.ttft)), tps: avg(m.tps) == null ? null : Math.round(avg(m.tps) * 10) / 10 })).sort((a, b) => b.calls - a.calls);
+  return r;
 }
