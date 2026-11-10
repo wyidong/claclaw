@@ -4901,7 +4901,7 @@ var peerSub='';
 function peerGo(sub){peerSub=sub||'';peerMsg={};renderPeer();var sp=$('.sheet-p');if(sp)sp.scrollTop=0}
 function fmtMs(ms){return ms<1000?ms+' 毫秒':(ms/1000).toFixed(1)+' 秒'}
 function peerDot(p){var o=peerOnline[p.id];return p.canCall?'<i class="h-dot'+(!o?' wait':o.online?' on':'')+'" title="'+(!o?'检查中':o.online?'在线':'离线')+'"></i>':''}
-function routeName(r,o){if(r==='direct'){var v=o&&o.direct&&o.direct.open&&o.direct.via;return v==='lan'?'局域网直连':v==='wan'?'外网直连':v==='tailscale'?'Tailscale 直连':'直连'}return r==='relay'?(o&&o.routeRel==='main'?'主中继':o&&o.routeRel==='backup'?'备中继':'中继'):'局域网'}   // 直连 = 打洞的 WebRTC 通道，按实际选中的对端地址标局域网 / 外网
+function routeName(r,o){if(r==='direct'){var v=o&&o.direct&&o.direct.open&&o.direct.via;return v==='lan'?'直连 · 局域网':v==='wan'?'直连 · 外网':v==='tailscale'?'直连 · Tailscale':'直连'}return r==='relay'?(o&&o.routeRel==='main'?'中继 · 主':o&&o.routeRel==='backup'?'中继 · 备':'中继'):'局域网'}   // 直连 = 打洞的 WebRTC 通道，按实际选中的对端地址标局域网 / 外网
 function peerRouteTag(p){var o=peerOnline[p.id];return o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+routeName(o.route,o)+'</em>':''}
 var RELAY_ST={online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上',off:'没开'};
 function relayStateText(c){   // 主中继的状态（有备用的话带上个数）
