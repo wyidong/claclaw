@@ -138,12 +138,18 @@ async def handle(line, out_lock):
 async def main():
     POOL[:] = [Conn(), Conn()]
     loop = asyncio.get_running_loop()
-    reader = asyncio.StreamReader(limit=1 << 20)
-    await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+    if sys.platform == "win32":
+        # Windows 的事件循环（Proactor）接不了 stdin 这种匿名管道（WinError 6），改在线程里一行行读
+        async def readline():
+            return await loop.run_in_executor(None, sys.stdin.buffer.readline)
+    else:
+        reader = asyncio.StreamReader(limit=1 << 20)
+        await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
+        readline = reader.readline
     out_lock = asyncio.Lock()
     tasks = set()
     while True:
-        line = await reader.readline()
+        line = await readline()
         if not line:
             break
         t = asyncio.create_task(handle(line.decode("utf-8", "replace"), out_lock))
