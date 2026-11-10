@@ -4820,16 +4820,23 @@ function paintPeerNear(){var el=$('#peNear');if(el&&peerCfg)el.innerHTML=peerNea
 function loadPeerPage(){
   $('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';
   var j=function(u){return fetch(u).then(function(r){return r.json()}).catch(function(){return []})};
-  // 协同会话可以来自任意 Claw：这台电脑装了、能用的 Claw 的会话都列出来，按「Claw + 目录」分组挑
-  Promise.all([fetch('/api/peer').then(function(r){return r.json()}),j('/api/sessions'),j('/api/claws').then(function(cl){
-    return Promise.all((Array.isArray(cl)?cl:[]).filter(function(c){return c.id!=='claude'&&c.installed&&c.supported&&c.running!==false}).map(function(c){
-      return j('/api/sessions?claw='+c.id).then(function(l){return (Array.isArray(l)?l:[]).map(function(s){s.claw=c.id;return s})});
-    })).then(function(ls){return [].concat.apply([],ls)});
-  })]).then(function(x){
-    peerCfg=x[0];peerList=(Array.isArray(x[1])?x[1]:[]).map(function(s){s.claw=s.claw||'claude';return s}).concat(x[2]||[]);
-    peNormCfg(peerCfg);
-    if(!peerCfg.dir&&peerCfg.sessions.length){var f=peerList.find(function(s){return s.id===peerCfg.sessions[0]});if(f)peerCfg.dir=peDirKey(f)}
+  // 先只等 /api/peer 就画出来（已配对、在线状态都靠它；池里会话的标题有 poolInfo 兜底）。
+  // 各 Claw 的会话列表要十几个请求，走中继时一来一回很慢，放到后台取，取回来再补「协同会话」页和默认目录
+  fetch('/api/peer').then(function(r){return r.json()}).then(function(c){
+    if(hostView!=='peer')return;
+    peerCfg=c;peNormCfg(peerCfg);
     renderPeer();peerWatch(true);peerCheckNow();peerScan();loadSkills();
+    // 协同会话可以来自任意 Claw：这台电脑装了、能用的 Claw 的会话都列出来，按「Claw + 目录」分组挑
+    Promise.all([j('/api/sessions'),j('/api/claws').then(function(cl){
+      return Promise.all((Array.isArray(cl)?cl:[]).filter(function(c){return c.id!=='claude'&&c.installed&&c.supported&&c.running!==false}).map(function(c){
+        return j('/api/sessions?claw='+c.id).then(function(l){return (Array.isArray(l)?l:[]).map(function(s){s.claw=c.id;return s})});
+      })).then(function(ls){return [].concat.apply([],ls)});
+    })]).then(function(x){
+      peerList=(Array.isArray(x[0])?x[0]:[]).map(function(s){s.claw=s.claw||'claude';return s}).concat(x[1]||[]);
+      if(hostView!=='peer'||!peerCfg)return;
+      if(!peerCfg.dir&&peerCfg.sessions.length){var f=peerList.find(function(s){return s.id===peerCfg.sessions[0]});if(f)peerCfg.dir=peDirKey(f)}
+      if(peerSub==='pool')renderPeer();
+    });
   }).catch(function(e){$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
 function fmtLeft(t){var s=Math.max(0,Math.round((t-Date.now())/1000));return Math.floor(s/60)+':'+('0'+s%60).slice(-2)}
