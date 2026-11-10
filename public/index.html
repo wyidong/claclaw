@@ -102,7 +102,7 @@ window.__sc=(function(){
 })();
 // 界面语言：默认中文；设置里选了 English 就先加载 /i18n/en.js（词典 + 翻译引擎，看着页面把界面文字换成英文）
 (function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
-(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply();var b=document.documentElement.style.getPropertyValue('--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
+(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply();var b=document.documentElement.style.getPropertyValue(matchMedia('(min-width:1000px)').matches?'--sc-out':'--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
@@ -198,7 +198,7 @@ window.__sc=(function(){
   :root[data-theme="shichen"]:not(.sc-img) :is(#app,#rail){background:var(--sc-out)}
   /* 图片背景：图只铺在内圈（列表 + 聊天这一块，圆角），外圈（左栏、四周留边）是纯色 --sc-out；图原样显示，不压淡底 */
   :root[data-theme="shichen"].sc-img #app{background:var(--sc-out)!important;isolation:isolate;--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
-  :root[data-theme="shichen"].sc-img #app::before{content:'';position:absolute;top:0;left:64px;right:8px;bottom:8px;border-radius:12px;z-index:-1;pointer-events:none;background:var(--sc-in)}
+  :root[data-theme="shichen"].sc-img #app::before{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;z-index:-1;pointer-events:none;background:var(--sc-in)}
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
@@ -719,7 +719,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-tb tbody.tn tr.r td{border-bottom:0;padding-top:8px}
 @media (hover:hover){.ds-tb tbody.tn:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
-@media (min-width:1000px){#diss,#fview{left:64px;right:8px;bottom:8px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
+@media (min-width:1000px){#diss,#fview{top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
 /* 电脑：模型管理、语音管理整页（像会话解剖）——中间栏铺满右边，聊天区让开；内容居中限宽 */
 @media (min-width:1000px){
   #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #sheet{grid-column:2 / -1;z-index:6}
@@ -1400,8 +1400,8 @@ select.pe-in{text-align-last:right}
   #sheet::after{content:'';position:absolute;top:var(--hd-h,56px);bottom:0;right:0;width:1px;background:var(--line);pointer-events:none;z-index:3}
   /* 列表栏 + 聊天区是一整块：外面一圈细边框、四角圆角，左边是图标栏、右下留一点边（底色同顶部那条）。
      圆角外面那一小块用同色的外阴影盖住（只扩 6px，盖不到图标栏的按钮） */
-  #app{position:relative;box-sizing:border-box;padding:0 8px 8px 0;background:var(--strip)}
-  #app::after{content:'';position:absolute;top:0;left:64px;right:8px;bottom:8px;border:1px solid var(--line);border-radius:12px;box-shadow:0 0 0 6px var(--strip);pointer-events:none;z-index:20}
+  #app{position:relative;box-sizing:border-box;padding:4px 4px 4px 0;background:var(--strip)}   /* 内圈四周都留 4px */
+  #app::after{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border:1px solid var(--line);border-radius:12px;box-shadow:0 0 0 6px var(--strip);pointer-events:none;z-index:20}
   #newDlg,#delDlg,#keyDlg,#cfgDlg,#lightbox,#vplayer,#fview,#diss{z-index:21}   /* 弹框 / 全屏查看盖在这圈边框上面：整屏一起变暗，不留一圈亮边 */
   /* 聊天区滚动条：位置始终留着（内容不跟着跳），没有底色 */
   #feed{scrollbar-gutter:stable}
@@ -5991,12 +5991,13 @@ function scTick(force){
   if(!on){if(scName){window.__sc.clear();scName=''}return}
   var n=window.__sc.now().name;if(n===scName&&!force)return;
   scName=window.__sc.apply();
-  var sb=scVar('--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏：和顶栏同一个底色
+  var sb=scVar(DESKTOP.matches?'--sc-out':'--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
   var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=document.documentElement.classList.contains('sc-dark')?'dark':'light';   // 6 阴是深色
   if(!force)postTheme();
   var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='流变时辰（'+scName+'时）';
 }
 setInterval(function(){scTick(false)},60000);
+DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(){if(scName)scTick(true)});   // 窗口在手机 / 电脑宽度之间变：标题栏颜色跟着换
 // 电脑端会话列表的浮动滚动条（像微信）：系统滚动条藏掉，这里画一根细条浮在行上；从顶部那条下面开始，到底留 4px
 (function(){
   var sc=document.querySelector('#sheet .sheet-p'),box=document.getElementById('sheet');if(!sc||!box||!window.ResizeObserver)return;
