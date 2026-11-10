@@ -141,6 +141,7 @@ export class AcpAgent {
     const { cmd, args } = binCall(...this.command(bin));
     const p = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: HOME, env: { ...binEnv(), ...(prep.env || {}) } });
     this.proc = p;
+    p.stdout.setEncoding('utf8'); p.stderr.setEncoding('utf8');   // 按 UTF-8 流式解码：一个中文字被拆到两块数据里时不会变乱码
     let buf = '', errTail = '';
     const lastErr = () => errTail.trim().split('\n').pop() || '';
     p.stdout.on('data', d => {
