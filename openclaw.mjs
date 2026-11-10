@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawn, execFileSync } from 'node:child_process';
 import { WebSocket } from 'ws';
 import { storeNow, splitGroups, hostOf } from './modelpick.mjs';
 import { tms } from './util.mjs';
@@ -334,6 +335,39 @@ export async function ocGatewayUp(log) {
   if (!config()) return false;
   try { await Promise.race([connect(log), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]); return true; }
   catch { return false; }
+}
+
+// 网关没开时由 claclaw 临时拉起（OpenClaw 开销大，开机自启可以关掉，用的时候在 Claw 页点「启动」）。
+// 照它 launchd 配置里的命令跑（带它自己的环境变量包装脚本），但不经 launchd：不动开机自启；
+// 脱离 claclaw 自己跑（新会话组），claclaw 重启不影响它。没有 launchd 配置就用 PATH 里的 openclaw。
+let ocStartAt = 0;
+export async function ocStartGateway(env, log) {
+  const cfg = config();
+  if (!cfg) throw new Error('没找到 OpenClaw 的配置（~/.openclaw/openclaw.json）');
+  if (await ocGatewayUp(log)) return { status: 'up' };
+  if (Date.now() - ocStartAt < 90e3) return { status: 'starting' };   // 刚拉过，还在起
+  let args = null, cwd = path.join(os.homedir(), '.openclaw'), out = path.join(os.homedir(), 'Library', 'Logs', 'openclaw', 'gateway.log');
+  const plist = path.join(os.homedir(), 'Library', 'LaunchAgents', 'ai.openclaw.gateway.plist');
+  if (process.platform === 'darwin' && fs.existsSync(plist)) {
+    try {
+      const j = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', plist], { timeout: 5000 }).toString());
+      if (Array.isArray(j.ProgramArguments) && j.ProgramArguments.length) args = j.ProgramArguments.map(String);
+      if (j.WorkingDirectory) cwd = String(j.WorkingDirectory);
+      if (j.StandardOutPath) out = String(j.StandardOutPath);
+    } catch (e) { log?.('openclaw plist read failed', e.message); }
+  }
+  if (!args) args = ['openclaw', 'gateway', '--port', String(cfg.port)];
+  if (process.platform !== 'win32') args = ['/bin/sh', '-c', 'umask 077; exec "$@"', 'sh', ...args];   // 和 launchd 配置的 Umask 一样：它写的文件只有自己能读
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const fd = fs.openSync(out, 'a');
+  try {
+    const ch = spawn(args[0], args.slice(1), { cwd: fs.existsSync(cwd) ? cwd : os.homedir(), env, detached: true, stdio: ['ignore', fd, fd] });
+    ch.on('error', e => { ocStartAt = 0; log?.('openclaw gateway start failed', e.message); });
+    ch.unref();
+  } finally { fs.closeSync(fd); }
+  ocStartAt = Date.now();
+  log?.('openclaw gateway starting (claclaw)', '→ ' + out);
+  return { status: 'starting' };
 }
 
 // 新建：在 main 这个 agent 下建一个会话；名字可以不填（OpenClaw 会按第一条消息起名）

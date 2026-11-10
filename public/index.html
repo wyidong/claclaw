@@ -1302,6 +1302,7 @@ select.pe-in{text-align-last:right}
 .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
 .claw-card[aria-current="true"]{border-color:var(--user-bg);background:var(--user-bg)}   /* 选中：浅绿底，和会话列表一致 */
 .claw-card:disabled{opacity:.45;cursor:default}
+.claw-card.claw-down>:not(.claw-start){opacity:.45}   /* 装了没启动、能在这里启动的（OpenClaw）：灰着，「启动」按钮不灰 */
 .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
 .claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
 /* Claude Code：用 Claude 的花瓣标记（LobeHub 图标库 claude-color.svg，MIT），无底板，颜色 #D97757 */
@@ -4967,22 +4968,28 @@ fetch('/api/claws').then(function(r){return r.json()}).then(function(list){try{l
 }
 // 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部、再少几个），服务器的结果到了再更新
 var clawInfo={};   // /api/claws 的结果，按 id 存（登录情况在 .login 里）
+var clawStarting={};   // 正在临时启动的 Claw（startClaw）：id → 开始时间
 function applyClaws(list){
   if(!Array.isArray(list))return;
   var any=false,ok=[];
   list.forEach(function(c){
     clawInfo[c.id]=c;
-    var down=c.installed&&c.supported&&c.running===false;   // 装了但没启动（OpenClaw 网关没开）：手机上灰着显示、不能选；电脑上不显示
+    var down=c.installed&&c.supported&&c.running===false;   // 装了但没启动（OpenClaw 网关没开）：灰着显示；能启动的（canStart）带「启动」，不能的手机上灰着、电脑上不显示
+    var canStart=down&&!!c.canStart,starting=canStart&&!!clawStarting[c.id];
     var rb=document.querySelector('#rail .rclaw[data-claw="'+c.id+'"]');if(rb)rb.hidden=!c.installed||!c.supported||down;
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
-    card.hidden=!(c.installed||c.canInstall)||(down&&DESKTOP.matches);if(!card.hidden)any=true;
-    card.disabled=!c.supported||down;card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):down?'已安装，没有启动':c.canInstall?'还没安装，点「安装」帮你装好':'';
+    card.hidden=!(c.installed||c.canInstall)||(down&&!canStart&&DESKTOP.matches);if(!card.hidden)any=true;
+    card.disabled=!c.supported||(down&&!canStart);card.classList.toggle('claw-down',canStart);
+    card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):starting?'正在启动…':down?'已安装，没有启动':c.canInstall?'还没安装，点「安装」帮你装好':'';
+    var sb=card.querySelector('.claw-start');
+    if(canStart){if(!sb){sb=document.createElement('span');sb.className='claw-login claw-start';sb.setAttribute('role','button');sb.addEventListener('click',function(e){e.stopPropagation();startClaw(c.id)});card.appendChild(sb)}sb.textContent=starting?'启动中…':'启动';sb.hidden=false}
+    else if(sb)sb.hidden=true;
     // 一个 Claw 都没装：这张卡片（DeepSeek）带「安装」按钮，点卡片也是装
     var ib=card.querySelector('.claw-install');
     if(c.canInstall){if(!ib){ib=document.createElement('span');ib.className='claw-login claw-install';ib.setAttribute('role','button');ib.textContent='安装';ib.addEventListener('click',function(e){e.stopPropagation();openInstall(c.id)});card.appendChild(ib)}ib.hidden=false}
     else if(ib)ib.hidden=true;
     // 登录：没登录（模型库也顶不上）就写「未登录」；claclaw 能替它登的加个「登录」小按钮（已登录的写「换账号」）
-    var lg=c.login,lb=card.querySelector('.claw-login:not(.claw-install)');
+    var lg=c.login,lb=card.querySelector('.claw-login:not(.claw-install):not(.claw-start)');
     if(c.supported&&!down&&lg&&lg.need)card.querySelector('.claw-st').textContent=lg.can?'未登录':'未登录（要在电脑上登录）';
     if(c.supported&&!down&&lg&&lg.can){
       if(!lb){lb=document.createElement('span');lb.className='claw-login';lb.setAttribute('role','button');lb.addEventListener('click',function(e){e.stopPropagation();openLogin(c.id)});card.appendChild(lb)}
@@ -5045,7 +5052,24 @@ function pickClaw(id){
   clawSel=id;try{localStorage.setItem(hk('claw'),clawSel)}catch(_){}
   showClawSel();renderUnread();mTab('chats');openSheet();
 }
-document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(c.disabled)return;var i=clawInfo[c.dataset.claw];if(i&&i.canInstall&&!i.installed)openInstall(c.dataset.claw);else pickClaw(c.dataset.claw)})});
+document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(c.disabled)return;var i=clawInfo[c.dataset.claw];if(i&&i.canInstall&&!i.installed)openInstall(c.dataset.claw);else if(i&&i.canStart&&i.running===false)startClaw(c.dataset.claw);else pickClaw(c.dataset.claw)})});
+// 临时启动装了没开的 Claw（OpenClaw 网关）：叫电脑拉起来，然后每 3 秒查一次，起来了卡片就变正常（最多等 2 分钟）
+function startClaw(id){
+  if(clawStarting[id])return;
+  var nm=CLAW_NAMES[id]||id,again=function(){applyClaws(Object.keys(clawInfo).map(function(k){return clawInfo[k]}))};
+  clawStarting[id]=Date.now();again();
+  var t0=Date.now(),done=function(list,msg){delete clawStarting[id];if(list)applyClaws(list);else again();if(msg)toast(msg)};
+  var poll=function(){
+    fetch('/api/claws',{cache:'no-store'}).then(function(r){return r.json()}).then(function(list){
+      var c=Array.isArray(list)&&list.filter(function(x){return x.id===id})[0];
+      if(c&&c.running){try{localStorage.setItem(hk('claws'),JSON.stringify(list))}catch(_){}return done(list,nm+' 已启动')}
+      if(Date.now()-t0>120e3)return done(list,nm+' 两分钟还没起来，看看电脑上它的日志');
+      setTimeout(poll,3000);
+    },function(){if(Date.now()-t0>120e3)done(null,'连不上服务');else setTimeout(poll,3000)});
+  };
+  postJson('/api/claws/start',{claw:id}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'启动失败');return j})})
+  .then(function(j){setTimeout(poll,j.status==='up'?0:3000)},function(e){done(null,e.message)});
+}
 // ---------- 帮用户装第一个 Agent（一个都没装时的 DeepSeek 卡片；见 install.mjs）：装完接着填 API key ----------
 var instTimer=null;
 function openInstall(claw){

@@ -27,7 +27,7 @@ import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbA
 import { isQd, QdRunner, qdRunners, qdSessionList, qdNewSession, qdShutdown, qdAcpRunning, qdInfo, qdExists, qdDelete, qdInstalled, qdRename, qdModelsChanged } from './qoder.mjs';
 import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText, attKind, ATT_MAX } from './group.mjs';
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './copilot.mjs';
-import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate } from './openclaw.mjs';
+import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate, ocStartGateway } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
@@ -3009,12 +3009,21 @@ const handler = async (req, res) => {
       }
       return sendJson(res, 200, installState() || { status: 'none' });
     }
+    // 临时启动装了没开的 Claw（现在只有 OpenClaw 网关）：POST {claw}，马上回，网页接着查 /api/claws 等它起来
+    if (url.pathname === '/api/claws/start' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+      const b = await jsonBody(req, 1024);
+      if (String(b?.claw || '') !== 'openclaw') return sendJson(res, 400, { error: '这个 Claw 不用启动' });
+      try { return sendJson(res, 200, await ocStartGateway(childEnv(), log)); } catch (e) { return sendJson(res, 500, { error: e.message }); }
+    }
     if (url.pathname === '/api/claws') {
-      // running：装了但没启动的（OpenClaw 网关没开）手机上灰着显示、电脑上不显示；其他 Claw 用的时候才拉起进程，装了就算可用
+      // running：装了但没启动的（OpenClaw 网关没开）灰着显示，带「启动」（canStart）；其他 Claw 用的时候才拉起进程，装了就算可用
       const list = detectClaws();
       for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.id === 'claude') c.login = { can: true, ctok: claudeTokenPublic(req) }; else if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）；Claude 只有长期令牌这一项
       // 一个都没装：能在网页上一键装的（DeepSeek）标上 canInstall，网页显示它的卡片和「安装」按钮
       if (!list.some(c => c.installed)) for (const c of list) if (INSTALLS[c.id] && c.supported) c.canInstall = true;
+      for (const c of list) if (c.id === 'openclaw' && c.installed && c.supported && c.running === false) c.canStart = true;
       return sendJson(res, 200, list);
     }
     if (url.pathname === '/api/sound') {
