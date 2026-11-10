@@ -18,7 +18,7 @@
 <title>Claclaw</title>
 <script src="/_clarelay/rtc.js"></script><!-- 经 clarelay 打开时：手机和电脑 WebRTC 直连（window.clarelay），直接访问时 404，用原生的 -->
 <script>
-// 主题：跟随系统（默认）/ 普通 / 深色，按设备记在本机；在页面画出来之前就设好，免得先闪一下
+// 主题：跟随系统（默认，在阳白明亮 / 阴黑暗沉间切）/ 阳白明亮 / 阴黑暗沉 / 九紫离火 / 12 个时辰 / 流变时辰（在 12 个时辰间切），按设备记在本机；在页面画出来之前就设好，免得先闪一下
 // 流变时辰：按当前时辰换色。颜色不在这里算——<html> 设上 data-sc="地支序号"（0 子 … 11 亥），阴时辰再加 .sc-dark，
 // 各时辰的颜色写在 <style> 主题段 ④ 的 12 个变量块里。日干按儒略日推（2000-01-01 戊午日），时干按五鼠遁；23 点起算次日子时
 window.__sc=(function(){
@@ -72,10 +72,10 @@ window.__sc=(function(){
 <style>html.boot #app{filter:blur(8px);opacity:.45}</style>
 <style>
 /* ════════ 主题：一共 15 套 ════════
-   普通、深色、九紫离火，加上流变时辰的 12 个时辰（子丑寅卯辰巳午未申酉戌亥，每个时辰算一套）。
+   阳白明亮（light）、阴黑暗沉（dark）、九紫离火，加上流变时辰的 12 个时辰（子丑寅卯辰巳午未申酉戌亥，每个时辰算一套）。
    这一段只放「各套主题不一样的地方」，按套分块：
-     ① 公共变量（也就是「普通」这一套；别的主题没写的变量都沿用它）
-     ② 深色、九紫离火：各自的变量 + 和公共不一样的规则
+     ① 公共变量（也就是「阳白明亮」这一套；别的主题没写的变量都沿用它）
+     ② 阴黑暗沉、九紫离火：各自的变量 + 和公共不一样的规则
      ③ 流变时辰 12 套共用的规则（时辰族公共），以及阳时辰、阴时辰两组各自的公共变量
      ④ 12 个时辰各自的颜色（每块只有变量）
    这一段之后的样式（布局、组件）所有主题共用，只用变量、不认主题：要对所有主题生效的规矩改那里一处。 */
@@ -92,7 +92,7 @@ window.__sc=(function(){
   --strip:var(--surface);--strip-line:var(--line);--rail-on:var(--bg);
   --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
 }
-/* ── ② 深色（「跟随系统」且系统是深色时也用这套） ── */
+/* ── ② 阴黑暗沉（「跟随系统」且系统是深色时也用这套） ── */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
     --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
@@ -811,7 +811,9 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 .att-audio audio,.uaudio audio{display:block;width:100%;min-width:220px;height:36px}
 .uaudio{max-width:300px}
 .att-fn{font-size:12px;line-height:16px;max-height:48px;overflow:hidden;word-break:break-all}
-#lightbox img{max-width:100%;max-height:100%;object-fit:contain}
+#lightbox img{max-width:100%;max-height:100%;object-fit:contain;margin:auto;flex:none}
+#lightbox{overflow:auto;-webkit-overflow-scrolling:touch}
+#lightbox,.fv-b{touch-action:pan-x pan-y}   /* 预览图双指缩放由 pinchZoom 自己做（只放大这张图）：整页缩放会把底下所有层一起放大，iOS 上很闪 */
 .sheet-p{overflow-x:hidden}
 .ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
 #sList .s-grp{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 4px;padding:6px 2px;border:0;background:none;font-size:13px;color:var(--muted);text-align:left}
@@ -1954,8 +1956,8 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <label class="set-item"><span class="lb">语言 / Language<small>切换后页面会刷新</small></span>
             <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
-          <label class="set-item"><span class="lb">主题<small>「跟随系统」随设备深浅色切换</small></span>
-            <select id="setTheme"><option value="">跟随系统</option><option value="light">普通</option><option value="dark">深色</option><option value="ziwei">九紫离火</option><option value="shichen">流变时辰</option><optgroup label="固定一个阳时辰（预览用）"><option value="shichen@0">子时</option><option value="shichen@2">寅时</option><option value="shichen@4">辰时</option><option value="shichen@6">午时</option><option value="shichen@8">申时</option><option value="shichen@10">戌时</option></optgroup><optgroup label="固定一个阴时辰（预览用）"><option value="shichen@1">丑时</option><option value="shichen@3">卯时</option><option value="shichen@5">巳时</option><option value="shichen@7">未时</option><option value="shichen@9">酉时</option><option value="shichen@11">亥时</option></optgroup></select></label>
+          <label class="set-item"><span class="lb">主题<small>「跟随系统」在阳白明亮 / 阴黑暗沉间随设备切换；「流变时辰」在 12 个时辰主题间按时间切换</small></span>
+            <select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">流变时辰</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@0">子时</option><option value="shichen@1">丑时</option><option value="shichen@2">寅时</option><option value="shichen@3">卯时</option><option value="shichen@4">辰时</option><option value="shichen@5">巳时</option><option value="shichen@6">午时</option><option value="shichen@7">未时</option><option value="shichen@8">申时</option><option value="shichen@9">酉时</option><option value="shichen@10">戌时</option><option value="shichen@11">亥时</option></optgroup></select></label>
           <label class="set-item" id="setScImgRow"><span class="lb">时辰背景<small>阳时辰（子寅辰午申戌）可以铺同色系图片，阴时辰总是纯色；还没有图的时辰也用纯色</small></span>
             <select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></label>
         </div>
@@ -2718,7 +2720,7 @@ $('#fview .fv-share').addEventListener('click',function(){if(fvBlob)saveBlob(fvB
 function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
 function showImage(src){
-  var im=lightbox.querySelector('img');im.onerror=null;im.src=src;lightbox.classList.add('on');
+  var im=lightbox.querySelector('img');im.onerror=null;im._zs=1;im.removeAttribute('style');im.src=src;lightbox.classList.add('on');
   var m=/^data:image\/[\w.+-]+;base64,(.+)$/.exec(src||''),hk2=/^\/api\/himg\?.*[?&]k=([^&]+)/.exec(src||'');   // 历史图片是网址，带着原图的 key
   var key=m?imgKey(m[1]):hk2?decodeURIComponent(hk2[1]):'';if(!key||!window.indexedDB)return;
   vidStore('readonly',function(st){return st.get('img:'+key)}).then(function(rec){
@@ -2726,7 +2728,42 @@ function showImage(src){
     var u=URL.createObjectURL(rec.blob);im.onerror=function(){im.onerror=null;im.src=src};im.src=u;   // 原图打不开（比如 HEIC）就退回压缩图
   }).catch(function(){});
 }
-lightbox.addEventListener('click',function(){lightbox.classList.remove('on')});
+// 预览图双指缩放 / 双击放大：改图片宽度、在外面的滚动框里平移，不让浏览器缩放整页（整页放大时底下各层一起重画，iOS 上闪）
+var pinchAt=0;
+function pinchZoom(box,dbl){
+  var st=null,raf=0,tap=0;
+  function img(){var i=box.querySelector('img');return i&&i.naturalWidth?i:null}
+  function zoom(im,ns,cx,cy){   // cx/cy：缩放中心在 box 视口里的位置
+    var cur=im._zs||1;ns=Math.max(1,Math.min(ns,8));if(Math.abs(ns-cur)<.005)return;
+    if(cur===1)im._zw=im.getBoundingClientRect().width;
+    var br=box.getBoundingClientRect(),r0=im.getBoundingClientRect(),ix=(cx+br.left-r0.left)/cur,iy=(cy+br.top-r0.top)/cur;
+    im._zs=ns;
+    if(ns===1){im.style.width=im.style.height=im.style.maxWidth=im.style.maxHeight='';return}
+    im.style.maxWidth=im.style.maxHeight='none';im.style.height='auto';im.style.width=im._zw*ns+'px';
+    var r1=im.getBoundingClientRect();box.scrollLeft+=r1.left-(br.left+cx-ix*ns);box.scrollTop+=r1.top-(br.top+cy-iy*ns);
+  }
+  function d(t){return Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY)}
+  box.addEventListener('touchstart',function(e){
+    var im=img();if(!im||e.touches.length!==2)return;e.preventDefault();
+    st={d:d(e.touches)||1,s:im._zs||1};
+  },{passive:false});
+  box.addEventListener('touchmove',function(e){
+    if(!st||e.touches.length!==2)return;e.preventDefault();
+    var t=e.touches,k=d(t)/st.d,br=box.getBoundingClientRect(),cx=(t[0].clientX+t[1].clientX)/2-br.left,cy=(t[0].clientY+t[1].clientY)/2-br.top;
+    if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(function(){raf=0;var im=img();if(im)zoom(im,st?st.s*k:1,cx,cy)});
+  },{passive:false});
+  box.addEventListener('touchend',function(e){
+    if(st){if(e.touches.length<2){st=null;pinchAt=Date.now()}return}
+    if(!dbl||e.touches.length||e.changedTouches.length!==1)return;
+    var now=Date.now(),t=e.changedTouches[0],im=img();
+    if(im&&now-tap<300&&now-pinchAt>400){e.preventDefault();tap=0;var br=box.getBoundingClientRect();zoom(im,(im._zs||1)>1?1:2.5,t.clientX-br.left,t.clientY-br.top);return}
+    tap=now;
+  });
+  if(dbl)box.addEventListener('dblclick',function(e){var im=img();if(!im)return;var br=box.getBoundingClientRect();zoom(im,(im._zs||1)>1?1:2.5,e.clientX-br.left,e.clientY-br.top)});
+  ['gesturestart','gesturechange'].forEach(function(n){box.addEventListener(n,function(e){e.preventDefault()})});   // iOS：别让系统再缩整页
+}
+pinchZoom($('#fview .fv-b'),true);pinchZoom(lightbox,false);
+lightbox.addEventListener('click',function(){if(Date.now()-pinchAt<400)return;lightbox.classList.remove('on')});   // 刚捏完松手不算点
 // 回复里的 Markdown 图片：点开全屏；加载完再滚到底，免得图片撑高后看不到最新内容
 feed.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))showImage(e.target.src)});
 feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))scrollDown()},true);
@@ -7148,7 +7185,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
 (function(){
   var sel=$('#setTheme'),t='';try{t=localStorage.getItem('claclaw.theme')||''}catch(_){}
   sel.value=t==='shichen'&&window.__scZ!=null?'shichen@'+window.__scZ:t;applyTheme(t);
-  // 「shichen@<地支序号>」：流变时辰固定在这个时辰（预览用，记在 claclaw.scZ）；选别的就回到按真实时间走
+  // 「shichen@<地支序号>」：单选一个时辰主题（记在 claclaw.scZ）；选别的就回到按真实时间走
   sel.addEventListener('change',function(){
     var m=/^shichen@(\d+)$/.exec(sel.value),v=m?'shichen':sel.value;
     window.__scZ=m?+m[1]:null;
@@ -7256,19 +7293,19 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   DESKTOP.addEventListener('change',function(){if(!on())balls.forEach(function(b){b._o=0;b._v=0;put(b)})});
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&tilt)kick()});
 })();
-// 15 个主题快捷方块（普通 / 深色 / 九紫离火 / 流变时辰 12 个时辰）：点时辰方块就固定显示那个时辰，刷新后回到按时间自动换
+// 15 个主题快捷方块（阳白明亮 / 阴黑暗沉 / 九紫离火 / 12 个时辰）：点时辰方块就固定成那个时辰主题，和设置里单选一个时辰一样
 (function(){
   var box=$('#tmpTh'),sel=$('#setTheme'),Z='子丑寅卯辰巳午未申酉戌亥';
   var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
-  var L=[['light','#FFFFFF','普通'],['dark','#161B21','深色'],['ziwei','#5B21B6','九紫离火']];
+  var L=[['light','#FFFFFF','阳白明亮'],['dark','#161B21','阴黑暗沉'],['ziwei','#5B21B6','九紫离火']];
   for(var i=0;i<12;i++)L.push(['shichen','#'+ZC[i],Z[i]+'时',i]);
   function mark(){var t=document.documentElement.getAttribute('data-theme');[].forEach.call(box.querySelectorAll('[data-th]'),function(b){b.setAttribute('aria-pressed',String(b._t===t&&(t!=='shichen'||b._z===window.__scZ)))})}
   L.forEach(function(x){
     var b=document.createElement('button');b.type='button';b.style.setProperty('--c',x[1]);b.title=x[2];b.setAttribute('aria-label',x[2]);b._t=x[0];b._z=x[3];
     b.addEventListener('click',function(){
       window.__scZ=x[0]==='shichen'?x[3]:null;
-      try{localStorage.setItem('claclaw.theme',x[0]);localStorage.removeItem('claclaw.scZ')}catch(_){}
-      sel.value=x[0];applyTheme(x[0]);mark();box.classList.remove('open');b.blur();
+      try{localStorage.setItem('claclaw.theme',x[0]);if(x[0]==='shichen')localStorage.setItem('claclaw.scZ',String(x[3]));else localStorage.removeItem('claclaw.scZ')}catch(_){}
+      sel.value=x[0]==='shichen'?'shichen@'+x[3]:x[0];applyTheme(x[0]);mark();box.classList.remove('open');b.blur();
     });
     b.setAttribute('data-th','');box.appendChild(b);
   });
