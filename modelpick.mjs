@@ -1,4 +1,4 @@
-// 模型库接到各 Claw 的会话里选（dsh / OpenCode / OpenClaw；Claude 会话有自己的选择）：
+// 模型库接到各 Claw 的会话里选（dsh / OpenCode / OpenClaw；Claude 见文件末尾 claudeLib*）：
 // - OpenCode：启动 `opencode acp` 时把模型库注入成 OPENCODE_CONFIG_CONTENT（和用户自己的配置合并），供应商 id 加 claclaw- 前缀；
 //   key 放在子进程的环境变量里，配置里只写 {env:…}，不落盘
 // - dsh / OpenClaw：它们自己已经配了供应商；按「同一个接口地址（host）+ 同一个模型 ID」把它们的模型对上模型库里的那一条
@@ -255,4 +255,23 @@ export function qoderSettingsMerge(cur, inj) {
   const all = [...keep, ...inj.list];
   if (all.length) s.customModels = all; else delete s.customModels;
   return s;
+}
+
+// ---------- Claude Code 用模型库：只接有 Anthropic 格式地址的那几家（DeepSeek、Kimi、智谱、MiniMax、百炼……） ----------
+// 每个 Claude 会话一个进程，环境变量按会话给：ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN 指到那一家。
+// 会话建好就绑定这一个 Key（供应商），之后只能在它的模型里换，不能换到别家或换回 Claude 自己的模型
+// （回复里的思考内容带签名，跨家接着聊会被拒）
+export const claudeLibProviders = store => store.providers.filter(p => p.endpoints?.anthropic && p.key && p.models?.length);
+export function parseLibPick(v) {
+  const m = /^lib:([a-z0-9][a-z0-9-]{0,31})\/([A-Za-z0-9][\w.:/@+-]{0,119})$/.exec(String(v || ''));
+  return m ? { provider: m[1], model: m[2] } : null;
+}
+export function claudeLibEnv(p, model) {
+  const base = String(p.endpoints.anthropic).replace(/\/+$/, '').replace(/\/v1$/, '');
+  // 几个别名（opus / sonnet / haiku、子任务、后台小模型）都指到同一个模型：不然 Claude Code 会拿 Claude 的模型名去问这一家
+  return {
+    ANTHROPIC_BASE_URL: base, ANTHROPIC_AUTH_TOKEN: p.key, ANTHROPIC_MODEL: model,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: model, ANTHROPIC_DEFAULT_SONNET_MODEL: model, ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+    ANTHROPIC_SMALL_FAST_MODEL: model, CLAUDE_CODE_SUBAGENT_MODEL: model,
+  };
 }

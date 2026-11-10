@@ -1775,7 +1775,7 @@ select.pe-in{text-align-last:right}
     <div class="cfg-p" role="dialog" aria-label="会话设置">
       <div class="cfg-grab"></div>
       <div class="cfg-h"><b>会话设置</b><button type="button" id="cfgX" aria-label="关闭">×</button></div>
-      <section id="cfgModelSec" hidden><h4>模型</h4><div class="cfg-list" id="cfgModels" role="radiogroup" aria-label="模型"></div></section>
+      <section id="cfgModelSec" hidden><h4>模型<span id="cfgLibNote"></span></h4><div class="cfg-list" id="cfgModels" role="radiogroup" aria-label="模型"></div></section>
       <section id="cfgEffortSec" hidden><h4>推理强度<span id="cfgEffortNote"></span></h4><div class="cfg-seg" id="cfgEfforts" role="radiogroup" aria-label="推理强度"></div></section>
       <section id="cfgModeSec"><h4>权限</h4><div class="cfg-list" id="cfgModes" role="radiogroup" aria-label="权限"></div></section>
       <!-- 只管这个会话的设置（以后更多全局设置会逐步放到这里按会话单独设） -->
@@ -3606,7 +3606,7 @@ function onEvent(m){
     // dsh / OpenCode / OpenClaw：会话设置里只有模型（从模型库 + 各 Claw 自带的里选），没有推理强度和权限模式
     xcfg=NOT_CLAUDE.test(m.id)?(m.xmodels||{current:null,label:'',groups:null}):null;xcfgAsked=false;xcfgErr='';
     $('#cfgMode').hidden=!!xcfg;$('#cfgBtn').style.display=m.group?'none':'';   // 群聊没有会话设置
-    cfg={models:null,model:null,effort:null,pick:'default'};cfgBusy=null;applyModel(m);
+    cfg={models:null,model:null,effort:null,pick:'default',lib:null};cfgBusy=null;applyModel(m);
     setMode(m.mode,false);
     if(!reuse){
     if(m.mode!=='default')addSys('权限模式继承自原会话：'+(MODES.find(function(x){return x.key===m.mode})||{label:m.mode}).label);
@@ -4075,7 +4075,7 @@ function cfgNote(extra){
 }
 // ---------- 会话设置：模型 / 推理强度 / 权限（标题栏右边的按钮 + 面板）----------
 // 模型列表由服务器从 Claude Code 实时取（这个账号能用哪些就列哪些），只有 Claude 会话有
-var cfg={models:null,model:null,effort:null,pick:'default'},cfgBusy=null,cfgBusyT=null,lastModels=null;
+var cfg={models:null,model:null,effort:null,pick:'default',lib:null},cfgBusy=null,cfgBusyT=null,lastModels=null;
 var xcfg=null,xcfgAsked=false,xcfgErr='';   // dsh / OpenCode / OpenClaw 会话的模型选择：{current, label, groups:[{name, items:[{value,label,sub,disabled}]}]}（groups 为 null = 还没取）   // lastModels：新建对话框用（在列表页时没有打开的会话）
 var EFFORTS=[
  {key:'low',label:'低',note:'最快、最省用量'},
@@ -4090,6 +4090,7 @@ function modelShort(id){
   var x=String(id).match(/(fable|opus|sonnet|haiku|mythos)-(\d+)(?:-(\d{1,2}))?(?!\d)/i);
   if(x)return x[1].charAt(0).toUpperCase()+x[1].slice(1).toLowerCase()+' '+x[2]+(x[3]?'.'+x[3]:'');
   var r=(cfg.models||[]).find(function(m){return m.value===id});
+  if(cfg.lib)return r&&r.name||String(id);   // 模型库会话：用模型库里记的名字，不改大小写
   if(r&&r.resolved&&r.resolved!==id)return modelShort(r.resolved);
   return String(id).charAt(0).toUpperCase()+String(id).slice(1);
 }
@@ -4173,8 +4174,17 @@ function renderCfg(){
   if(xcfg)return renderXCfg();
   $('#cfgModeSec').hidden=false;
   var ms=claudeSess()&&cfg.models&&cfg.models.length?cfg.models:null;
-  $('#cfgModelSec').hidden=!ms;$('#cfgEffortSec').hidden=!ms;
-  if(ms){
+  $('#cfgModelSec').hidden=!ms;$('#cfgEffortSec').hidden=!ms||!!cfg.lib;
+  $('#cfgLibNote').textContent=claudeSess()&&cfg.lib?'模型库 · '+cfg.lib.name+'（只能在这个 Key 的模型里换）':'';
+  if(ms&&cfg.lib){   // 模型库会话：只列这个 Key 下的模型，不能调推理强度
+    var lbox=$('#cfgModels');lbox.innerHTML='';
+    ms.forEach(function(m){
+      var b=cfgOpt(m.name||m.value,m.name&&m.name!==m.value?m.value:'',m.value===cfg.pick);
+      if(cfgBusy==='model:'+m.value)b.classList.add('busy');
+      b.addEventListener('click',function(){if(m.value!==cfg.pick)cfgSend('model:'+m.value,{t:'model.set',model:m.value})});
+      lbox.appendChild(b);
+    });
+  }else if(ms){
     var box=$('#cfgModels');box.innerHTML='';
     ms.forEach(function(m){
       var fam=(String(m.resolved||m.value).match(/fable|opus|sonnet|haiku|mythos/i)||[''])[0].toLowerCase();
@@ -4223,7 +4233,8 @@ $('#cfgX').addEventListener('click',closeCfg);
 $('#cfgDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeCfg()});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#cfgDlg').classList.contains('on'))closeCfg()});
 function applyModel(m){
-  if(m.models)cfg.models=lastModels=m.models;
+  if('lib' in m)cfg.lib=m.lib||null;
+  if(m.models){cfg.models=m.models;if(!cfg.lib)lastModels=m.models}   // lastModels 给新建对话框用：只记 Claude 自己的模型
   if('model' in m)cfg.model=m.model||null;
   if('effort' in m)cfg.effort=m.effort||null;
   if(m.pick)cfg.pick=m.pick;
@@ -7491,7 +7502,7 @@ function newSibling(s){
   $('#newName').value='';$('#newErr').textContent='';
   // Claude 会话：可以选模型 / 推理强度 / 权限；默认「沿用」= 用参照会话的
   var isClaude=!NOT_CLAUDE.test(s.id||'')&&(!s.claw||s.claw==='claude');
-  var ms=isClaude?(cfg.models&&cfg.models.length?cfg.models:lastModels):null;
+  var ms=isClaude?(cfg.models&&cfg.models.length&&!cfg.lib?cfg.models:lastModels):null;   // 当前是模型库会话时 cfg.models 是那个 Key 的模型，不能当 Claude 的列
   newPick={model:null,effort:null,mode:null};$('#newPick').hidden=!isClaude;
   $('#newModels').hidden=false;$('#newModelSel').hidden=true;$('#newEffortRow').hidden=!ms;$('#newModeRow').hidden=false;
   $('#newPick > label').hidden=!ms;$('#newModels').hidden=!ms;
@@ -7502,6 +7513,7 @@ function newSibling(s){
       pickChips($('#newModels'),[{value:null,label:keepM}].concat(ms.map(function(m){return {value:m.value,label:m.value==='default'?'默认':modelShort(m.resolved||m.value)}})),null,function(v){newPick.model=v});
       pickChips($('#newEfforts'),[{value:null,label:keepE}].concat(EFFORTS.map(function(e){return {value:e.key,label:e.label}})),null,function(v){newPick.effort=v});
     }
+    newClaudeLib(s,ms,same);
     var mx=MODES.find(function(x){return x.key===mode});
     pickChips($('#newModes'),[{value:null,label:same&&mx?'沿用（'+mx.label+'）':'沿用原会话'}].concat(MODES.map(function(x){return {value:x.key,label:x.label}})),null,function(v){newPick.mode=v});
   }else if(s.claw&&CLAW_T.some(function(c){return c.id===s.claw&&c.acp})){
@@ -7511,6 +7523,26 @@ function newSibling(s){
   $('#newName').focus();
 }
 var newOptsFor=null;
+// Claude 新建：模型库里有 Anthropic 格式地址的 Key，就把模型换成下拉（Claude 自己的一组 + 每个 Key 一组）；
+// 选了模型库的模型，这个会话就绑定那个 Key，以后只能在它的模型里换；推理强度不能调
+function newClaudeLib(s,ms,same){
+  fetch('/api/models',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){
+    if(!j||newFrom!==s)return;
+    var ps=(j.providers||[]).filter(function(p){return p.endpoints&&p.endpoints.anthropic&&p.hasKey&&p.models&&p.models.length});
+    if(!ps.length)return;
+    var sel=$('#newModelSel');sel.innerHTML='';
+    var d0=document.createElement('option');d0.value='';d0.textContent=same&&cfg.lib?'沿用（'+cfg.lib.name+' · '+curModelLabel()+'）':same?'沿用（'+curModelLabel()+'）':'沿用原会话';sel.appendChild(d0);
+    var cms=ms&&ms.length?ms:[{value:'default'}];   // 没取到过 Claude 的模型清单（只开过模型库会话）：至少能选 Claude 默认
+    {var og=document.createElement('optgroup');og.label='Claude';cms.forEach(function(m){var o=document.createElement('option');o.value=m.value;o.textContent=m.value==='default'?'默认':modelShort(m.resolved||m.value);og.appendChild(o)});sel.appendChild(og)}
+    ps.forEach(function(p){
+      var og=document.createElement('optgroup');og.label='模型库 · '+p.name+(p.label?'（'+p.label+'）':'');
+      p.models.forEach(function(m){var o=document.createElement('option');o.value='lib:'+p.id+'/'+m.id;o.textContent=(m.name||m.id)+(m.name&&m.name!==m.id?' · '+m.id:'');og.appendChild(o)});
+      sel.appendChild(og);
+    });
+    sel.onchange=function(){newPick.model=sel.value||null;$('#newEffortRow').hidden=!ms||/^lib:/.test(sel.value)};
+    $('#newPick > label').hidden=false;$('#newModels').hidden=true;sel.hidden=false;
+  }).catch(function(){});
+}
 // ACP Claw 的新建：模型（下拉，分组）、推理强度、权限（agent 给什么列什么；「默认」= 不改，用 agent 自己的）
 function drawNewOpts(claw,o){
   if(!newFrom||newOptsFor!==claw||!o)return;

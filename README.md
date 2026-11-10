@@ -23,7 +23,7 @@ claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十四个：[C
 
 | Claw | claclaw 怎么连它 | 需要的 Node | 说明 |
 | --- | --- | --- | --- |
-| Claude Code | [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)（自带 Claude Code，要先登录过） | 18+ | 可切换权限模式（默认 / 自动改文件 / 计划）；占用检测和接管最完整 |
+| Claude Code | [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk)（自带 Claude Code，要先登录过） | 18+ | 可切换权限模式（默认 / 自动改文件 / 计划）；占用检测和接管最完整；新建会话时也能选模型库里有 Anthropic 格式地址的模型（DeepSeek、Kimi、智谱、MiniMax、百炼等，按会话走 `ANTHROPIC_BASE_URL`），选了就绑定那个 Key，之后只能在它的模型里换，不能调推理强度 |
 | DeepSeek Harness | 起 `dsh` 的 ACP 进程 | **22.15+**（会话记录是 zstd 压缩的） | `/model`、`/effort` 切模型和思考强度 |
 | OpenCode | 起 `opencode acp` 进程 | **22.13+**（会话在 SQLite 库里，用 Node 自带的 `node:sqlite`） | `/model`、`/effort`、`/mode`；按目录推断终端占用 |
 | Kimi Code | 起 `kimi acp` 进程 | 18+ | 不用登录 Kimi 账号：模型库里的模型自动配进去（也可以 `kimi login` 用 Kimi 会员）；`/model`、`/thinking`、`/mode` |

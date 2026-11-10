@@ -52,6 +52,7 @@ import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs'
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_TTL } from './peerqueue.mjs';
 import { peerJudge } from './peerjudge.mjs';
+import { storeNow as libStoreNow, claudeLibProviders, parseLibPick, claudeLibEnv } from './modelpick.mjs';
 import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './modelstore.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 群记录文件（成员会话按需读）：不能放数据目录里——那里对协同那一轮算敏感位置，读一下就要确认
@@ -1804,6 +1805,8 @@ class Runner {
     this.textOpen = false;
     // 模型 / 推理强度：网页上选过的（存在 web-sessions 里）优先，新建时可以指定
     const saved = webSessions()[this.id] || {};
+    // 模型库：会话绑定的那个 Key（供应商 id），建好就不变；null = 用 Claude 自己的模型
+    this.lib = opts.lib !== undefined ? opts.lib || null : saved.lib || null;
     this.wantModel = opts.model || saved.model || null;
     this.wantEffort = EFFORTS.includes(opts.effort) ? opts.effort : EFFORTS.includes(saved.effort) ? saved.effort : null;
     this.model = this.wantModel;   // init 到了换成实际在用的
@@ -1822,6 +1825,19 @@ class Runner {
         }
       },
     };
+    // 模型库会话：环境变量指到那一家（Key 只进子进程环境，不写日志）；Key 被删了 / 没了 Anthropic 地址：不发消息，提示
+    let env = childEnv();
+    this.libErr = '';
+    if (this.lib) {
+      const p = this.libProvider();
+      if (!p) this.libErr = '这个会话用的模型库 Key 已经删掉了（或没有 Anthropic 格式地址），没法接着聊；请在 Claw › 模型库里加回来，或新建会话';
+      else {
+        if (!this.wantModel || !p.models.some(m => m.id === this.wantModel)) this.wantModel = p.models[0].id;
+        env = { ...childEnv(), ...claudeLibEnv(p, this.wantModel) };
+        delete env.CLAUDE_CODE_OAUTH_TOKEN; delete env.ANTHROPIC_API_KEY;
+        this.model = this.wantModel;
+      }
+    }
     this.q = query({
       prompt: inbox,
       options: {
@@ -1829,14 +1845,14 @@ class Runner {
         cwd: this.cwd,
         permissionMode: this.mode,
         ...(this.wantModel ? { model: this.wantModel } : {}),
-        ...(this.wantEffort ? { effort: this.wantEffort } : {}),
+        ...(this.wantEffort && !this.lib ? { effort: this.wantEffort } : {}),
         // 只有继承来的模式就是 bypass 时才放开（SDK 要求显式同意才能进 bypass）
         allowDangerouslySkipPermissions: this.allowedModes.includes('bypassPermissions'),
         includePartialMessages: true,
         // 每轮结束后由 Claude Code 生成一条「下一句可能要说的话」，在网页输入框里做成提示
         promptSuggestions: true,
         // 不传 settingSources = 和 CLI 一样加载 user + project + local，网页会话与原会话的权限完全一致
-        env: childEnv(),
+        env,
         mcpServers: { claclaw: claclawMcp(this.id) },
         canUseTool: (name, input, o) => this.askPermission(name, input, o),
         // 协同消息触发的那一轮：不管什么权限模式（包括跳过确认），有风险的操作都要用户确认（钩子在跳过确认模式下也会跑）
@@ -1974,7 +1990,13 @@ class Runner {
 
   // 当前会话可用的斜杠命令（内置 + skill + 插件 + MCP），去掉只能在终端里用的
   // 这个账号能用的模型（含每个模型支持的推理强度）：打开就取，网页的设置面板用
+  libProvider() { return this.lib ? claudeLibProviders(libStoreNow()).find(p => p.id === this.lib) || null : null; }
   async loadModels() {
+    if (this.lib) {   // 模型库会话：只列这个 Key 下的模型
+      const p = this.libProvider();
+      this.models = p ? p.models.map(m => ({ value: m.id, resolved: m.id, name: m.name || m.id, desc: p.name, efforts: [] })) : [];
+      return this.emit({ t: 'models', ...this.modelInfo() });
+    }
     try {
       const list = await this.q.supportedModels();
       this.models = list.map(m => ({ value: m.value, resolved: m.resolvedModel || '', name: m.displayName || m.value, desc: m.description || '', efforts: m.supportedEffortLevels || [] }));
@@ -1983,17 +2005,21 @@ class Runner {
       log('supportedModels failed', e?.message);
     }
   }
-  modelInfo() { return { models: this.models, model: this.model, effort: this.effort, pick: this.wantModel || 'default' }; }
+  modelInfo() {
+    const p = this.lib && this.libProvider();
+    return { models: this.models, model: this.model, effort: this.lib ? null : this.effort, pick: this.wantModel || 'default', lib: this.lib ? { id: this.lib, name: p ? p.name : '（已删除的 Key）' } : null };
+  }
 
   async setModel(value) {
     const row = (this.models || []).find(m => m.value === value);
     if (!row) return this.emit({ t: 'error', message: '没有这个模型：' + value });
     try {
+      if (this.lib && value === 'default') throw new Error('模型库会话没有「默认」');
       await this.q.setModel(value === 'default' ? undefined : value);
       this.model = value === 'default' ? (row.resolved || value) : value;
       this.wantModel = value === 'default' ? null : value;
       // 当前推理强度这个模型不支持：降到它支持的最高一档
-      if (this.effort && row.efforts.length && !row.efforts.includes(this.effort)) await this.setEffort(row.efforts[row.efforts.length - 1], true);
+      if (!this.lib && this.effort && row.efforts.length && !row.efforts.includes(this.effort)) await this.setEffort(row.efforts[row.efforts.length - 1], true);
       rememberPick(this.id, { model: value === 'default' ? null : value });
       log('model', this.id.slice(0, 8), '→', value);
       this.emit({ t: 'model', ...this.modelInfo(), models: undefined, changed: 'model' });
@@ -2004,6 +2030,7 @@ class Runner {
 
   async setEffort(level, quiet) {
     if (!EFFORTS.includes(level)) return;
+    if (this.lib) return quiet ? undefined : this.emit({ t: 'error', message: '模型库的模型不支持调推理强度' });
     try {
       await this.q.applyFlagSettings({ effortLevel: level });
       this.effort = level;
@@ -2032,6 +2059,7 @@ class Runner {
 
   // 正在工作时也能发：作为「插话」排队（priority next），Claude 在下一个合适的时机读到，和终端里边干边打字一样
   send(text, images = []) {
+    if (this.libErr) return this.emit({ t: 'error', message: this.libErr });
     const steering = this.busy;
     // 干活中途插的话：被 Claude 读到之前还不在会话文件里，先记着，重新打开会话时补显示
     if (steering && text) { (this.steered ||= []).push(text); if (this.steered.length > 10) this.steered.shift(); }
@@ -2458,8 +2486,8 @@ function webSessions() {
 const webSessionIds = () => new Set(Object.keys(webSessions()));
 function rememberWebSession(id, mode, force) {
   const all = webSessions();
-  const { model, effort } = all[id] || {};   // 选过的模型 / 推理强度跟着留下
-  all[id] = { mode, ...(force ? { force: true } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+  const { model, effort, lib } = all[id] || {};   // 选过的模型 / 推理强度 / 绑定的模型库 Key 跟着留下
+  all[id] = { mode, ...(force ? { force: true } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(lib ? { lib } : {}) };
   saveWebSessions(all);
 }
 // 记下网页上给这个会话选的模型 / 推理强度（null = 删掉，回到默认）
@@ -2477,7 +2505,7 @@ function switchToBypass(old) {
   const subs = [...old.subs];
   old.subs.clear();   // 先摘掉订阅：dispose 发的 session.closed 不要让网页以为会话关了
   old.dispose('mode');
-  const r = new Runner(old.info, 'bypassPermissions', [...MODES, 'bypassPermissions'], { model: old.wantModel, effort: old.effort });
+  const r = new Runner(old.info, 'bypassPermissions', [...MODES, 'bypassPermissions'], { model: old.wantModel, effort: old.effort, lib: old.lib });
   runners.set(old.id, r);
   for (const w of subs) r.subscribe(w);
   r.emit({ t: 'mode', mode: 'bypassPermissions', modes: r.allowedModes });
@@ -3582,11 +3610,16 @@ wss.on('connection', (ws, req) => {
         runner?.unsubscribe(ws);
         // 模型 / 推理强度：新建对话框里选的优先，否则沿用参照会话的
         const fr = from && runners.get(from.sessionId), fw = (from && webSessions()[from.sessionId]) || {};
-        const refModel = fr ? fr.wantModel : fw.model, refEffort = fr ? fr.effort : fw.effort;
-        const pickModel = typeof m.model === 'string' && /^[\w.\[\]-]{1,80}$/.test(m.model) ? (m.model === 'default' ? null : m.model) : refModel || null;
-        const pickEffort = EFFORTS.includes(m.effort) ? m.effort : (EFFORTS.includes(refEffort) ? refEffort : null);
-        runner = new Runner(info, inherited, allowed, { isNew: true, model: pickModel, effort: pickEffort });
-        if (pickModel || pickEffort) rememberPick(id, { model: pickModel, effort: pickEffort });
+        const refModel = fr ? fr.wantModel : fw.model, refEffort = fr ? fr.effort : fw.effort, refLib = fr ? fr.lib : fw.lib || null;
+        // 选了模型库的模型（lib:<Key id>/<模型>）：这个会话绑定那个 Key；没选模型 = 沿用参照会话的（它是模型库会话就沿用同一个 Key、同一个模型）
+        const libPick = parseLibPick(m.model);
+        if (libPick && !claudeLibProviders(libStoreNow()).some(p => p.id === libPick.provider && p.models.some(x => x.id === libPick.model))) return send({ t: 'error', message: '模型库里没有这个模型（或这个 Key 没有 Anthropic 格式地址）' });
+        const chose = libPick || (typeof m.model === 'string' && /^[\w.\[\]-]{1,80}$/.test(m.model));
+        const pickLib = libPick ? libPick.provider : chose ? null : refLib;
+        const pickModel = libPick ? libPick.model : chose ? (m.model === 'default' ? null : m.model) : refModel || null;
+        const pickEffort = pickLib ? null : EFFORTS.includes(m.effort) ? m.effort : (EFFORTS.includes(refEffort) ? refEffort : null);
+        runner = new Runner(info, inherited, allowed, { isNew: true, model: pickModel, effort: pickEffort, lib: pickLib });
+        if (pickModel || pickEffort || pickLib) rememberPick(id, { model: pickModel, effort: pickEffort, lib: pickLib });
         runners.set(id, runner);
         rememberWebSession(id, inherited);
         runner.subscribe(ws);
@@ -3594,7 +3627,7 @@ wss.on('connection', (ws, req) => {
         send({
           t: 'session.opened', id, title: info.summary, cwd: info.cwd, cwdShort: relPath(info.cwd, null),
           mode: runner.mode, modes: runner.allowedModes, busy: false, history: [], pending: [], suggestion: null,
-          commands: runner.commands || null, isNew: true,
+          commands: runner.commands || null, isNew: true, ...runner.modelInfo(),   // 模型库会话的模型清单是同步给的，早于订阅：随打开一起带上
         });
       } else if (m.t === 'session.open' && isGroupId(m.id)) {
         const g = groups.get(m.id);
