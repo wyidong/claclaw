@@ -115,36 +115,47 @@ window.__sc=(function(){
 /* 九紫离火：照 clarelay 外壳的样子——淡紫底、白卡片带细边；字是重点：标题 / 名字用 clarelay 紫，说明用石板灰，正文近黑；离火的暖橙只做点缀（提醒、协同） */
 :root[data-theme="ziwei"]{
   --bg:#F2F0F8;--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--line:#E4E0EE;
-  --accent:#5B21B6;--accent-ink:#FFFFFF;--user-bg:#EDE7FB;--zw-t:#4C1D95;
+  --accent:#5B21B6;--accent-ink:#FFFFFF;--user-bg:#EDE7FB;--title:#4C1D95;
   --allow:#5B21B6;--on-allow:#FFFFFF;--deny:#D93636;--warn:#C2410C;
   --add-bg:#E6F4EA;--del-bg:#FCE7E4;--code-bg:#F1EEF8;--banner-bg:#FFF0E3;
   --strip:var(--bg);--rail-on:var(--surface);
 }
-/* 卡片、列表行、搜索框：白底细边（像 clarelay 的卡片）；列表 / 设置页的底换成淡紫 */
-:root[data-theme="ziwei"] #setPane .set-card,:root[data-theme="ziwei"] .h-card,:root[data-theme="ziwei"] .claw-card,:root[data-theme="ziwei"] .claw-tool,:root[data-theme="ziwei"] .s-item,:root[data-theme="ziwei"] .s-row,:root[data-theme="ziwei"] #sSearch{background:#FFFFFF;border:1px solid var(--line)}
-:root[data-theme="ziwei"] #sList .s-row.wx .s-item{border:0}
-:root[data-theme="ziwei"] #app #sheet,:root[data-theme="ziwei"] #app #sheet .sheet-p,:root[data-theme="ziwei"] #app #hostPane,:root[data-theme="ziwei"] #app #sTop,:root[data-theme="ziwei"] #app #setTop{background:var(--bg)}
-/* 字：标题、名字用紫 */
-:root[data-theme="ziwei"] .lb,:root[data-theme="ziwei"] .claw-tx b,:root[data-theme="ziwei"] .claw-r b,:root[data-theme="ziwei"] .s-item .t,:root[data-theme="ziwei"] #setTop,:root[data-theme="ziwei"] #nm,:root[data-theme="ziwei"] #setPane .set-h{color:var(--zw-t)}
-:root[data-theme="ziwei"] #setPane .set-h,:root[data-theme="ziwei"] .h-h{font-weight:600}
-/* 宿主页、协同页：页头、分组标题、每行名称同样用紫 */
-:root[data-theme="ziwei"] .pg-hd,:root[data-theme="ziwei"] .h-h,:root[data-theme="ziwei"] .h-row .k{color:var(--zw-t)}
-:root[data-theme="ziwei"] .pe-back{color:var(--accent)}
-
-:root[data-theme="ziwei"] #setTop button,:root[data-theme="ziwei"] #backBtn{color:var(--accent)}
+/* ── ② 卡片风格（九紫离火、流变时辰共用）：淡底上放白卡片细边；标题 / 名字用 --title（各套自己给），返回键之类用强调色 ── */
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #setPane .set-card,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .h-card,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-card,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-tool,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .s-item,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .s-row{background:var(--surface);border:1px solid var(--line)}
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #sList .s-row.wx .s-item{border:0}
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #app #sheet,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #app #sheet .sheet-p,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #app #hostPane,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #app #sTop,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #app #setTop{background:var(--bg)}
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .lb,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-tx b,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-r b,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .s-item .t,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #setTop,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #nm,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #setPane .set-h,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .pg-hd,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .h-h,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .h-row .k{color:var(--title)}
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #setPane .set-h,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .h-h{font-weight:600}
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .pe-back,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #setTop button,
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) #backBtn{color:var(--accent)}
+@media (min-width:1000px){:root:is([data-theme="ziwei"],[data-theme="shichen"]) #sList .s-row:not(.wx){border:0;background:none}}   /* 电脑：卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
 /* ── ③ 流变时辰 · 12 套共用 ── */
 /* 流变时辰：6 阳时辰（子寅辰午申戌）照九紫离火的配色（淡底白卡片），6 阴时辰（丑卯巳未酉亥）照深色主题（深底深卡片浅字，<html> 带 .sc-dark）。
    window.__sc 只按当前时辰给 <html> 设 data-sc="0~11"（地支序号）和 .sc-dark，颜色全在下面 ④ 各时辰的变量块里——要调哪个时辰的颜色直接改那一块。
-   变量：--sc-b 地支色 / --sc-t 标题字色 / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
+   变量：--sc-b 地支色 / --title 标题字色（卡片风格共用的变量） / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
 :root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface);--allow:var(--accent);--on-allow:var(--accent-ink)}
-:root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .claw-tool,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row,:root[data-theme="shichen"] #sSearch{background:var(--surface);border:1px solid var(--line)}
+:root[data-theme="shichen"] #setPane #setScImgRow{display:flex}   /* 设置里的「时辰背景」只在这套主题下出现 */
 :root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg)}
-:root[data-theme="shichen"] #sList .s-row.wx .s-item{border:0}
-:root[data-theme="shichen"] #app #sheet,:root[data-theme="shichen"] #app #sheet .sheet-p,:root[data-theme="shichen"] #app #hostPane,:root[data-theme="shichen"] #app #sTop,:root[data-theme="shichen"] #app #setTop{background:var(--bg)}
-/* 字：标题、名字、分组标题用天干色 */
-:root[data-theme="shichen"] .lb,:root[data-theme="shichen"] .claw-tx b,:root[data-theme="shichen"] .claw-r b,:root[data-theme="shichen"] .s-item .t,:root[data-theme="shichen"] #setTop,:root[data-theme="shichen"] #nm,:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .pg-hd,:root[data-theme="shichen"] .h-h,:root[data-theme="shichen"] .h-row .k{color:var(--sc-t)}
-:root[data-theme="shichen"] #setPane .set-h,:root[data-theme="shichen"] .h-h{font-weight:600}
-:root[data-theme="shichen"] .pe-back,:root[data-theme="shichen"] #setTop button,:root[data-theme="shichen"] #backBtn{color:var(--accent)}
 /* 时辰背景选「图片」：图铺在整页最底下；列表 / 设置 / 宿主页的底变透明露出图，顶栏 / 底栏 / 左栏是半透明的淡底毛玻璃，卡片仍是白底 */
 :root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
 :root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
@@ -180,37 +191,38 @@ window.__sc=(function(){
 :root[data-theme="shichen"]:not(.sc-dark){--surface:#FFFFFF;--muted:#64748B;--accent-ink:#FFFFFF}
 :root[data-theme="shichen"].sc-img:not(.sc-dark){--muted:color-mix(in srgb,var(--ink) 72%,var(--surface))}   /* 铺了图：说明字压在图上，石板灰看不清，调深 */
 /* ── ③ 流变时辰 · 阴时辰公共（丑卯巳未酉亥）：浅色正文 / 标题，提示色、玻璃按钮、协同配色用深色主题那一套 ── */
-:root[data-theme="shichen"].sc-dark{--ink:#ECEEF0;--sc-t:#ECEEF0;
+:root[data-theme="shichen"].sc-dark{--ink:#ECEEF0;--title:#ECEEF0;
   --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB}
 /* ── ④ 12 个时辰各自的颜色 ──
    阳时辰：照九紫离火的配比换成地支色的色相——淡底 / 细边 / 选中 / 代码底是同色相的淡色，强调色、标题是同色相的深色，正文近黑带一点色；外圈比淡底深一档。
    阴时辰：底是地支色本身的深色（色相不变，亮度压到 8%~25%），说明字是带一点色的浅灰，强调色是地支色调亮到看得清。 */
 /* 子时（阳 · 地支色 #5B8FC7） */
-:root[data-theme="shichen"][data-sc="0"]{--bg:#EEF3F9;--line:#E0E7EE;--user-bg:#E8EFF7;--code-bg:#EDF2F7;--accent:#3769A0;--ink:#1B232D;--sc-b:#5B8FC7;--sc-t:#2D5885;--sc-out:#D7E4F1}
+:root[data-theme="shichen"][data-sc="0"]{--bg:#EEF3F9;--line:#E0E7EE;--user-bg:#E8EFF7;--code-bg:#EDF2F7;--accent:#3769A0;--ink:#1B232D;--sc-b:#5B8FC7;--title:#2D5885;--sc-out:#D7E4F1}
 /* 丑时（阴 · 地支色 #F2D27A） */
 :root[data-theme="shichen"][data-sc="1"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
 /* 寅时（阳 · 地支色 #1E6B3A） */
-:root[data-theme="shichen"][data-sc="2"]{--bg:#EEF9F2;--line:#E0EEE5;--user-bg:#E7F8ED;--code-bg:#EDF7F1;--accent:#268649;--ink:#1B2D21;--sc-b:#1E6B3A;--sc-t:#1F703C;--sc-out:#D7F2E1}
+:root[data-theme="shichen"][data-sc="2"]{--bg:#EEF9F2;--line:#E0EEE5;--user-bg:#E7F8ED;--code-bg:#EDF7F1;--accent:#268649;--ink:#1B2D21;--sc-b:#1E6B3A;--title:#1F703C;--sc-out:#D7F2E1}
 /* 卯时（阴 · 地支色 #9CCB8E） */
 :root[data-theme="shichen"][data-sc="3"]{--bg:#162612;--surface:#21381A;--line:#335728;--code-bg:#27421F;--user-bg:#315427;--muted:#ACBBA8;--accent:#9CCB8E;--accent-ink:#162612;--sc-b:#9CCB8E;--sc-out:#101C0D}
 /* 辰时（阳 · 地支色 #D49A2A） */
-:root[data-theme="shichen"][data-sc="4"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--sc-t:#7D5B19;--sc-out:#F2E8D7}
+:root[data-theme="shichen"][data-sc="4"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--title:#7D5B19;--sc-out:#F2E8D7}
 /* 巳时（阴 · 地支色 #D62828） */
 :root[data-theme="shichen"][data-sc="5"]{--bg:#2F0909;--surface:#450D0D;--line:#6B1414;--code-bg:#520F0F;--user-bg:#671313;--muted:#BBA8A8;--accent:#E16060;--accent-ink:#2F0909;--sc-b:#D62828;--sc-out:#220606}
 /* 午时（阳 · 地支色 #F2A0A0） */
-:root[data-theme="shichen"][data-sc="6"]{--bg:#F9EEEE;--line:#EEE0E0;--user-bg:#FAE5E5;--code-bg:#F7EDED;--accent:#B62020;--ink:#2D1B1B;--sc-b:#F2A0A0;--sc-t:#951D1D;--sc-out:#F2D7D7}
+:root[data-theme="shichen"][data-sc="6"]{--bg:#F9EEEE;--line:#EEE0E0;--user-bg:#FAE5E5;--code-bg:#F7EDED;--accent:#B62020;--ink:#2D1B1B;--sc-b:#F2A0A0;--title:#951D1D;--sc-out:#F2D7D7}
 /* 未时（阴 · 地支色 #F2D27A） */
 :root[data-theme="shichen"][data-sc="7"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
 /* 申时（阳 · 地支色 #F2F0EB） */
-:root[data-theme="shichen"][data-sc="8"]{--bg:#F6F5F1;--line:#ECE9E2;--user-bg:#F3F1EC;--code-bg:#F5F3F0;--accent:#827554;--ink:#2B271C;--sc-b:#F2F0EB;--sc-t:#6C6146;--sc-out:#EAE7DF}
+:root[data-theme="shichen"][data-sc="8"]{--bg:#F6F5F1;--line:#ECE9E2;--user-bg:#F3F1EC;--code-bg:#F5F3F0;--accent:#827554;--ink:#2B271C;--sc-b:#F2F0EB;--title:#6C6146;--sc-out:#EAE7DF}
 /* 酉时（阴 · 地支色 #D9D9D9） */
 :root[data-theme="shichen"][data-sc="9"]{--bg:#1C1C1C;--surface:#292929;--line:#404040;--code-bg:#303030;--user-bg:#3D3D3D;--muted:#B1B1B1;--accent:#D9D9D9;--accent-ink:#1C1C1C;--sc-b:#D9D9D9;--sc-out:#141414}
 /* 戌时（阳 · 地支色 #D49A2A） */
-:root[data-theme="shichen"][data-sc="10"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--sc-t:#7D5B19;--sc-out:#F2E8D7}
+:root[data-theme="shichen"][data-sc="10"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--title:#7D5B19;--sc-out:#F2E8D7}
 /* 亥时（阴 · 地支色 #1F3A6B） */
 :root[data-theme="shichen"][data-sc="11"]{--bg:#0D182B;--surface:#12223F;--line:#1D3663;--code-bg:#16294B;--user-bg:#1B335F;--muted:#A8AFBB;--accent:#7D8DA9;--accent-ink:#0D182B;--sc-b:#1F3A6B;--sc-out:#091120}
-/* ════════ 主题到此为止；下面是所有主题共用的样式 ════════ */
+/* ════════ 主题到此为止；下面是所有主题共用的样式 ════════
+   按区域分节，每节开头一行「════ 公共 · 区域名 ════」，搜「公共 · 」能逐节跳。顺序就是层叠顺序：后写的同级规则会盖前面的，挪动整节前先确认没有被后面覆盖的规则。 */
 /* ── 通用规矩（所有主题）：块和它所在区域的底色不一样、靠底色就分得开 → 不画边框；底色一样分不开 → 才画边框 ──
    哪些块按这个规矩来，在脚本的 BDR 表里（bdSync）；它换主题、换时辰、换图、电脑 / 手机切换时实际比一次两边的底色，
    底色不同就在 <html> 上加 nb-xxx，下面这些规则把边框去掉。等确认的提醒边框不算在内，照常显示。 */
@@ -220,6 +232,7 @@ window.__sc=(function(){
 :root.nb-hd #app header{border-bottom-color:transparent!important}
 :root.nb-stop #app #sTop,:root.nb-settop #app #setTop{border-bottom-color:transparent!important}
 :root.nb-tabs #app #mtabs{border-top-color:transparent!important}
+/* ════ 公共 · 页面骨架：不滚动、雾感、整体框 ════ */
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
 /* 页面本身不许滚：iOS 弹键盘时会把整个页面往上推，收起后不一定推回来，顶栏就一直压在状态栏下面被模糊。
@@ -239,6 +252,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 #app{position:relative;height:100%;display:flex;flex-direction:column;max-width:760px;margin:0 auto;background:var(--bg)}
 @media (min-width:800px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 
+/* ════ 公共 · 聊天标题栏（会话名、ID、目录、会话设置按钮、圆形功能按钮） ════ */
 /* 标题栏：平的，不加底边框（白底坐在浅灰的聊天区上，边界自然就有）；左边两行「名字 ID / 目录 · 分支」，右边两行「模型 · 推理强度 / 权限」 */
 header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;border-bottom:1px solid var(--line);background:var(--strip)}
 #sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
@@ -298,6 +312,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .cpid{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}   /* 长按时不弹系统的选字菜单 */
 .cpid.lp{background:var(--accent)!important;color:var(--accent-ink)!important}
 
+/* ════ 公共 · 提示条、聊天区、消息、播放键 ════ */
 #banner{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;background:var(--banner-bg);color:var(--warn);font-size:13px;line-height:1.4}
 #banner span{flex:1}
 #banner button{flex:none;width:36px;height:36px;border:0;background:none;color:inherit;font-size:20px;line-height:1}
@@ -325,6 +340,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* 手机：发出的消息长按复制、连点两下放回输入框；关掉系统的选字 / 放大，免得和这两个手势打架 */
 @media (pointer:coarse){.msg.user.lp{filter:brightness(.9)}.msg.user{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}}
 .msg code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
+/* ════ 公共 · 回复里的 Markdown ════ */
 /* 渲染后的 Markdown（流式输出期间仍是纯文本，结束后才渲染） */
 .msg.md{white-space:normal}
 .md>:first-child{margin-top:0}.md>:last-child{margin-bottom:0}
@@ -368,6 +384,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important}   /* 嵌在 clarelay 外壳里：通知由外壳收，不在这里订阅 */
 .peer .from{font-size:12px;color:var(--muted);margin-bottom:3px}
 .peer .body{word-break:break-word}
+/* ════ 公共 · 群聊 ════ */
 /* 群聊：成员的话（Claw logo + 协同标识 + 名字）、状态行、建群按钮和选成员面板 */
 .peer.gm{border-left-color:var(--accent)}
 .gm-foot{display:flex;justify-content:flex-end;margin:2px -6px -4px 0}
@@ -428,6 +445,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #grpPane .gp-av{flex:none;display:flex;align-items:center;gap:2px}
 #grpPane .gp-av .gm-ic{width:26px;height:26px}
 #grpPane .gp-av .gm-ic svg,#grpPane .gp-av .gm-ic img{width:22px;height:22px}
+/* ════ 公共 · 会话列表：分组树（Claw / 协同对方 / 目录） ════ */
 /* 第一级（Claw、协同的对方）的图标比第二级的文件夹（18px）大一点 */
 #grpPane .gp-nh>.gm-ic{width:24px;height:24px}
 #grpPane .gp-nh>.gm-ic svg,#grpPane .gp-nh>.gm-ic img{width:22px;height:22px}
@@ -470,6 +488,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .sys{align-self:center;max-width:92%;min-width:0;text-align:center;color:var(--muted);font-size:13px;line-height:1.45;white-space:pre-line;overflow-wrap:anywhere}   /* 报错里的长网址也要折行，不然把聊天区撑宽 */
 .think{align-self:flex-start;display:flex;align-items:center;gap:5px;padding:6px 0}
 .think .tt{margin-left:6px;font-size:13px;color:var(--muted)}
+/* ════ 公共 · 加载动画、刷新按钮 ════ */
 /* 顶部图标不闪：干活的闪烁在底部工作条上 */
 .think i{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.5;animation:blink 1.1s infinite}
 .think i:nth-child(2){animation-delay:.18s}.think i:nth-child(3){animation-delay:.36s}
@@ -481,6 +500,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #bgReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
+/* ════ 公共 · 工具调用卡片、工具组 ════ */
 .tool{border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
 .tool[data-k="wait"]{border-color:var(--warn)}
 .tool-h{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:0;background:none;text-align:left}
@@ -519,6 +539,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .out{margin:0;padding:10px 12px;font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
 
 #dock{background:var(--surface);border-top:1px solid var(--line);padding:10px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 7px)}
+/* ════ 公共 · 输入区上的权限确认、选择题面板 ════ */
 /* 软键盘弹起时底部横条被键盘盖住，不再留安全区 */
 body.kb #dock{padding-bottom:10px}
 #dock[data-state="perm"]{border-top:2px solid var(--warn)}
@@ -558,6 +579,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .btn.allow{background:var(--allow);color:var(--on-allow);border-color:var(--allow)}
 .always{display:block;width:100%;min-height:44px;margin-top:6px;border:0;background:none;color:var(--muted);font-size:14px;text-decoration:underline}
 
+/* ════ 公共 · iOS 状态栏、最近活跃、协同配色 ════ */
 /* iOS 主屏幕 Web App 会在状态栏区域盖一层从背景色渐变到透明的遮罩，透出下面的内容；
    遮罩层不画到状态栏区域，保证那里永远是纯色，否则会看到一截灰色模糊 */
 #sheet{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:flex-end;background:rgba(0,0,0,.42);z-index:5}
@@ -586,6 +608,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 
 @media (prefers-reduced-motion:reduce){.think i,.tool[data-k="run"] .st,.tgroup[data-k="run"] .tg-h .st{animation:none}}
 #dock{position:relative}
+/* ════ 公共 · 底部输入区 ════ */
 /* 底部输入区：分割线以下没有任何边框和底色块，靠光标和淡色提示表明这里能输入；
    左上角「+」加图片、右上角发送/停止，都是浮在输入框上的纯符号 */
 #composer{position:relative}
@@ -656,6 +679,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .fv-b img{display:block;max-width:100%;margin:0 auto}
 .fv-b iframe{width:100%;height:100%;border:0}
 .fv-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+/* ════ 公共 · 会话解剖页 ════ */
 /* 会话解剖页：标题栏点会话名打开。三层：会话（总消耗、四桶、每轮一颗球、每轮明细表）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） */
 #diss{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg);--ds-inp:#e8912d;--ds-cr:#8b7bff;--ds-cw:#9aa0a6;--ds-out:#3fb950}
 #diss.on{display:flex}
@@ -758,6 +782,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
   #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #hostBody{max-width:880px;margin:0 auto}
 }
 @media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb{font-size:12.5px}.ds-tb th,.ds-tb td{padding:6px 8px}}
+/* ════ 公共 · 聊天里的图片、文件 ════ */
 /* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最大 180）；点开才是原图 */
 .sfimg{align-self:flex-start;margin:6px 0;max-width:min(260px,80%)}
 .sfimg:not(.sfmedia){max-width:min(180px,60%)}
@@ -791,6 +816,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 .ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
 #sList .s-grp{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 4px;padding:6px 2px;border:0;background:none;font-size:13px;color:var(--muted);text-align:left}
 #sList .s-grp:first-child{margin-top:0}
+/* ════ 公共 · 会话列表：目录行、状态、干活中 ════ */
 /* 目录行前面：合着是关着的文件夹，展开是打开的文件夹（打开的那个右转 90 度）；和顶上「新建会话」的图标竖着对齐 */
 #sList .s-grp{gap:8px}
 #sList .s-grp .fdw{position:relative;flex:none;width:20px;height:20px}
@@ -819,6 +845,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 .s-row.working .s-item .when::before{content:'';display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:currentColor;vertical-align:middle;animation:pulse 1.2s infinite}
 .s-row.waiting .s-item{border-color:var(--warn)!important}
 .s-row.waiting .s-item .when{color:var(--warn)}
+/* ════ 公共 · 设置页 ════ */
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
 #setPane .set-sec{margin:0 0 20px}
 /* 设置：一组一张圆角卡片，每行左边名称 + 灰色说明，右边开关或「当前值 ›」，行间细线（参考常见 App 的设置页） */
@@ -826,7 +853,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #setPane .set-card{background:var(--bg);border-radius:12px;overflow:hidden}
 #setPane .set-card:not(:has(> :not([hidden]))){display:none}
 #setPane .set-sec:not(:has(.set-card > :not([hidden]))):not(:has(.set-note:not([hidden]))){display:none}
-#setPane #setScImgRow{display:none}:root[data-theme="shichen"] #setPane #setScImgRow{display:flex}   /* 「时辰背景」只在流变时辰主题下出现 */
+#setPane #setScImgRow{display:none}   /* 「时辰背景」只在流变时辰主题下出现（主题段里打开） */
 #setPane .set-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:54px;margin:0;padding:11px 14px;border:0;background:none;text-align:left;font:inherit;font-size:15px;color:var(--ink);cursor:pointer;box-sizing:border-box}
 #setPane .set-item:not([hidden]) ~ .set-item:not([hidden])::before{content:'';position:absolute;top:0;left:14px;right:0;border-top:1px solid var(--line)}
 #setPane .set-item:active{background:var(--surface)}
@@ -837,6 +864,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #setPane .set-num{flex:none;display:flex;align-items:center;gap:2px;color:var(--muted);font-size:14.5px}
 #setPane .set-num input{width:64px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;text-align:right;padding:4px 6px}
 #setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
+/* ════ 公共 · 朗读 ════ */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
    没在念：播放三角，点了念最后一条回复；在念：方块（外圈呼吸），点了停；被 iPhone 拦住：绿色播放键 */
 #ttsStop{position:fixed;right:14px;bottom:calc(var(--dockTop,96px) + 10px);z-index:30;width:42px;height:42px;padding:0;border:.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:pointer;opacity:.92}
@@ -890,6 +918,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 #setPane .set-foot .ver{text-align:center;padding:0}
 
 #sList .s-rempty{padding:2px 10px 8px 24px;font-size:12px}
+/* ════ 公共 · 未读红点、会话行按钮、右键菜单 ════ */
 /* 未读红点 */
 .s-row.unread .s-item .t::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 #railChats{position:relative}
@@ -940,6 +969,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .dlg select{width:100%;box-sizing:border-box;min-height:42px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
 .chip{min-height:34px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
 .chip[aria-checked="true"]{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600}
+/* ════ 公共 · 会话设置面板（模型、推理强度、权限） ════ */
 /* 会话设置面板：手机从底部滑上来，电脑居中；三组：模型（卡片）、推理强度（分段）、权限（卡片） */
 #cfgDlg{position:fixed;inset:0;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);z-index:9}
 #cfgDlg.on{display:flex}
@@ -991,6 +1021,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .plan{margin:0;padding:10px 12px;white-space:pre-wrap;font-size:14px;max-height:40vh;overflow-y:auto}
 #sessBtn .dot.off{filter:grayscale(1);opacity:.45}
 #sessBtn .dot.off:empty{background:var(--muted);filter:none;opacity:1}
+/* ════ 公共 · 工作状态条 ════ */
 /* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
 #workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
 /* 干活时：这个会话所属 Claw 的图标一闪一闪（代替原来的绿点和「XXX 正在工作」） */
@@ -1008,6 +1039,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 #workBar.quiet .wlogo{animation-duration:3.6s}
 #bannerT.link{cursor:pointer;text-decoration:underline}
 
+/* ════ 公共 · 电脑端布局（左边图标栏、中间列表、右边聊天） ════ */
 /* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
 #rail{display:none}
 #sheetGrip{display:none}
@@ -1017,6 +1049,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
   #sheetGrip:hover,#sheetGrip.drag{background:linear-gradient(to right,transparent 3px,var(--accent) 3px,var(--accent) 5px,transparent 5px)}
   body.col-drag{cursor:col-resize;user-select:none}
 }
+/* ════ 公共 · 手机布局 ════ */
 /* ---------- 手机：像微信，首页是会话列表，点进去是聊天页，左上角返回 ---------- */
 #backBtn{display:none}
 /* 标题栏两行网格：手机、电脑一样（第一行 ● 会话名；第二行 ID ······ 模型 · 推理强度 · 权限 ›）。
@@ -1100,6 +1133,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 #clawTop{display:none}   /* Claw 页的标题条：只在电脑端显示 */
 #hostPane{display:none}
 #hostPane:has(#hostBody .pg-hd) #hostHd{display:none}   /* 协同、技能子页面有自己的标题栏 */
+/* ════ 公共 · 宿主页、子页面、模型管理、协同 ════ */
 /* 宿主页的分组卡片（手机和电脑共用） */
 .h-link{cursor:pointer}
 .h-link:active{background:var(--surface)}
@@ -1268,6 +1302,7 @@ select.pe-in{text-align-last:right}
 .pe-peer .h-dot{flex:none;width:11px;height:11px;margin:0 8px 0 0;background:transparent;border:2px solid var(--muted);box-sizing:border-box}
 .pe-peer .h-dot.wait{border-style:dotted;animation:rlspin 1s linear infinite}
 .pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
+/* ════ 公共 · Claw 登录、Claw 页、各 Claw 图标 ════ */
 /* 各 Claw 的登录：卡片上的「登录」小按钮；登录面板（网址 / 一次性代码 / 要粘贴的授权码） */
 /* 各 Claw 的 logo 统一可见大小（rail、Claw 卡片、底部栏、干活提示里的 logo 都是 rail 按钮里那个元素的拷贝，所以按元素定一次全都生效）：
    --lk 按实测可见外框定：实心 / 方块类（Codex、CodeBuddy、Qoder、MiniMax 满框）缩到约 88%，和 GLM 一样；镂空的（Claude、Qwen、DeepSeek、Kimi、iFlow）保持满框。
@@ -1355,6 +1390,7 @@ select.pe-in{text-align-last:right}
 .claw-icw{position:relative;flex:none;display:block}
 .claw-card.busy .claw-ic{animation:wbreath 2.4s ease-in-out infinite}
 .claw-card.unread .claw-icw::after{content:'';position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
+/* ════ 公共 · 列表顶栏（搜索、新建、主题方块）、手机会话卡片、「最近」 ════ */
 /* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
 #sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
 /* 15 个主题快捷方块：点一下切主题（普通 / 深色 / 九紫离火 / 流变时辰 12 个时辰） */
@@ -1423,6 +1459,7 @@ select.pe-in{text-align-last:right}
   .s-item .m{font-size:12px;gap:8px}
 }
 #setPane .set-foot{padding-top:18px}
+/* ════ 公共 · 电脑端：列表、聊天的细节 ════ */
 @media (min-width:1000px){
   #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px var(--listW,300px) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto}
   header,#banner,#feed,#dock{grid-column:3}
@@ -1531,9 +1568,6 @@ select.pe-in{text-align-last:right}
   .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding-top:7px;padding-bottom:7px;padding-left:9px;border:1px solid var(--bg);border-radius:8px;background:none;cursor:pointer}
   .s-row:hover .s-item{background:var(--bg)}
   .s-item[aria-current="true"]{background:var(--user-bg)!important;border-color:var(--user-bg)!important}
-  /* 紫微主题给 .s-row 和 .s-item 都画了边框：电脑端卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
-  :root[data-theme="ziwei"] #sList .s-row:not(.wx){border:0;background:none}
-  :root[data-theme="shichen"] #sList .s-row:not(.wx){border:0;background:none}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
