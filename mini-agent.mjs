@@ -152,11 +152,35 @@ function pieceOf(j) {
 const LENGTH = new Set(['length', 'max_tokens', 'MAX_TOKENS']), DONE = new Set(['stop', 'end_turn', 'stop_sequence', 'STOP', 'FINISH_REASON_UNSPECIFIED', 'tool_calls', 'tool_use', 'pause_turn']);
 const stopOf = r => !r ? null : LENGTH.has(r) ? 'length' : DONE.has(r) ? 'stop' : String(r);
 // 接口报错：各家都是 JSON 里带 error.message（Gemini 有时包在数组里），取出说明，不贴整段 JSON
-function errOf(status, body) {
-  let msg = '';
-  try { const j = JSON.parse(body), e = (Array.isArray(j) ? j[0] : j)?.error; msg = typeof e === 'string' ? e : e?.message || ''; } catch {}
-  msg = String(msg || body).replace(/\s+/g, ' ').trim().slice(0, 300);
-  return (status === 429 ? '模型服务说额度或频率超限（429），等一会儿再试或换个模型：' : status === 401 || status === 403 ? '模型服务拒绝了 key（' + status + '），去模型库检查 key：' : '模型服务返回 ' + status + '：') + msg;
+function errOf(status, body, headers) {
+  let msg = '', e = null;
+  try { const j = JSON.parse(body); e = (Array.isArray(j) ? j[0] : j)?.error; msg = typeof e === 'string' ? e : e?.message || ''; } catch {}
+  msg = String(msg || body).replace(/\s+/g, ' ').trim();
+  if (status === 429) return '模型服务说额度或频率超限（429）：' + (waitOf(e, msg, headers) || '等一会儿再试，或者换个模型') + '。原话：' + msg.slice(0, 200);
+  return (status === 401 || status === 403 ? '模型服务拒绝了 key（' + status + '），去模型库检查 key：' : '模型服务返回 ' + status + '：') + msg.slice(0, 300);
+}
+// 429 多久恢复：Gemini 在 details 里写明超的是哪项额度（QuotaFailure：每分钟 / 每天）和 RetryInfo.retryDelay；
+// OpenAI、Anthropic 等在 retry-after 头里给秒数（或时间）；都没有就看说明里的「retry in 37.5s」。每天的额度按太平洋时间 0 点重置
+function waitOf(e, msg, headers) {
+  const det = Array.isArray(e?.details) ? e.details : [];
+  const vs = det.find(d => /QuotaFailure/.test(d?.['@type']))?.violations || [];
+  const day = vs.find(v => /PerDay/i.test(v?.quotaId || '')), min = vs.find(v => /PerMinute/i.test(v?.quotaId || ''));
+  const lim = v => v?.quotaValue ? '（上限 ' + v.quotaValue + ' 次）' : '';
+  if (day) return '今天的额度' + lim(day) + '用完了，' + dayReset() + '恢复';
+  let sec = parseFloat(det.find(d => /RetryInfo/.test(d?.['@type']))?.retryDelay);
+  const ra = String(headers?.get?.('retry-after') || '').trim();
+  if (!(sec >= 0) && ra) sec = /^\d+(\.\d+)?$/.test(ra) ? Number(ra) : (Date.parse(ra) - Date.now()) / 1000;
+  const m = /retry (?:in|after) ([\d.]+)\s*(ms|s)\b/i.exec(msg);
+  if (!(sec >= 0) && m) sec = Number(m[1]) / (m[2].toLowerCase() === 'ms' ? 1000 : 1);
+  const head = min ? '每分钟的次数' + lim(min) + '用完了，' : '';
+  return sec >= 0 ? head + '约 ' + waitText(sec) + '后恢复' : head ? head + '过一分钟再试' : '';
+}
+const waitText = s => s < 60 ? Math.max(1, Math.ceil(s)) + ' 秒' : s < 3600 ? Math.ceil(s / 60) + ' 分钟' : (s / 3600).toFixed(1) + ' 小时';
+function dayReset(now = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hourCycle: 'h23', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(now).map(x => [x.type, x.value]));
+  const at = new Date(now.getTime() + 86400000 - ((Number(p.hour) % 24) * 3600 + Number(p.minute) * 60 + Number(p.second)) * 1000);
+  const hm = at.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  return (at.toDateString() === now.toDateString() ? '今天 ' : '明天 ') + hm + '（太平洋时间 0 点）';
 }
 async function chat(s, signal, onText, onThought, extra) {
   const t0 = Date.now();
@@ -167,7 +191,7 @@ async function chat(s, signal, onText, onThought, extra) {
     r = await post(s, signal, extra);
     if (!r.ok) { s.plain = false; throw new Error(errOf(400, first)); }
   }
-  if (!r.ok) throw new Error(errOf(r.status, await r.text()));
+  if (!r.ok) throw new Error(errOf(r.status, await r.text(), r.headers));
   let text = '', tin = 0, tout = 0, buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻
   const dec = new TextDecoder();
   for await (const chunk of r.body) {

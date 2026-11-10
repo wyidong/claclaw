@@ -390,15 +390,29 @@ test('Mini agent：一直写不完最多接 4 段，提示发「继续」；被 
   } finally { a1.stop(); a2.stop(); m1.srv.close(); m2.srv.close(); }
 });
 
-test('Mini agent：接口报错只取说明（429 写明是额度 / 频率）', async () => {
+test('Mini agent：接口报错只取说明；429 写明多久恢复（Gemini 的每分钟 / 每天额度、retry-after 头）', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
-  const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(429, { 'content-type': 'application/json' }); res.end(JSON.stringify([{ error: { code: 429, message: 'You exceeded your current quota.\n* Quota exceeded for metric: free_tier_requests, limit: 20', status: 'RESOURCE_EXHAUSTED' } }])); }); });
+  const quota = (id, delay) => JSON.stringify([{ error: { code: 429, message: 'You exceeded your current quota.\n* Quota exceeded for metric: free_tier_requests, limit: 10\nPlease retry in 37.2s.', status: 'RESOURCE_EXHAUSTED',
+    details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: id, quotaValue: '10' }] }, { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: delay }] } }]);
+  const replies = [
+    [{}, quota('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', '37s')],
+    [{}, quota('GenerateRequestsPerDayPerProjectPerModel-FreeTier', '20s')],
+    [{ 'retry-after': '125' }, JSON.stringify({ error: { message: 'Rate limit reached' } })],
+    [{}, JSON.stringify({ error: { message: 'slow down, retry after 900ms' } })],
+    [{}, JSON.stringify({ error: { message: 'too many' } })],
+  ];
+  let k = 0;
+  const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { const [h, b] = replies[k++]; res.writeHead(429, { 'content-type': 'application/json', ...h }); res.end(b); }); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const a = startAgent({ MINI_FORMAT: 'gemini', MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1beta', MINI_MODEL: 'mx', MINI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
-    const r = await say(a, n.sessionId, 'hi');
-    assert.match(r.error.message, /^模型服务说额度或频率超限（429）.*You exceeded your current quota\. \* Quota exceeded for metric: free_tier_requests, limit: 20$/);
+    const err = async () => (await say(a, n.sessionId, 'hi')).error.message;
+    assert.match(await err(), /^模型服务说额度或频率超限（429）：每分钟的次数（上限 10 次）用完了，约 37 秒后恢复。原话：You exceeded your current quota\. \* Quota/);
+    assert.match(await err(), /今天的额度（上限 10 次）用完了，(今天|明天) \d\d:\d\d（太平洋时间 0 点）恢复/);
+    assert.match(await err(), /：约 3 分钟后恢复。原话：Rate limit reached$/);
+    assert.match(await err(), /：约 1 秒后恢复。/);
+    assert.match(await err(), /：等一会儿再试，或者换个模型。原话：too many$/);
   } finally { a.stop(); srv.close(); }
 });
