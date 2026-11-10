@@ -178,6 +178,9 @@ function replay(s) {
   }
 }
 
+// 换模型：noOff / plain 是按模型试出来的，换了就重新试（不然从回 400 的模型换到 Ollama，思考就关不掉了）
+function setModel(s, m) { if (m !== s.model) { s.noOff = false; s.plain = false; } s.model = m; }
+
 // ---------- 分发 ----------
 const handlers = {
   initialize: () => ({ protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: false } }, authMethods: [] }),
@@ -190,10 +193,10 @@ const handlers = {
     if (!text) return { stopReason: 'end_turn' };
     return { stopReason: await prompt(s, text) };
   },
-  'session/set_model': p => { const s = open(String(p.sessionId)); s.model = String(p.modelId); save(s); return {}; },
+  'session/set_model': p => { const s = open(String(p.sessionId)); setModel(s, String(p.modelId)); save(s); return {}; },
   'session/set_config_option': p => {
     const s = open(String(p.sessionId)), v = String(p.value);
-    if (p.configId === 'model') s.model = v; else if (p.configId === 'effort') s.think = v === 'on'; else throw new Error('没有这一项：' + p.configId);
+    if (p.configId === 'model') setModel(s, v); else if (p.configId === 'effort') s.think = v === 'on'; else throw new Error('没有这一项：' + p.configId);
     save(s);
     return { configOptions: configOf(s) };
   },

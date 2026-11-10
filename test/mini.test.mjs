@@ -239,5 +239,9 @@ test('Mini agent：接口不收 temperature / reasoning_effort（回 400）时�
     await say(a, n.sessionId, '再问');
     assert.equal(m.reqs.length, 3); assert.ok(!('temperature' in m.reqs[2]));   // 记住了，不再先撞一次 400
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).plain, true);
+    // 换了模型要重新试：又先带上 temperature
+    await a.rpc('session/set_config_option', { sessionId: n.sessionId, configId: 'model', value: 'other' });
+    await say(a, n.sessionId, '换了模型');
+    assert.equal(m.reqs[3].model, 'other'); assert.ok('temperature' in m.reqs[3]); assert.equal(m.reqs.length, 5);
   } finally { a.stop(); m.srv.close(); }
 });
