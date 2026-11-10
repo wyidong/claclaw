@@ -5293,29 +5293,24 @@ function applySearch(){
   });
 }
 $('#sSearch').addEventListener('input',applySearch);
+// 新建会话：选了 Claw 就能建。参照同一个 Claw 里当前打开的 / 最近打开过的 / 列表里最近的会话的目录；一个都没有就建在主目录
+function newInClaw(k,pref){
+  if(k==='openclaw'){newSibling({id:'',cwd:'',claw:'openclaw'});return}   // OpenClaw 没有目录，只填名字
+  var mine=function(x){return !!(x&&x.id&&!x.group&&x.cwd&&clawOf(x.id)===k)};
+  var ref=mine(pref)?pref:mine(session)?session:mine(lastSess)?lastSess:(lastList||[]).find(mine);
+  if(k==='claude')newSibling(ref?{id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd}:{id:'',cwd:'~'});
+  else newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:k}:{id:'',cwd:'~',claw:k});
+}
 $('#sNew').addEventListener('click',function(){
-  if(listMode==='recent'){   // 「最近」：参照当前打开的会话，没有就用列表里最近的一个（群除外）
+  if(listMode==='recent'){   // 「最近」：参照当前打开的会话，没有就用列表里最近的一个（群除外）；都没有就用选中的 Claw
     var ok=function(x){return x&&x.id&&!x.group&&clawOf(x.id)!=='group'&&(x.cwd||clawOf(x.id)==='openclaw')};
     var r0=ok(session)?session:(lastList||[]).find(ok);
-    if(!r0&&!lastList&&!this.dataset.retry){var me=this;me.dataset.retry=1;fetch('/api/recent').then(function(r){return r.json()}).then(function(a){if(Array.isArray(a)&&!lastList)lastList=a;me.click()}).catch(function(){}).then(function(){delete me.dataset.retry});return}   // 列表还没取回：取一次再来
-    if(!r0){alert('「最近」里还没有会话可参照：先到某个 Claw 的会话列表里新建');return}
-    var k0=r0.claw&&r0.claw!=='group'?r0.claw:clawOf(r0.id);
-    if(k0==='openclaw'){newSibling({id:'',cwd:'',claw:'openclaw'});return}
-    newSibling(k0==='claude'?{id:r0.id,cwd:r0.cwd,cwdShort:r0.cwd}:{id:r0.id,cwd:r0.cwd,claw:k0});return;
+    if(!r0&&!lastList&&!this.dataset.retry){var me=this;me.dataset.retry=1;fetch('/api/recent').then(function(r){return r.json()}).then(function(a){if(Array.isArray(a)&&!lastList)lastList=a}).catch(function(){}).then(function(){me.click();delete me.dataset.retry});return}   // 列表还没取回：取一次再来
+    if(r0){newInClaw(r0.claw&&r0.claw!=='group'?r0.claw:clawOf(r0.id),r0);return}
+    if(clawSel){newInClaw(clawSel);return}
+    alert('先在「Claw」页选一个 Claw，再新建会话');return;
   }
-  var ref=(session&&session.cwd)?session:(lastSess||(lastList||[]).find(function(x){return x.cwd}));   // 手机列表页没有打开的会话：用最近打开过的、或列表里最近活跃的那个
-  if(clawSel==='openclaw'){newSibling({id:'',cwd:'',claw:'openclaw'});return}   // OpenClaw 没有目录，只填名字
-  var sc=clawById(clawSel);
-  if(sc&&sc.acp){   // ACP 的 Claw：参照当前打开的、或列表里最近的同一个 Claw 的会话的目录；一个都没有就建在主目录
-    var mine=function(x){return clawOf(x.id)===sc.id};
-    ref=(session&&mine(session))?session:(lastList||[]).find(function(x){return mine(x)&&x.cwd});
-    newSibling(ref?{id:ref.id,cwd:ref.cwd,claw:sc.id}:{id:'',cwd:'~',claw:sc.id});return;
-  }
-  if(ref&&ref.cwd){newSibling({id:ref.id,cwd:ref.cwd,cwdShort:ref.cwd});return}
-  // 一个会话都没有（新装的宿主）：第一个会话建在主目录；有会话之后照旧参照已有会话的目录
-  var firstOrAlert=function(arr){if(Array.isArray(arr)&&!arr.length)newSibling({id:'',cwd:'~'});else alert('先打开一个会话，新会话会默认建在它的目录里')};
-  if(Array.isArray(lastList)&&clawSel!=='openclaw'){firstOrAlert(lastList);return}
-  fetch('/api/sessions').then(function(r){return r.json()}).then(function(arr){if(Array.isArray(arr))lastList=arr;firstOrAlert(arr)}).catch(function(){firstOrAlert(null)});
+  newInClaw(clawSel||'claude');
 });
 // 建群 / 群设置：按 Claw → 会话目录 → 会话逐层展开着选（只列有会话的 Claw）；协同的对方点开才去取它开放的会话。至少 2 个
 function openGroupPick(gid){
