@@ -2728,7 +2728,7 @@ function tickWork(){
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
 var connectedOnce=false,updateReady=false,bootAt=Date.now();
 // 打开 / 刷新后先不提示「正在连接」：多数时候一两秒就连上了，提示条一闪反而像出了问题；3 秒还没连上才提示
-setTimeout(function(){if(!connectedOnce&&$('#banner').hidden)banner('正在连接…')},10000);   // 连接中由雾表示；10 秒还没连上才出提示条
+setTimeout(function(){if(!connectedOnce)connState(true)},10000);   // 连接中由雾表示；10 秒还没连上，刷新图标变黄转圈（不出黄条）
 function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<10000)return;connState(true)}
 // 重连中：不出黄条，刷新图标（手机顶栏 / 电脑左栏）变黄、一直转；连上就恢复
 function connState(on){['#sReload','#railReload'].forEach(function(q){var b=$(q);if(b)b.classList.toggle('reconn',!!on)})}
