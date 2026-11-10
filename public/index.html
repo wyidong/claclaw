@@ -1957,7 +1957,7 @@ select.pe-in{text-align-last:right}
           <label class="set-item"><span class="lb">语言 / Language<small>切换后页面会刷新</small></span>
             <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
           <label class="set-item"><span class="lb">主题</span>
-            <select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">循行轮转</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option></optgroup></select></label>
+            <select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">子午流注</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option></optgroup></select></label>
           <label class="set-item" id="setScImgRow"><span class="lb">时辰背景</span>
             <select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></label>
         </div>
@@ -6267,7 +6267,7 @@ function scTick(force){
   var sb=scVar(DESKTOP.matches?'--sc-out':'--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
   var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=document.documentElement.classList.contains('sc-dark')?'dark':'light';   // 6 阴是深色
   if(!force)postTheme();
-  var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='循行轮转';
+  var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='子午流注';
 }
 setInterval(function(){scTick(false)},60000);
 DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(){if(scName)scTick(true)});   // 窗口在手机 / 电脑宽度之间变：标题栏颜色跟着换

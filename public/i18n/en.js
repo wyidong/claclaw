@@ -637,7 +637,7 @@ var I18N={dict:{
 "波波":"Bobo",
 "派子任务":"Spawning subtask",
 "流变时辰":"Shichen Flow",
-"循行轮转":"Shichen Flow",
+"子午流注":"Shichen Flow",
 "测试通知：推送已经通了":"Test notification: push is working",
 "浩浩":"Haohao",
 "消息":"Message",
