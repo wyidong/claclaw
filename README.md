@@ -4,7 +4,7 @@
 
 在手机浏览器里接管本机的 AI 编程会话。
 
-claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十三个：[Claude Code](https://docs.claude.com/en/docs/claude-code)、DeepSeek Harness（dsh）、[OpenCode](https://opencode.ai)、[Kimi Code](https://github.com/MoonshotAI/kimi-code)、[Qwen Code](https://github.com/QwenLM/qwen-code)、[Codex](https://developers.openai.com/codex)、[GLM Agent](https://www.npmjs.com/package/glm-acp-agent)、[iFlow CLI](https://platform.iflow.cn/cli)、[MiniMax Code](https://github.com/MiniMax-AI/minimax-code)、[CodeBuddy Code](https://www.codebuddy.ai)、[Qoder CLI](https://docs.qoder.com/cli)、[GitHub Copilot CLI](https://github.com/github/copilot-cli)、[OpenClaw](https://openclaw.ai)。**装了其中任意一个就能用**，不一定要有 Claude；装了几个，「Claw」页就列几个，随时切换。
+claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十四个：[Claude Code](https://docs.claude.com/en/docs/claude-code)、DeepSeek Harness（dsh）、[OpenCode](https://opencode.ai)、[Kimi Code](https://github.com/MoonshotAI/kimi-code)、[Qwen Code](https://github.com/QwenLM/qwen-code)、[Codex](https://developers.openai.com/codex)、[GLM Agent](https://www.npmjs.com/package/glm-acp-agent)、[iFlow CLI](https://platform.iflow.cn/cli)、[MiniMax Code](https://github.com/MiniMax-AI/minimax-code)、[CodeBuddy Code](https://www.codebuddy.ai)、[Qoder CLI](https://docs.qoder.com/cli)、[GitHub Copilot CLI](https://github.com/github/copilot-cli)、[OpenClaw](https://openclaw.ai)。**装了其中任意一个就能用**，不一定要有 Claude；装了几个，「Claw」页就列几个，随时切换。
 
 手机上用 SSH 进终端操作这些工具很难受：没有方向键、容易断线、排版乱。claclaw 在开发机上起一个小网页服务，用手机浏览器打开就能：
 
@@ -30,6 +30,7 @@ claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十三个：[C
 | Qwen Code | 起 `qwen --acp` 进程 | 18+ | 模型库里的模型自动配进去（Qwen 账号登录已停，要用自己的 key）；`/model`、`/mode` |
 | Codex | 起 `codex-acp` 进程（官方 ACP 转接，`npm i -g @agentclientprotocol/codex-acp`，自带 Codex） | 18+ | 用 Codex 自己的配置 / 登录，或在会话设置里换成模型库的模型（Codex 没登录、没配服务商时默认用模型库第一个，不用先登录）（要支持 Responses 接口，比如 DeepSeek；所有 Codex 会话一起换）；`/model`、`/mode` |
 | GLM Agent | 起 `glm-acp-agent` 进程（社区做的 ACP agent，`npm i -g glm-acp-agent`） | 18+ | 默认用智谱 Z.AI 的 GLM Coding Plan（要 `glm-acp-agent --setup` 存 key）；也能用模型库里有 OpenAI 兼容地址的供应商（一个进程一家供应商，换供应商所有 GLM 会话一起换）；`/model`、`/mode` |
+| Mini | claclaw 自带的纯问答 agent（`mini-agent.mjs`，ACP），不调工具、不碰电脑上的文件和命令，不用另外安装 | 18+ | 只用模型库里有 OpenAI 兼容地址的供应商，本机地址排最前（Ollama 填 `http://127.0.0.1:11434/v1`，key 随便填）。每轮只发一段很短的系统提示和对话本身，首字快；每轮结束显示「模型 · 首字耗时 · 生成速度」，方便试本地模型；默认关思考，会话设置里可开；只支持文字 |
 | iFlow CLI | 起 `iflow --experimental-acp` 进程（`npm i -g @iflow-ai/iflow-cli`） | 18+ | 模型库里的模型能用（一个进程一个模型，换模型所有 iFlow 会话一起换）；iFlow 自带的模型要先在终端登录心流账号；新会话自动从「什么都不问」切到「先问」；`/model`、`/mode` |
 | MiniMax Code | 起 `mcode acp` 进程（`npm i -g @minimax-ai/code`） | **22.13+**（会话在 SQLite 库里） | 模型库里的模型自动用 `mcode provider add` 配进去（key 会被 mcode 写进它的 config.yaml，文件 600）；也能 `mcode login` 用 MiniMax 账号；`/model`、`/mode` |
 | CodeBuddy Code | 起 `codebuddy --acp` 进程（`npm i -g @tencent-ai/codebuddy-code`） | 18+ | 要先在终端登录过腾讯账号（微信 / Google / 企业域）；模型库里 OpenAI 兼容的模型写进 `~/.codebuddy/models.json`（key 只能写进文件，600）；`/model`、`/mode`。这一块没在真机上验证过 |
@@ -262,6 +263,7 @@ kimi.mjs          Kimi Code 会话（kimi ACP；历史靠 session/load 重放；
 codex.mjs         Codex 会话（codex-acp；历史靠 session/load 重放；列表读 ~/.codex/sessions；模型库走 CODEX_CONFIG，所有会话一起换）
 qwen.mjs          Qwen Code 会话（qwen --acp；历史靠 session/load 重放；列表读 ~/.qwen/projects；模型库写进 ~/.qwen/settings.json）
 glm.mjs           GLM Agent 会话（glm-acp-agent；历史靠 session/load 重放；列表读 ~/.local/state/glm-acp-agent/sessions；模型库走环境变量，一个进程一家供应商）
+mini.mjs          Mini 会话（纯问答，agent 本体在 mini-agent.mjs；历史靠 session/load 重放；列表读 data/mini-sessions；模型库走环境变量，一个进程一家供应商；超出预算 CLACLAW_MINI_BUDGET 默认 6000 token 时整体丢最早几轮）
 iflow.mjs         iFlow CLI 会话（iflow --experimental-acp；历史从 ~/.iflow/acp/sessions 的记录转；模型 / 模式由 claclaw 合成成选项；模型库走环境变量，一个进程一个模型）
 minimax.mjs       MiniMax Code 会话（mcode acp；历史靠 session/load 重放；列表只读它的 SQLite 库；模型库用 mcode provider add 同步）
 codebuddy.mjs     CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebuddy/projects；模型库写进 ~/.codebuddy/models.json）

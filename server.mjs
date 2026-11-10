@@ -21,6 +21,7 @@ import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmA
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './qwen.mjs';
 import { isCx, CxRunner, cxRunners, cxSessionList, cxNewSession, cxShutdown, cxAcpRunning, cxInfo, cxExists, cxDelete, cxInstalled, cxSupported, cxUnsupportedReason, cxRename, cxModelsChanged } from './codex.mjs';
 import { isGl, GlRunner, glRunners, glSessionList, glNewSession, glShutdown, glAcpRunning, glInfo, glExists, glDelete, glInstalled, glRename, glModelsChanged } from './glm.mjs';
+import { isMi, MiRunner, miRunners, miSessionList, miNewSession, miShutdown, miAcpRunning, miInfo, miExists, miDelete, miInstalled, miRename, miModelsChanged } from './mini.mjs';
 import { isIf, IfRunner, ifRunners, ifSessionList, ifNewSession, ifShutdown, ifAcpRunning, ifInfo, ifExists, ifDelete, ifInstalled, ifRename, ifModelsChanged } from './iflow.mjs';
 import { isMm, MmRunner, mmRunners, mmSessionList, mmNewSession, mmShutdown, mmAcpRunning, mmInfo, mmExists, mmDelete, mmInstalled, mmSupported, mmUnsupportedReason, mmRename, mmModelsChanged } from './minimax.mjs';
 import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbAcpRunning, cbInfo, cbExists, cbDelete, cbInstalled, cbRename, cbModelsChanged } from './codebuddy.mjs';
@@ -810,7 +811,7 @@ function claclawMcp(sessionId) {
       // claclaw 协同：本机会话之间都能用；跨电脑只能找对方开放的会话（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
-        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / Codex / GLM / iFlow / MiniMax / CodeBuddy / Qoder / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
+        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / Codex / GLM / Mini / iFlow / MiniMax / CodeBuddy / Qoder / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
         '只在用户要你和「别的会话 / 对方 / 另一台电脑的会话」沟通时使用。peer 填「本机」只列本机，填对方名字只列那个对方，不填两边都列。',
         { peer: z.string().optional().describe('「本机」或对方名字，可省略') },
         async ({ peer }) => {
@@ -949,6 +950,18 @@ const CLAWS = [
     newSession: cwd => glNewSession(cwd, dsOpts()), cls: GlRunner,
     short: shortKeep(/^gl:/),
     del: id => glDelete(id, TRASH), rename: (id, title) => glRename(id, title),
+  },
+  // Mini：claclaw 自带的极简 agent（本地小模型用），同样走 ACP，差异都在 mini.mjs 里
+  {
+    id: 'mini', label: 'Mini', logName: 'mini', prefix: 'mi:', is: isMi, runners: miRunners, acp: true, attachOnOpen: true,
+    installed: miInstalled, supported: () => true,
+    running: miAcpRunning, shutdown: miShutdown, modelsChanged: miModelsChanged, exists: miExists,
+    list: () => miSessionList({ busy: x => !!miRunners.get(x)?.busy }),
+    make: id => { const s = miInfo(id); return s ? new MiRunner(id, { ...dsOpts(), info: s }) : null; },
+    refCwd: id => miInfo(id)?.cwd,
+    newSession: cwd => miNewSession(cwd, dsOpts()), cls: MiRunner,
+    short: shortKeep(/^mi:/),
+    del: id => miDelete(id, TRASH), rename: (id, title) => miRename(id, title),
   },
   {
     id: 'iflow', label: 'iFlow', logName: 'iflow', prefix: 'if:', is: isIf, runners: ifRunners, acp: true, attachOnOpen: true,
