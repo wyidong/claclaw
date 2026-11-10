@@ -769,7 +769,14 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 .sfmedia.playing audio{outline:2px solid var(--accent,#2F6F4F);outline-offset:2px;border-radius:20px}
 .sf-next{display:block;margin-top:6px;padding:6px 12px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sfimg figcaption{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dlcard{display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;cursor:pointer;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none}
+.dlcard{position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;cursor:pointer;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 52px 10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none;box-sizing:border-box}
+.dlcard.nopv{cursor:default}
+/* 聊天里的文件：右边一个下载按钮，点了直接存到本机（手机弹系统分享面板，可「存储到文件」；电脑下到「下载」）；看得了的文件点卡片才打开预览 */
+.f-dl{position:absolute;right:8px;top:50%;width:36px;height:36px;margin-top:-18px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);cursor:pointer}
+.f-dl:disabled{opacity:.45;cursor:default}
+.f-dl.spin svg{animation:pulse 1s infinite}
+.ufile .f-dl{top:auto;bottom:6px;margin-top:0;width:30px;height:30px}
+.ufile.nopv{cursor:default}
 .dl-n{font-size:14px;word-break:break-all}
 .dl-m{font-size:12px;color:var(--muted)}
 .ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:1px solid var(--line);color:var(--ink)}
@@ -2202,7 +2209,7 @@ function md(src){
     if(!l.trim()){i++;continue}
     if((m=l.match(/^\s*\[群附件[:：]\s*(\/[^\]\n]+?)\s*\]\s*$/))){   // 群成员回复里的 [群附件:路径]：画成文件卡片，点开预览、能保存
       var gp=m[1],gn=gp.split('/').pop()||'文件';
-      out.push('<div class="uvid ufile" data-fpath="'+esc(gp)+'" data-fname="'+esc(gn)+'"><span class="ufile-n">📄 '+esc(gn)+'</span><span class="uvid-b">群附件</span></div>');i++;continue;
+      out.push('<div class="uvid ufile'+(fvCan(gn)?'':' nopv')+'" data-fpath="'+esc(gp)+'" data-fname="'+esc(gn)+'"><span class="ufile-n">📄 '+esc(gn)+'</span><span class="uvid-b">群附件</span><button type="button" class="f-dl" aria-label="下载到本机" title="下载到本机"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg></button></div>');i++;continue;
     }
     if((m=l.match(/^\s*(```|~~~)\s*([\w+-]*)/))){            // 代码块
       var fence=m[1],lang=m[2].toLowerCase(),code=[];i++;
@@ -2298,6 +2305,7 @@ function fileTile(name,label,src){
   var n=document.createElement('span');n.className='ufile-n';n.textContent=(aud?'🎵 ':'📄 ')+(name||'文件');w.appendChild(n);
   if(aud&&src)w.appendChild(audioEl(src));
   var b=document.createElement('span');b.className='uvid-b';b.textContent=label;w.appendChild(b);
+  w.appendChild(dlBtn());if(!fvCan(name))w.classList.add('nopv');
   return w;
 }
 function videoTile(src,label,isVideoEl){
@@ -2385,8 +2393,46 @@ function playVideo(id){
 }
 function closeVideo(){var pl=$('#vplayer'),v=pl.querySelector('video');pl.classList.remove('on');try{v.pause()}catch(_){}if(v.dataset.local)URL.revokeObjectURL(v.dataset.local);v.removeAttribute('src');v.load()}
 document.getElementById('vplayer').querySelector('button').addEventListener('click',closeVideo);
-feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&t.dataset.fpath){e.preventDefault();openLocalFile(t.dataset.fpath,t.dataset.fname);return}if(t&&!t.dataset.vid&&t.dataset.gurl){e.preventDefault();if(t.dataset.gname)openGroupFile(t.dataset.gurl,t.dataset.gname);else window.open(t.dataset.gurl,'_blank');return}if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
+feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');
+  if(t&&t.classList.contains('ufile')){var ts=tileSrc(t);if(ts&&(e.target.closest('.f-dl')||!fvCan(ts.name))){e.preventDefault();if(e.target.closest('.f-dl'))dlFile(ts.src,ts.name,0,e.target.closest('.f-dl'));return}}   // 看不了的文件：点块本身不打开，只有下载按钮
+  if(t&&t.dataset.fpath){e.preventDefault();openLocalFile(t.dataset.fpath,t.dataset.fname);return}if(t&&!t.dataset.vid&&t.dataset.gurl){e.preventDefault();if(t.dataset.gname)openGroupFile(t.dataset.gurl,t.dataset.gname);else window.open(t.dataset.gurl,'_blank');return}if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
 // 文件：本机有就直接打开（看不了的类型浏览器会给下载 / 分享），没有再从电脑取
+// 这里看得了的文件（点开在页面里预览）：文本、图片、矢量图、PDF；别的（压缩包、文档、音视频…）点下载按钮直接存本机，不打开预览页
+var FV_PREVIEW=/\.(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env|png|jpe?g|gif|webp|heic|svg|pdf)$/i;
+function fvCan(name){return FV_PREVIEW.test(name||'')}
+// 取文件内容：src = {id}（发过 / 发回来的文件，本机缓存优先）| {path}（电脑上的文件）| {url}（群附件）
+// size：知道大小的，缓存或下回来的大小对不上（直连中途断了只收到一半）就不用、不存，重新从电脑取
+function fileBlob(src,name,size){
+  var ok=function(b){return b&&(!(+size)||b.size===+size)};
+  if(src.path)return postJson('/api/fs/read',{path:src.path}).then(function(r){return r.ok?r.blob():httpErr(r)});
+  if(src.url)return fetch(src.url).then(function(r){if(!r.ok)return httpErr(r);return r.blob()});
+  var id=src.id,net=function(){
+    return fetch('/api/upload/file?id='+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error(r.status===404?'电脑上也没有了（超过了保留时间）':'HTTP '+r.status);return r.blob()})
+      .then(function(b){if(!ok(b))throw new Error('没收全（'+fmtSize(b.size)+' / '+fmtSize(+size)+'），网络断过，再试一次');vidSave(id,b,name,'file');return b});
+  };
+  if(!window.indexedDB)return net();
+  return vidStore('readonly',function(st){return st.get(id)}).then(function(rec){return rec&&ok(rec.blob)?rec.blob:net()},net);
+}
+// 存到本机：手机弹系统分享面板（存储到「文件」、用别的 App 打开），分享不了退回下载；电脑直接下到「下载」
+function saveBlob(blob,name){
+  var f;try{f=new File([blob],name,{type:blob.type||'application/octet-stream'})}catch(_){f=null}
+  var dl=function(){var u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000);if(!fvTouch)toast('已保存到「下载」')};
+  if(fvTouch&&f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(e){if(!e||e.name!=='AbortError')dl()});return}   // 分享失败（不是用户取消）也退回下载
+  dl();
+}
+function dlFile(src,name,size,btn){
+  if(btn){if(btn.disabled)return;btn.disabled=true;btn.classList.add('spin')}
+  var done=function(){if(btn){btn.disabled=false;btn.classList.remove('spin')}};
+  fileBlob(src,name,size).then(function(b){done();saveBlob(b,name)}).catch(function(e){done();toast('下载失败：'+e.message)});
+}
+function dlBtn(){var b=document.createElement('button');b.type='button';b.className='f-dl';b.setAttribute('aria-label','下载到本机');b.title='下载到本机';b.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>';return b}
+// 聊天里的文件块（.uvid.ufile）：从 data- 属性认出是哪种来源
+function tileSrc(t){
+  if(t.dataset.fpath)return {src:{path:t.dataset.fpath},name:t.dataset.fname||''};
+  if(t.dataset.vid&&/^f/.test(t.dataset.vid))return {src:{id:t.dataset.vid},name:t.dataset.vname||''};
+  if(t.dataset.gurl&&t.dataset.gname)return {src:{url:t.dataset.gurl},name:t.dataset.gname};
+  return null;
+}
 // 群里的文件：在页面里预览，右上角「分享 / 保存」（电脑上是下载）——不再直接交给浏览器打开（那样存不下来）
 function openGroupFile(url,name){
   showFile(null,name,'加载中…');
@@ -2400,14 +2446,10 @@ function openLocalFile(p,name){
     .then(function(b){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(b,name)})
     .catch(function(e){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(null,name,'打不开：'+e.message)});
 }
-function openFile(id,name){
-  var fromServer=function(){
-    showFile(null,name,'加载中…');
-    fetch('/api/upload/file?id='+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error(r.status===404?'电脑上也没有了（超过了保留时间）':'HTTP '+r.status);return r.blob()})
-      .then(function(b){vidSave(id,b,name,'file');showFile(b,name)}).catch(function(e){showFile(null,name,'打不开：'+e.message)});
-  };
-  if(!window.indexedDB)return fromServer();
-  vidStore('readonly',function(st){return st.get(id)}).then(function(rec){if(rec&&rec.blob)showFile(rec.blob,name);else fromServer()}).catch(fromServer);
+function openFile(id,name,size){
+  showFile(null,name,'加载中…');
+  fileBlob({id:id},name,size).then(function(b){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(b,name,'','/api/upload/file?id='+encodeURIComponent(id))})
+    .catch(function(e){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(null,name,'打不开：'+e.message)});
 }
 // 点聊天里的文件路径：电脑上直接开的（本机网页）由服务器用默认 App 打开；别的设备把文件读回来，在页面里预览
 function showDlg(d,on){d.classList.toggle('on',on);d.setAttribute('aria-hidden',String(!on))}   // 弹窗 / 面板开关
@@ -2616,30 +2658,28 @@ $('#sessBtn').addEventListener('click',function(){if(!session)return;if(session.
   dissEl.addEventListener('touchend',function(e){if(!g)return;var p=e.changedTouches[0],dx=p.clientX-g.x,dy=p.clientY-g.y,dt=Date.now()-g.t,tw=g.tw;g=null;if(tw)return;if(dx>70&&Math.abs(dy)<dx*0.6&&dt<600)dsBack()},{passive:true});
 })();
 $('#fview .fv-share').textContent=FV_ACT;
-function showFile(blob,name,msg){
+function showFile(blob,name,msg,src){
   var v=$('#fview'),b=v.querySelector('.fv-b');
   if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}
   fvBlob=blob;fvName=name||'文件';v.querySelector('.fv-n').textContent=fvName;v.querySelector('.fv-share').hidden=!blob;
   b.innerHTML='';v.classList.add('on');
   if(!blob){var e0=document.createElement('div');e0.className='fv-empty';e0.textContent=msg||'';b.appendChild(e0);return}
   var ext=(/\.([a-z0-9]+)$/i.exec(fvName)||[])[1]||'',t=(blob.type||'').toLowerCase();
+  if(/^svg$/i.test(ext)||t==='image/svg+xml'){   // 矢量图：当图片显示（img 里脚本不执行）
+    fvUrl=URL.createObjectURL(new Blob([blob],{type:'image/svg+xml'}));var sv=document.createElement('img');sv.src=fvUrl;sv.style.background='#fff';b.appendChild(sv);return;
+  }
   if(/^text\/|json|xml|javascript/.test(t)||/^(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env)$/i.test(ext)){
     if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「'+FV_ACT+'」'+(fvTouch?'用别的 App 打开':'下载到电脑');b.appendChild(e1);return}
     blob.text().then(function(tx){var pre=document.createElement('pre');pre.textContent=tx;b.appendChild(pre)});
   }else if(/^image\//.test(t)||/^(png|jpe?g|gif|webp|heic)$/i.test(ext)){
     fvUrl=URL.createObjectURL(blob);var im=document.createElement('img');im.src=fvUrl;b.appendChild(im);
+    if(src)im.addEventListener('error',function(){if(im.src!==location.origin+src&&im.getAttribute('src')!==src)im.src=src},{once:true});   // 本机缓存那份坏了：直接从电脑取
   }else if(t==='application/pdf'||/^pdf$/i.test(ext)){
     fvUrl=URL.createObjectURL(blob.type?blob:new Blob([blob],{type:'application/pdf'}));var fr=document.createElement('iframe');fr.src=fvUrl;b.appendChild(fr);
   }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「'+FV_ACT+'」'+(fvTouch?'存到「文件」或用别的 App 打开':'下载到电脑');b.appendChild(e2)}
 }
 $('#fview .fv-x').addEventListener('click',function(){$('#fview').classList.remove('on');$('#fview .fv-b').innerHTML='';if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}fvBlob=null});
-$('#fview .fv-share').addEventListener('click',function(){
-  if(!fvBlob)return;
-  var f;try{f=new File([fvBlob],fvName,{type:fvBlob.type||'application/octet-stream'})}catch(_){f=null}
-  var blob=fvBlob,name=fvName,dl=function(){var u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000);if(!fvTouch)toast('已保存到「下载」')};
-  if(fvTouch&&f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(e){if(!e||e.name!=='AbortError')dl()});return}   // 分享失败（不是用户取消）也退回下载
-  dl();   // 电脑、或不支持分享文件（http 打开时）：下载
-});
+$('#fview .fv-share').addEventListener('click',function(){if(fvBlob)saveBlob(fvBlob,fvName)});
 // 发过的图片：原图也存在本机（按发出去的压缩图算个指纹对应），聊天记录里点开看原图
 function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
@@ -2957,10 +2997,11 @@ function newCard(it){
 // AI 用 send_file 发回来的文件：工具结果里带 [claclaw-file:id|名字|大小]，在卡片后面放一张下载卡片
 var SENT_FILE=/\[claclaw-file:([vf][0-9a-f]{16}\.[a-z0-9]{1,8})\|([^|\]]*)\|(\d+)\]/;
 function dlCard(id,name,size){
-  var a=document.createElement('button');a.type='button';a.className='dlcard';   // 不用链接：主屏幕 App 里点链接会被系统预览整页换掉、回不来
-  a.addEventListener('click',function(){openFile(id,name)});
+  var pv=fvCan(name),a=document.createElement('div');a.className='dlcard'+(pv?'':' nopv');   // 不用链接：主屏幕 App 里点链接会被系统预览整页换掉、回不来
+  if(pv)a.addEventListener('click',function(){openFile(id,name,size)});   // 看得了的才打开预览；看不了的只有下载按钮
   var n=document.createElement('span');n.className='dl-n';n.textContent='📄 '+name;a.appendChild(n);
-  var m=document.createElement('span');m.className='dl-m';m.textContent=fmtSize(+size)+' · 点开查看 / 保存';a.appendChild(m);
+  var m=document.createElement('span');m.className='dl-m';m.textContent=fmtSize(+size)+(pv?' · 点开预览':'');a.appendChild(m);
+  var b=dlBtn();b.addEventListener('click',function(e){e.stopPropagation();dlFile({id:id},name,size,b)});a.appendChild(b);
   return a;
 }
 // 发回来的是图片：直接在聊天里显示（限高限宽），点开看大图、能保存；加载失败（过了保留期）退回下载卡片
@@ -2968,7 +3009,7 @@ function imgCard(id,name,size){
   var src='/api/upload/file?thumb=1&id='+encodeURIComponent(id);   // 大图服务端先缩小，省流量
   var f=document.createElement('figure');f.className='sfimg';
   var im=document.createElement('img');im.src=src;im.alt=name;im.loading='lazy';
-  im.addEventListener('click',function(){openFile(id,name)});   // 和下载卡片一样：大图预览 + 「分享 / 保存」
+  im.addEventListener('click',function(){openFile(id,name,size)});   // 和下载卡片一样：大图预览 + 「分享 / 保存」
   im.addEventListener('load',function(){scrollDown()});
   im.addEventListener('error',function(){f.replaceWith(dlCard(id,name,size))});
   var cap=document.createElement('figcaption');cap.textContent=name+' · '+fmtSize(+size)+' · 点开保存';
@@ -2981,7 +3022,7 @@ function svgCard(id,name,size){
   fetch('/api/upload/file?id='+encodeURIComponent(id),{credentials:'same-origin'}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){
     var d=svgData(t);if(!d)throw 0;
     var im=document.createElement('img');im.src=d.url;im.alt=name;
-    im.addEventListener('click',function(){openFile(id,name)});
+    im.addEventListener('click',function(){openFile(id,name,size)});
     im.addEventListener('load',function(){scrollDown()});
     var cap=document.createElement('figcaption');cap.textContent=name+' · '+fmtSize(+size)+' · 点开保存';
     f.appendChild(im);f.appendChild(cap);
@@ -2999,7 +3040,7 @@ function mediaCard(id,name,size){
   m.addEventListener('error',function(){if(f.isConnected)f.replaceWith(dlCard(id,name,size))});
   if(!isV)audioChain(f,m);
   var cap=document.createElement('figcaption');cap.className='sf-save';cap.dataset.name=name;cap.textContent=(isV?'🎬 ':'🎵 ')+name+' · '+fmtSize(+size)+' · 点这里保存';
-  cap.addEventListener('click',function(){openFile(id,name)});
+  cap.addEventListener('click',function(){dlFile({id:id},name,size)});   // 直接存本机（预览页放不了音视频）
   f.appendChild(m);f.appendChild(cap);
   return f;
 }
