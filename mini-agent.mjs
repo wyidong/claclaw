@@ -98,8 +98,8 @@ function trim(s) {
 const clean = full => { const k = full.lastIndexOf('</think>'); return k >= 0 ? full.slice(k + 8).replace(/^\s+/, '') : full.replace(/<think>[\s\S]*$/, ''); };
 // 三种接口格式（模型库里一家有几种时，claclaw 按 openai → anthropic → gemini 挑一种传进来）。
 // plain：接口不收调参（temperature、关思考那几项，比如 OpenAI 官方的推理模型）回 400 时，去掉重试一次，成了就记下来以后都不发
-function reqOf(s) {
-  const system = systemOf(s), msgs = history(s), tune = !s.plain;
+function reqOf(s, extra = []) {
+  const system = systemOf(s), msgs = [...history(s), ...extra], tune = !s.plain;
   if (FORMAT === 'anthropic') return {
     url: BASE + '/v1/messages', headers: { 'x-api-key': KEY, 'anthropic-version': '2023-06-01' },
     // 不带 thinking 就是不思考；开思考时不能再带 temperature，max_tokens 要比思考预算大
@@ -120,8 +120,8 @@ function reqOf(s) {
       ...(s.think || s.noOff || !tune ? {} : { reasoning_effort: 'none' }) },   // noOff：这个模型关不掉思考（见 clean），不发 none，让服务端自己把思考分出去
   };
 }
-async function post(s, signal) {
-  const q = reqOf(s);
+async function post(s, signal, extra) {
+  const q = reqOf(s, extra);
   try {
     return await fetch(q.url, { method: 'POST', signal, headers: { 'content-type': 'application/json', ...q.headers }, body: JSON.stringify(q.body) });
   } catch (e) {
@@ -135,28 +135,40 @@ function pieceOf(j) {
   if (FORMAT === 'anthropic') {
     if (j.type === 'content_block_delta') return j.delta?.type === 'thinking_delta' ? { thought: true } : { text: j.delta?.text || '' };
     if (j.type === 'message_start') { const u = j.message?.usage || {}; return { usage: { in: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0) } }; }
-    if (j.type === 'message_delta' && j.usage) return { usage: { out: j.usage.output_tokens } };
+    if (j.type === 'message_delta') return { usage: j.usage ? { out: j.usage.output_tokens } : null, stop: stopOf(j.delta?.stop_reason) };
     return {};
   }
   if (FORMAT === 'gemini') {
-    const parts = j.candidates?.[0]?.content?.parts || [], u = j.usageMetadata;
+    const c = j.candidates?.[0], parts = c?.content?.parts || [], u = j.usageMetadata;
     return { text: parts.filter(x => !x.thought).map(x => x.text || '').join(''), thought: parts.some(x => x.thought),
-      usage: u ? { in: u.promptTokenCount, out: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0) } : null };
+      usage: u ? { in: u.promptTokenCount, out: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0) } : null,
+      stop: stopOf(c?.finishReason || j.promptFeedback?.blockReason) };
   }
   const dl = j.choices?.[0]?.delta;
-  return { text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), usage: j.usage ? { in: j.usage.prompt_tokens, out: j.usage.completion_tokens } : null };
+  return { text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), usage: j.usage ? { in: j.usage.prompt_tokens, out: j.usage.completion_tokens } : null,
+    stop: stopOf(j.choices?.[0]?.finish_reason) };
 }
-async function chat(s, signal, onText, onThought) {
+// 各家的结束原因 → 'stop'（正常写完）| 'length'（到了输出上限，没写完）| 其他原样（被过滤拦下之类：RECITATION / SAFETY / content_filter / refusal…）
+const LENGTH = new Set(['length', 'max_tokens', 'MAX_TOKENS']), DONE = new Set(['stop', 'end_turn', 'stop_sequence', 'STOP', 'FINISH_REASON_UNSPECIFIED', 'tool_calls', 'tool_use', 'pause_turn']);
+const stopOf = r => !r ? null : LENGTH.has(r) ? 'length' : DONE.has(r) ? 'stop' : String(r);
+// 接口报错：各家都是 JSON 里带 error.message（Gemini 有时包在数组里），取出说明，不贴整段 JSON
+function errOf(status, body) {
+  let msg = '';
+  try { const j = JSON.parse(body), e = (Array.isArray(j) ? j[0] : j)?.error; msg = typeof e === 'string' ? e : e?.message || ''; } catch {}
+  msg = String(msg || body).replace(/\s+/g, ' ').trim().slice(0, 300);
+  return (status === 429 ? '模型服务说额度或频率超限（429），等一会儿再试或换个模型：' : status === 401 || status === 403 ? '模型服务拒绝了 key（' + status + '），去模型库检查 key：' : '模型服务返回 ' + status + '：') + msg;
+}
+async function chat(s, signal, onText, onThought, extra) {
   const t0 = Date.now();
-  let r = await post(s, signal);
+  let r = await post(s, signal, extra);
   if (r.status === 400 && !s.plain) {
     const first = await r.text();
     s.plain = true;
-    r = await post(s, signal);
-    if (!r.ok) { s.plain = false; throw new Error('模型服务返回 400：' + first.slice(0, 300)); }
+    r = await post(s, signal, extra);
+    if (!r.ok) { s.plain = false; throw new Error(errOf(400, first)); }
   }
-  if (!r.ok) throw new Error('模型服务返回 ' + r.status + '：' + (await r.text()).slice(0, 300));
-  let text = '', tin = 0, tout = 0, buf = '', first = 0;   // first：第一个字（含思考）到达的时刻
+  if (!r.ok) throw new Error(errOf(r.status, await r.text()));
+  let text = '', tin = 0, tout = 0, buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻
   const dec = new TextDecoder();
   for await (const chunk of r.body) {
     buf += dec.decode(chunk, { stream: true });
@@ -170,39 +182,63 @@ async function chat(s, signal, onText, onThought) {
       const x = pieceOf(j);
       if (x.usage?.in) tin = x.usage.in;
       if (x.usage?.out) tout = x.usage.out;
+      if (x.stop) stop = x.stop;
       if ((x.text || x.thought) && !first) first = Date.now();
       if (x.thought) onThought();
       if (x.text) { text += x.text; onText(text); }
     }
   }
-  const usage = tin || tout ? { prompt_tokens: tin, completion_tokens: tout } : null;
-  const end = Date.now(), out = tout, gen = first ? (end - first) / 1000 : 0;   // 输出太短（< 8 tok）算出的速度没意义，不报
-  // 生成速度只算第一个字之后的；没有 usage 的服务不报速度（估出来的不准，调试时会误导）
-  const stats = { model: s.model, ttft: first ? (first - t0) / 1000 : null, outTokens: out || null, tps: out >= 8 && gen > 0.05 ? out / gen : null, total: (end - t0) / 1000 };
-  return { text: clean(text), usage, leaked: text.includes('</think>'), stats };
+  return { text: clean(text), tin, tout, leaked: text.includes('</think>'), stop, t0, first, end: Date.now() };
 }
 
 // ---------- 一轮 ----------
+// 回复到了输出上限（没写完）就自动接着写，最多 MAX_PARTS 段，拼成同一条回复
+const MAX_PARTS = 4;
+const CONTINUE = '上面的回答因为长度限制断了。从断开的地方直接接着写，不要重复已经写过的内容，也不要加开场白或总结。';
+// 被过滤拦下（不自动重试：防复述、安全过滤是对方的规矩）
+function noteOf(stop) {
+  if (!stop || stop === 'stop') return '';
+  if (stop === 'length') return `回复太长，已经分 ${MAX_PARTS} 段接着写了还没写完；发「继续」让它接着写`;
+  if (stop === 'RECITATION') return '模型判定在大段照搬已有的原文（Gemini 的防复述限制），中途停了。可以让它分段讲、讲大意或译成白话，或者换个模型';
+  if (/SAFETY|PROHIBITED|BLOCKLIST|SPII|content_filter|refusal/i.test(stop)) return `回复被模型的安全过滤拦下，中途停了（${stop}）`;
+  return `模型中途停了（${stop}）`;
+}
 async function prompt(s, text) {
   const ac = new AbortController(); s.abort = ac;
   s.messages.push({ role: 'user', content: text });
   if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50); update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
+  let full = '', parts = 0;
+  const say = t => update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
+  let kept = false;
+  const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, ...(parts > 1 ? { parts } : {}) }); } };
   try {
     trim(s);
-    let sent = 0, cut = false;
-    const { text: out, usage, leaked, stats } = await chat(s, ac.signal, raw => {
-      const full = clean(raw);
-      if (!cut && raw.includes('</think>')) { cut = true; sent = 0; }   // 刚发现思考混在正文里：已经流出去的没法收回，从回答开头重新算
-      if (full.length > sent) { update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: full.slice(sent) } }); sent = full.length; }
-    }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }));
-    if (leaked && !s.noOff && !s.think) s.noOff = true;
-    if (out.length > sent) update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: out.slice(sent) } });
-    s.messages.push({ role: 'assistant', content: out, model: s.model });
-    save(s);
-    update(s.id, { sessionUpdate: 'usage_update', used: usage?.prompt_tokens ? usage.prompt_tokens + (usage.completion_tokens || 0) : 0, size: BUDGET, _meta: { mini: stats } });
+    let tin = 0, tout = 0, gen = 0, t0 = 0, first = 0, end = 0, stop = null;
+    while (parts < MAX_PARTS) {
+      parts++;
+      const base = full, extra = base ? [{ role: 'assistant', content: base }, { role: 'user', content: CONTINUE }] : [];
+      let sent = base.length, cut = false;
+      const r = await chat(s, ac.signal, raw => {
+        const now = base + clean(raw);
+        if (!cut && raw.includes('</think>')) { cut = true; sent = base.length; }   // 刚发现思考混在正文里：已经流出去的没法收回，从这一段开头重新算
+        if (now.length > sent) { say(now.slice(sent)); sent = now.length; }
+      }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }), extra);
+      if (r.leaked && !s.noOff && !s.think) s.noOff = true;
+      full = base + r.text;
+      if (full.length > sent) say(full.slice(sent));
+      if (!t0) { t0 = r.t0; first = r.first; }
+      tin = r.tin || tin; tout += r.tout; end = r.end; stop = r.stop;
+      if (r.first) gen += (r.end - r.first) / 1000;
+      if (stop !== 'length' || !r.text) break;
+    }
+    keep(); save(s);
+    // 生成速度只算第一个字之后的；输出太短（< 8 tok）算出的速度没意义，不报；没有 usage 的服务不报速度（估出来的不准，调试时会误导）
+    const stats = { model: s.model, ttft: first ? (first - t0) / 1000 : null, outTokens: tout || null, tps: tout >= 8 && gen > 0.05 ? tout / gen : null, total: (end - t0) / 1000,
+      ...(parts > 1 ? { parts } : {}), ...(noteOf(stop) ? { note: noteOf(stop) } : {}) };
+    update(s.id, { sessionUpdate: 'usage_update', used: tin ? tin + tout : 0, size: BUDGET, _meta: { mini: stats } });
     return 'end_turn';
   } catch (e) {
-    save(s);
+    keep(); save(s);   // 停掉、出错时已经写出来的那部分也留着（网页上已经显示了）
     if (e.name === 'AbortError') return 'cancelled';
     throw e;
   } finally { s.abort = null; }

@@ -149,6 +149,7 @@ export class MiRunner extends AcpRunner {
     const st = u?.sessionUpdate === 'usage_update' && u._meta?.mini;
     if (!st || this.replaying || this.closed) return;
     this.closeText();
+    if (st.note) this.emit({ t: 'sys', text: '⚠️ ' + st.note });   // 没写完 / 被拦下：写明原因
     this.emit({ t: 'sys', text: statsLine(st) });
   }
 
@@ -191,6 +192,7 @@ export function statsLine(st) {
   else parts.push('首字 ' + num(st.ttft, st.ttft < 10 ? 2 : 1) + ' 秒');
   if (st.tps) parts.push(num(st.tps, st.tps < 10 ? 1 : 0) + ' tok/s');
   if (st.outTokens) parts.push('输出 ' + st.outTokens + ' tok');
+  if (st.parts > 1) parts.push('分 ' + st.parts + ' 段');
   if (st.total != null) parts.push('共 ' + num(st.total, 1) + ' 秒');
   return parts.join(' · ');
 }

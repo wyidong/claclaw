@@ -320,3 +320,85 @@ for (const kind of ['anthropic', 'gemini']) test('Mini agent：' + kind + ' 接�
     else assert.deepEqual(q3.generationConfig.thinkingConfig, { includeThoughts: true });
   } finally { a.stop(); m.srv.close(); }
 });
+
+// 按脚本回：每次 { text, stop }，stop 按格式写进结束原因字段
+function scripted(kind, script) {
+  const reqs = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      const body = JSON.parse(b); reqs.push(body);
+      const { text, stop } = script[Math.min(reqs.length - 1, script.length - 1)];
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const ev = o => res.write('data: ' + JSON.stringify(o) + '\n\n');
+      if (kind === 'openai') {
+        for (const ch of text.match(/[\s\S]{1,3}/g)) ev({ choices: [{ delta: { content: ch } }] });
+        ev({ choices: [{ delta: {}, finish_reason: stop }] }); ev({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 20 } });
+        res.write('data: [DONE]\n\n');
+      } else if (kind === 'anthropic') {
+        ev({ type: 'message_start', message: { usage: { input_tokens: 100 } } });
+        ev({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } });
+        ev({ type: 'message_delta', delta: { stop_reason: stop }, usage: { output_tokens: 20 } });
+      } else {
+        ev({ candidates: [{ content: { parts: [{ text }] } }] });
+        ev({ candidates: [{ content: { parts: [{ text: '' }] }, finishReason: stop }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20 } });
+      }
+      res.end();
+    });
+  });
+  return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port + (kind === 'openai' ? '/v1' : kind === 'gemini' ? '/v1beta' : '') })));
+}
+const miniStats = ups => ups.filter(u => u.sessionUpdate === 'usage_update').at(-1)?._meta?.mini;
+
+for (const [kind, LEN, OK] of [['openai', 'length', 'stop'], ['anthropic', 'max_tokens', 'end_turn'], ['gemini', 'MAX_TOKENS', 'STOP']]) test('Mini agent：' + kind + ' 回复到了输出上限就自动接着写，拼成同一条回复', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await scripted(kind, [{ text: '第一段，', stop: LEN }, { text: '第二段，', stop: LEN }, { text: '写完了。', stop: OK }]);
+  const a = startAgent({ MINI_FORMAT: kind, MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const r = await say(a, n.sessionId, '讲长一点');
+    assert.equal(r.result.stopReason, 'end_turn');
+    assert.equal(m.reqs.length, 3);
+    assert.equal(textOf(a.updates), '第一段，第二段，写完了。');
+    // 续写的请求：带上已经写的和「接着写」
+    const last = kind === 'gemini' ? m.reqs[2].contents.map(x => x.role + ':' + x.parts[0].text) : m.reqs[2].messages.filter(x => x.role !== 'system').map(x => x.role + ':' + x.content);
+    assert.equal(last.length, 3); assert.match(last[1], /:第一段，第二段，$/); assert.match(last[2], /^user:.*接着写/);
+    const st = miniStats(a.updates);
+    assert.equal(st.parts, 3); assert.equal(st.outTokens, 60); assert.ok(!st.note);
+    assert.match(statsLine(st), /分 3 段/);
+    const saved = JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).messages;
+    assert.deepEqual(saved.map(x => x.role + ':' + x.content), ['user:讲长一点', 'assistant:第一段，第二段，写完了。']);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini agent：一直写不完最多接 4 段，提示发「继续」；被 Gemini 防复述拦下不重试，写明原因', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m1 = await scripted('openai', [{ text: '又一段', stop: 'length' }]);
+  const a1 = startAgent({ MINI_BASE_URL: m1.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  const m2 = await scripted('gemini', [{ text: '昔在黄帝，生而神灵，', stop: 'RECITATION' }]);
+  const a2 = startAgent({ MINI_FORMAT: 'gemini', MINI_BASE_URL: m2.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    await a1.rpc('initialize', {});
+    const n1 = (await a1.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a1, n1.sessionId, '写很长');
+    assert.equal(m1.reqs.length, 4); assert.match(miniStats(a1.updates).note, /继续/);
+    await a2.rpc('initialize', {});
+    const n2 = (await a2.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a2, n2.sessionId, '素问第一篇原文');
+    assert.equal(m2.reqs.length, 1); assert.equal(textOf(a2.updates), '昔在黄帝，生而神灵，');
+    assert.match(miniStats(a2.updates).note, /照搬已有的原文/);
+  } finally { a1.stop(); a2.stop(); m1.srv.close(); m2.srv.close(); }
+});
+
+test('Mini agent：接口报错只取说明（429 写明是额度 / 频率）', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(429, { 'content-type': 'application/json' }); res.end(JSON.stringify([{ error: { code: 429, message: 'You exceeded your current quota.\n* Quota exceeded for metric: free_tier_requests, limit: 20', status: 'RESOURCE_EXHAUSTED' } }])); }); });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const a = startAgent({ MINI_FORMAT: 'gemini', MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1beta', MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const r = await say(a, n.sessionId, 'hi');
+    assert.match(r.error.message, /^模型服务说额度或频率超限（429）.*You exceeded your current quota\. \* Quota exceeded for metric: free_tier_requests, limit: 20$/);
+  } finally { a.stop(); srv.close(); }
+});
