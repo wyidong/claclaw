@@ -19,13 +19,10 @@
 <script src="/_clarelay/rtc.js"></script><!-- 经 clarelay 打开时：手机和电脑 WebRTC 直连（window.clarelay），直接访问时 404，用原生的 -->
 <script>
 // 主题：跟随系统（默认）/ 普通 / 深色，按设备记在本机；在页面画出来之前就设好，免得先闪一下
-// 流变时辰：按当前时辰的干支换色——地支色定底色和强调色，天干色定标题字（看不清就往深里调）。
-// 日干按儒略日推（2000-01-01 戊午日），时干按五鼠遁；23 点起算次日子时
+// 流变时辰：按当前时辰换色。颜色不在这里算——<html> 设上 data-sc="地支序号"（0 子 … 11 亥），阴时辰再加 .sc-dark，
+// 各时辰的颜色写在 <style> 主题段 ④ 的 12 个变量块里。日干按儒略日推（2000-01-01 戊午日），时干按五鼠遁；23 点起算次日子时
 window.__sc=(function(){
-  var G='甲乙丙丁戊己庚辛壬癸',Z='子丑寅卯辰巳午未申酉戌亥',W=[255,255,255],K=[0,0,0];
-  var GC=['1E6B3A','9CCB8E','D62828','F2A0A0','D49A2A','F2D27A','F2F0EB','D9D9D9','1F3A6B','5B8FC7'];
-  var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
-  var ZF=['000000','A4A9B1','FFFFFF','000000','1F3A6B','FFFFFF','000000','1E6B3A','000000','000000','8B1A1A','FFFFFF'];   // 地支底上的字色（六十甲子表定的；辰戌丑未用墓库那一行的色）
+  var G='甲乙丙丁戊己庚辛壬癸',Z='子丑寅卯辰巳午未申酉戌亥';
   // 时辰壁纸（设置里「时辰背景：图片」时用，只有 6 阳时辰用；6 阴是纯色）：/sc-bg/<地支序号>.jpg，图放在电脑的 data/sc-bg/ 下；这个时辰没有图就仍用纯色
   var ok={},SCV='3';   // 换了图就把 SCV 加一：图片缓存一天，不加的话手机上还是旧图
   function img(z){
@@ -35,54 +32,18 @@ window.__sc=(function(){
     r.classList.remove('sc-img');if(!on||ok[z]===false)return;
     var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z)img(z)};im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg?v='+SCV;
   }
-  var VARS=['--sc-img','--sc-out','--accent','--accent-ink','--allow','--on-allow','--sc-b','--sc-t','--bg','--line','--user-bg','--code-bg','--surface','--ink','--muted','--add-bg','--del-bg','--banner-bg','--deny','--warn','--gl-a','--gl-b','--gl-hi','--gl-rim','--gl-sh','--pc0b','--pc0f','--pc1b','--pc1f','--pc2b','--pc2f','--pc3b','--pc3f','--pc4b','--pc4f','--pc5b','--pc5f','--pc6b','--pc6f'];
-  function rgb(h){return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]}
-  function hex(c){return '#'+c.map(function(v){return ('0'+Math.round(v).toString(16)).slice(-2)}).join('').toUpperCase()}
-  function mix(a,b,t){return [0,1,2].map(function(i){return a[i]+(b[i]-a[i])*t})}
-  function lum(c){var l=c.map(function(v){v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*l[0]+.7152*l[1]+.0722*l[2]}
-  function cr(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
-  function deepen(c,bg,n){for(var t=0;t<=1;t+=.02){var m=mix(c,K,t);if(cr(m,bg)>=n)return m}return K}
-  // 天干色放在地支底上（标题栏的标题、返回键）：看不清就往黑或往白调，哪边调得少用哪边
-  function onBg(c,bg,n){for(var t=0;t<=1;t+=.02){var d=mix(c,K,t),l=mix(c,W,t);if(cr(d,bg)>=n)return d;if(cr(l,bg)>=n)return l}return cr(K,bg)>cr(W,bg)?K:W}
   function now(d){
     d=d||new Date();var x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
     var day=Math.floor(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate())/864e5)+2440588+49;   // 儒略日 +49：0 = 甲子日
     var z=window.__scZ!=null?window.__scZ:Math.floor((d.getHours()+1)%24/2);return {g:(day%10%5*2+z)%10,z:z,name:G[(day%10%5*2+z)%10]+Z[z]};
   }
-  // 6 阳（子寅辰午申戌）照九紫离火：淡底白卡片；6 阴（丑卯巳未酉亥）照深色主题：深底深卡片、浅字，底色、卡片、细边都带一点这个地支的色
-  var DK={bg:rgb('0E1115'),sf:rgb('161B21'),ln:rgb('262D35'),cd:rgb('232A32'),ink:rgb('E7EBEF'),mu:rgb('8B95A1')};
-  var DARK={'--add-bg':'#12301F','--del-bg':'#3A1A17','--banner-bg':'#2B2210','--deny':'#F27C70','--warn':'#E0A24A',
-    '--gl-a':'rgba(255,255,255,.14)','--gl-b':'rgba(255,255,255,.03)','--gl-hi':'rgba(255,255,255,.28)','--gl-rim':'rgba(255,255,255,.12)','--gl-sh':'rgba(0,0,0,.35)',
-    '--pc0b':'#881337','--pc0f':'#FFE4E6','--pc1b':'#78350F','--pc1f':'#FEF3C7','--pc2b':'#0C4A6E','--pc2f':'#E0F2FE','--pc3b':'#7C2D12','--pc3f':'#FFEDD5','--pc4b':'#134E4A','--pc4f':'#CCFBF1','--pc5b':'#701A75','--pc5f':'#FAE8FF','--pc6b':'#365314','--pc6f':'#ECFCCB'};
-  // 同色相、同饱和度（可限一个上限）换亮度：l 0~1
-  function hl(c,l,smax){var r=c[0]/255,g=c[1]/255,bb=c[2]/255,mx=Math.max(r,g,bb),mn=Math.min(r,g,bb),d=mx-mn,h=0,L=(mx+mn)/2,S=d?d/(1-Math.abs(2*L-1)):0;
-    if(d){h=mx===r?((g-bb)/d)%6:mx===g?(bb-r)/d+2:(r-g)/d+4;h*=60;if(h<0)h+=360}
-    if(smax!=null)S=Math.min(S,smax);var C=(1-Math.abs(2*l-1))*S,X=C*(1-Math.abs(h/60%2-1)),m=l-C/2,q=h<60?[C,X,0]:h<120?[X,C,0]:h<180?[0,C,X]:h<240?[0,X,C]:h<300?[X,0,C]:[C,0,X];
-    return q.map(function(x){return (x+m)*255})}
-  function lighten(c,bg,n){for(var t=0;t<=1;t+=.02){var m=mix(c,W,t);if(cr(m,bg)>=n)return m}return W}
   function apply(){
-    var n=now(),b=rgb(ZC[n.z]),f=rgb(ZF[n.z]),g=rgb(GC[n.g]),s=document.documentElement.style,lt=lum(f)>.5,yin=n.z%2===1,v;
-    if(yin){
-      // 先定底：用这个地支色本身的深色（色相、饱和度不变，亮度压到 11%~24%），不是黑底只带一点色；字先用中性的浅色，等底定了再配
-      var bg=hl(b,.11),sf=hl(b,.16),acc=lighten(b,sf,4.5),ai=cr(bg,acc)>cr(W,acc)?bg:W;
-      v={'--bg':hex(bg),'--surface':hex(sf),'--line':hex(hl(b,.25)),'--code-bg':hex(hl(b,.19)),'--user-bg':hex(hl(b,.24)),
-        '--ink':'#ECEEF0','--muted':hex(mix(hl(b,.68,.12),W,.05)),'--accent':hex(acc),'--accent-ink':hex(ai),'--allow':hex(acc),'--on-allow':hex(ai),
-        '--sc-b':hex(b),'--sc-t':'#ECEEF0','--sc-out':hex(hl(b,.08))};
-      for(var k in DARK)v[k]=DARK[k];
-    }else{
-      // 6 阳照九紫离火的配比（它是紫色：底 #F2F0F8、细边 #E4E0EE、选中 #EDE7FB、强调 #5B21B6、标题 #4C1D95、正文 #1F1B2D），换成这个地支色的色相：
-      // 淡底（亮度 95.5%）+ 白卡片 + 细边（90.5%）；强调色、标题是同色相的深色；正文近黑带一点色，说明用石板灰
-      var acc2=deepen(hl(b,.42,.7),W,4.5);
-      v={'--bg':hex(hl(b,.955,.45)),'--line':hex(hl(b,.905,.3)),'--user-bg':hex(hl(b,.94,.7)),'--code-bg':hex(hl(b,.95,.4)),
-        '--accent':hex(acc2),'--accent-ink':'#FFFFFF','--allow':hex(acc2),'--on-allow':'#FFFFFF',
-        '--ink':hex(hl(b,.14,.25)),'--muted':'#64748B','--sc-b':hex(b),'--sc-t':hex(deepen(hl(b,.35,.67),W,6)),'--sc-out':hex(hl(b,.895,.5))};   // 外圈（电脑左栏、四周、聊天区底）比淡底深一档：浅色里同样的亮度差看着比深色里小，所以拉开得比阴时辰多
-    }
-    clear();for(var k2 in v)s.setProperty(k2,v[k2]);
-    document.documentElement.classList.toggle('sc-dark',yin);
+    var n=now(),r=document.documentElement;
+    r.setAttribute('data-sc',String(n.z));r.classList.toggle('sc-dark',n.z%2===1);   // 阴时辰：深色
     img(n.z);   // 时辰背景：图片 / 纯色（默认纯色）
     return n.name;
   }
-  function clear(){var s=document.documentElement.style;VARS.forEach(function(k){s.removeProperty(k)});document.documentElement.classList.remove('sc-dark')}
+  function clear(){var r=document.documentElement;r.removeAttribute('data-sc');r.style.removeProperty('--sc-img');r.classList.remove('sc-dark','sc-img')}
   return {now:now,apply:apply,clear:clear};
 })();
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
@@ -102,7 +63,7 @@ window.__sc=(function(){
 })();
 // 界面语言：默认中文；设置里选了 English 就先加载 /i18n/en.js（词典 + 翻译引擎，看着页面把界面文字换成英文）
 (function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
-(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply();var b=document.documentElement.style.getPropertyValue(matchMedia('(min-width:1000px)').matches?'--sc-out':'--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})}}catch(e){}})();
+(function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply()}}catch(e){}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
 // 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
@@ -110,6 +71,15 @@ window.__sc=(function(){
 </script>
 <style>html.boot #app{filter:blur(8px);opacity:.45}</style>
 <style>
+/* ════════ 主题：一共 15 套 ════════
+   普通、深色、九紫离火，加上流变时辰的 12 个时辰（子丑寅卯辰巳午未申酉戌亥，每个时辰算一套）。
+   这一段只放「各套主题不一样的地方」，按套分块：
+     ① 公共变量（也就是「普通」这一套；别的主题没写的变量都沿用它）
+     ② 深色、九紫离火：各自的变量 + 和公共不一样的规则
+     ③ 流变时辰 12 套共用的规则（时辰族公共），以及阳时辰、阴时辰两组各自的公共变量
+     ④ 12 个时辰各自的颜色（每块只有变量）
+   这一段之后的样式（布局、组件）所有主题共用，只用变量、不认主题：要对所有主题生效的规矩改那里一处。 */
+/* ── ① 公共变量 · 普通 ── */
 :root{
   --gl-a:rgba(255,255,255,.62);--gl-b:rgba(255,255,255,.22);--gl-hi:rgba(255,255,255,.9);--gl-rim:rgba(255,255,255,.55);--gl-sh:rgba(0,0,0,.10);   /* 标题栏圆按钮的 iOS 玻璃：上亮下透、顶边高光、细亮边、轻投影 */
   --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
@@ -122,6 +92,7 @@ window.__sc=(function(){
   --strip:var(--surface);--strip-line:var(--line);--rail-on:var(--bg);
   --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
 }
+/* ── ② 深色（「跟随系统」且系统是深色时也用这套） ── */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
     --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
@@ -140,6 +111,7 @@ window.__sc=(function(){
   --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
   --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
 }
+/* ── ② 九紫离火 ── */
 /* 九紫离火：照 clarelay 外壳的样子——淡紫底、白卡片带细边；字是重点：标题 / 名字用 clarelay 紫，说明用石板灰，正文近黑；离火的暖橙只做点缀（提醒、协同） */
 :root[data-theme="ziwei"]{
   --bg:#F2F0F8;--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--line:#E4E0EE;
@@ -160,11 +132,11 @@ window.__sc=(function(){
 :root[data-theme="ziwei"] .pe-back{color:var(--accent)}
 
 :root[data-theme="ziwei"] #setTop button,:root[data-theme="ziwei"] #backBtn{color:var(--accent)}
-/* 流变时辰：6 阳时辰（子寅辰午申戌）照九紫离火的配色、6 阴时辰（丑卯巳未酉亥）照深色主题（深底深卡片浅字，<html> 带 .sc-dark，变量在 window.__sc 里换成深色的），颜色跟着时辰换——
-   整页一个淡底（地支色的淡色 --bg）：顶栏、左栏、列表、设置页都是它，不铺浓的地支色；上面是白卡片细边（--line）；
-   字是重点：标题 / 名字用天干色（--sc-t），说明用石板灰，正文近黑；按钮、选中用地支色调深的强调色（--accent）。
-   变量都由 window.__sc 按时辰算好：--sc-b 地支色 / --sc-t 天干色 / --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
-:root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface)}
+/* ── ③ 流变时辰 · 12 套共用 ── */
+/* 流变时辰：6 阳时辰（子寅辰午申戌）照九紫离火的配色（淡底白卡片），6 阴时辰（丑卯巳未酉亥）照深色主题（深底深卡片浅字，<html> 带 .sc-dark）。
+   window.__sc 只按当前时辰给 <html> 设 data-sc="0~11"（地支序号）和 .sc-dark，颜色全在下面 ④ 各时辰的变量块里——要调哪个时辰的颜色直接改那一块。
+   变量：--sc-b 地支色 / --sc-t 标题字色 / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
+:root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface);--allow:var(--accent);--on-allow:var(--accent-ink)}
 :root[data-theme="shichen"] #setPane .set-card,:root[data-theme="shichen"] .h-card,:root[data-theme="shichen"] .claw-card,:root[data-theme="shichen"] .claw-tool,:root[data-theme="shichen"] .s-item,:root[data-theme="shichen"] .s-row,:root[data-theme="shichen"] #sSearch{background:var(--surface);border:1px solid var(--line)}
 :root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg)}
 :root[data-theme="shichen"] #sList .s-row.wx .s-item{border:0}
@@ -176,21 +148,19 @@ window.__sc=(function(){
 /* 时辰背景选「图片」：图铺在整页最底下；列表 / 设置 / 宿主页的底变透明露出图，顶栏 / 底栏 / 左栏是半透明的淡底毛玻璃，卡片仍是白底 */
 :root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
 :root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
-:root[data-theme="shichen"].sc-img{--strip:transparent;--muted:color-mix(in srgb,var(--ink) 72%,var(--surface))}   /* 图原样显示，不压淡底、不雾化（像桌面壁纸） */
+:root[data-theme="shichen"].sc-img{--strip:transparent}   /* 图原样显示，不压淡底、不雾化（像桌面壁纸） */
 :root[data-theme="shichen"].sc-img .msg.ai{background:color-mix(in srgb,var(--surface) 30%,transparent);border-radius:14px;padding:10px 12px;margin-left:-12px;margin-right:-12px}   /* 回复的字直接压在原图上：垫一层很浅的底，字更清楚，图还看得见 */
 :root[data-theme="shichen"].sc-img .msg.ai.has-play[data-ts]>.gm-foot{left:6px;bottom:2px}   /* 朗读按钮跟着内边距往里挪，和时间同一行 */
 :root[data-theme="shichen"].sc-img .tgroup{margin-left:-12px;margin-right:-12px}   /* 工具卡片：和回复一样宽 */
 :root[data-theme="shichen"].sc-img :is(.tool,.tg-h){background:color-mix(in srgb,var(--surface) 42%,transparent);border-radius:10px}   /* 比回复的浅底只深一点点，圆角小一点 */
 @media (min-width:1000px){:root[data-theme="shichen"].sc-img :is(#sList .s-item,#dock){background:color-mix(in srgb,var(--surface) 30%,transparent)}}
-:root[data-theme="shichen"].sc-img #app #dock{background:color-mix(in srgb,var(--surface) 30%,transparent);border-top-color:transparent}   /* 输入区：手机也垫同样很浅的底，用底色和聊天区分开，不要分隔线 */   /* 电脑：同样很浅的底垫在会话列表每一行、输入区下面（选中的行仍是选中色；手机的列表行本来就是白卡片） */
-/* 有底色、靠底色就分得出来的块不再画边框（列表行、卡片、工具条、搜索框；电脑上的输入区）；靠不了底色区分的保留分隔线（列表和聊天之间那条） */
-:root[data-theme="shichen"].sc-img :is(.s-item,.s-row,.uvid,#setPane .set-card,.h-card,.claw-card,.claw-tool,#sSearch,.tool,.tgroup:not([data-k="wait"]) .tg-h){border-color:transparent}
+:root[data-theme="shichen"].sc-img #app #dock{background:color-mix(in srgb,var(--surface) 30%,transparent)}   /* 输入区：手机也垫同样很浅的底，用底色和聊天区分开，不要分隔线 */   /* 电脑：同样很浅的底垫在会话列表每一行、输入区下面（选中的行仍是选中色；手机的列表行本来就是白卡片） */
 :root[data-theme="shichen"].sc-img #app:not(.m-list){background:var(--strip)}   /* 聊天页：整页一层半透明淡底盖在图上，聊天内容、输入区都透出图 */
 :root[data-theme="shichen"].sc-img :is(#feed,#banner,#dock,#workBar){background:transparent}   /* 「运行 Bash」那条工作状态也不要底色 */
 :root[data-theme="shichen"].sc-img #rail{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 /* 顶部固定的几条（列表顶上的图标条、聊天标题栏、设置 / 宿主页标题）：纯色淡底，和外壳顶栏、状态栏同一个颜色接成一片（底部菜单是雾化半透明，两者不一样） */
-:root[data-theme="shichen"].sc-img :is(#app #sTop,header,#app #setTop,#hostPane .pg-hd){background:var(--bg)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border-color:transparent!important}
-:root[data-theme="shichen"].sc-img #app.m-list #mtabs{border-top-color:transparent;background:color-mix(in srgb,var(--bg) 70%,transparent);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%)}   /* 底部菜单：半透明淡底毛玻璃（列表从它下面滚过） */
+:root[data-theme="shichen"].sc-img :is(#app #sTop,header,#app #setTop,#hostPane .pg-hd){background:var(--bg)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+:root[data-theme="shichen"].sc-img #app.m-list #mtabs{background:color-mix(in srgb,var(--bg) 70%,transparent);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%)}   /* 底部菜单：半透明淡底毛玻璃（列表从它下面滚过） */
 @media (min-width:1000px){   /* 电脑：图铺满整个窗口——左栏、列表、标题栏、聊天区、输入区都是同一层半透明淡底（#app 的底），不再各叠一层（叠了就出现深一块的边）；卡片仍是白底 */
   :root[data-theme="shichen"].sc-img :is(#rail,#app #sheet,#app #sheet .sheet-p,#app #hostPane){background:transparent!important}
   :root[data-theme="shichen"].sc-img :is(#app #sTop,header,#app #setTop,#hostPane .pg-hd){background:transparent!important}   /* 电脑：顶部那条不要纯色，和下面的区域一样透出图（手机才和外壳接成纯色） */
@@ -206,6 +176,50 @@ window.__sc=(function(){
   :root[data-theme="shichen"].sc-img #app{background:var(--sc-out)!important;isolation:isolate;--sc-veil:color-mix(in srgb,var(--surface) 30%,transparent);--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
   :root[data-theme="shichen"].sc-img #app::before{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;z-index:-1;pointer-events:none;background:var(--sc-in)}
 }
+/* ── ③ 流变时辰 · 阳时辰公共（子寅辰午申戌）：白卡片、石板灰说明字、强调色上白字 ── */
+:root[data-theme="shichen"]:not(.sc-dark){--surface:#FFFFFF;--muted:#64748B;--accent-ink:#FFFFFF}
+:root[data-theme="shichen"].sc-img:not(.sc-dark){--muted:color-mix(in srgb,var(--ink) 72%,var(--surface))}   /* 铺了图：说明字压在图上，石板灰看不清，调深 */
+/* ── ③ 流变时辰 · 阴时辰公共（丑卯巳未酉亥）：浅色正文 / 标题，提示色、玻璃按钮、协同配色用深色主题那一套 ── */
+:root[data-theme="shichen"].sc-dark{--ink:#ECEEF0;--sc-t:#ECEEF0;
+  --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+  --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB}
+/* ── ④ 12 个时辰各自的颜色 ──
+   阳时辰：照九紫离火的配比换成地支色的色相——淡底 / 细边 / 选中 / 代码底是同色相的淡色，强调色、标题是同色相的深色，正文近黑带一点色；外圈比淡底深一档。
+   阴时辰：底是地支色本身的深色（色相不变，亮度压到 8%~25%），说明字是带一点色的浅灰，强调色是地支色调亮到看得清。 */
+/* 子时（阳 · 地支色 #5B8FC7） */
+:root[data-theme="shichen"][data-sc="0"]{--bg:#EEF3F9;--line:#E0E7EE;--user-bg:#E8EFF7;--code-bg:#EDF2F7;--accent:#3769A0;--ink:#1B232D;--sc-b:#5B8FC7;--sc-t:#2D5885;--sc-out:#D7E4F1}
+/* 丑时（阴 · 地支色 #F2D27A） */
+:root[data-theme="shichen"][data-sc="1"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
+/* 寅时（阳 · 地支色 #1E6B3A） */
+:root[data-theme="shichen"][data-sc="2"]{--bg:#EEF9F2;--line:#E0EEE5;--user-bg:#E7F8ED;--code-bg:#EDF7F1;--accent:#268649;--ink:#1B2D21;--sc-b:#1E6B3A;--sc-t:#1F703C;--sc-out:#D7F2E1}
+/* 卯时（阴 · 地支色 #9CCB8E） */
+:root[data-theme="shichen"][data-sc="3"]{--bg:#162612;--surface:#21381A;--line:#335728;--code-bg:#27421F;--user-bg:#315427;--muted:#ACBBA8;--accent:#9CCB8E;--accent-ink:#162612;--sc-b:#9CCB8E;--sc-out:#101C0D}
+/* 辰时（阳 · 地支色 #D49A2A） */
+:root[data-theme="shichen"][data-sc="4"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--sc-t:#7D5B19;--sc-out:#F2E8D7}
+/* 巳时（阴 · 地支色 #D62828） */
+:root[data-theme="shichen"][data-sc="5"]{--bg:#2F0909;--surface:#450D0D;--line:#6B1414;--code-bg:#520F0F;--user-bg:#671313;--muted:#BBA8A8;--accent:#E16060;--accent-ink:#2F0909;--sc-b:#D62828;--sc-out:#220606}
+/* 午时（阳 · 地支色 #F2A0A0） */
+:root[data-theme="shichen"][data-sc="6"]{--bg:#F9EEEE;--line:#EEE0E0;--user-bg:#FAE5E5;--code-bg:#F7EDED;--accent:#B62020;--ink:#2D1B1B;--sc-b:#F2A0A0;--sc-t:#951D1D;--sc-out:#F2D7D7}
+/* 未时（阴 · 地支色 #F2D27A） */
+:root[data-theme="shichen"][data-sc="7"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
+/* 申时（阳 · 地支色 #F2F0EB） */
+:root[data-theme="shichen"][data-sc="8"]{--bg:#F6F5F1;--line:#ECE9E2;--user-bg:#F3F1EC;--code-bg:#F5F3F0;--accent:#827554;--ink:#2B271C;--sc-b:#F2F0EB;--sc-t:#6C6146;--sc-out:#EAE7DF}
+/* 酉时（阴 · 地支色 #D9D9D9） */
+:root[data-theme="shichen"][data-sc="9"]{--bg:#1C1C1C;--surface:#292929;--line:#404040;--code-bg:#303030;--user-bg:#3D3D3D;--muted:#B1B1B1;--accent:#D9D9D9;--accent-ink:#1C1C1C;--sc-b:#D9D9D9;--sc-out:#141414}
+/* 戌时（阳 · 地支色 #D49A2A） */
+:root[data-theme="shichen"][data-sc="10"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--sc-t:#7D5B19;--sc-out:#F2E8D7}
+/* 亥时（阴 · 地支色 #1F3A6B） */
+:root[data-theme="shichen"][data-sc="11"]{--bg:#0D182B;--surface:#12223F;--line:#1D3663;--code-bg:#16294B;--user-bg:#1B335F;--muted:#A8AFBB;--accent:#7D8DA9;--accent-ink:#0D182B;--sc-b:#1F3A6B;--sc-out:#091120}
+/* ════════ 主题到此为止；下面是所有主题共用的样式 ════════ */
+/* ── 通用规矩（所有主题）：块和它所在区域的底色不一样、靠底色就分得开 → 不画边框；底色一样分不开 → 才画边框 ──
+   哪些块按这个规矩来，在脚本的 BDR 表里（bdSync）；它换主题、换时辰、换图、电脑 / 手机切换时实际比一次两边的底色，
+   底色不同就在 <html> 上加 nb-xxx，下面这些规则把边框去掉。等确认的提醒边框不算在内，照常显示。 */
+:root.nb-tool #feed .tool:not([data-k="wait"]),:root.nb-tgh #feed .tgroup:not([data-k="wait"]) .tg-h,:root.nb-uvid #feed .uvid,
+:root.nb-srow #sList .s-row,:root.nb-sitem #sList .s-item:not([aria-current="true"]),:root.nb-set #setPane .set-card,:root.nb-hcard #hostPane .h-card,:root.nb-claw #clawPane :is(.claw-card,.claw-tool){border-color:transparent!important}
+:root.nb-dock #app #dock{border-top-color:transparent!important}
+:root.nb-hd #app header{border-bottom-color:transparent!important}
+:root.nb-stop #app #sTop,:root.nb-settop #app #setTop{border-bottom-color:transparent!important}
+:root.nb-tabs #app #mtabs{border-top-color:transparent!important}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
 /* 页面本身不许滚：iOS 弹键盘时会把整个页面往上推，收起后不一定推回来，顶栏就一直压在状态栏下面被模糊。
@@ -665,8 +679,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-beads{display:flex;flex-wrap:wrap;gap:5px 6px;align-items:center;margin:6px 0 4px}
 .ds-beads.one{flex-wrap:nowrap;justify-content:flex-end;overflow:hidden;-webkit-mask-image:linear-gradient(to right,transparent,#000 48px);mask-image:linear-gradient(to right,transparent,#000 48px)}   /* 收起：一行，最近的几轮靠右，更早的从左边淡出（不再露出上一行被切掉的半个球） */
 .ds-tg{margin:0 2px 0 8px;padding:1px 8px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:11px;line-height:1.5;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.ds-bead{display:block;cursor:pointer;flex:none}
+.ds-bead{display:block;cursor:pointer;flex:none;transition:transform .14s ease-out,filter .14s ease-out,opacity .14s ease-out}
 .ds-bead.dim{opacity:.35}
+@media (hover:hover){.ds-bead:hover{transition-duration:.05s;transform:scale(1.14);filter:brightness(1.07) drop-shadow(0 2px 4px rgba(0,0,0,.18));opacity:1}}   /* 鼠标移上去：球稍微放大、提亮、浮起一点（照 dsh） */
 .ds-bead text{font-size:11px;font-weight:600;fill:#fff;text-anchor:middle;pointer-events:none}
 .ds-tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px;padding:0 12px}
 .ds-tb{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -687,7 +702,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 @media (hover:hover){.ds-tb tr.r:hover td,.ds-tb tr.q:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 .ds-rec{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
 .ds-rec b{color:var(--ink);font-weight:600}
-.ds-pg{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;margin:8px 0;font-size:12px;color:var(--muted)}
+.ds-pg{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;margin:8px 0;font-size:12px;color:var(--muted)}
 .ds-pg button{min-width:30px;height:28px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:none;color:var(--ink);font:inherit;font-size:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .ds-pg button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .ds-pg button:disabled{opacity:.35;cursor:default}
@@ -1566,6 +1581,7 @@ select.pe-in{text-align-last:right}
   #sugBtn{bottom:-37px;top:auto;right:110px}
 }
 </style>
+<script>(function(){var r=document.documentElement;if(r.getAttribute('data-theme')!=='shichen')return;var b=getComputedStyle(r).getPropertyValue(matchMedia('(min-width:1000px)').matches?'--sc-out':'--bg').trim();if(b)document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})})();</script>   <!-- 流变时辰：状态栏颜色要等上面的样式读进来才知道 -->
 </head>
 <body>
 <div id="app"><script>
@@ -2477,21 +2493,25 @@ function dsSegH(r,f){   // 圆里从底往上占面积比例 f 的弓形高度�
   for(var i=0;i<28;i++){var h=(lo+hi)/2,a=r*r*Math.acos((r-h)/r)-(r-h)*Math.sqrt(Math.max(0,2*r*h-h*h));if(a/A<f)lo=h;else hi=h}
   return (lo+hi)/2;
 }
-function dsBead(t,max,dim){
+function dsBeadNum(n,r){   // 球里的步数：大于 1 步都写；小球字跟着缩，位数多的再缩，总能放进圆里
+  var L=String(n).length,fs=Math.min(11,2*r*(L<2?.6:L<3?.5:.4));
+  return '<text x="'+r+'" y="'+(r+fs*.36).toFixed(2)+'" style="font-size:'+fs.toFixed(1)+'px">'+n+'</text>';
+}
+function dsBead(t,max,dim){   // 立体感（照 dsh 的球）：左上一块白色高光渐隐，边缘一圈很淡的暗影
   var tot=t.total||0,r=tot>0&&max>0?7+13*Math.sqrt(tot/max):7,d=r*2,s=Math.round;
   var fi=tot?((t.inp||0)+(t.cw||0))/tot:0,fc=tot?(t.cr||0)/tot:0;
   var h1=dsSegH(r,fi),h2=dsSegH(r,fi+fc);
   var id='dsb'+t.i;
-  return '<svg class="ds-bead'+(dim?' dim':'')+'" data-i="'+t.i+'" width="'+s(d)+'" height="'+s(d)+'" viewBox="0 0 '+d+' '+d+'"><title>第 '+t.i+' 轮 · '+t.nSteps+' 步 · 合计 '+dsNum(tot)+'</title><defs><clipPath id="'+id+'"><circle cx="'+r+'" cy="'+r+'" r="'+r+'"/></clipPath></defs><g clip-path="url(#'+id+')"><rect x="0" y="0" width="'+d+'" height="'+d+'" fill="'+(tot?'var(--ds-out)':'var(--line)')+'"/><rect x="0" y="'+(d-h2)+'" width="'+d+'" height="'+(h2-h1)+'" fill="var(--ds-cr)"/><rect x="0" y="'+(d-h1)+'" width="'+d+'" height="'+h1+'" fill="var(--ds-inp)"/></g>'+(t.errors?'<circle cx="'+r+'" cy="'+r+'" r="'+(r-1)+'" fill="none" stroke="var(--deny)" stroke-width="2"/>':'')+(d>=22?'<text x="'+r+'" y="'+(r+4)+'">'+t.nSteps+'</text>':'')+'</svg>';
+  return '<svg class="ds-bead'+(dim?' dim':'')+'" data-i="'+t.i+'" width="'+s(d)+'" height="'+s(d)+'" viewBox="0 0 '+d+' '+d+'"><title>第 '+t.i+' 轮 · '+t.nSteps+' 步 · 合计 '+dsNum(tot)+'</title><defs><clipPath id="'+id+'"><circle cx="'+r+'" cy="'+r+'" r="'+r+'"/></clipPath><radialGradient id="'+id+'h" cx="34%" cy="28%" r="72%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/></radialGradient><radialGradient id="'+id+'s" cx="50%" cy="50%" r="50%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".13"/></radialGradient></defs><g clip-path="url(#'+id+')"><rect x="0" y="0" width="'+d+'" height="'+d+'" fill="'+(tot?'var(--ds-out)':'var(--line)')+'"/><rect x="0" y="'+(d-h2)+'" width="'+d+'" height="'+(h2-h1)+'" fill="var(--ds-cr)"/><rect x="0" y="'+(d-h1)+'" width="'+d+'" height="'+h1+'" fill="var(--ds-inp)"/></g>'+(tot?'<circle cx="'+r+'" cy="'+r+'" r="'+r+'" fill="url(#'+id+'s)"/><circle cx="'+r+'" cy="'+r+'" r="'+r+'" fill="url(#'+id+'h)"/>':'')+(t.errors?'<circle cx="'+(r+r*.5)+'" cy="'+(r-r*.5)+'" r="1.2" fill="var(--deny)" opacity=".75"/>':'')+(t.nSteps>1?dsBeadNum(t.nSteps,r):'')+'</svg>';
 }
 function dsPager(n){
   var pages=Math.ceil(n/DS_PAGE);if(pages<=1)return '';
-  var h='<div class="ds-pg"><button type="button" data-pg="'+(dissPage-1)+'"'+(dissPage<=0?' disabled':'')+'>‹</button>';
+  var h='<div class="ds-pg"><span>第 '+(n-dissPage*DS_PAGE)+'–'+Math.max(1,n-(dissPage+1)*DS_PAGE+1)+' 轮 / 共 '+n+' 轮</span><button type="button" data-pg="'+(dissPage-1)+'"'+(dissPage<=0?' disabled':'')+'>‹</button>';
   for(var p=0;p<pages;p++){
     if(pages>9&&Math.abs(p-dissPage)>2&&p!==0&&p!==pages-1){if(Math.abs(p-dissPage)===3)h+='<span>…</span>';continue}
     h+='<button type="button" data-pg="'+p+'"'+(p===dissPage?' class="on"':'')+'>'+(p+1)+'</button>';
   }
-  return h+'<button type="button" data-pg="'+(dissPage+1)+'"'+(dissPage>=pages-1?' disabled':'')+'>›</button><span>第 '+(n-dissPage*DS_PAGE)+'–'+Math.max(1,n-(dissPage+1)*DS_PAGE+1)+' 轮 / 共 '+n+' 轮</span></div>';
+  return h+'<button type="button" data-pg="'+(dissPage+1)+'"'+(dissPage>=pages-1?' disabled':'')+'>›</button></div>';
 }
 function showSession(restore){
   var j=dissData;if(!j)return;
@@ -2517,7 +2537,7 @@ function showSession(restore){
     h+='<div class="ds-sec">模型表现<small>每次请求算一次；首字、速度只算成功的</small></div><div class="ds-tw"><table class="ds-tb"><thead><tr><th>模型</th><th>请求</th><th>出错</th><th>平均首字</th><th>平均速度</th><th class="col-out">输出</th></tr></thead><tbody>'
       +s.miniModels.map(function(m){return '<tr><td>'+esc(m.model)+'</td><td>'+m.calls+'</td><td'+(m.errors?' style="color:var(--deny)"':'')+'>'+(m.errors||'')+'</td><td>'+(m.ttftMs!=null?dsSec(m.ttftMs):'--')+'</td><td>'+(m.tps!=null?m.tps+' tok/s':'--')+'</td><td class="col-out">'+dsTk(m.out)+'</td></tr>'}).join('')+'</tbody></table></div>';
   }
-  h+='<div class="ds-sec">每一轮<small>一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；红圈 = 工具出错。点球进那一轮</small><button type="button" class="ds-tg" data-tg="beads">'+(dissBeadsOpen?'收起':'展开全部 '+ts.length+' 轮')+'</button></div><div class="ds-beads'+(dissBeadsOpen?'':' one')+'">';
+  h+='<div class="ds-sec">每一轮<small>一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；右上小红点 = 工具出错。点球进那一轮</small><button type="button" class="ds-tg" data-tg="beads">'+(dissBeadsOpen?'收起':'展开全部 '+ts.length+' 轮')+'</button></div><div class="ds-beads'+(dissBeadsOpen?'':' one')+'">';
   var hi=ts.length-dissPage*DS_PAGE,lo=Math.max(0,hi-DS_PAGE);   // 当前页：倒序，第一页是最新的几轮；球还是按时间从左到右
   ts.forEach(function(t,k){h+=dsBead(t,max,k<lo||k>=hi)});
   h+='</div>';
@@ -6076,7 +6096,33 @@ function applyTheme(t){
 }
 // 流变时辰：每分钟看一次时辰变没变，变了就换色；设置里的选项名带上当前时辰
 var scName='';
-function scVar(k){return document.documentElement.style.getPropertyValue(k).trim()}
+// 通用规矩（所有主题）：块和它所在区域的底色不同 → 不画边框；相同 → 照常画（CSS 在主题段后面的 nb-xxx 规则）。
+// 每项：[类名, 块（选择器，或一段样品 HTML + 样品里要量的选择器）, 放样品 / 比底色的区域]。块不在页面上时放一个看不见的样品进区域量一下再拿掉
+var BDR=[['nb-tool',['<div class="tool"></div>','.tool'],'#feed'],['nb-tgh',['<div class="tgroup"><button type="button" class="tg-h"></button></div>','.tg-h'],'#feed'],
+  ['nb-uvid',['<div class="msg ai"><div class="uvid ufile"></div></div>','.uvid'],'#feed'],
+  ['nb-srow',['<div class="s-row"><button type="button" class="s-item"></button></div>','.s-row'],'#sList'],['nb-sitem',['<div class="s-row"><button type="button" class="s-item"></button></div>','.s-item'],'#sList'],
+  ['nb-set',['<div class="set-card"></div>','.set-card'],'#setPane'],['nb-hcard',['<div class="h-card"></div>','.h-card'],'#hostPane'],['nb-claw',['<button type="button" class="claw-card"></button>','.claw-card'],'#clawList'],
+  ['nb-dock','#dock','#feed'],['nb-hd','header','#feed'],['nb-stop','#sTop','#sList'],['nb-settop','#setTop','#setPane'],['nb-tabs','#mtabs','#sList']];
+function bdBg(e){var c=getComputedStyle(e),i=c.backgroundImage;if(i&&i!=='none'&&/url\(/.test(i))return 'img';var b=c.backgroundColor;return /^rgba\(0, 0, 0, 0\)$|^transparent$| \/ 0\)$/.test(b)?'':b}
+function bdArea(e){for(;e&&e.nodeType===1;e=e.parentElement){var b=bdBg(e);if(b)return b}return ''}
+function bdSync(){
+  var r=document.documentElement;
+  BDR.forEach(function(x){
+    var area=document.querySelector(x[2]),on=false,blk,tmp=null;
+    if(area){
+      if(typeof x[1]==='string')blk=document.querySelector(x[1]);
+      else{tmp=document.createElement('div');tmp.style.cssText='position:absolute;visibility:hidden;pointer-events:none;left:0;top:0';tmp.innerHTML=x[1][0];area.appendChild(tmp);blk=tmp.querySelector(x[1][1])}
+      if(blk){var own=bdBg(blk),bg=bdArea(tmp?blk.parentElement:area);on=!!own&&own!==bg}   // 样品：比它上一层（一路往上找到有底色的）；页面上的块（输入区、标题栏…）：比旁边那块区域
+      if(tmp)tmp.remove();
+    }
+    r.classList.toggle(x[0],on);
+  });
+}
+var bdT=0;function bdLater(){cancelAnimationFrame(bdT);bdT=requestAnimationFrame(bdSync)}
+new MutationObserver(bdLater).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-sc','class']});
+new MutationObserver(bdLater).observe(document.getElementById('app'),{attributes:true,attributeFilter:['class']});
+DESKTOP.addEventListener('change',bdLater);bdLater();
+function scVar(k){return getComputedStyle(document.documentElement).getPropertyValue(k).trim()}
 function scTick(force){
   var on=document.documentElement.getAttribute('data-theme')==='shichen';
   if(!on){if(scName){window.__sc.clear();scName=''}return}

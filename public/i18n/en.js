@@ -115,7 +115,7 @@ var I18N={dict:{
 "「跟随系统」随设备深浅色切换":"\"System\" follows the device's light/dark mode",
 "一次只能发一个视频或文件":"Only one video or file at a time",
 "一步 = 一次模型调用；点一步看它调了什么。工具调用本身不另算 token（算在这一步的输出里），所以只给次数":"One step = one model call; tap a step to see what it called. Tool calls have no separate tokens (they're counted in the step's output), so only counts are shown",
-"一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；红圈 = 工具出错。点球进那一轮":"One bead = one turn, area = usage; bottom: input, middle: cache read, top: output; red ring = tool error. Tap a bead to open that turn",
+"一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；右上小红点 = 工具出错。点球进那一轮":"One bead = one turn, area = usage; bottom: input, middle: cache read, top: output; tiny red dot = tool error. Tap a bead to open that turn",
 "上一条还在处理中":"Previous message still processing",
 "上一条还在处理，稍后再发":"Previous message still processing, send again later",
 "上下文":"Context",
