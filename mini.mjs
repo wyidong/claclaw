@@ -1,7 +1,7 @@
 // Mini：claclaw 自带的纯问答 agent，不调工具、不碰电脑上的文件和命令；接模型库里的模型（尤其本地 Ollama）答疑、看模型快不快。
 // agent 本体在 mini-agent.mjs（ACP，stdin/stdout）。每轮结束显示一行：模型 · 首字耗时 · 生成速度。
 // - 会话：agent 把每个会话存成 data/mini-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
-// - 模型：只认模型库里有 OpenAI 兼容地址的条目。一个进程只连一家供应商（和 GLM Agent 一样），本机地址（127.0.0.1 / localhost）的排最前；
+// - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商（和 GLM Agent 一样），本机地址（127.0.0.1 / localhost）的排最前；
 //   选别家的模型会重启进程（所有 Mini 会话一起换），走哪家记在 data/mini-route.json
 // - 改名：agent 没有接口，名字记在 claclaw 这边；删除：把会话文件挪进回收站
 // 网页里 Mini 会话的 id = 'mi:' + 会话 id（UUID）。
@@ -22,7 +22,8 @@ const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 const AGENT_JS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mini-agent.mjs');
 const SESSIONS = path.join(DATA, 'mini-sessions');
 const ROUTE_FILE = path.join(DATA, 'mini-route.json');
-const FMTS = ['openai'];
+const FMTS = ['openai', 'anthropic', 'gemini'];   // 一家有几种接口时按这个顺序挑
+const epOf = x => x.p.endpoints[x.fmt];
 const LOCAL = /^(127\.|localhost$|\[?::1\]?$)/;
 
 export const miInstalled = () => !!route();   // 模型库里有能用的模型就算装好了（agent 随 claclaw 自带）
@@ -71,14 +72,28 @@ export const miExists = id => !!miInfo(id);
 export function pickRoute(rec, store, lib = libModels(store, FMTS)) {
   const hit = rec?.provider && lib.find(x => x.p.id === rec.provider);
   if (hit) return hit;
-  return lib.find(x => LOCAL.test(hostOf(x.p.endpoints.openai))) || lib[0] || null;
+  return lib.find(x => LOCAL.test(hostOf(epOf(x)))) || lib[0] || null;
 }
 const route = (store = storeNow()) => pickRoute(readJson(ROUTE_FILE, {}), store);
-const v1 = u => String(u).replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
+// agent 按格式拼路径：openai → <base>/chat/completions（base 写到 /v1）；anthropic → <base>/v1/messages；gemini → <base>/models/<id>:streamGenerateContent（base 写到 /v1beta）
+export function baseOf(fmt, url) {
+  const u = String(url).replace(/\/+$/, '');
+  if (fmt === 'anthropic') return u.replace(/\/v1$/, '');
+  if (fmt === 'gemini') return /\/v1(beta)?$/.test(u) ? u : u + '/v1beta';
+  return u.replace(/\/v1$/, '') + '/v1';
+}
+// agent 进程里的 fetch 按 HTTP(S)_PROXY 走代理（国外的接口直连会卡到超时）；本机、局域网地址照旧直连
+function proxyEnv() {
+  if (!process.env.HTTPS_PROXY && !process.env.https_proxy && !process.env.HTTP_PROXY && !process.env.http_proxy) return {};
+  const no = (process.env.NO_PROXY || process.env.no_proxy || '').split(',').map(s => s.trim()).filter(Boolean);
+  for (const h of ['localhost', '127.0.0.1', '::1']) if (!no.includes(h)) no.push(h);
+  return { NODE_USE_ENV_PROXY: '1', NO_PROXY: no.join(','), no_proxy: no.join(',') };
+}
 function routeEnv() {
-  const hit = route(), env = { MINI_DIR: SESSIONS };
+  const hit = route(), env = { MINI_DIR: SESSIONS, ...proxyEnv() };
   if (hit) {
-    env.MINI_BASE_URL = v1(hit.p.endpoints.openai);
+    env.MINI_FORMAT = hit.fmt;
+    env.MINI_BASE_URL = baseOf(hit.fmt, epOf(hit));
     env.MINI_API_KEY = hit.p.key || 'none';
     env.MINI_MODELS = hit.p.models.map(m => m.id).join(',');
     env.MINI_MODEL = hit.m.id;
@@ -140,7 +155,7 @@ export class MiRunner extends AcpRunner {
   // 进程里的模型清单就是走的那家供应商的模型：base 填它的地址，splitGroups 会对回模型库
   ownModel(o, store) {
     const v = String(o.value), hit = route(store);
-    return { value: v, label: String(o.name || v), id: v, base: hit ? hit.p.endpoints.openai : '' };
+    return { value: v, label: String(o.name || v), id: v, base: hit ? epOf(hit) : '' };
   }
   // 模型选择：模型库里所有有 OpenAI 兼容地址的（换供应商会重启进程）
   xmodels() {

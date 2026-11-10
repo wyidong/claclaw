@@ -8,15 +8,15 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-data-'));   // mini.mjs 引入 auth.mjs 前先指到临时目录
-const { pickRoute, statsLine } = await import('../mini.mjs');
+const { pickRoute, statsLine, baseOf } = await import('../mini.mjs');
 const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'mini-agent.mjs');
 
 const P = (id, url, models = ['m1']) => ({ id, name: id, endpoints: { openai: url }, key: 'k', models: models.map(x => ({ id: x })) });
 const store = { providers: [P('deepseek', 'https://api.deepseek.com'), P('ollama', 'http://127.0.0.1:11434/v1', ['q1', 'q2']), P('anthropic-only', 'x')] };
 store.providers[2].endpoints = { anthropic: 'https://a.example' };
-const lib = pr => pr.providers.flatMap(p => p.endpoints.openai ? p.models.map(m => ({ p, m, value: 'lib:' + p.id + '/' + m.id })) : []);
+const lib = pr => pr.providers.flatMap(p => p.endpoints.openai ? p.models.map(m => ({ p, m, value: 'lib:' + p.id + '/' + m.id, fmt: 'openai' })) : []);
 
-test('Mini 走哪家：记过的优先；没记过本机地址排最前；没有 OpenAI 地址的不算', () => {
+test('Mini 走哪家：记过的优先；没记过本机地址排最前；记的那家没了换回默认', () => {
   assert.equal(pickRoute({}, store, lib(store)).p.id, 'ollama');
   assert.equal(pickRoute({ provider: 'deepseek' }, store, lib(store)).p.id, 'deepseek');
   assert.equal(pickRoute({ provider: 'gone' }, store, lib(store)).p.id, 'ollama');   // 记的那家没了
@@ -243,5 +243,80 @@ test('Mini agent：接口不收 temperature / reasoning_effort（回 400）时�
     await a.rpc('session/set_config_option', { sessionId: n.sessionId, configId: 'model', value: 'other' });
     await say(a, n.sessionId, '换了模型');
     assert.equal(m.reqs[3].model, 'other'); assert.ok('temperature' in m.reqs[3]); assert.equal(m.reqs.length, 5);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini 走哪家：模型库里只有 Anthropic / Gemini 接口的也能选；地址按格式补齐', () => {
+  const g = { id: 'google', name: 'Google', endpoints: { gemini: 'https://generativelanguage.googleapis.com/v1beta' }, key: 'k', models: [{ id: 'gemini-2.5-flash' }] };
+  const hit = pickRoute({ provider: 'google' }, { providers: [store.providers[0], g] });
+  assert.equal(hit.p.id, 'google'); assert.equal(hit.fmt, 'gemini');
+  assert.equal(pickRoute({ provider: 'anthropic-only' }, store).fmt, 'anthropic');
+  assert.equal(pickRoute({}, store).p.id, 'ollama');   // 本机的还是排最前
+  assert.equal(baseOf('openai', 'https://api.deepseek.com'), 'https://api.deepseek.com/v1');
+  assert.equal(baseOf('openai', 'http://127.0.0.1:11434/v1/'), 'http://127.0.0.1:11434/v1');
+  assert.equal(baseOf('anthropic', 'https://api.deepseek.com/anthropic'), 'https://api.deepseek.com/anthropic');
+  assert.equal(baseOf('anthropic', 'https://api.anthropic.com/v1'), 'https://api.anthropic.com');
+  assert.equal(baseOf('gemini', 'https://generativelanguage.googleapis.com'), 'https://generativelanguage.googleapis.com/v1beta');
+  assert.equal(baseOf('gemini', 'https://generativelanguage.googleapis.com/v1beta/'), 'https://generativelanguage.googleapis.com/v1beta');
+});
+
+// 假的 Anthropic / Gemini 服务：记下路径、请求头、请求体，按各自的流格式回「你好世界」
+function fakeNative(kind) {
+  const reqs = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      reqs.push({ url: req.url, headers: req.headers, body: JSON.parse(b) });
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const ev = o => res.write((kind === 'anthropic' ? 'event: ' + o.type + '\n' : '') + 'data: ' + JSON.stringify(o) + '\r\n\r\n');
+      if (kind === 'anthropic') {
+        ev({ type: 'message_start', message: { usage: { input_tokens: 50, cache_read_input_tokens: 10 } } });
+        ev({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: '想想' } });
+        for (const s of ['你好', '世界']) ev({ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: s } });
+        ev({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 12 } });
+        ev({ type: 'message_stop' });
+      } else {
+        ev({ candidates: [{ content: { role: 'model', parts: [{ text: '想想', thought: true }] } }] });
+        for (const s of ['你好', '世界']) ev({ candidates: [{ content: { role: 'model', parts: [{ text: s }] } }] });
+        ev({ candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 60, candidatesTokenCount: 9, thoughtsTokenCount: 3 } });
+      }
+      res.end();
+    });
+  });
+  return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port })));
+}
+
+for (const kind of ['anthropic', 'gemini']) test('Mini agent：' + kind + ' 接口——路径、key 的请求头、请求体、流式回复、用量都对', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeNative(kind);
+  const base = kind === 'gemini' ? m.url + '/v1beta' : m.url;
+  const a = startAgent({ MINI_FORMAT: kind, MINI_BASE_URL: base, MINI_API_KEY: 'sk-test', MINI_MODELS: 'mx', MINI_MODEL: kind === 'gemini' ? 'models/mx' : 'mx', MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a, n.sessionId, '第一问');
+    const r = await say(a, n.sessionId, '第二问');
+    assert.equal(r.result.stopReason, 'end_turn');
+    assert.equal(textOf(a.updates), '你好世界你好世界');
+    assert.ok(a.updates.some(u => u.sessionUpdate === 'agent_thought_chunk'));
+    const q = m.reqs[1], use = a.updates.filter(u => u.sessionUpdate === 'usage_update').at(-1);
+    if (kind === 'anthropic') {
+      assert.equal(q.url, '/v1/messages'); assert.equal(q.headers['x-api-key'], 'sk-test'); assert.ok(q.headers['anthropic-version']);
+      assert.match(q.body.system, /你现在用的模型是 mx/);
+      assert.deepEqual(q.body.messages.map(x => x.role + ':' + x.content), ['user:第一问', 'assistant:你好世界', 'user:第二问']);
+      assert.ok(!('thinking' in q.body)); assert.equal(q.body.temperature, 0.3);
+      assert.equal(use.used, 60 + 12); assert.equal(use._meta.mini.outTokens, 12);
+    } else {
+      assert.equal(q.url, '/v1beta/models/mx:streamGenerateContent?alt=sse'); assert.equal(q.headers['x-goog-api-key'], 'sk-test');
+      assert.match(q.body.systemInstruction.parts[0].text, /你现在用的模型是 models\/mx/);
+      assert.deepEqual(q.body.contents.map(x => x.role + ':' + x.parts[0].text), ['user:第一问', 'model:你好世界', 'user:第二问']);
+      assert.deepEqual(q.body.generationConfig.thinkingConfig, { thinkingBudget: 0 });
+      assert.equal(use.used, 60 + 12); assert.equal(use._meta.mini.outTokens, 12);
+    }
+    // 打开思考：anthropic 带 thinking、不带 temperature；gemini 要思考摘要
+    await a.rpc('session/set_config_option', { sessionId: n.sessionId, configId: 'effort', value: 'on' });
+    await say(a, n.sessionId, '第三问');
+    const q3 = m.reqs[2].body;
+    if (kind === 'anthropic') { assert.equal(q3.thinking.type, 'enabled'); assert.ok(!('temperature' in q3)); assert.ok(q3.max_tokens > q3.thinking.budget_tokens); }
+    else assert.deepEqual(q3.generationConfig.thinkingConfig, { includeThoughts: true });
   } finally { a.stop(); m.srv.close(); }
 });
