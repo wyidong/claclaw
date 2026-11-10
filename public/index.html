@@ -19,15 +19,17 @@
 <script src="/_clarelay/rtc.js"></script><!-- 经 clarelay 打开时：手机和电脑 WebRTC 直连（window.clarelay），直接访问时 404，用原生的 -->
 <script>
 // 主题：跟随系统（默认，在阳白明亮 / 阴黑暗沉间切）/ 阳白明亮 / 阴黑暗沉 / 九紫离火 / 12 个时辰 / 流变时辰（在 12 个时辰间切），按设备记在本机；在页面画出来之前就设好，免得先闪一下
-// 流变时辰：按当前时辰换色。颜色不在这里算——<html> 设上 data-sc="地支序号"（0 子 … 11 亥），阴时辰再加 .sc-dark，
+// 流变时辰：按当前时辰换色。颜色不在这里算——<html> 设上 data-sc="地支序号"（0 子 … 11 亥），阴（脏）再加 .sc-dark，
 // 各时辰的颜色写在 <style> 主题段 ④ 的 12 个变量块里。日干按儒略日推（2000-01-01 戊午日），时干按五鼠遁；23 点起算次日子时
 window.__sc=(function(){
   var G='甲乙丙丁戊己庚辛壬癸',Z='子丑寅卯辰巳午未申酉戌亥';
-  // 时辰壁纸（设置里「时辰背景：图片」时用，只有 6 阳时辰用；6 阴是纯色）：/sc-bg/<地支序号>.jpg，图放在电脑的 data/sc-bg/ 下；这个时辰没有图就仍用纯色
-  var ok={},SCV='3';   // 换了图就把 SCV 加一：图片缓存一天，不加的话手机上还是旧图
+  var YIN=[0,1,1,0,0,1,1,0,0,1,1,0];   // 阴阳看脏腑：脏（肝肺脾心肾心包）为阴 → 深色；腑（胆大肠胃小肠膀胱三焦）为阳 → 浅色
+  var N=['子 · 少阳胆 🦶','丑 · 厥阴肝 🦶','寅 · 太阴肺 ✋','卯 · 阳明大肠 ✋','辰 · 阳明胃 🦶','巳 · 太阴脾 🦶','午 · 少阴心 ✋','未 · 太阳小肠 ✋','申 · 太阳膀胱 🦶','酉 · 少阴肾 🦶','戌 · 厥阴心包 ✋','亥 · 少阳三焦 ✋'];   // 12 个时辰主题的名字（地支 · 当令的经络，🦶 足经 / ✋ 手经），设置下拉、快捷方块、流变时辰的选项名都用这份
+  // 时辰壁纸（设置里「时辰背景：图片」时用，只有 6 阳（腑）用；6 阴（脏）是纯色）：/sc-bg/<地支序号>.jpg，图放在电脑的 data/sc-bg/ 下；这个时辰没有图就仍用纯色
+  var ok={},SCV='5';   // 换了图就把 SCV 加一：图片缓存一天，不加的话手机上还是旧图
   function img(z){
     var r=document.documentElement,on=false;try{on=localStorage.getItem('claclaw.scImg')==='1'}catch(_){}
-    if(z%2===1)on=false;   // 6 阴（丑卯巳未酉亥）只用纯色深底，不铺图；6 阳才用图
+    if(YIN[z])on=false;   // 6 阴（脏）只用纯色深底，不铺图；6 阳（腑）才用图
     if(on&&ok[z]===true){r.style.setProperty('--sc-img','url("/sc-bg/'+z+'.jpg?v='+SCV+'")');r.classList.add('sc-img');return}
     r.classList.remove('sc-img');if(!on||ok[z]===false)return;
     var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z)img(z)};im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg?v='+SCV;
@@ -39,12 +41,12 @@ window.__sc=(function(){
   }
   function apply(){
     var n=now(),r=document.documentElement;
-    r.setAttribute('data-sc',String(n.z));r.classList.toggle('sc-dark',n.z%2===1);   // 阴时辰：深色
+    r.setAttribute('data-sc',String(n.z));r.classList.toggle('sc-dark',!!YIN[n.z]);   // 阴（脏）：深色
     img(n.z);   // 时辰背景：图片 / 纯色（默认纯色）
     return n.name;
   }
   function clear(){var r=document.documentElement;r.removeAttribute('data-sc');r.style.removeProperty('--sc-img');r.classList.remove('sc-dark','sc-img')}
-  return {now:now,apply:apply,clear:clear};
+  return {now:now,apply:apply,clear:clear,names:N};
 })();
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
@@ -150,9 +152,9 @@ window.__sc=(function(){
 :root:is([data-theme="ziwei"],[data-theme="shichen"]) #backBtn{color:var(--accent)}
 @media (min-width:1000px){:root:is([data-theme="ziwei"],[data-theme="shichen"]) #sList .s-row:not(.wx){border:0;background:none}}   /* 电脑：卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
 /* ── ③ 流变时辰 · 12 套共用 ── */
-/* 流变时辰：6 阳时辰（子寅辰午申戌）照九紫离火的配色（淡底白卡片），6 阴时辰（丑卯巳未酉亥）照深色主题（深底深卡片浅字，<html> 带 .sc-dark）。
+/* 流变时辰：6 阳（腑：子胆 卯大肠 辰胃 未小肠 申膀胱 亥三焦）照九紫离火的配色（淡底白卡片），6 阴（脏：丑肝 寅肺 巳脾 午心 酉肾 戌心包）照深色主题（深底深卡片浅字，<html> 带 .sc-dark）。
    window.__sc 只按当前时辰给 <html> 设 data-sc="0~11"（地支序号）和 .sc-dark，颜色全在下面 ④ 各时辰的变量块里——要调哪个时辰的颜色直接改那一块。
-   变量：--sc-b 地支色 / --title 标题字色（卡片风格共用的变量） / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
+   变量：--sc-b 本时辰的代表色（铺图时图片没加载出来先垫的底色） / --title 标题字色（卡片风格共用的变量） / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
 :root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface);--allow:var(--accent);--on-allow:var(--accent-ink)}
 :root[data-theme="shichen"] #setPane #setScImgRow{display:flex}   /* 设置里的「时辰背景」只在这套主题下出现 */
 :root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg)}
@@ -187,40 +189,40 @@ window.__sc=(function(){
   :root[data-theme="shichen"].sc-img #app{background:var(--sc-out)!important;isolation:isolate;--sc-veil:color-mix(in srgb,var(--surface) 30%,transparent);--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
   :root[data-theme="shichen"].sc-img #app::before{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;z-index:-1;pointer-events:none;background:var(--sc-in)}
 }
-/* ── ③ 流变时辰 · 阳时辰公共（子寅辰午申戌）：白卡片、石板灰说明字、强调色上白字 ── */
+/* ── ③ 流变时辰 · 阳（腑）公共（子卯辰未申亥）：白卡片、石板灰说明字、强调色上白字 ── */
 :root[data-theme="shichen"]:not(.sc-dark){--surface:#FFFFFF;--muted:#64748B;--accent-ink:#FFFFFF}
 :root[data-theme="shichen"].sc-img:not(.sc-dark){--muted:color-mix(in srgb,var(--ink) 72%,var(--surface))}   /* 铺了图：说明字压在图上，石板灰看不清，调深 */
-/* ── ③ 流变时辰 · 阴时辰公共（丑卯巳未酉亥）：浅色正文 / 标题，提示色、玻璃按钮、协同配色用深色主题那一套 ── */
+/* ── ③ 流变时辰 · 阴（脏）公共（丑寅巳午酉戌）：浅色正文 / 标题，提示色、玻璃按钮、协同配色用深色主题那一套 ── */
 :root[data-theme="shichen"].sc-dark{--ink:#ECEEF0;--title:#ECEEF0;
   --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB}
-/* ── ④ 12 个时辰各自的颜色 ──
-   阳时辰：照九紫离火的配比换成地支色的色相——淡底 / 细边 / 选中 / 代码底是同色相的淡色，强调色、标题是同色相的深色，正文近黑带一点色；外圈比淡底深一档。
-   阴时辰：底是地支色本身的深色（色相不变，亮度压到 8%~25%），说明字是带一点色的浅灰，强调色是地支色调亮到看得清。 */
-/* 子时（阳 · 地支色 #5B8FC7） */
-:root[data-theme="shichen"][data-sc="0"]{--bg:#EEF3F9;--line:#E0E7EE;--user-bg:#E8EFF7;--code-bg:#EDF2F7;--accent:#3769A0;--ink:#1B232D;--sc-b:#5B8FC7;--title:#2D5885;--sc-out:#D7E4F1}
-/* 丑时（阴 · 地支色 #F2D27A） */
-:root[data-theme="shichen"][data-sc="1"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
-/* 寅时（阳 · 地支色 #1E6B3A） */
-:root[data-theme="shichen"][data-sc="2"]{--bg:#EEF9F2;--line:#E0EEE5;--user-bg:#E7F8ED;--code-bg:#EDF7F1;--accent:#268649;--ink:#1B2D21;--sc-b:#1E6B3A;--title:#1F703C;--sc-out:#D7F2E1}
-/* 卯时（阴 · 地支色 #9CCB8E） */
-:root[data-theme="shichen"][data-sc="3"]{--bg:#162612;--surface:#21381A;--line:#335728;--code-bg:#27421F;--user-bg:#315427;--muted:#ACBBA8;--accent:#9CCB8E;--accent-ink:#162612;--sc-b:#9CCB8E;--sc-out:#101C0D}
-/* 辰时（阳 · 地支色 #D49A2A） */
+/* ── ④ 12 个时辰各自的颜色：按五行配色（子丑木 · 绿，寅卯金 · 银灰，辰巳土 · 黄，午未火 · 红，申酉水 · 蓝，戌亥相火 · 橙——和午未的君火红分开） ──
+   阳 · 腑（子卯辰未申亥）：淡底 / 细边 / 选中 / 代码底是本行色相的淡色，强调色、标题是同色相的深色，正文近黑带一点色；外圈比淡底深一档。
+   阴 · 脏（丑寅巳午酉戌）：底是本行色相的深色，说明字是带一点色的浅灰，强调色是本行色调亮到看得清。 */
+/* 子 · 少阳胆（阳 · 木） */
+:root[data-theme="shichen"][data-sc="0"]{--bg:#EEF9F2;--line:#E0EEE5;--user-bg:#E7F8ED;--code-bg:#EDF7F1;--accent:#268649;--ink:#1B2D21;--sc-b:#1E6B3A;--title:#1F703C;--sc-out:#D7F2E1}
+/* 丑 · 厥阴肝（阴 · 木） */
+:root[data-theme="shichen"][data-sc="1"]{--bg:#162612;--surface:#21381A;--line:#335728;--code-bg:#27421F;--user-bg:#315427;--muted:#ACBBA8;--accent:#9CCB8E;--accent-ink:#162612;--sc-b:#9CCB8E;--sc-out:#101C0D}
+/* 寅 · 太阴肺（阴 · 金） */
+:root[data-theme="shichen"][data-sc="2"]{--bg:#191C1F;--surface:#25292D;--line:#3A4046;--code-bg:#2B3035;--user-bg:#373D43;--muted:#ABB1B7;--accent:#D6D9DC;--accent-ink:#191C1F;--sc-b:#D6D9DC;--sc-out:#121416}
+/* 卯 · 阳明大肠（阳 · 金） */
+:root[data-theme="shichen"][data-sc="3"]{--bg:#EFF4F8;--line:#DFE8EF;--user-bg:#EAF0F5;--code-bg:#EEF3F7;--accent:#466D90;--ink:#182430;--sc-b:#E9EFF4;--title:#3B5B77;--sc-out:#DCE5ED}
+/* 辰 · 阳明胃（阳 · 土） */
 :root[data-theme="shichen"][data-sc="4"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--title:#7D5B19;--sc-out:#F2E8D7}
-/* 巳时（阴 · 地支色 #D62828） */
-:root[data-theme="shichen"][data-sc="5"]{--bg:#2F0909;--surface:#450D0D;--line:#6B1414;--code-bg:#520F0F;--user-bg:#671313;--muted:#BBA8A8;--accent:#E16060;--accent-ink:#2F0909;--sc-b:#D62828;--sc-out:#220606}
-/* 午时（阳 · 地支色 #F2A0A0） */
-:root[data-theme="shichen"][data-sc="6"]{--bg:#F9EEEE;--line:#EEE0E0;--user-bg:#FAE5E5;--code-bg:#F7EDED;--accent:#B62020;--ink:#2D1B1B;--sc-b:#F2A0A0;--title:#951D1D;--sc-out:#F2D7D7}
-/* 未时（阴 · 地支色 #F2D27A） */
-:root[data-theme="shichen"][data-sc="7"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
-/* 申时（阳 · 地支色 #F2F0EB） */
-:root[data-theme="shichen"][data-sc="8"]{--bg:#F6F5F1;--line:#ECE9E2;--user-bg:#F3F1EC;--code-bg:#F5F3F0;--accent:#827554;--ink:#2B271C;--sc-b:#F2F0EB;--title:#6C6146;--sc-out:#EAE7DF}
-/* 酉时（阴 · 地支色 #D9D9D9） */
-:root[data-theme="shichen"][data-sc="9"]{--bg:#1C1C1C;--surface:#292929;--line:#404040;--code-bg:#303030;--user-bg:#3D3D3D;--muted:#B1B1B1;--accent:#D9D9D9;--accent-ink:#1C1C1C;--sc-b:#D9D9D9;--sc-out:#141414}
-/* 戌时（阳 · 地支色 #D49A2A） */
-:root[data-theme="shichen"][data-sc="10"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--title:#7D5B19;--sc-out:#F2E8D7}
-/* 亥时（阴 · 地支色 #1F3A6B） */
-:root[data-theme="shichen"][data-sc="11"]{--bg:#0D182B;--surface:#12223F;--line:#1D3663;--code-bg:#16294B;--user-bg:#1B335F;--muted:#A8AFBB;--accent:#7D8DA9;--accent-ink:#0D182B;--sc-b:#1F3A6B;--sc-out:#091120}
+/* 巳 · 太阴脾（阴 · 土） */
+:root[data-theme="shichen"][data-sc="5"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
+/* 午 · 少阴心（阴 · 火） */
+:root[data-theme="shichen"][data-sc="6"]{--bg:#2F0909;--surface:#450D0D;--line:#6B1414;--code-bg:#520F0F;--user-bg:#671313;--muted:#BBA8A8;--accent:#E16060;--accent-ink:#2F0909;--sc-b:#D62828;--sc-out:#220606}
+/* 未 · 太阳小肠（阳 · 火） */
+:root[data-theme="shichen"][data-sc="7"]{--bg:#F9EEEE;--line:#EEE0E0;--user-bg:#FAE5E5;--code-bg:#F7EDED;--accent:#B62020;--ink:#2D1B1B;--sc-b:#F2A0A0;--title:#951D1D;--sc-out:#F2D7D7}
+/* 申 · 太阳膀胱（阳 · 水） */
+:root[data-theme="shichen"][data-sc="8"]{--bg:#EEF3F9;--line:#E0E7EE;--user-bg:#E8EFF7;--code-bg:#EDF2F7;--accent:#3769A0;--ink:#1B232D;--sc-b:#5B8FC7;--title:#2D5885;--sc-out:#D7E4F1}
+/* 酉 · 少阴肾（阴 · 水） */
+:root[data-theme="shichen"][data-sc="9"]{--bg:#0D182B;--surface:#12223F;--line:#1D3663;--code-bg:#16294B;--user-bg:#1B335F;--muted:#A8AFBB;--accent:#86A6D6;--accent-ink:#0D182B;--sc-b:#123678;--sc-out:#091120}
+/* 戌 · 厥阴心包（阴 · 火（相火）） */
+:root[data-theme="shichen"][data-sc="10"]{--bg:#2F1709;--surface:#45220D;--line:#6B3414;--code-bg:#52280F;--user-bg:#673213;--muted:#BBAFA8;--accent:#E18F60;--accent-ink:#2F1709;--sc-b:#D66828;--sc-out:#221006}
+/* 亥 · 少阳三焦（阳 · 火（相火）） */
+:root[data-theme="shichen"][data-sc="11"]{--bg:#FCF2EB;--line:#F2E5DC;--user-bg:#FFECE0;--code-bg:#FAF0EA;--accent:#B65C20;--ink:#2D221B;--sc-b:#FFBE93;--title:#954D1D;--sc-out:#F9E0D0}
 /* ════════ 主题到此为止；下面是所有主题共用的样式 ════════
    按区域分节，每节开头一行「════ 公共 · 区域名 ════」，搜「公共 · 」能逐节跳。顺序就是层叠顺序：后写的同级规则会盖前面的，挪动整节前先确认没有被后面覆盖的规则。 */
 /* ── 通用规矩（所有主题）：块和它所在区域的底色不一样、靠底色就分得开 → 不画边框；底色一样分不开 → 才画边框 ──
@@ -1956,9 +1958,9 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <label class="set-item"><span class="lb">语言 / Language<small>切换后页面会刷新</small></span>
             <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
-          <label class="set-item"><span class="lb">主题<small>「跟随系统」在阳白明亮 / 阴黑暗沉间随设备切换；「流变时辰」在 12 个时辰主题间按时间切换</small></span>
-            <select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">流变时辰</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@0">子时</option><option value="shichen@1">丑时</option><option value="shichen@2">寅时</option><option value="shichen@3">卯时</option><option value="shichen@4">辰时</option><option value="shichen@5">巳时</option><option value="shichen@6">午时</option><option value="shichen@7">未时</option><option value="shichen@8">申时</option><option value="shichen@9">酉时</option><option value="shichen@10">戌时</option><option value="shichen@11">亥时</option></optgroup></select></label>
-          <label class="set-item" id="setScImgRow"><span class="lb">时辰背景<small>阳时辰（子寅辰午申戌）可以铺同色系图片，阴时辰总是纯色；还没有图的时辰也用纯色</small></span>
+          <label class="set-item"><span class="lb">主题</span>
+            <select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">循行轮转</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option></optgroup></select></label>
+          <label class="set-item" id="setScImgRow"><span class="lb">时辰背景</span>
             <select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></label>
         </div>
       </div>
@@ -6255,7 +6257,7 @@ function scTick(force){
   var sb=scVar(DESKTOP.matches?'--sc-out':'--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
   var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=document.documentElement.classList.contains('sc-dark')?'dark':'light';   // 6 阴是深色
   if(!force)postTheme();
-  var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='流变时辰（'+scName+'时）';
+  var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='循行轮转';
 }
 setInterval(function(){scTick(false)},60000);
 DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(){if(scName)scTick(true)});   // 窗口在手机 / 电脑宽度之间变：标题栏颜色跟着换
@@ -7295,10 +7297,10 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
 })();
 // 15 个主题快捷方块（阳白明亮 / 阴黑暗沉 / 九紫离火 / 12 个时辰）：点时辰方块就固定成那个时辰主题，和设置里单选一个时辰一样
 (function(){
-  var box=$('#tmpTh'),sel=$('#setTheme'),Z='子丑寅卯辰巳午未申酉戌亥';
-  var ZC=['5B8FC7','F2D27A','1E6B3A','9CCB8E','D49A2A','D62828','F2A0A0','F2D27A','F2F0EB','D9D9D9','D49A2A','1F3A6B'];
+  var box=$('#tmpTh'),sel=$('#setTheme'),ZN=window.__sc.names;
+  var ZC=['6AAE65','3F7A3B','5E6C79','B8C4CF','D9B44A','8A6D1E','8E2A20','E06A5A','4A78B5','1F3F6E','8E4519','E8894A'];
   var L=[['light','#FFFFFF','阳白明亮'],['dark','#161B21','阴黑暗沉'],['ziwei','#5B21B6','九紫离火']];
-  for(var i=0;i<12;i++)L.push(['shichen','#'+ZC[i],Z[i]+'时',i]);
+  for(var i=0;i<12;i++)L.push(['shichen','#'+ZC[i],ZN[i],i]);
   function mark(){var t=document.documentElement.getAttribute('data-theme');[].forEach.call(box.querySelectorAll('[data-th]'),function(b){b.setAttribute('aria-pressed',String(b._t===t&&(t!=='shichen'||b._z===window.__scZ)))})}
   L.forEach(function(x){
     var b=document.createElement('button');b.type='button';b.style.setProperty('--c',x[1]);b.title=x[2];b.setAttribute('aria-label',x[2]);b._t=x[0];b._z=x[3];
