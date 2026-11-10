@@ -315,7 +315,7 @@ export async function discover(c) {
 // 按各条路最近的表现排序，最好的先走（见下面「各条路的表现」）；某条路 5 分钟内送不到就排到最后，过了再按表现排。
 // 只在「连都没连上」时换路；已经送到对方的请求出错不重发（不然同一条消息会送两遍）。
 export const isRelayAddr = u => /^https:|#.*\bkey=/.test(String(u || ''));
-export const peerRoute = new Map();   // 对方 id → { via: 'lan' | 'direct' | 'relay', at, ms }：最近一次实际走的路（协同页标「局域网 / 直连 / 中继」）
+export const peerRoute = new Map();   // 对方 id → { via: 'lan' | 'direct' | 'relay', rel: 'main' | 'backup'（有主备中继时走的是哪台）, at, ms }：最近一次实际走的路（协同页标「局域网 / 直连 / 中继」）
 // 对方的中继地址（主 → 备）：relays 数组；兼容旧的单个 relay 字段、以及配对时 inbox 本身就是中继地址的
 export const peerRelays = p => [...new Set([...(Array.isArray(p.relays) ? p.relays : []), p.relay, p.inbox, p.inboxAlt].filter(u => u && isRelayAddr(u)))];
 export const relayOf = p => peerRelays(p)[0] || '';
@@ -406,7 +406,7 @@ export async function peerCall(c, p, sub, opts = {}) {
       const ms = Date.now() - t0;
       noteChan(p.id, url, true, cheap ? ms : null);
       trail.push(label(url) + ' ok ' + ms + 'ms');
-      peerRoute.set(p.id, { via: url === DIRECT ? 'direct' : viaRelay ? 'relay' : 'lan', at: Date.now(), ms, trail: trail.join(' → ') });
+      peerRoute.set(p.id, { via: url === DIRECT ? 'direct' : viaRelay ? 'relay' : 'lan', rel: viaRelay && relays.length > 1 ? (url === relays[0] ? 'main' : 'backup') : undefined, at: Date.now(), ms, trail: trail.join(' → ') });
       if (!viaRelay && url !== DIRECT && url !== lan[0] && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; savePeer(c); }   // 局域网里换了能用的那个当首选
       return j;
     } catch (e) {

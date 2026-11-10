@@ -135,6 +135,8 @@ var I18N={dict:{
 "个文件":"files",
 "中":"Medium",
 "中继":"Relay",
+"主中继":"Main relay",
+"备中继":"Backup relay",
 "中继 20 秒没响应":"Relay didn't respond in 20 s",
 "中继地址":"Relay address",
 "中继地址已保存":"Relay address saved",

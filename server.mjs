@@ -3260,7 +3260,7 @@ const handler = async (req, res) => {
             peerCall(c, p, '/sessions', { ms: 6000 }).then(j => ({ online: !!j.ok, sessions: j.sessions || [], error: j.ok ? undefined : j.error }), e => ({ online: false, error: e.message })),
             probeRelay(p),
           ]);
-          return { id: p.id, ...main, route: main.online ? peerRoute.get(p.id)?.via : undefined, relay, chans: chanList(p.id), direct: rtcState(p.id) };
+          return { id: p.id, ...main, route: main.online ? peerRoute.get(p.id)?.via : undefined, routeRel: main.online ? peerRoute.get(p.id)?.rel : undefined, relay, chans: chanList(p.id), direct: rtcState(p.id) };
         }));
         return sendJson(res, 200, out);
       }
