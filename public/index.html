@@ -2584,7 +2584,7 @@ function showTurn(i){
     st.tools.forEach(function(u){d+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(dsTool(u.name))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?(u.wait?'等你 ':'')+dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
     if(st.req){   // Mini：这次请求实际发了什么
       var RL={system:'系统',user:'用户',assistant:'回答'},ms=st.req.msgs||[],tot=0;ms.forEach(function(m){tot+=+m[1]||0});
-      d+='<div class="ds-note">发出去 '+ms.length+' 条，共 '+dsN(tot)+' 字：'+ms.map(function(m){return (RL[m[0]]||esc(m[0]))+' '+dsN(m[1])}).join(' · ')+'</div>';
+      d+='<div class="ds-note">发出去 '+ms.length+' 条，共 '+dsN(tot)+' 字'+(st.req.imgs?'、'+st.req.imgs+' 张图':'')+'：'+ms.map(function(m){return (RL[m[0]]||esc(m[0]))+' '+dsN(m[1])+(m[2]?'+图 '+m[2]:'')}).join(' · ')+'</div>';
       d+=dsRaw('请求参数 '+esc(st.req.path),JSON.stringify(st.req.params,null,2));
     }
     if(st.thought)d+=dsRaw('思考原文',st.thought);

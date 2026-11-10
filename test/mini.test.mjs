@@ -442,3 +442,91 @@ test('Mini agent：每轮在用户那条消息上记 run（模型、接口、发
     assert.equal(JSON.stringify(r).includes('Bearer'), false);
   } finally { a.stop(); m.srv.close(); }
 });
+
+// 一张 1×1 的 PNG
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const sayImg = (a, sid, text, n = 1) => a.rpc('session/prompt', { sessionId: sid, prompt: [...(text ? [{ type: 'text', text }] : []), ...Array.from({ length: n }, () => ({ type: 'image', mimeType: 'image/png', data: PNG }))] });
+
+test('Mini agent：收图——声明能收图；OpenAI 格式发 image_url（data URL）；图存在会话旁边、会话文件里只记文件名；下一轮历史里照样带；只有图没有字也能发；重放带图', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeModel(['看到了']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    const init = await a.rpc('initialize', {});
+    assert.equal(init.result.agentCapabilities.promptCapabilities.image, true);
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await sayImg(a, n.sessionId, '这是什么');
+    const u = m.reqs[0].messages[1];
+    assert.equal(u.role, 'user');
+    assert.deepEqual(u.content, [{ type: 'text', text: '这是什么' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,' + PNG } }]);
+    const raw = fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8'), saved = JSON.parse(raw);
+    assert.equal(raw.includes(PNG), false, '会话文件里不放图的数据');
+    const im = saved.messages[0].images;
+    assert.equal(im.length, 1); assert.equal(im[0].mime, 'image/png'); assert.match(im[0].file, /^[0-9a-f]{16}\.png$/);
+    assert.equal(fs.readFileSync(path.join(dir, n.sessionId + '.files', im[0].file)).toString('base64'), PNG);
+    assert.deepEqual(saved.messages[0].run.calls[0].req.msgs.at(-1), ['user', 4, 1]); assert.equal(saved.messages[0].run.calls[0].req.imgs, 1);
+    assert.equal(JSON.stringify(saved.messages[0].run).includes(PNG), false, '请求记录里不放图的数据');
+    await say(a, n.sessionId, '再说说');
+    assert.equal(m.reqs[1].messages[1].content[1].type, 'image_url', '下一轮历史里还带着图');
+    assert.equal(m.reqs[1].messages[3].content, '再说说');
+    const r = await sayImg(a, n.sessionId, '');
+    assert.equal(r.result.stopReason, 'end_turn'); assert.deepEqual(m.reqs[2].messages.at(-1).content, [{ type: 'image_url', image_url: { url: 'data:image/png;base64,' + PNG } }]);
+  } finally { a.stop(); }
+  const b = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    await b.rpc('initialize', {});
+    const sid = fs.readdirSync(dir).find(f => f.endsWith('.json')).replace(/\.json$/, '');
+    await b.rpc('session/load', { sessionId: sid, cwd: os.tmpdir() });
+    const ups = b.updates.filter(x => x.sessionUpdate === 'user_message_chunk');
+    assert.deepEqual(ups.map(x => x.content.type), ['text', 'image', 'text', 'image']);
+    assert.equal(ups[1].content.data, PNG); assert.equal(ups[1].content.mimeType, 'image/png');
+  } finally { b.stop(); m.srv.close(); }
+});
+
+test('Mini agent：历史里最多带最近 6 张图，更早的换成一句话', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeModel(['嗯']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir, MINI_BUDGET: '100000' });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await sayImg(a, n.sessionId, '一', 3); await sayImg(a, n.sessionId, '二', 3); await sayImg(a, n.sessionId, '三', 2);
+    const ms = m.reqs[2].messages, imgs = x => Array.isArray(x.content) ? x.content.filter(p => p.type === 'image_url').length : 0;
+    assert.deepEqual(ms.filter(x => x.role === 'user').map(imgs), [1, 3, 2]);
+    assert.match(ms[1].content.find(p => p.type === 'text').text, /^\[这里原来有 2 张图，这次没再发给你\]\n一$/);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+for (const kind of ['anthropic', 'gemini']) test('Mini agent：' + kind + ' 接口发图的写法', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeNative(kind);
+  const a = startAgent({ MINI_FORMAT: kind, MINI_BASE_URL: kind === 'gemini' ? m.url + '/v1beta' : m.url, MINI_API_KEY: 'sk-test', MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await sayImg(a, n.sessionId, '看图');
+    await sayImg(a, n.sessionId, '');
+    const b0 = m.reqs[0].body, b1 = m.reqs[1].body;
+    if (kind === 'anthropic') {
+      assert.deepEqual(b0.messages[0].content, [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG } }, { type: 'text', text: '看图' }]);
+      assert.deepEqual(b1.messages.at(-1).content, [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: PNG } }]);   // 只有图：不带空的文字块
+      assert.equal(b1.messages[1].role, 'assistant'); assert.equal(typeof b1.messages[1].content, 'string');
+    } else {
+      assert.deepEqual(b0.contents[0].parts, [{ inline_data: { mime_type: 'image/png', data: PNG } }, { text: '看图' }]);
+      assert.deepEqual(b1.contents.at(-1).parts, [{ inline_data: { mime_type: 'image/png', data: PNG } }]);
+    }
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini agent：带图被服务拒了（400）——报错里说明可能是模型不收图', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'unknown variant `image_url`, expected `text`' } })); }); });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const a = startAgent({ MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', MINI_MODEL: 'mx', MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const r = await sayImg(a, n.sessionId, '看图');
+    assert.match(r.error.message, /unknown variant `image_url`.*这次带了图：这个模型可能不收图片/);
+  } finally { a.stop(); srv.close(); }
+});

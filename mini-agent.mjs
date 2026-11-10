@@ -48,6 +48,26 @@ function open(id, cwd) {
   sessions.set(id, s);
   return s;
 }
+// 图片：存在会话文件旁边的 <id>.files/ 里（按内容取名，同一张只存一份），会话文件里只记 { mime, file }
+const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+const MAX_IMGS = 6, IMG_TOK = 800;   // 发给模型的历史里最多带最近 6 张图；估算上下文时一张图按 800 token 算
+const imgDir = id => path.join(DIR, id + '.files');
+function saveImg(id, mime, data) {
+  const buf = Buffer.from(data, 'base64');
+  const name = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16) + '.' + EXT[mime];
+  fs.mkdirSync(imgDir(id), { recursive: true, mode: 0o700 });
+  const f = path.join(imgDir(id), name);
+  if (!fs.existsSync(f)) fs.writeFileSync(f, buf, { mode: 0o600 });
+  return { mime, file: name };
+}
+const imgCache = new Map();   // 一轮里会读好几次（估算、记录、真正发出去），留最近几张
+function readImg(id, im) {
+  const f = path.join(imgDir(id), path.basename(String(im?.file || '')));
+  if (imgCache.has(f)) return imgCache.get(f);
+  let d = null; try { d = fs.readFileSync(f).toString('base64'); } catch {}
+  imgCache.set(f, d); if (imgCache.size > MAX_IMGS * 2) imgCache.delete(imgCache.keys().next().value);
+  return d;
+}
 function create(cwd) {
   const id = crypto.randomUUID();
   const s = { id, cwd: cwd || os.homedir(), model: DEFAULT_MODEL, think: false, noOff: false, plain: false, title: '', messages: [], from: 0, abort: null };
@@ -67,13 +87,27 @@ const systemOf = s => `你是答疑助手，简洁回答；用户用什么语言
 // 发给模型的历史：旧版本（还能调工具时）留下的工具标签和工具结果不发；空回复不发；
 // 去掉这些后相邻同角色的并成一条（有的接口不收连续两条 user / assistant），开头不能是 assistant
 const LEGACY_TOOL = /^\s*<(run|read|write)[\s>]/;
+// 用户消息带的图跟着发（{ mime, data }），只发最近 MAX_IMGS 张；更早的、文件读不到的换成一句话，让模型知道那里原来有图
 function history(s) {
   const out = [];
   for (const x of s.messages.slice(s.from)) {
-    if (x.tool || !x.content || (x.role === 'assistant' && LEGACY_TOOL.test(x.content))) continue;
+    const imgs = x.role === 'user' && Array.isArray(x.images) ? x.images : [];
+    if (x.tool || (!x.content && !imgs.length) || (x.role === 'assistant' && LEGACY_TOOL.test(x.content))) continue;
     const last = out.at(-1);
-    if (last?.role === x.role) last.content += '\n\n' + x.content;
-    else if (out.length || x.role === 'user') out.push({ role: x.role, content: x.content });
+    if (last?.role === x.role) { last.content = [last.content, x.content].filter(Boolean).join('\n\n'); if (imgs.length) last.images = [...(last.images || []), ...imgs]; }
+    else if (out.length || x.role === 'user') out.push({ role: x.role, content: x.content || '', ...(imgs.length ? { images: [...imgs] } : {}) });
+  }
+  let left = MAX_IMGS;
+  for (let i = out.length - 1; i >= 0; i--) {
+    const m = out[i];
+    if (!m.images) continue;
+    const keep = []; let gone = 0;
+    for (let k = m.images.length - 1; k >= 0; k--) {
+      const d = left > 0 ? readImg(s.id, m.images[k]) : null;
+      if (d) { keep.unshift({ mime: m.images[k].mime, data: d }); left--; } else gone++;
+    }
+    if (keep.length) m.images = keep; else delete m.images;
+    if (gone) m.content = `[这里原来有 ${gone} 张图，这次没再发给你]` + (m.content ? '\n' + m.content : '');
   }
   return out;
 }
@@ -83,7 +117,7 @@ const tok = t => { let n = 0; for (const c of String(t)) n += c.charCodeAt(0) > 
 // 超出预算时一次性丢掉最早的几轮，降到 60%（前缀不再每轮变，Ollama 才能复用缓存）；从用户消息处断开，保证最后一轮完整
 // 旧版本（还能调工具时）存下的工具结果也是 role:user，带 tool:true，不能当断点
 function trim(s) {
-  const m = s.messages, size = from => m.slice(from).reduce((a, x) => a + tok(x.content) + 4, 0) + tok(systemOf(s));
+  const m = s.messages, size = from => m.slice(from).reduce((a, x) => a + tok(x.content) + 4 + (Array.isArray(x.images) ? x.images.length * IMG_TOK : 0), 0) + tok(systemOf(s));
   if (size(s.from) <= BUDGET) return;
   const starts = m.map((x, i) => x.role === 'user' && !x.tool ? i : -1).filter(i => i >= 0);
   for (const i of starts) {
@@ -104,19 +138,21 @@ function reqOf(s, extra = []) {
   if (FORMAT === 'anthropic') return {
     url: BASE + '/v1/messages', headers: { 'x-api-key': KEY, 'anthropic-version': '2023-06-01' },
     // 不带 thinking 就是不思考；开思考时不能再带 temperature，max_tokens 要比思考预算大
-    body: { model: s.model, stream: true, max_tokens: MAX_OUT, system, messages: msgs,
+    body: { model: s.model, stream: true, max_tokens: MAX_OUT, system,
+      messages: msgs.map(x => x.images ? { role: x.role, content: [...x.images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })), ...(x.content ? [{ type: 'text', text: x.content }] : [])] } : { role: x.role, content: x.content }),
       ...(tune ? s.think ? { thinking: { type: 'enabled', budget_tokens: 2048 }, max_tokens: MAX_OUT + 2048 } : { temperature: 0.3 } : {}) },
   };
   if (FORMAT === 'gemini') return {
     url: BASE + '/models/' + encodeURIComponent(String(s.model).replace(/^models\//, '')) + ':streamGenerateContent?alt=sse', headers: { 'x-goog-api-key': KEY },
     body: { systemInstruction: { parts: [{ text: system }] },
-      contents: msgs.map(x => ({ role: x.role === 'assistant' ? 'model' : 'user', parts: [{ text: x.content }] })),
+      contents: msgs.map(x => ({ role: x.role === 'assistant' ? 'model' : 'user', parts: [...(x.images || []).map(i => ({ inline_data: { mime_type: i.mime, data: i.data } })), ...(x.content || !x.images ? [{ text: x.content }] : [])] })),
       // thinkingBudget 0 = 关思考（关不掉的模型回 400，走 plain）
       generationConfig: { maxOutputTokens: MAX_OUT, ...(tune ? { temperature: 0.3, thinkingConfig: s.think ? { includeThoughts: true } : { thinkingBudget: 0 } } : {}) } },
   };
   return {
     url: BASE + '/chat/completions', headers: { authorization: 'Bearer ' + KEY },
-    body: { model: s.model, stream: true, stream_options: { include_usage: true }, max_tokens: MAX_OUT, messages: [{ role: 'system', content: system }, ...msgs],
+    body: { model: s.model, stream: true, stream_options: { include_usage: true }, max_tokens: MAX_OUT,
+      messages: [{ role: 'system', content: system }, ...msgs.map(x => x.images ? { role: x.role, content: [...(x.content ? [{ type: 'text', text: x.content }] : []), ...x.images.map(i => ({ type: 'image_url', image_url: { url: 'data:' + i.mime + ';base64,' + i.data } }))] } : { role: x.role, content: x.content })],
       ...(tune ? { temperature: 0.3 } : {}),
       ...(s.think || s.noOff || !tune ? {} : { reasoning_effort: 'none' }) },   // noOff：这个模型关不掉思考（见 clean），不发 none，让服务端自己把思考分出去
   };
@@ -125,10 +161,13 @@ function reqOf(s, extra = []) {
 const reqRec = q => {
   const b = q.body, list = b.messages || b.contents || [];
   const params = Object.fromEntries(Object.entries(b).filter(([k]) => !['messages', 'contents', 'system', 'systemInstruction'].includes(k)));
-  const len = x => (typeof x.content === 'string' ? x.content : (x.parts || []).map(p => p.text || '').join('')).length;
+  // 每条 [角色, 字数, 图数（有图才写）]；图的数据不记
+  const len = x => { const c = x.content ?? x.parts; if (typeof c === 'string') return [c.length, 0]; let n = 0, im = 0; for (const p of c || []) { if (typeof p.text === 'string') n += p.text.length; else if (p.type === 'image' || p.type === 'image_url' || p.inline_data) im++; } return [n, im]; };
   let path = ''; try { path = new URL(q.url).pathname; } catch {}
   const sys = b.system ?? b.systemInstruction?.parts?.[0]?.text;   // anthropic / gemini 的系统提示不在对话里，补成第一条，三种格式看起来一样
-  return { path, params, msgs: [...(sys != null ? [['system', String(sys).length]] : []), ...list.map(x => [x.role === 'model' ? 'assistant' : x.role, len(x)])] };
+  const rows = list.map(x => { const [n, im] = len(x); return [x.role === 'model' ? 'assistant' : x.role, n, ...(im ? [im] : [])]; });
+  const imgs = rows.reduce((a, r) => a + (r[2] || 0), 0);
+  return { path, params, msgs: [...(sys != null ? [['system', String(sys).length]] : []), ...rows], ...(imgs ? { imgs } : {}) };
 };
 async function post(s, signal, extra) {
   const q = reqOf(s, extra);
@@ -207,10 +246,10 @@ async function chat(s, signal, onText, onThought, extra, calls = []) {
       s.plain = true;
       call = { at: Date.now(), retry: true, req: reqRec(reqOf(s, extra)) }; calls.push(call);
       r = await post(s, signal, extra);
-      if (!r.ok) { s.plain = false; call.status = r.status; call.body = (await r.text().catch(() => '')).slice(0, 4000); throw new Error(errOf(400, first)); }
+      if (!r.ok) { s.plain = false; call.status = r.status; call.body = (await r.text().catch(() => '')).slice(0, 4000); throw new Error(errOf(400, first) + imgHint(400, call)); }
     }
     call.status = r.status; call.plain = !!s.plain;
-    if (!r.ok) { const b = await r.text(); call.body = b.slice(0, 4000); throw new Error(errOf(r.status, b, r.headers)); }   // body：服务返回的原文，给解剖看
+    if (!r.ok) { const b = await r.text(); call.body = b.slice(0, 4000); throw new Error(errOf(r.status, b, r.headers) + imgHint(r.status, call)); }   // body：服务返回的原文，给解剖看
   } catch (e) { fail(call, e); throw e; }
   let text = '', tt = '', buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻；text / tt 是模型原样的输出和思考（不剥标签），记进 calls 给解剖看
   const u = {};
@@ -238,6 +277,8 @@ async function chat(s, signal, onText, onThought, extra, calls = []) {
   Object.assign(call, { ms: end - call.at, ttftMs: first ? first - call.at : null, ...usageRec(u), stop, chars: clean(text).length, ...rawRec(text, tt) });
   return { text: clean(text), tin: u.in || 0, tout: u.out || 0, leaked: text.includes('</think>'), stop, t0, first, end };
 }
+// 带了图、服务说请求不对（400 / 413 / 415 / 422）：多半是这个模型不收图或者图太大
+const imgHint = (st, c) => c.req?.imgs && [400, 413, 415, 422].includes(st) ? '（这次带了图：这个模型可能不收图片，或者图太大，换个能看图的模型试试）' : '';
 // 原样的输出 / 思考：空的不写
 const rawRec = (text, tt) => ({ ...(text ? { text } : {}), ...(tt ? { thought: tt } : {}) });
 // 用量 → 记录里的字段：inp 是输入合计（含缓存）；没报的项不写
@@ -255,11 +296,11 @@ function noteOf(stop) {
   if (/SAFETY|PROHIBITED|BLOCKLIST|SPII|content_filter|refusal/i.test(stop)) return `回复被模型的安全过滤拦下，中途停了（${stop}）`;
   return `模型中途停了（${stop}）`;
 }
-async function prompt(s, text) {
+async function prompt(s, text, images = []) {
   const ac = new AbortController(); s.abort = ac;
-  const um = { role: 'user', content: text, at: Date.now() };
+  const um = { role: 'user', content: text, ...(images.length ? { images: images.map(i => saveImg(s.id, i.mime, i.data)) } : {}), at: Date.now() };
   s.messages.push(um);
-  if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50); update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
+  if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50) || '图片'; update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
   let full = '', parts = 0;
   const say = t => update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
   let kept = false;
@@ -304,7 +345,10 @@ async function prompt(s, text) {
 // 历史重放（session/load）：只放用户和回复。旧版本存下的工具结果（tool:true）不放
 function replay(s) {
   for (const x of s.messages) {
-    if (x.role === 'user' && !x.tool) update(s.id, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: x.content } });
+    if (x.role === 'user' && !x.tool) {
+      if (x.content || !x.images?.length) update(s.id, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: x.content } });
+      for (const im of Array.isArray(x.images) ? x.images : []) { const d = readImg(s.id, im); if (d) update(s.id, { sessionUpdate: 'user_message_chunk', content: { type: 'image', mimeType: im.mime, data: d } }); }
+    }
     else if (x.role === 'assistant' && x.content) update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: x.content } });
   }
 }
@@ -314,15 +358,16 @@ function setModel(s, m) { if (m !== s.model) { s.noOff = false; s.plain = false;
 
 // ---------- 分发 ----------
 const handlers = {
-  initialize: () => ({ protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: false } }, authMethods: [] }),
+  initialize: () => ({ protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } }, authMethods: [] }),
   'session/new': p => { const s = create(p.cwd); return { sessionId: s.id, configOptions: configOf(s) }; },
   'session/load': p => { const s = open(String(p.sessionId), p.cwd); replay(s); return { configOptions: configOf(s) }; },
   'session/close': p => { const s = sessions.get(String(p.sessionId)); s?.abort?.abort(); sessions.delete(String(p.sessionId)); return {}; },
   'session/prompt': async p => {
     const s = open(String(p.sessionId));
     const text = (p.prompt || []).map(b => b?.type === 'text' ? b.text : '').join('').trim();
-    if (!text) return { stopReason: 'end_turn' };
-    return { stopReason: await prompt(s, text) };
+    const images = (p.prompt || []).filter(b => b?.type === 'image' && EXT[b.mimeType] && typeof b.data === 'string' && b.data).map(b => ({ mime: b.mimeType, data: b.data }));
+    if (!text && !images.length) return { stopReason: 'end_turn' };
+    return { stopReason: await prompt(s, text, images) };
   },
   'session/set_model': p => { const s = open(String(p.sessionId)); setModel(s, String(p.modelId)); save(s); return {}; },
   'session/set_config_option': p => {

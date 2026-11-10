@@ -375,7 +375,7 @@ export function dissectMini(o) {
     if (m.role === 'user') {
       if (m.tool) continue;   // 旧版本（还能调工具时）的工具结果
       const r = m.run && typeof m.run === 'object' ? m.run : null;
-      cur = newTurn(Number(m.at) || 0, m.content, {});
+      cur = newTurn(Number(m.at) || 0, m.content, Array.isArray(m.images) && m.images.length ? { images: m.images.length } : {});
       turns.push(cur);
       if (!r) continue;
       cur.endAt = Math.max(cur.at, Number(r.endAt) || 0);
@@ -393,7 +393,7 @@ export function dissectMini(o) {
         if (typeof c.text === 'string') s.text = c.text;
         if (c.thought) s.thought = String(c.thought);
         if (c.body) s.body = String(c.body);
-        if (c.req && typeof c.req === 'object') s.req = { path: String(c.req.path || ''), params: c.req.params || {}, msgs: Array.isArray(c.req.msgs) ? c.req.msgs : [] };   // 实际发了什么
+        if (c.req && typeof c.req === 'object') s.req = { path: String(c.req.path || ''), params: c.req.params || {}, msgs: Array.isArray(c.req.msgs) ? c.req.msgs : [], imgs: Number(c.req.imgs) || 0 };   // 实际发了什么
         cur.steps.push(s);
         if (c.retry) cur.retries++;
       }

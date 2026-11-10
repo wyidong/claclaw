@@ -142,7 +142,7 @@ export class MiRunner extends AcpRunner {
     if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Mini 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
-  get imageError() { return 'Mini 只支持文字'; }
+  get imageError() { return 'Mini 进程是旧版本，还不收图片：重启 claclaw 后再试'; }
   // 每轮结束 agent 在 usage_update._meta.mini 里带上速度：显示成一行小字（不进历史）
   handle(u) {
     super.handle(u);
@@ -206,6 +206,8 @@ export function miDelete(id, trashDir) {
   fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
   const dest = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_mini_' + s.id + '.json');
   fs.renameSync(s.file, dest);
+  const files = s.file.replace(/\.json$/, '.files');   // 会话里的图片（agent 存在会话文件旁边）一起挪走
+  try { if (fs.existsSync(files)) fs.renameSync(files, dest.replace(/\.json$/, '.files')); } catch {}
   fs.writeFileSync(dest + '.origin.json', JSON.stringify({ sessionId: id, from: s.file, cwd: s.cwd, deletedAt: new Date().toISOString() }, null, 2));
   fileCache.delete(s.file); localNames.set(id, '');
   return dest;
