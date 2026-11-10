@@ -26,11 +26,11 @@ const send = o => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...o }) 
 const update = (sessionId, u) => send({ method: 'session/update', params: { sessionId, update: u } });
 
 // ---------- 会话 ----------
-const sessions = new Map();   // id → { id, cwd, model, think, noOff, title, messages, from, abort }
+const sessions = new Map();   // id → { id, cwd, model, think, noOff, plain, title, messages, from, abort }
 const file = id => path.join(DIR, id + '.json');
 const validId = id => /^[A-Za-z0-9_.-]{4,128}$/.test(id);
 function save(s) {
-  const o = { sessionId: s.id, cwd: s.cwd, model: s.model, think: s.think, noOff: s.noOff, title: s.title, from: s.from, messages: s.messages, updatedAt: new Date().toISOString() };
+  const o = { sessionId: s.id, cwd: s.cwd, model: s.model, think: s.think, noOff: s.noOff, plain: s.plain, title: s.title, from: s.from, messages: s.messages, updatedAt: new Date().toISOString() };
   const tmp = file(s.id) + '.' + process.pid + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(o), { mode: 0o600 });
   fs.renameSync(tmp, file(s.id));
@@ -42,13 +42,13 @@ function open(id, cwd) {
   let o = null;
   try { o = JSON.parse(fs.readFileSync(file(id), 'utf8')); } catch {}
   if (!o) throw new Error('找不到这个会话');
-  s = { id, cwd: o.cwd || cwd || os.homedir(), model: o.model || DEFAULT_MODEL, think: !!o.think, noOff: !!o.noOff, title: o.title || '', messages: Array.isArray(o.messages) ? o.messages : [], from: Number(o.from) || 0, abort: null };
+  s = { id, cwd: o.cwd || cwd || os.homedir(), model: o.model || DEFAULT_MODEL, think: !!o.think, noOff: !!o.noOff, plain: !!o.plain, title: o.title || '', messages: Array.isArray(o.messages) ? o.messages : [], from: Number(o.from) || 0, abort: null };
   sessions.set(id, s);
   return s;
 }
 function create(cwd) {
   const id = crypto.randomUUID();
-  const s = { id, cwd: cwd || os.homedir(), model: DEFAULT_MODEL, think: false, noOff: false, title: '', messages: [], from: 0, abort: null };
+  const s = { id, cwd: cwd || os.homedir(), model: DEFAULT_MODEL, think: false, noOff: false, plain: false, title: '', messages: [], from: 0, abort: null };
   sessions.set(id, s); save(s);
   return s;
 }
@@ -58,16 +58,30 @@ const configOf = s => [
 ];
 
 // ---------- 提示词 ----------
-// 日期按天变：一天之内前缀不变，Ollama 照样能复用
-const systemOf = () => `你是答疑助手，简洁回答；用户用什么语言就用什么语言。今天是 ${new Date().toLocaleDateString('sv')}。
-你不能上网，也不能操作用户的电脑；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。`;
+// 日期按天变、模型换了才变：前缀照样能复用。写明当前模型：会话中途换了模型，新模型会跟着历史里旧模型的自我介绍说（「我是通义千问」）
+const systemOf = s => `你是答疑助手，简洁回答；用户用什么语言就用什么语言。今天是 ${new Date().toLocaleDateString('sv')}。
+你不能上网，也不能操作用户的电脑；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
+你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。`;
+// 发给模型的历史：旧版本（还能调工具时）留下的工具标签和工具结果不发；空回复不发；
+// 去掉这些后相邻同角色的并成一条（有的接口不收连续两条 user / assistant），开头不能是 assistant
+const LEGACY_TOOL = /^\s*<(run|read|write)[\s>]/;
+function history(s) {
+  const out = [];
+  for (const x of s.messages.slice(s.from)) {
+    if (x.tool || !x.content || (x.role === 'assistant' && LEGACY_TOOL.test(x.content))) continue;
+    const last = out.at(-1);
+    if (last?.role === x.role) last.content += '\n\n' + x.content;
+    else if (out.length || x.role === 'user') out.push({ role: x.role, content: x.content });
+  }
+  return out;
+}
 
 // token 估算：中文约 1 字 1 token，英文约 3.5 字符 1 token
 const tok = t => { let n = 0; for (const c of String(t)) n += c.charCodeAt(0) > 255 ? 1 : 0.29; return Math.ceil(n); };
 // 超出预算时一次性丢掉最早的几轮，降到 60%（前缀不再每轮变，Ollama 才能复用缓存）；从用户消息处断开，保证最后一轮完整
 // 旧版本（还能调工具时）存下的工具结果也是 role:user，带 tool:true，不能当断点
 function trim(s) {
-  const m = s.messages, size = from => m.slice(from).reduce((a, x) => a + tok(x.content) + 4, 0) + tok(systemOf());
+  const m = s.messages, size = from => m.slice(from).reduce((a, x) => a + tok(x.content) + 4, 0) + tok(systemOf(s));
   if (size(s.from) <= BUDGET) return;
   const starts = m.map((x, i) => x.role === 'user' && !x.tool ? i : -1).filter(i => i >= 0);
   for (const i of starts) {
@@ -81,19 +95,29 @@ function trim(s) {
 // 有的模型（如 Ollama 的 qwen3:4b，模板里已经替它写了 <think>）关思考时服务端不再分离思考，输出以「思考…</think>回答」的样子混在正文里：
 // 只取 </think> 之后的；没写完的 <think> 后面也先不显示。碰到这种模型记下来（noOff），之后不再发 reasoning_effort=none
 const clean = full => { const k = full.lastIndexOf('</think>'); return k >= 0 ? full.slice(k + 8).replace(/^\s+/, '') : full.replace(/<think>[\s\S]*$/, ''); };
-async function chat(s, signal, onText, onThought) {
-  const body = {
-    model: s.model, stream: true, stream_options: { include_usage: true }, temperature: 0.3, max_tokens: MAX_OUT,
-    messages: [{ role: 'system', content: systemOf() }, ...s.messages.slice(s.from).map(x => ({ role: x.role, content: x.content }))],
-    ...(s.think || s.noOff ? {} : { reasoning_effort: 'none' }),   // noOff：这个模型关不掉思考（见 clean），不发 none，让服务端自己把思考分出去
-  };
-  const t0 = Date.now();
-  let r;
+// plain：这个模型（如 OpenAI 官方的推理模型）不收 temperature / reasoning_effort，回 400；去掉重试一次，成了就记下来以后都不发
+const bodyOf = s => ({
+  model: s.model, stream: true, stream_options: { include_usage: true }, max_tokens: MAX_OUT,
+  messages: [{ role: 'system', content: systemOf(s) }, ...history(s)],
+  ...(s.plain ? {} : { temperature: 0.3 }),
+  ...(s.think || s.noOff || s.plain ? {} : { reasoning_effort: 'none' }),   // noOff：这个模型关不掉思考（见 clean），不发 none，让服务端自己把思考分出去
+});
+async function post(body, signal) {
   try {
-    r = await fetch(BASE + '/chat/completions', { method: 'POST', signal, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + KEY }, body: JSON.stringify(body) });
+    return await fetch(BASE + '/chat/completions', { method: 'POST', signal, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + KEY }, body: JSON.stringify(body) });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
     throw new Error('连不上模型服务 ' + BASE + (e.cause?.code ? '（' + e.cause.code + '）' : '：' + e.message));
+  }
+}
+async function chat(s, signal, onText, onThought) {
+  const t0 = Date.now();
+  let r = await post(bodyOf(s), signal);
+  if (r.status === 400 && !s.plain) {
+    const first = await r.text();
+    s.plain = true;
+    r = await post(bodyOf(s), signal);
+    if (!r.ok) { s.plain = false; throw new Error('模型服务返回 400：' + first.slice(0, 300)); }
   }
   if (!r.ok) throw new Error('模型服务返回 ' + r.status + '：' + (await r.text()).slice(0, 300));
   let text = '', usage = null, buf = '', first = 0;   // first：第一个字（含思考）到达的时刻
@@ -135,7 +159,7 @@ async function prompt(s, text) {
     }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }));
     if (leaked && !s.noOff && !s.think) s.noOff = true;
     if (out.length > sent) update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: out.slice(sent) } });
-    s.messages.push({ role: 'assistant', content: out });
+    s.messages.push({ role: 'assistant', content: out, model: s.model });
     save(s);
     update(s.id, { sessionUpdate: 'usage_update', used: usage?.prompt_tokens ? usage.prompt_tokens + (usage.completion_tokens || 0) : 0, size: BUDGET, _meta: { mini: stats } });
     return 'end_turn';

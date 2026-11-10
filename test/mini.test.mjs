@@ -40,6 +40,20 @@ function fakeModel(replies) {
   return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port + '/v1' })));
 }
 
+// 不收 temperature 的接口（像 OpenAI 官方的推理模型）：带了就回 400
+function strictModel() {
+  const reqs = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      const j = JSON.parse(b); reqs.push(j);
+      if ('temperature' in j) { res.writeHead(400, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: "Unsupported parameter: 'temperature'" } })); }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end('data: ' + JSON.stringify({ choices: [{ delta: { content: '好的' } }] }) + '\n\ndata: [DONE]\n\n');
+    });
+  });
+  return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port + '/v1' })));
+}
+
 // answer(params) → 选哪个 optionId（默认「允许」）
 function startAgent(env, answer = () => 'allow') {
   const p = spawn(process.execPath, [AGENT], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'inherit'] });
@@ -80,7 +94,8 @@ test('Mini agent：纯问答——不带工具、提示词很短；模型写了�
     assert.equal(q.reasoning_effort, 'none'); assert.equal(q.max_tokens, 4096);
     assert.ok(!('tools' in q) && !('stop' in q));
     assert.equal(q.messages.length, 2);
-    assert.ok(q.messages[0].content.length < 120, '系统提示要短');
+    assert.ok(q.messages[0].content.length < 200, '系统提示要短');
+    assert.match(q.messages[0].content, /你现在用的模型是 q1。/);
     assert.doesNotMatch(q.messages[0].content, /<run>|工作目录|标签/);
     const u = a.updates.find(x => x.sessionUpdate === 'usage_update');
     assert.equal(u.used, 110); assert.equal(u._meta.mini.model, 'q1'); assert.equal(u._meta.mini.outTokens, 10);
@@ -176,4 +191,53 @@ test('Mini 速度那一行：模型 · 首字 · 速度 · 输出 · 共计；�
   assert.equal(statsLine({ model: 'qwen3:30b', ttft: 0.4234, tps: 47.26, outTokens: 312, total: 7.04 }), 'qwen3:30b · 首字 0.42 秒 · 47 tok/s · 输出 312 tok · 共 7.0 秒');
   assert.equal(statsLine({ model: 'q', ttft: 12.3, tps: 3.14, outTokens: null, total: 20 }), 'q · 首字 12.3 秒 · 3.1 tok/s · 共 20.0 秒');
   assert.equal(statsLine({ model: 'q', ttft: null, tps: null, outTokens: null, total: 1 }), 'q · 没有输出 · 共 1.0 秒');
+});
+
+test('Mini agent：中途换模型——提示词写明当前模型，回答记下是哪个模型答的', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeModel(['我是 q1', '我是 q2']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'q1,q2', MINI_MODEL: 'q1' });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a, n.sessionId, '你是谁');
+    await a.rpc('session/set_config_option', { sessionId: n.sessionId, configId: 'model', value: 'q2' });
+    await say(a, n.sessionId, '你是谁');
+    assert.equal(m.reqs[1].model, 'q2');
+    assert.match(m.reqs[1].messages[0].content, /你现在用的模型是 q2。.*以这一句为准/s);
+    const saved = JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8'));
+    assert.deepEqual(saved.messages.filter(x => x.role === 'assistant').map(x => x.model), ['q1', 'q2']);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini agent：旧会话里的工具标签 / 工具结果 / 空回复不发给模型，相邻同角色并成一条', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  fs.writeFileSync(path.join(dir, 'legacy-1.json'), JSON.stringify({ sessionId: 'legacy-1', model: 'q1', messages: [
+    { role: 'assistant', content: '开头多出来的' },
+    { role: 'user', content: '西游记原文' }, { role: 'assistant', content: '<read>https://x.com/a</read>' }, { role: 'user', tool: true, content: '<result>\n失败\n</result>' },
+    { role: 'user', content: 'hi' }, { role: 'assistant', content: '你好' }, { role: 'user', content: 'ls' }, { role: 'assistant', content: '' }] }));
+  const m = await fakeModel(['好']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    await a.rpc('session/load', { sessionId: 'legacy-1' });
+    await say(a, 'legacy-1', '再来');
+    assert.deepEqual(m.reqs[0].messages.slice(1).map(x => x.role + ':' + x.content), ['user:西游记原文\n\nhi', 'assistant:你好', 'user:ls\n\n再来']);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini agent：接口不收 temperature / reasoning_effort（回 400）时去掉重试一次，记下来以后不发', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await strictModel();
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const r = await say(a, n.sessionId, 'hi');
+    assert.equal(r.result.stopReason, 'end_turn'); assert.equal(textOf(a.updates), '好的');
+    assert.equal(m.reqs.length, 2); assert.ok(!('reasoning_effort' in m.reqs[1]));
+    await say(a, n.sessionId, '再问');
+    assert.equal(m.reqs.length, 3); assert.ok(!('temperature' in m.reqs[2]));   // 记住了，不再先撞一次 400
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).plain, true);
+  } finally { a.stop(); m.srv.close(); }
 });
