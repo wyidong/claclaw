@@ -2090,6 +2090,10 @@ function md(src){
   while(i<L.length){
     var l=L[i];
     if(!l.trim()){i++;continue}
+    if((m=l.match(/^\s*\[群附件[:：]\s*(\/[^\]\n]+?)\s*\]\s*$/))){   // 群成员回复里的 [群附件:路径]：画成文件卡片，点开预览、能保存
+      var gp=m[1],gn=gp.split('/').pop()||'文件';
+      out.push('<div class="uvid ufile" data-fpath="'+esc(gp)+'" data-fname="'+esc(gn)+'"><span class="ufile-n">📄 '+esc(gn)+'</span><span class="uvid-b">群附件</span></div>');i++;continue;
+    }
     if((m=l.match(/^\s*(```|~~~)/))){            // 代码块
       var fence=m[1],code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
@@ -2265,8 +2269,21 @@ function playVideo(id){
 }
 function closeVideo(){var pl=$('#vplayer'),v=pl.querySelector('video');pl.classList.remove('on');try{v.pause()}catch(_){}if(v.dataset.local)URL.revokeObjectURL(v.dataset.local);v.removeAttribute('src');v.load()}
 document.getElementById('vplayer').querySelector('button').addEventListener('click',closeVideo);
-feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&!t.dataset.vid&&t.dataset.gurl){e.preventDefault();window.open(t.dataset.gurl,'_blank');return}if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
+feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');if(t&&t.dataset.fpath){e.preventDefault();openLocalFile(t.dataset.fpath,t.dataset.fname);return}if(t&&!t.dataset.vid&&t.dataset.gurl){e.preventDefault();if(t.dataset.gname)openGroupFile(t.dataset.gurl,t.dataset.gname);else window.open(t.dataset.gurl,'_blank');return}if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
 // 文件：本机有就直接打开（看不了的类型浏览器会给下载 / 分享），没有再从电脑取
+// 群里的文件：在页面里预览，右上角「分享 / 保存」（电脑上是下载）——不再直接交给浏览器打开（那样存不下来）
+function openGroupFile(url,name){
+  showFile(null,name,'加载中…');
+  fetch(url).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.error||'HTTP '+r.status)},function(){throw new Error('HTTP '+r.status)});return r.blob()})
+    .then(function(b){showFile(b,name)}).catch(function(e){showFile(null,name,'打不开：'+e.message)});
+}
+// 电脑上的文件（绝对路径）：读回来在页面里预览，右上角保存
+function openLocalFile(p,name){
+  showFile(null,name,'加载中…');
+  postJson('/api/fs/read',{path:p}).then(function(r){return r.ok?r.blob():httpErr(r)})
+    .then(function(b){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(b,name)})
+    .catch(function(e){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(null,name,'打不开：'+e.message)});
+}
 function openFile(id,name){
   var fromServer=function(){
     showFile(null,name,'加载中…');
@@ -2652,13 +2669,13 @@ function gAttBox(att){
   var box=document.createElement('div');box.className='gm-att';
   var imgs=att.filter(function(a){return a.kind==='image'});
   if(imgs.length){var g=document.createElement('div');g.className='uimgs';imgs.forEach(function(a){var im=document.createElement('img');im.src=gAttUrl(a);im.alt=a.name||'图片';im.loading='lazy';im.addEventListener('click',function(){showImage(im.src)});im.addEventListener('load',function(){scrollDown()});g.appendChild(im)});box.appendChild(g)}
-  att.filter(function(a){return a.kind!=='image'}).forEach(function(a){var t=fileTile(a.name,(a.kind==='video'?'视频 ':'')+fmtSize(a.size||0),gAttUrl(a));t.dataset.gurl=gAttUrl(a);box.appendChild(t)});
+  att.filter(function(a){return a.kind!=='image'}).forEach(function(a){var t=fileTile(a.name,(a.kind==='video'?'视频 ':'')+fmtSize(a.size||0),gAttUrl(a));t.dataset.gurl=gAttUrl(a);if(a.kind!=='video')t.dataset.gname=a.name||'文件';box.appendChild(t)});
   return box;
 }
 function gAttUrl(a){return '/api/group/att?id='+encodeURIComponent(session.id)+'&aid='+encodeURIComponent(a.aid)}
 function addGu(it){var att=it.att||[],f=att.filter(function(a){return a.kind!=='image'})[0];
   var e=addUser(it.text,att.filter(function(a){return a.kind==='image'}).map(gAttUrl),f?{kind:'file',name:f.name,label:(f.kind==='video'?'视频 ':'')+fmtSize(f.size||0),url:gAttUrl(f)}:null);
-  var ft=f&&e&&e.querySelector('.uvid');if(ft)ft.dataset.gurl=gAttUrl(f);if(e&&it.via){var v=document.createElement('div');v.className='u-via';v.textContent='在 '+it.via+' 上发的';e.insertBefore(v,e.firstChild)}gStatTail();return e}
+  var ft=f&&e&&e.querySelector('.uvid');if(ft){ft.dataset.gurl=gAttUrl(f);if(f.kind!=='video')ft.dataset.gname=f.name||'文件'}if(e&&it.via){var v=document.createElement('div');v.className='u-via';v.textContent='在 '+it.via+' 上发的';e.insertBefore(v,e.firstChild)}gStatTail();return e}
 // 状态行（谁正在回复 / 在忙排队）：始终在聊天区最下面
 function gStat(list){var el=$('#gStat');if(!list||!list.length){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='gStat'}el.innerHTML='';list.forEach(function(x){var d=document.createElement('div');d.textContent=(x.name?x.name+' ':'')+x.text;el.appendChild(d)});feed.appendChild(el);scrollDown()}
 function gStatTail(){var el=$('#gStat');if(el&&el.parentNode===feed&&feed.lastElementChild!==el)feed.appendChild(el)}
