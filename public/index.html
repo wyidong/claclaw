@@ -192,12 +192,14 @@ window.__sc=(function(){
 @media (min-width:1000px){   /* 电脑：图铺满整个窗口——左栏、列表、标题栏、聊天区、输入区都是同一层半透明淡底（#app 的底），不再各叠一层（叠了就出现深一块的边）；卡片仍是白底 */
   :root[data-theme="shichen"].sc-img :is(#rail,#app #sheet,#app #sheet .sheet-p,#app #hostPane){background:transparent!important}
   :root[data-theme="shichen"].sc-img :is(#app #sTop,header,#app #setTop,#hostPane .pg-hd){background:transparent!important}   /* 电脑：顶部那条不要纯色，和下面的区域一样透出图（手机才和外壳接成纯色） */
-  :root[data-theme="shichen"].sc-img :is(#app #sTop,#app #setTop,#hostPane .pg-hd){background:var(--sc-in)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}   /* 钉在顶上的标题条：内容会从它下面滚过——铺上和内圈同一张图（都按窗口定位，接缝看不出），看着和聊天标题栏一样透明，又挡住下面滚过的内容 */
+  :root[data-theme="shichen"].sc-img :is(#app header,#app #_hdx){background:var(--sc-veil)!important}   /* 顶上两块（列表图标条、聊天标题栏）也垫同样很浅的底；#_hdx 不存在，只是把优先级抬到和上面那条一样，后写的生效 */
+  :root[data-theme="shichen"].sc-img #sheet::after{background:var(--sc-veil)}   /* 列表和聊天之间的竖线：不用灰线，用同样很浅的白，和浅底一样的色差 */
+  :root[data-theme="shichen"].sc-img :is(#app #sTop,#app #setTop,#hostPane .pg-hd){background:linear-gradient(var(--sc-veil),var(--sc-veil)),var(--sc-in)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}   /* 钉在顶上的标题条：内容会从它下面滚过——铺上和内圈同一张图（都按窗口定位，接缝看不出），看着和聊天标题栏一样透明，又挡住下面滚过的内容 */
   /* 电脑：列表 + 聊天这一大块不再用边框圈出来，改成和外圈（左栏、四周留边）轻微不同的底色区分：外圈 --sc-out 比里面的 --bg 深一点（阴时辰更暗一点） */
   :root[data-theme="shichen"] #app::after{border-color:transparent;box-shadow:0 0 0 6px var(--sc-out)}
   :root[data-theme="shichen"]:not(.sc-img) :is(#app,#rail){background:var(--sc-out)}
   /* 图片背景：图只铺在内圈（列表 + 聊天这一块，圆角），外圈（左栏、四周留边）是纯色 --sc-out；图原样显示，不压淡底 */
-  :root[data-theme="shichen"].sc-img #app{background:var(--sc-out)!important;isolation:isolate;--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
+  :root[data-theme="shichen"].sc-img #app{background:var(--sc-out)!important;isolation:isolate;--sc-veil:color-mix(in srgb,var(--surface) 30%,transparent);--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
   :root[data-theme="shichen"].sc-img #app::before{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;z-index:-1;pointer-events:none;background:var(--sc-in)}
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
