@@ -91,6 +91,12 @@ export function verifyMaster(username, password) {
   return String(username ?? '').trim() === a.master.username && check(String(password ?? ''), a.master);
 }
 
+// 只核对初始密码（删除会话用：不用再输用户名）
+export function verifyMasterPassword(password) {
+  const a = loadAuth();
+  return !!a && check(String(password ?? ''), a.master);
+}
+
 export function setLastSet(username, password) {
   const a = loadAuth();
   if (!a) throw new Error('还没有设置初始账号，请先在网页上完成首次设置');

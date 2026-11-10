@@ -43,7 +43,7 @@ const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
-import { DATA, verify, verifyMaster, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
+import { DATA, verify, verifyMaster, verifyMasterPassword, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
@@ -2673,11 +2673,11 @@ async function handleDelete(req, res) {
   if (f) return sendJson(res, 429, { error: tooManyTries(f) });
   if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
   let body = await jsonBody(req);
-  if (!verifyMaster(body.username, body.password)) {
+  if (!verifyMasterPassword(body.password)) {   // 只要初始密码，不用输用户名（失败照样计次、锁定）
     const { n } = noteFail(ip);
     noteGlobalFail(req);
-    log('delete: wrong initial credentials from', ip, 'fails=' + n);
-    return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '初始用户名或密码不对' });
+    log('delete: wrong initial password from', ip, 'fails=' + n);
+    return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '初始密码不对' });
   }
   clearFails(ip);
   const c = clawOf(body.id);
