@@ -718,9 +718,10 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-tool .a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
 .ds-tool .r{flex:none}
 .ds-tool.err .n,.ds-tool.err .r{color:var(--deny)}
-.ds-tx{margin-top:6px;color:var(--ink);font-size:13px;line-height:1.5;word-break:break-word}
+.ds-tx{margin-top:6px;color:var(--ink);font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
+.ds-raw{margin-top:6px;font-size:12px;color:var(--muted)}.ds-raw summary{cursor:pointer}.ds-raw pre{margin:4px 0 0;padding:8px 10px;border-radius:8px;background:rgba(127,127,127,.08);white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.45;color:var(--ink)}
 .ds-note{margin-top:6px;color:var(--muted);font-size:11px;line-height:1.5}
-.ds-reply{margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word}
+.ds-reply{margin:6px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
 .ds-empty{padding:40px 16px;text-align:center;color:var(--muted)}
 @media (max-width:999px){.ds-tb .ds-opt{display:none}}
 /* 解剖页重排：总消耗卡片 + 比例条，概况用数字格子，工具用标签，表格每轮两行一起高亮 */
@@ -2436,6 +2437,8 @@ function dsNum(n){return Math.round(+n||0).toLocaleString('en-US')}
 function dsVal(n,known){return known===false?'--':dsTk(n)}   // 全程没上报过的桶：-- 不补 0
 function dsDur(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1 秒':'0 秒';if(s<60)return s+' 秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h+' 小时 '+(m%60)+' 分';return m+' 分 '+(s%60)+' 秒'}
 function dsSec(ms){ms=+ms||0;return (ms/1000).toFixed(ms<10000?2:1)+' 秒'}
+function dsBrief(s){s=String(s||'').replace(/\s+/g,' ').trim();return s.length>120?s.slice(0,119)+'…':s}   // 只给每轮明细列表做一行预览；点进那一轮看全文
+function dsRaw(label,txt,open){return '<details class="ds-raw"'+(open?' open':'')+'><summary>'+label+' · '+dsN(String(txt).length)+' 字</summary><pre>'+esc(txt)+'</pre></details>'}   // 原样显示：标签按源码、换行照留
 // Mini 这一轮怎么问的：接口、模型、参数、发了几条历史、系统提示；最后出错 / 没写完的说明
 function dsMiniAsk(mi){
   var c=['<span class="ds-chip">'+esc(mi.api||'openai')+(mi.host?' · '+esc(mi.host):'')+'</span>','<span class="ds-chip">思考 <b>'+(mi.think?'开':'关')+'</b>'+(mi.noOff?'（这个模型关不掉）':'')+'</span>',
@@ -2502,7 +2505,7 @@ function dsBead(t,max,dim){   // 立体感（照 dsh 的球）：左上一块白
   var fi=tot?((t.inp||0)+(t.cw||0))/tot:0,fc=tot?(t.cr||0)/tot:0;
   var h1=dsSegH(r,fi),h2=dsSegH(r,fi+fc);
   var id='dsb'+t.i;
-  return '<svg class="ds-bead'+(dim?' dim':'')+'" data-i="'+t.i+'" width="'+s(d)+'" height="'+s(d)+'" viewBox="0 0 '+d+' '+d+'"><title>第 '+t.i+' 轮 · '+t.nSteps+' 步 · 合计 '+dsNum(tot)+'</title><defs><clipPath id="'+id+'"><circle cx="'+r+'" cy="'+r+'" r="'+r+'"/></clipPath><radialGradient id="'+id+'h" cx="34%" cy="28%" r="72%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/></radialGradient><radialGradient id="'+id+'s" cx="50%" cy="50%" r="50%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".13"/></radialGradient></defs><g clip-path="url(#'+id+')"><rect x="0" y="0" width="'+d+'" height="'+d+'" fill="'+(tot?'var(--ds-out)':'var(--line)')+'"/><rect x="0" y="'+(d-h2)+'" width="'+d+'" height="'+(h2-h1)+'" fill="var(--ds-cr)"/><rect x="0" y="'+(d-h1)+'" width="'+d+'" height="'+h1+'" fill="var(--ds-inp)"/></g>'+(tot?'<circle cx="'+r+'" cy="'+r+'" r="'+r+'" fill="url(#'+id+'s)"/><circle cx="'+r+'" cy="'+r+'" r="'+r+'" fill="url(#'+id+'h)"/>':'')+(t.errors?'<circle cx="'+(r+r*.5)+'" cy="'+(r-r*.5)+'" r="1.2" fill="var(--deny)" opacity=".75"/>':'')+(t.nSteps>1?dsBeadNum(t.nSteps,r):'')+'</svg>';
+  return '<svg class="ds-bead'+(dim?' dim':'')+'" data-i="'+t.i+'" width="'+s(d)+'" height="'+s(d)+'" viewBox="0 0 '+d+' '+d+'"><title>第 '+t.i+' 轮 · '+t.nSteps+' 步 · '+(t.noStats?'没记用量':'合计 '+dsNum(tot))+'</title><defs><clipPath id="'+id+'"><circle cx="'+r+'" cy="'+r+'" r="'+r+'"/></clipPath><radialGradient id="'+id+'h" cx="34%" cy="28%" r="72%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/></radialGradient><radialGradient id="'+id+'s" cx="50%" cy="50%" r="50%"><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".13"/></radialGradient></defs><g clip-path="url(#'+id+')"><rect x="0" y="0" width="'+d+'" height="'+d+'" fill="'+(tot?'var(--ds-out)':'var(--line)')+'"/><rect x="0" y="'+(d-h2)+'" width="'+d+'" height="'+(h2-h1)+'" fill="var(--ds-cr)"/><rect x="0" y="'+(d-h1)+'" width="'+d+'" height="'+h1+'" fill="var(--ds-inp)"/></g>'+(tot?'<circle cx="'+r+'" cy="'+r+'" r="'+r+'" fill="url(#'+id+'s)"/><circle cx="'+r+'" cy="'+r+'" r="'+r+'" fill="url(#'+id+'h)"/>':'')+(t.errors?'<circle cx="'+(r+r*.5)+'" cy="'+(r-r*.5)+'" r="1.2" fill="var(--deny)" opacity=".75"/>':'')+(t.nSteps>1?dsBeadNum(t.nSteps,r):'')+'</svg>';
 }
 function dsPager(n){
   var pages=Math.ceil(n/DS_PAGE);if(pages<=1)return '';
@@ -2519,19 +2522,20 @@ function showSession(restore){
   dissEl.classList.remove('t');
   dissEl.querySelector('.ds-n').textContent=((session&&session.title||'').trim()||(session&&session.dir)||'会话');
   if(!ts.length){b.innerHTML='<div class="ds-empty">这个会话还没有对话</div>';return}
-  var multi=dsMulti(s),max=0;ts.forEach(function(t){if((t.total||0)>max)max=t.total});
+  var multi=dsMulti(s),max=0,none=!!s.noStats&&s.noStats>=ts.length;ts.forEach(function(t){if((t.total||0)>max)max=t.total});
   var st=function(l,v,sub,x){return '<div class="ds-st'+(x&&x.bad?' bad':'')+'"'+(x&&x.i?' data-i="'+x.i+'" title="点开第 '+x.i+' 轮"':'')+'><div class="l">'+l+'</div><div class="v">'+v+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'};
-  var h='<div class="ds-hero"><div class="ds-k">总消耗 Tokens</div><div class="ds-big">'+dsNum(s.total)+'<small>≈'+dsTk(s.total)+' · 输入、缓存读、缓存写、输出四项相加</small></div>'+dsLegend(s,s)+'</div>';
+  var h='<div class="ds-hero"><div class="ds-k">总消耗 Tokens</div><div class="ds-big">'+(none?'--<small>没记用量</small>':dsNum(s.total)+'<small>≈'+dsTk(s.total)+' · 输入、缓存读、缓存写、输出四项相加</small>')+'</div>'+dsLegend(s,s)+'</div>';
   h+='<div class="ds-grid">'
     +st('轮次',ts.length+' 轮',(s.steps||0)+' 步 · '+(s.tools||0)+' 次工具')
-    +st('干活',dsDur(s.durMs),s.waitMs?'等你 '+dsDur(s.waitMs)+' 不算':'')
+    +st('干活',none?'--':dsDur(s.durMs),s.waitMs?'等你 '+dsDur(s.waitMs)+' 不算':'')
     +(s.longestTurn?st('最长一轮','#'+s.longestTurn,dsDur(s.longestMs),{i:s.longestTurn}):'')
-    +st('上下文',dsTk(s.maxCtx)+' <small style="font-size:12px;font-weight:500;color:var(--muted)">最大</small>',(s.ctxLast?'现在 '+dsTk(s.ctxLast):'')+(s.compactions?(s.ctxLast?' · ':'')+'压缩 '+s.compactions+' 次':''))
+    +st('上下文',(none?'--':dsTk(s.maxCtx))+' <small style="font-size:12px;font-weight:500;color:var(--muted)">最大</small>',(s.ctxLast?'现在 '+dsTk(s.ctxLast):'')+(s.compactions?(s.ctxLast?' · ':'')+'压缩 '+s.compactions+' 次':''))
     +(s.reads||s.writes||s.cmds?st('文件 / 命令','读 '+(s.reads||0)+' · 改 '+(s.writes||0),(s.cmds||0)+' 条命令'):'')
     +(s.linesAdded||s.linesRemoved?st('代码','<span class="add">+'+s.linesAdded+'</span> <span class="del">−'+s.linesRemoved+'</span>','增 / 删 行数'):'')
     +(s.errors||s.interrupted||s.subagents?st('意外',s.errors?s.errors+' 次出错':(s.interrupted?s.interrupted+' 次打断':'子代理 '+s.subagents),[s.errors&&s.interrupted?'打断 '+s.interrupted:'',s.subagents&&(s.errors||s.interrupted)?'子代理 '+s.subagents:''].filter(Boolean).join(' · '),{bad:!!s.errors}):'')
     +'</div>';
   h+='<div class="ds-meta2">'+esc(((s.models||[]).filter(function(m){return m!=='<synthetic>'}).map(dsModel).join(' · ')||s.model||'')+(j.cwdShort?' · '+j.cwdShort:'')+(j.branch?' · '+j.branch:'')+(s.firstAt?' · '+dsWhen(s.firstAt,true)+' → '+dsWhen(s.lastAt,true):''))+'</div>';
+  if(s.noStats)h+='<div class="ds-rec">'+(none?'这 '+s.noStats+' 轮都是':'前 '+s.noStats+' 轮是')+' Mini 开始记明细之前的对话：没记用量和耗时，显示 --'+(none?'':'，合计里不含')+'。之后的对话每次请求都有明细</div>';
   if(s.toolsBy&&s.toolsBy.length)h+='<div class="ds-sec">用到的工具<small>次数</small></div><div class="ds-chips tl">'+s.toolsBy.map(function(x){return '<span class="ds-chip" title="'+esc(x[0])+'">'+esc(dsTool(x[0]))+' <b>'+x[1]+'</b></span>'}).join('')+'</div>';
   if(s.miniModels&&s.miniModels.length){   // Mini：按模型看快不快、出错多不多（挑模型用）
     h+='<div class="ds-sec">模型表现<small>每次请求算一次；首字、速度只算成功的</small></div><div class="ds-tw"><table class="ds-tb"><thead><tr><th>模型</th><th>请求</th><th>出错</th><th>平均首字</th><th>平均速度</th><th class="col-out">输出</th></tr></thead><tbody>'
@@ -2545,8 +2549,8 @@ function showSession(restore){
   h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>轮</th><th>步</th><th>工具</th><th class="col-inp">输入Σ</th><th class="col-cw ds-opt" title="该轮各步缓存写之和">缓存写</th><th class="col-cr ds-opt" title="该轮末步命中缓存的输入，快照值，各轮不可相加">缓存读·末步</th><th class="col-cr" title="该轮各步缓存读之和，各轮可相加">缓存读Σ</th><th class="col-out">输出Σ</th><th title="输入Σ + 缓存写 + 缓存读Σ + 输出Σ">合计</th><th>耗时</th></tr></thead>';
   for(var k=hi-1;k>=lo;k--){   // 最新一轮在第一行
     var t=ts[k],cls=t.errors?'err':t.heavy?'heavy':'',marks=dsMarks(t);
-    h+='<tbody class="tn"><tr class="r" data-i="'+t.i+'"><td class="no '+cls+'">#'+t.i+'</td><td>'+t.nSteps+'</td><td>'+(t.nTools||'')+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr ds-opt">'+(t.crLast==null?'--':dsTk(t.crLast))+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td><b>'+dsTk(t.total)+'</b></td><td>'+dsDur(t.durMs)+'</td></tr>'
-      +'<tr class="q" data-i="'+t.i+'"><td colspan="10"><span class="tm">'+dsWhen(t.at,multi)+'</span>'+(t.text?'<span>'+esc(t.text)+'</span>':'（接着上一轮）')+(marks.length?' · '+marks.map(function(m){return '<span>'+m+'</span>'}).join(' · '):'')+'</td></tr></tbody>';
+    h+='<tbody class="tn"><tr class="r" data-i="'+t.i+'"><td class="no '+cls+'">#'+t.i+'</td><td>'+t.nSteps+'</td><td>'+(t.nTools||'')+'</td>'+(t.noStats?'<td class="col-inp">--</td><td class="col-cw ds-opt">--</td><td class="col-cr ds-opt">--</td><td class="col-cr">--</td><td class="col-out">--</td><td>--</td><td>--</td></tr>':'<td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr ds-opt">'+(t.crLast==null?'--':dsTk(t.crLast))+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td><b>'+dsTk(t.total)+'</b></td><td>'+dsDur(t.durMs)+'</td></tr>')
+      +'<tr class="q" data-i="'+t.i+'"><td colspan="10"><span class="tm">'+dsWhen(t.at,multi)+'</span>'+(t.text?'<span>'+esc(dsBrief(t.text))+'</span>':'（接着上一轮）')+(marks.length?' · '+marks.map(function(m){return '<span>'+m+'</span>'}).join(' · '):'')+'</td></tr></tbody>';
   }
   h+='<tfoot><tr><td>Σ全轮</td><td>'+(s.steps||0)+'</td><td>'+(s.tools||0)+'</td><td class="col-inp">'+dsTk(s.inp)+'</td><td class="col-cw ds-opt">'+dsVal(s.cw,s.cwKnown)+'</td><td class="ds-opt" style="color:var(--muted);font-weight:400">末轮快照</td><td class="col-cr">'+dsVal(s.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(s.out)+'</td><td>'+dsTk(s.total)+'</td><td>'+dsDur(s.durMs)+'</td></tr></tfoot></table></div>'+dsPager(ts.length);
   var bl=s.bill;
@@ -2564,8 +2568,8 @@ function showTurn(i){
   dissEl.querySelector('.ds-n').textContent='第 '+i+' 轮 / '+j.turns.length;
   dissEl.querySelector('.ds-prev').disabled=i<=1;dissEl.querySelector('.ds-next').disabled=i>=j.turns.length;
   var marks=dsMarks(t);
-  var h='<div class="ds-hero"><div class="ds-k">第 '+i+' 轮 · 本轮消耗 Tokens · '+dsWhen(t.at,true)+'</div><div class="ds-big">'+dsNum(t.total)+'<small>≈'+dsTk(t.total)+' · 共 '+t.nSteps+' 步 · 干活 '+dsDur(t.durMs)+'</small></div>'+dsLegend(t,s)
-    +'<div class="ds-meta">上下文 末步 <b>'+(t.crLast==null&&!t.ctx?'--':dsTk(t.steps.length?t.steps[t.steps.length-1].ctx:0))+'</b> · 最大 <b>'+dsTk(t.ctx)+'</b>'+(t.steps.length?' · 模型 '+esc(dsModel(t.steps[t.steps.length-1].model)):'')+'</div>'
+  var h='<div class="ds-hero"><div class="ds-k">第 '+i+' 轮 · 本轮消耗 Tokens · '+dsWhen(t.at,true)+'</div><div class="ds-big">'+(t.noStats?'--<small>这一轮是 Mini 开始记明细之前的对话，没记用量和耗时</small>':dsNum(t.total)+'<small>≈'+dsTk(t.total)+' · 共 '+t.nSteps+' 步 · 干活 '+dsDur(t.durMs)+'</small>')+'</div>'+dsLegend(t,s)
+    +'<div class="ds-meta">上下文 末步 <b>'+(t.noStats||t.crLast==null&&!t.ctx?'--':dsTk(t.steps.length?t.steps[t.steps.length-1].ctx:0))+'</b> · 最大 <b>'+(t.noStats?'--':dsTk(t.ctx))+'</b>'+(t.steps.length?' · 模型 '+esc(dsModel(t.steps[t.steps.length-1].model)):'')+'</div>'
     +(marks.length?'<div class="ds-chips">'+marks.map(function(m){return '<span class="ds-chip'+(/<u>/.test(m)?' bad':/<i>/.test(m)?' warn':'')+'">'+m.replace(/<\/?[ui]>/g,'')+'</span>'}).join('')+'</div>':'')+'</div>';
   h+='<div class="ds-sec">你说的<small>'+dsN(t.chars)+' 字'+(t.queued?' · 干活中插的话':'')+'</small></div><div class="ds-q">'+(t.text?esc(t.text):'<span style="color:var(--muted)">（接着上一轮，没有新的话）</span>')+'</div>';
   h+='<div class="ds-sec">这一轮做了什么</div><div class="ds-chips"><span class="ds-chip"><b>'+t.nSteps+'</b> 步</span><span class="ds-chip"><b>'+t.nTools+'</b> 次工具</span>'+(t.reads?'<span class="ds-chip">读 <b>'+t.reads+'</b> 个文件</span>':'')+(t.writes?'<span class="ds-chip">改 <b>'+t.writes+'</b> 个文件</span>':'')+(t.cmds?'<span class="ds-chip"><b>'+t.cmds+'</b> 条命令</span>':'')+(t.subagents?'<span class="ds-chip">子代理 <b>'+t.subagents+'</b></span>':'')+(t.replyChars?'<span class="ds-chip">回复 <b>'+dsN(t.replyChars)+'</b> 字</span>':'')+'</div>'
@@ -2575,14 +2579,22 @@ function showTurn(i){
   h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>步</th><th>模型</th><th>模型耗时</th><th class="col-inp">输入</th><th class="col-cw ds-opt">缓存写</th><th class="col-cr">缓存读</th><th class="col-out">输出</th><th class="ds-opt">思考</th><th>工具</th><th>合计</th></tr></thead><tbody>';
   (t.steps||[]).forEach(function(st,k){
     var errs=st.tools.filter(function(u){return u.err}).length;
-    h+='<tr class="r s" data-k="'+k+'"><td class="no'+(errs?' err':'')+'">'+(k+1)+'</td><td>'+esc(dsModel(st.model))+'</td><td>'+(st.ttftMs!==undefined?dsSec(st.latMs):dsDur(st.latMs))+'</td><td class="col-inp">'+dsTk(st.inp)+'</td><td class="col-cw ds-opt">'+(st.cw==null?'--':dsTk(st.cw))+'</td><td class="col-cr">'+(st.cr==null?'--':dsTk(st.cr))+'</td><td class="col-out">'+dsTk(st.out)+'</td><td class="ds-opt">'+(st.think?dsTk(st.think):'')+'</td><td>'+(st.tools.length||'')+'</td><td><b>'+dsTk(st.total)+'</b></td></tr>';
+    h+='<tr class="r s" data-k="'+k+'"><td class="no'+(errs?' err':'')+'">'+(k+1)+'</td><td>'+esc(dsModel(st.model))+'</td>'+(st.noStats?'<td>--</td><td class="col-inp">--</td><td class="col-cw ds-opt">--</td><td class="col-cr">--</td><td class="col-out">--</td><td class="ds-opt"></td><td>'+(st.tools.length||'')+'</td><td>--</td></tr>':'<td>'+(st.ttftMs!==undefined?dsSec(st.latMs):dsDur(st.latMs))+'</td><td class="col-inp">'+dsTk(st.inp)+'</td><td class="col-cw ds-opt">'+(st.cw==null?'--':dsTk(st.cw))+'</td><td class="col-cr">'+(st.cr==null?'--':dsTk(st.cr))+'</td><td class="col-out">'+dsTk(st.out)+'</td><td class="ds-opt">'+(st.think?dsTk(st.think):'')+'</td><td>'+(st.tools.length||'')+'</td><td><b>'+dsTk(st.total)+'</b></td></tr>');
     var d='';
     st.tools.forEach(function(u){d+='<div class="ds-tool'+(u.err?' err':'')+'"><span class="n">'+esc(dsTool(u.name))+'</span><span class="a" title="'+esc(u.brief)+'">'+esc(u.brief)+'</span><span class="r">'+(u.err?'出错 · ':'')+(u.ms?(u.wait?'等你 ':'')+dsDur(u.ms)+' · ':'')+dsN(u.size)+' 字</span></div>'});
+    if(st.req){   // Mini：这次请求实际发了什么
+      var RL={system:'系统',user:'用户',assistant:'回答'},ms=st.req.msgs||[],tot=0;ms.forEach(function(m){tot+=+m[1]||0});
+      d+='<div class="ds-note">发出去 '+ms.length+' 条，共 '+dsN(tot)+' 字：'+ms.map(function(m){return (RL[m[0]]||esc(m[0]))+' '+dsN(m[1])}).join(' · ')+'</div>';
+      d+=dsRaw('请求参数 '+esc(st.req.path),JSON.stringify(st.req.params,null,2));
+    }
+    if(st.thought)d+=dsRaw('思考原文',st.thought);
     if(st.text)d+='<div class="ds-tx">'+esc(st.text)+'</div>';
-    d+='<div class="ds-note">这一步的上下文 '+dsTk(st.ctx)+'（输入 '+dsTk(st.inp)+(st.cr!=null?' + 缓存读 '+dsTk(st.cr):'')+(st.cw!=null?' + 缓存写 '+dsTk(st.cw):'')+'）· 输出 '+dsTk(st.out)+(st.think?'（其中思考 '+dsTk(st.think)+'，已含在输出里）':'')+(st.stop?' · 结束原因 '+esc(st.stop):'')+(st.ttftMs!==undefined?(st.ttftMs!=null?' · 首字 '+dsSec(st.ttftMs):'')+(st.tps?' · '+st.tps+' tok/s':'')+(st.retry?' · 去掉调参（temperature / 关思考）重试的':''):'')+'</div>'+(st.err?'<div class="ds-note" style="color:var(--deny)">'+esc(st.err)+'</div>':'');
+    if(st.body)d+=dsRaw('服务返回的原文',st.body,true);
+    if(st.noStats)d+='<div class="ds-note">这一步没记用量和耗时（Mini 开始记明细之前的对话）</div>';
+    else d+='<div class="ds-note">这一步的上下文 '+dsTk(st.ctx)+'（输入 '+dsTk(st.inp)+(st.cr!=null?' + 缓存读 '+dsTk(st.cr):'')+(st.cw!=null?' + 缓存写 '+dsTk(st.cw):'')+'）· 输出 '+dsTk(st.out)+(st.think?'（其中思考 '+dsTk(st.think)+'，已含在输出里）':'')+(st.stop?' · 结束原因 '+esc(st.stop):'')+(st.ttftMs!==undefined?(st.ttftMs!=null?' · 首字 '+dsSec(st.ttftMs):'')+(st.tps?' · '+st.tps+' tok/s':'')+(st.retry?' · 去掉调参（temperature / 关思考）重试的':''):'')+'</div>'+(st.err?'<div class="ds-note" style="color:var(--deny)">'+esc(st.err)+'</div>':'');
     h+='<tr class="d" hidden><td colspan="10">'+(d||'这一步没有记录')+'</td></tr>';
   });
-  h+='</tbody><tfoot><tr><td>Σ本轮</td><td></td><td>'+dsDur(t.durMs)+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td class="ds-opt">'+(t.think?dsTk(t.think):'')+'</td><td>'+(t.nTools||'')+'</td><td>'+dsTk(t.total)+'</td></tr></tfoot></table></div>';
+  h+='</tbody><tfoot><tr><td>Σ本轮</td><td></td><td>'+(t.noStats?'--':dsDur(t.durMs))+'</td><td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td class="ds-opt">'+(t.think?dsTk(t.think):'')+'</td><td>'+(t.nTools||'')+'</td><td>'+dsTk(t.total)+'</td></tr></tfoot></table></div>';
   if(t.reply)h+='<div class="ds-sec">最后的回复<small>'+dsN(t.replyChars)+' 字</small></div><div class="ds-reply">'+esc(t.reply)+'</div>';
   b.innerHTML='<div class="ds-in">'+h+'</div>';b.scrollTop=0;
 }

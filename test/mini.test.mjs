@@ -181,6 +181,7 @@ test('Mini agent：关不掉思考的模型（思考混在正文里，只有 </t
     assert.ok(textOf(a.updates).endsWith('答案是 42'));
     const saved = JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8'));
     assert.equal(saved.messages.at(-1).content, '答案是 42');   // 存下来的也不带思考
+    assert.equal(saved.messages.at(-2).run.calls[0].text, '我想一想，用户要什么……</think>\n\n答案是 42');   // 解剖用的原样输出带着标签
     assert.equal(saved.noOff, true);
     await say(a, n.sessionId, '问题二');
     assert.equal('reasoning_effort' in m.reqs[1], false);
@@ -433,5 +434,11 @@ test('Mini agent：每轮在用户那条消息上记 run（模型、接口、发
     assert.equal(r.calls.length, 2);
     assert.equal(r.calls[0].status, 400); assert.match(r.calls[0].err, /temperature/);
     assert.equal(r.calls[1].status, 200); assert.ok(r.calls[1].retry && r.calls[1].plain); assert.equal(r.calls[1].chars, 2); assert.ok(r.calls[1].ttftMs >= 0);
+    // 实际发了什么：第一次带 temperature，去掉调参重试的那次不带；对话的形状（系统提示 + 用户 2 字）；400 时服务返回的原文；不记 key
+    assert.equal(r.calls[0].req.path, '/v1/chat/completions'); assert.equal(r.calls[0].req.params.temperature, 0.3); assert.equal(r.calls[0].req.params.model, 'mx');
+    assert.equal('temperature' in r.calls[1].req.params, false);
+    assert.deepEqual(r.calls[1].req.msgs.map(x => x[0]), ['system', 'user']); assert.equal(r.calls[1].req.msgs[1][1], 2);
+    assert.match(r.calls[0].body, /temperature/); assert.equal(typeof r.calls[1].text, 'string');
+    assert.equal(JSON.stringify(r).includes('Bearer'), false);
   } finally { a.stop(); m.srv.close(); }
 });

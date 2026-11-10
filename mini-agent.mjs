@@ -121,6 +121,15 @@ function reqOf(s, extra = []) {
       ...(s.think || s.noOff || !tune ? {} : { reasoning_effort: 'none' }) },   // noOff：这个模型关不掉思考（见 clean），不发 none，让服务端自己把思考分出去
   };
 }
+// 这次请求实际发了什么（给解剖看）：接口路径、除对话以外的全部参数、每条消息的角色和字数。不含 key（key 在请求头里，不记）
+const reqRec = q => {
+  const b = q.body, list = b.messages || b.contents || [];
+  const params = Object.fromEntries(Object.entries(b).filter(([k]) => !['messages', 'contents', 'system', 'systemInstruction'].includes(k)));
+  const len = x => (typeof x.content === 'string' ? x.content : (x.parts || []).map(p => p.text || '').join('')).length;
+  let path = ''; try { path = new URL(q.url).pathname; } catch {}
+  const sys = b.system ?? b.systemInstruction?.parts?.[0]?.text;   // anthropic / gemini 的系统提示不在对话里，补成第一条，三种格式看起来一样
+  return { path, params, msgs: [...(sys != null ? [['system', String(sys).length]] : []), ...list.map(x => [x.role === 'model' ? 'assistant' : x.role, len(x)])] };
+};
 async function post(s, signal, extra) {
   const q = reqOf(s, extra);
   try {
@@ -130,24 +139,24 @@ async function post(s, signal, extra) {
     throw new Error('连不上模型服务 ' + BASE + (e.cause?.code ? '（' + e.cause.code + '）' : '：' + e.message));
   }
 }
-// 流里的一条 → { text, thought, usage: { in（输入合计，含缓存）, cr（缓存读）, cw（缓存写）, out（输出，含思考）, think（其中思考） }, stop }
+// 流里的一条 → { text, thought（有没有思考）, tt（思考原文）, usage: { in（输入合计，含缓存）, cr（缓存读）, cw（缓存写）, out（输出，含思考）, think（其中思考） }, stop }
 // 各格式的字段不一样，统一成这个样子；没报的项不给（解剖时显示 --，不补 0）
 function pieceOf(j) {
   if (j.error) throw new Error('模型服务出错：' + String(j.error.message || JSON.stringify(j.error)).slice(0, 300));
   if (FORMAT === 'anthropic') {
-    if (j.type === 'content_block_delta') return j.delta?.type === 'thinking_delta' ? { thought: true } : { text: j.delta?.text || '' };
+    if (j.type === 'content_block_delta') return j.delta?.type === 'thinking_delta' ? { thought: true, tt: j.delta.thinking || '' } : { text: j.delta?.text || '' };
     if (j.type === 'message_start') { const u = j.message?.usage || {}; return { usage: { in: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), cr: u.cache_read_input_tokens, cw: u.cache_creation_input_tokens } }; }
     if (j.type === 'message_delta') return { usage: j.usage ? { out: j.usage.output_tokens } : null, stop: stopOf(j.delta?.stop_reason) };
     return {};
   }
   if (FORMAT === 'gemini') {
     const c = j.candidates?.[0], parts = c?.content?.parts || [], u = j.usageMetadata;
-    return { text: parts.filter(x => !x.thought).map(x => x.text || '').join(''), thought: parts.some(x => x.thought),
+    return { text: parts.filter(x => !x.thought).map(x => x.text || '').join(''), thought: parts.some(x => x.thought), tt: parts.filter(x => x.thought).map(x => x.text || '').join(''),
       usage: u ? { in: u.promptTokenCount, cr: u.cachedContentTokenCount, out: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0), think: u.thoughtsTokenCount } : null,
       stop: stopOf(c?.finishReason || j.promptFeedback?.blockReason) };
   }
   const dl = j.choices?.[0]?.delta;
-  return { text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), usage: j.usage ? { in: j.usage.prompt_tokens, cr: j.usage.prompt_tokens_details?.cached_tokens, out: j.usage.completion_tokens, think: j.usage.completion_tokens_details?.reasoning_tokens } : null,
+  return { text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), tt: String(dl?.reasoning || dl?.reasoning_content || ''), usage: j.usage ? { in: j.usage.prompt_tokens, cr: j.usage.prompt_tokens_details?.cached_tokens, out: j.usage.completion_tokens, think: j.usage.completion_tokens_details?.reasoning_tokens } : null,
     stop: stopOf(j.choices?.[0]?.finish_reason) };
 }
 // 各家的结束原因 → 'stop'（正常写完）| 'length'（到了输出上限，没写完）| 其他原样（被过滤拦下之类：RECITATION / SAFETY / content_filter / refusal…）
@@ -187,23 +196,23 @@ function dayReset(now = new Date()) {
 // 每次请求记一条进 calls（给会话解剖用）：{ at, status, ms, ttftMs, inp, cr, cw, out, think, stop, chars, plain, err }
 async function chat(s, signal, onText, onThought, extra, calls = []) {
   const t0 = Date.now();
-  let call = { at: t0 }; calls.push(call);
-  const fail = (c, e) => { c.ms = Date.now() - c.at; if (e.name === 'AbortError') c.cancelled = true; else c.err = String(e.message).slice(0, 300); };
+  let call = { at: t0, req: reqRec(reqOf(s, extra)) }; calls.push(call);
+  const fail = (c, e) => { c.ms = Date.now() - c.at; if (e.name === 'AbortError') c.cancelled = true; else c.err = String(e.message).slice(0, 2000); };
   let r;
   try {
     r = await post(s, signal, extra);
     if (r.status === 400 && !s.plain) {
       const first = await r.text();
-      Object.assign(call, { status: 400, ms: Date.now() - call.at, err: errOf(400, first).slice(0, 300), plain: false });
+      Object.assign(call, { status: 400, ms: Date.now() - call.at, err: errOf(400, first).slice(0, 2000), body: first.slice(0, 4000), plain: false });
       s.plain = true;
-      call = { at: Date.now(), retry: true }; calls.push(call);
+      call = { at: Date.now(), retry: true, req: reqRec(reqOf(s, extra)) }; calls.push(call);
       r = await post(s, signal, extra);
-      if (!r.ok) { s.plain = false; call.status = r.status; throw new Error(errOf(400, first)); }
+      if (!r.ok) { s.plain = false; call.status = r.status; call.body = (await r.text().catch(() => '')).slice(0, 4000); throw new Error(errOf(400, first)); }
     }
     call.status = r.status; call.plain = !!s.plain;
-    if (!r.ok) throw new Error(errOf(r.status, await r.text(), r.headers));
+    if (!r.ok) { const b = await r.text(); call.body = b.slice(0, 4000); throw new Error(errOf(r.status, b, r.headers)); }   // body：服务返回的原文，给解剖看
   } catch (e) { fail(call, e); throw e; }
-  let text = '', buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻
+  let text = '', tt = '', buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻；text / tt 是模型原样的输出和思考（不剥标签），记进 calls 给解剖看
   const u = {};
   const dec = new TextDecoder();
   try {
@@ -220,15 +229,17 @@ async function chat(s, signal, onText, onThought, extra, calls = []) {
         if (x.usage) for (const k of ['in', 'cr', 'cw', 'out', 'think']) if (x.usage[k] != null) u[k] = x.usage[k];
         if (x.stop) stop = x.stop;
         if ((x.text || x.thought) && !first) first = Date.now();
-        if (x.thought) onThought();
+        if (x.thought) { tt += x.tt || ''; onThought(); }
         if (x.text) { text += x.text; onText(text); }
       }
     }
-  } catch (e) { Object.assign(call, usageRec(u), { chars: clean(text).length }); fail(call, e); throw e; }
+  } catch (e) { Object.assign(call, usageRec(u), { chars: clean(text).length }, rawRec(text, tt)); fail(call, e); throw e; }
   const end = Date.now();
-  Object.assign(call, { ms: end - call.at, ttftMs: first ? first - call.at : null, ...usageRec(u), stop, chars: clean(text).length });
+  Object.assign(call, { ms: end - call.at, ttftMs: first ? first - call.at : null, ...usageRec(u), stop, chars: clean(text).length, ...rawRec(text, tt) });
   return { text: clean(text), tin: u.in || 0, tout: u.out || 0, leaked: text.includes('</think>'), stop, t0, first, end };
 }
+// 原样的输出 / 思考：空的不写
+const rawRec = (text, tt) => ({ ...(text ? { text } : {}), ...(tt ? { thought: tt } : {}) });
 // 用量 → 记录里的字段：inp 是输入合计（含缓存）；没报的项不写
 const usageRec = u => Object.fromEntries([['inp', u.in], ['cr', u.cr], ['cw', u.cw], ['out', u.out], ['think', u.think]].filter(([, v]) => v != null));
 

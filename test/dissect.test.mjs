@@ -216,3 +216,27 @@ test('Mini 解剖：一轮 = 用户一句话，一步 = 一次请求（400 重�
   // 模型表现：只算有 run 的；2 次出错（400、429），首字 / 速度只算成功的
   assert.deepEqual(r.summary.miniModels, [{ model: 'gemini-2.5-flash', calls: 4, errors: 2, out: 340, ttftMs: 750, tps: 55 }]);   // 速度 (100 + 10) / 2
 });
+
+test('解剖原样给全文：你说的、每步输出、最后的回复不截、不并空白；Mini 每步给模型原样输出（带 <think> 标签）、思考、出错原文；旧轮标 noStats', () => {
+  const long = '第一行\n\n  第二行 <b>粗</b>\n' + '长'.repeat(5000);
+  const o = { model: 'q1', messages: [
+    { role: 'user', content: '旧问题' }, { role: 'assistant', content: '旧回答' },
+    { role: 'user', content: long, at: T0, run: { model: 'm', api: 'openai', endAt: T0 + 2000, calls: [
+      { at: T0, status: 500, ms: 100, err: '模型服务返回 500：坏了', body: '{"error":{"message":"坏了"}}' },
+      { at: T0 + 100, status: 200, ms: 1900, ttftMs: 300, inp: 10, out: 9, stop: 'stop', chars: 4, text: '<think>想想</think>\n回答\n  缩进', thought: '推理原文' }] } },
+    { role: 'assistant', content: '回答\n  缩进', model: 'm', at: T0 + 2000 },
+  ] };
+  const r = dissectMini(o), [a, b] = r.turns;
+  assert.equal(a.noStats, true); assert.equal(a.steps[0].noStats, true); assert.equal(a.durMs, 0); assert.equal(r.summary.noStats, 1);
+  assert.equal(b.noStats, undefined);
+  assert.equal(b.text, long); assert.equal(b.chars, long.length);
+  assert.equal(b.steps[0].body, '{"error":{"message":"坏了"}}');
+  assert.equal(b.steps[1].text, '<think>想想</think>\n回答\n  缩进'); assert.equal(b.steps[1].thought, '推理原文');
+  assert.equal(b.reply, '回答\n  缩进');
+  // Claude：多段文字之间留空行，不截
+  const big = 'x'.repeat(3000) + '\n  y';
+  const lines = [user(0, '问\n第二行'), asst(1000, 'a1', [{ type: 'text', text: big }, { type: 'text', text: '<tag>源码</tag>' }], U(1, 1))];
+  const c = dissectClaudeLines(lines, '/tmp').turns[0];
+  assert.equal(c.text, '问\n第二行');
+  assert.equal(c.reply, big + '\n\n<tag>源码</tag>');
+});

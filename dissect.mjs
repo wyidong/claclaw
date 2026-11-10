@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import readline from 'node:readline';
 import { relPath } from './util.mjs';
 
-const TEXT_MAX = 3000, SNIP = 400, BRIEF = 110, FILES_MAX = 30, WAIT_MS = 30 * 60e3;
+// 用户说的话、每一步的输出、最后的回复都原样给全文（不截、不并空白）；只有工具的一句话摘要截短
+const BRIEF = 110, FILES_MAX = 30, WAIT_MS = 30 * 60e3;
 const snip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const num = (v) => (v == null || v === '' ? null : Number(v) || 0);
 
@@ -19,7 +20,7 @@ export function userTextOf(e) {
   if (typeof c === 'string') t = c;
   else if (Array.isArray(c)) {
     if (c.some((x) => x && x.type === 'tool_result')) return '';
-    for (const x of c) { if (x && x.type === 'text') t += (t ? ' ' : '') + (x.text || ''); else if (x && x.type === 'image') img = true; }
+    for (const x of c) { if (x && x.type === 'text') t += (t ? '\n\n' : '') + (x.text || ''); else if (x && x.type === 'image') img = true; }
   }
   t = t.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
   if (sysLike(t)) return '';
@@ -56,7 +57,7 @@ export function toolKind(name) {
 }
 
 function newTurn(at, text, extra) {
-  return { i: 0, at, endAt: at, durMs: 0, text: snip(text, TEXT_MAX), chars: String(text || '').length, images: 0, steps: [], asks: 0, retries: 0, interrupted: false, compact: null, ...extra };
+  return { i: 0, at, endAt: at, durMs: 0, text: String(text || ''), chars: String(text || '').length, images: 0, steps: [], asks: 0, retries: 0, interrupted: false, compact: null, ...extra };
 }
 function newStep(at, model) { return { at, model: model || '', inp: 0, cr: null, cw: null, out: 0, think: 0, latMs: 0, text: '', chars: 0, tools: [], stop: '' }; }
 
@@ -82,7 +83,6 @@ function finish(turns, extra, cwd) {
         if ((k === 'read' || k === 'write') && u.brief) u.brief = relPath(u.brief, cwd);
         if (k === 'agent') t.subagents++; else if (k === 'cmd') cmds++; else if (k === 'read' && u.brief) reads.add(u.brief); else if (k === 'write' && u.brief) writes.add(u.brief);
       }
-      s.text = snip(s.text, SNIP);
     }
     t.total = t.inp + t.cr + t.cw + t.out;
     t.reads = reads.size; t.writes = writes.size; t.cmds = cmds; t.files = [...writes].slice(0, FILES_MAX).map((f) => relPath(f, cwd));
@@ -168,7 +168,7 @@ function claudeLine(st, e) {
       if (st.cur) st.cur.endAt = Math.max(st.cur.endAt, st.lastTs);
       return;
     }
-    const raw = typeof c === 'string' ? c : Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join(' ') : '';
+    const raw = typeof c === 'string' ? c : Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : '';
     if (/^\[Request interrupted/.test(raw.trim())) { if (st.cur) { st.cur.interrupted = true; if (ts) st.lastTs = Math.max(st.lastTs, ts); st.cur.endAt = Math.max(st.cur.endAt, st.lastTs); } return; }
     const text = userTextOf(e);
     if (!text) { if (ts) st.lastTs = Math.max(st.lastTs, ts); return; }
@@ -179,7 +179,7 @@ function claudeLine(st, e) {
   if (t === 'attachment') {
     const a = e.attachment;
     if (a && a.type === 'queued_command' && a.prompt) {
-      const p = a.prompt, raw = typeof p === 'string' ? p : Array.isArray(p) ? p.filter((x) => x && x.type === 'text').map((x) => x.text || '').join(' ') : '';
+      const p = a.prompt, raw = typeof p === 'string' ? p : Array.isArray(p) ? p.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : '';
       const text = raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
       if (text && !sysLike(text)) { const tr = startTurn(st, ts || st.lastTs, text, { queued: true }); if (Array.isArray(p)) tr.images = p.filter((x) => x && x.type === 'image').length; }
     }
@@ -201,7 +201,7 @@ function claudeLine(st, e) {
     if (m.model && !s.model) s.model = m.model;
     for (const b of Array.isArray(m.content) ? m.content : []) {
       if (!b) continue;
-      if (b.type === 'text') { s.text += (s.text ? ' ' : '') + (b.text || ''); s.chars += (b.text || '').length; }
+      if (b.type === 'text') { s.text += (s.text ? '\n\n' : '') + (b.text || ''); s.chars += (b.text || '').length; }
       else if (b.type === 'tool_use') { const tool = { name: b.name || '?', brief: toolBrief(b.name, b.input), ms: 0, size: 0, err: false, at: ts || st.lastTs }; s.tools.push(tool); if (b.id) st.pending.set(b.id, tool); }
     }
     st.cur.endAt = Math.max(st.cur.endAt, st.lastTs);
@@ -225,7 +225,7 @@ function claudeLine(st, e) {
 export function dissectDs(recs) {
   const st = { turns: [], cur: null, step: null, stepId: null, lastTs: 0, pending: new Map() };
   let model = '', cwd = '';
-  const txt = (content) => (Array.isArray(content) ? content.filter((x) => x && x.type === 'text').map((x) => x.text || '').join(' ') : typeof content === 'string' ? content : '');
+  const txt = (content) => (Array.isArray(content) ? content.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : typeof content === 'string' ? content : '');
   for (const r of recs || []) {
     if (!r || typeof r !== 'object') continue;
     const d = r.data || {}, ts = Number(r.time) || 0;
@@ -250,7 +250,7 @@ export function dissectDs(recs) {
         s.out = Number(u.outputTokens) || 0; s.think = Number(u.reasoningTokens) || 0;
         for (const b of Array.isArray(d.message && d.message.content) ? d.message.content : []) {
           if (!b) continue;
-          if (b.type === 'text') { s.text += (s.text ? ' ' : '') + (b.text || ''); s.chars += (b.text || '').length; }
+          if (b.type === 'text') { s.text += (s.text ? '\n\n' : '') + (b.text || ''); s.chars += (b.text || '').length; }
         }
         st.cur.steps.push(s); st.step = s;
         st.cur.endAt = Math.max(st.cur.endAt, ts);
@@ -298,7 +298,7 @@ export function dissectDs(recs) {
 export function dissectKimi(recs, cwd) {
   const st = { turns: [], cur: null, step: null, lastTs: 0, pending: new Map() };
   let model = '', reqAt = 0;
-  const txt = (c) => (Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join(' ') : '');
+  const txt = (c) => (Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : '');
   for (const r of recs || []) {
     if (!r || typeof r !== 'object') continue;
     const ts = Number(r.time) || 0;
@@ -329,7 +329,7 @@ export function dissectKimi(recs, cwd) {
       }
       case 'content.part': {
         const p = ev.part || {};
-        if (st.step && p.type === 'text' && p.text) { st.step.text += (st.step.text ? ' ' : '') + p.text; st.step.chars += p.text.length; }
+        if (st.step && p.type === 'text' && p.text) { st.step.text += (st.step.text ? '\n\n' : '') + p.text; st.step.chars += p.text.length; }
         break;
       }
       case 'tool.call': {
@@ -389,6 +389,11 @@ export function dissectMini(o) {
         s.tps = s.out >= 8 && gen > 50 ? Math.round(s.out / gen * 10000) / 10 : null;
         s.stop = c.cancelled ? '停掉了' : c.status && c.status !== 200 ? 'HTTP ' + c.status : c.stop === 'length' ? '到了输出上限' : c.stop === 'stop' ? '写完' : c.stop || '';
         s.err = c.err ? String(c.err) : ''; s.retry = !!c.retry; s.plain = !!c.plain; s.chars = Number(c.chars) || 0;
+        // 这次请求模型原样的输出（不剥 <think> 之类的标签）、思考原文、出错时服务返回的原文
+        if (typeof c.text === 'string') s.text = c.text;
+        if (c.thought) s.thought = String(c.thought);
+        if (c.body) s.body = String(c.body);
+        if (c.req && typeof c.req === 'object') s.req = { path: String(c.req.path || ''), params: c.req.params || {}, msgs: Array.isArray(c.req.msgs) ? c.req.msgs : [] };   // 实际发了什么
         cur.steps.push(s);
         if (c.retry) cur.retries++;
       }
@@ -396,14 +401,21 @@ export function dissectMini(o) {
       cur.mini = { api: String(r.api || ''), host: String(r.host || ''), think: !!r.think, noOff: !!r.noOff, maxOut: Number(r.maxOut) || 0, sent: Number(r.sent) || 0, dropped: Number(r.dropped) || 0,
         sys: String(r.sys || ''), parts: Number(r.parts) || 0, stop: String(r.stop || ''), note: String(r.note || ''), error: String(r.error || '') };
     } else if (m.role === 'assistant' && cur) {
-      // 回复文字放到最后一步上；旧记录没有 run，一条回复补一步
+      // 最后的回复 = 存下来的整段（几段续写拼好的）；每一步各自的原文在上面 calls 里。
+      // 早一点的 run 没存每步原文，回复放到最后一步上；更早的旧记录没有 run，一条回复补一步，用量、耗时都没记（noStats，页面显示 --）
+      cur.replyFull = m.content;
       let s = cur.mini ? cur.steps[cur.steps.length - 1] : null;
-      if (!s) { s = newStep(Number(m.at) || cur.at, m.model || o.model); cur.steps.push(s); }
-      s.text = m.content; s.chars = m.content.length; if (!s.model) s.model = m.model || o.model || '';
-      if (m.at) cur.endAt = Math.max(cur.endAt, Number(m.at));
+      if (!s) { s = newStep(Number(m.at) || cur.at, m.model || o.model); s.noStats = true; cur.noStats = true; cur.steps.push(s); }
+      if (!cur.mini || !cur.steps.some((x) => x.text)) { s.text = m.content; s.chars = m.content.length; }
+      if (!s.model) s.model = m.model || o.model || '';
+      if (m.at && !cur.noStats) cur.endAt = Math.max(cur.endAt, Number(m.at));
     }
   }
   const r = finish(turns, {}, (o && o.cwd) || '');
+  for (const t of r.turns) {
+    if (t.replyFull != null) { t.reply = t.replyFull; t.replyChars = t.replyFull.length; delete t.replyFull; }
+  }
+  r.summary.noStats = r.turns.filter((t) => t.noStats).length;   // 没记用量、耗时的旧轮数
   r.summary.apiErrors = r.turns.filter((t) => t.mini && t.mini.error).length;   // 这一轮最后出错了（额度超限、连不上之类）
   // 模型表现（挑模型用）：每个模型请求几次、出错几次、平均首字 / 生成速度（只算成功、有数的请求）
   const by = new Map();
