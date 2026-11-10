@@ -327,6 +327,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #sReload.dot::after,#railReload.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 有新版本：点一下刷新 */
 #railReload{position:relative}
 #sReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
+#sReload.reconn,#railReload.reconn{color:#E0A100!important}#sReload.reconn svg,#railReload.reconn svg{animation:rlspin 1s linear infinite}   /* 正在重连：刷新图标变黄、一直转（代替黄条） */
 #sVoice[hidden]{display:none}
 #sVoice{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover{color:var(--accent)}
 #rClear:disabled{opacity:.35;cursor:default}#rClear:disabled:hover{color:var(--muted);background:none}
@@ -2728,7 +2729,9 @@ function tickWork(){
 var connectedOnce=false,updateReady=false,bootAt=Date.now();
 // 打开 / 刷新后先不提示「正在连接」：多数时候一两秒就连上了，提示条一闪反而像出了问题；3 秒还没连上才提示
 setTimeout(function(){if(!connectedOnce&&$('#banner').hidden)banner('正在连接…')},10000);   // 连接中由雾表示；10 秒还没连上才出提示条
-function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<10000)return;banner(t)}
+function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<10000)return;connState(true)}
+// 重连中：不出黄条，刷新图标（手机顶栏 / 电脑左栏）变黄、一直转；连上就恢复
+function connState(on){['#sReload','#railReload'].forEach(function(q){var b=$(q);if(b)b.classList.toggle('reconn',!!on)})}
 var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[1])||'';
 function checkVersion(){
   fetch('/',{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){
@@ -3630,7 +3633,7 @@ function connect(){
     if(me!==ws)return;
     if(!wsOpenAt)wsOpenAt=Math.round(performance.now());
     setTimeout(function(){var q=clogQ;clogQ=[];q.forEach(function(t){wsSend({t:'clog',text:t})})},0);
-    retry=0;banner(null);
+    retry=0;banner(null);connState(false);
     if(!connectedOnce){document.documentElement.classList.remove('fog');try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'connected'},'*')}catch(_){}}   // 只在首次连上时
     if(connectedOnce)checkVersion();connectedOnce=true;
     wsSend({t:'visible',on:pageVisible()});
@@ -3721,7 +3724,7 @@ if(CR&&CR.addEventListener)CR.addEventListener('route',function(e){
   if(crLast==='direct'&&was!=='direct'&&ws&&ws.readyState===1)connect();   // connect 会先关掉旧连接
 });
 function reconnectNow(){
-  banner('连接似乎断了，正在重连…');connect();
+  connState(true);connect();
 }
 // 输入框还空着就把没送出的文字放回去，免得丢
 // 发出去立刻显示（半透明 = 发送中），服务器回显后变正常；不让人觉得消息发没了
