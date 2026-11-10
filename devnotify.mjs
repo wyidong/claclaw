@@ -52,8 +52,21 @@ export function startDevNotify(opts = {}) {
 export const devStatus = () => status;
 export const devConfigured = () => !!loadConf();
 
+// 报丢了（服务刚重启那几秒忙、3 秒没回就算超时）不单条重发：一条已读丢了，外壳角标就一直挂着消不掉。
+// 改成过一会儿把整份未读全量同步一次（同步是整体替换，先后顺序不会乱），没成再隔久一点，最多试 RESYNC.length 次
+const RESYNC = [5, 15, 60, 300, 900];
+let resyncT = null, resyncN = 0;
+function resyncLater() {
+  if (resyncT || resyncN >= RESYNC.length) return;
+  resyncT = setTimeout(async () => {
+    resyncT = null;
+    let ok = false; try { ok = !!(await onOnline())?.ok; } catch (e) { log('clarelay sync failed', e.message); }
+    if (ok) resyncN = 0; else { resyncN++; resyncLater(); }
+  }, RESYNC[resyncN] * 1000);
+  resyncT.unref?.();
+}
 const fire = (route, body) => { if (!loadConf()) return; call('POST', route, body).then(j => { if (j && typeof j.online === 'boolean') status.online = j.online; })
-  .catch(e => log('clarelay', route, 'failed', e.message)); };
+  .catch(e => { log('clarelay', route, 'failed', e.message, '→ 稍后全量同步'); resyncN = 0; resyncLater(); }); };
 export function devNotify({ target, kind, title, snippet, unread }) {
   fire('/notify', { app: 'claclaw', target: String(target), kind, title: String(title || '').slice(0, 120), snippet: String(snippet || ''), unread: unread | 0 });
 }

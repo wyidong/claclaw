@@ -2390,6 +2390,7 @@ startDevNotify({ log, onOnline: async () => {
   });
   const j = await devSync(items);
   log('clarelay sync', items.length, j?.ok ? 'ok' : 'fail');
+  return j;
 } });
 
 // ---------- 在 claclaw 里的最近活动 ----------
