@@ -52,7 +52,7 @@ import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs'
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_TTL } from './peerqueue.mjs';
 import { peerJudge } from './peerjudge.mjs';
-import { storeNow as libStoreNow, claudeLibProviders, parseLibPick, claudeLibEnv } from './modelpick.mjs';
+import { storeNow as libStoreNow, claudeLibProviders, parseLibPick, claudeLibEnv, noProxyAdd } from './modelpick.mjs';
 import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './modelstore.mjs';
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 群记录文件（成员会话按需读）：不能放数据目录里——那里对协同那一轮算敏感位置，读一下就要确认
@@ -1835,6 +1835,7 @@ class Runner {
         if (!this.wantModel || !p.models.some(m => m.id === this.wantModel)) this.wantModel = p.models[0].id;
         env = { ...childEnv(), ...claudeLibEnv(p, this.wantModel) };
         delete env.CLAUDE_CODE_OAUTH_TOKEN; delete env.ANTHROPIC_API_KEY;
+        env = noProxyAdd(env, env.ANTHROPIC_BASE_URL);   // 那一家直连，不绕代理
         this.model = this.wantModel;
       }
     }

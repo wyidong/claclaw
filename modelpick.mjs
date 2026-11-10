@@ -266,6 +266,16 @@ export function parseLibPick(v) {
   const m = /^lib:([a-z0-9][a-z0-9-]{0,31})\/([A-Za-z0-9][\w.:/@+-]{0,119})$/.exec(String(v || ''));
   return m ? { provider: m[1], model: m[2] } : null;
 }
+// 电脑开着代理（HTTPS_PROXY 等）时，模型库那一家的地址加进 NO_PROXY 直连：国内的接口不用绕代理，代理软件没开也能用；
+// 别的（会话里跑的命令、Claude Code 自己的其他请求）照旧走代理
+export function noProxyAdd(env, url) {
+  let host = '';
+  try { host = new URL(url).hostname; } catch { return env; }
+  if (!host || !['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy'].some(k => env[k])) return env;
+  const cur = String(env.NO_PROXY || env.no_proxy || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!cur.includes(host)) cur.push(host);
+  return { ...env, NO_PROXY: cur.join(','), no_proxy: cur.join(',') };
+}
 export function claudeLibEnv(p, model) {
   const base = String(p.endpoints.anthropic).replace(/\/+$/, '').replace(/\/v1$/, '');
   // 几个别名（opus / sonnet / haiku、子任务、后台小模型）都指到同一个模型：不然 Claude Code 会拿 Claude 的模型名去问这一家

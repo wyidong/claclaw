@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLibPick, claudeLibEnv, claudeLibProviders } from '../modelpick.mjs';
+import { parseLibPick, claudeLibEnv, claudeLibProviders, noProxyAdd } from '../modelpick.mjs';
 
 test('parseLibPick：lib:<Key id>/<模型>', () => {
   assert.deepEqual(parseLibPick('lib:deepseek/deepseek-v4-pro'), { provider: 'deepseek', model: 'deepseek-v4-pro' });
@@ -23,4 +23,12 @@ test('claudeLibProviders：只要有 Anthropic 地址、有 Key、有模型的',
     { id: 'd', endpoints: { anthropic: 'https://d' }, key: 'k', models: [] },
   ];
   assert.deepEqual(claudeLibProviders({ providers: ps }).map(p => p.id), ['a']);
+});
+
+test('noProxyAdd：开着代理时把那一家加进 NO_PROXY，没开代理不动', () => {
+  const e = noProxyAdd({ HTTPS_PROXY: 'http://127.0.0.1:7890', NO_PROXY: 'localhost,127.0.0.1' }, 'https://api.deepseek.com/anthropic');
+  assert.equal(e.NO_PROXY, 'localhost,127.0.0.1,api.deepseek.com');
+  assert.equal(e.no_proxy, e.NO_PROXY);
+  assert.equal(noProxyAdd(e, 'https://api.deepseek.com/anthropic').NO_PROXY, e.NO_PROXY);
+  assert.equal(noProxyAdd({ PATH: '/bin' }, 'https://api.deepseek.com').NO_PROXY, undefined);
 });
