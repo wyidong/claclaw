@@ -11,6 +11,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import net from 'node:net';
+import os from 'node:os';
 
 export const RTC_ICE = ['stun:stun.miwifi.com:3478', 'stun:stun.chat.bilibili.com:3478', 'stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'];
 const CHUNK = 16 * 1024, MAX_BODY = 32 << 20;
@@ -27,7 +28,7 @@ export async function rtcLib() {
 }
 
 // 打通的是哪条路：对方地址是内网 → lan；Tailscale（100.64/10）→ tailscale；其余 → wan
-export function classifyAddr(a) {
+export function classifyAddr(a, ifs) {   // ifs：测试用，替代本机网卡表
   a = String(a || '').replace(/^::ffff:/, '').split('%')[0];
   if (net.isIPv4(a)) {
     const [x, y] = a.split('.').map(Number);
@@ -35,8 +36,25 @@ export function classifyAddr(a) {
     if (x === 100 && y >= 64 && y < 128) return 'tailscale';
     return 'wan';
   }
+  if (/^fd7a:115c:a1e0:/i.test(a)) return 'tailscale';   // Tailscale 的 IPv6 段
   if (/^(fe80|fc|fd)/i.test(a)) return 'lan';
+  if (net.isIPv6(a) && localV6Prefixes(ifs).has(v6Prefix(a))) return 'lan';   // 公网 IPv6 但和本机网卡同一个 /64：同一个局域网（路由器发的同一段）
   return a ? 'wan' : '';
+}
+// IPv6 前 64 位（展开 ::，统一小写），比较是不是同一段
+function v6Prefix(a) {
+  const [h, t = ''] = a.toLowerCase().split('::');
+  const hs = h ? h.split(':') : [], ts = t ? t.split(':') : [];
+  const full = a.includes('::') ? [...hs, ...Array(8 - hs.length - ts.length).fill('0'), ...ts] : hs;
+  return full.slice(0, 4).map(x => parseInt(x, 16) || 0).join(':');
+}
+let v6Cache = null;
+function localV6Prefixes(ifs) {
+  if (!ifs && v6Cache && Date.now() - v6Cache.at < 60e3) return v6Cache.set;
+  const set = new Set();
+  for (const list of Object.values(ifs || os.networkInterfaces())) for (const x of list || []) if (x.family === 'IPv6' && !x.internal && !/^(fe80|fc|fd)/i.test(x.address)) set.add(v6Prefix(x.address.split('%')[0]));
+  if (!ifs) v6Cache = { at: Date.now(), set };
+  return set;
 }
 
 let cfg = { target: () => '', log: () => {}, ice: RTC_ICE, base: '/claclaw-peer' };

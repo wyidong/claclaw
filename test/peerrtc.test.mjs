@@ -12,6 +12,11 @@ test('classifyAddr', () => {
   assert.equal(classifyAddr('100.74.25.121'), 'tailscale');
   assert.equal(classifyAddr('182.139.218.212'), 'wan');
   assert.equal(classifyAddr('2409:8a62::1'), 'wan');
+  const ifs = { en0: [{ family: 'IPv6', internal: false, address: '2409:8a62:3d2:1c90:14f0:e367:3767:7e7b' }] };
+  assert.equal(classifyAddr('2409:8a62:3d2:1c90:473:d474:ff55:90b7', ifs), 'lan', '和本机同一个 /64 的公网 IPv6 算局域网');
+  assert.equal(classifyAddr('2409:8a62:3d2:1c91::5', ifs), 'wan');
+  assert.equal(classifyAddr('2409:8a62:3d2:1c90::5', ifs), 'lan');
+  assert.equal(classifyAddr('fd7a:115c:a1e0::7833:2e1b'), 'tailscale');
 });
 
 test('直连：打通、双向请求、大回复、路径限制、断开时进行中的请求报错', { skip: !lib && '没装 node-datachannel' }, async () => {
