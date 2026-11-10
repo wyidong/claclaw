@@ -263,8 +263,8 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
   box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh)}
 .hd-ctx{font-size:12.5px;font-weight:700;letter-spacing:-.2px}
 .hd-ctx.busy{font-size:11px;font-weight:600;cursor:default}
-.hd-ctx.busy{color:var(--accent);animation:ctxw 1.4s ease-in-out infinite}   /* 压缩中：和朗读停止键一样一圈圈往外呼吸，不用边框 */
-@keyframes ctxw{0%,100%{box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh),0 0 0 0 color-mix(in srgb,var(--accent) 18%,transparent)}50%{box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh),0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent)}}
+.hd-ctx.busy{color:var(--accent);animation:ctxw 1.4s ease-in-out infinite}   /* 压缩中：一圈强调色从边缘往里收（向内呼吸），不用边框 */
+@keyframes ctxw{0%,100%{box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh),inset 0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}50%{box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh),inset 0 0 9px 3px color-mix(in srgb,var(--accent) 38%,transparent)}}
 .hd-ctx.done{cursor:default}
 #cfgBtn>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #cfgBtn .c1{font-size:12px;line-height:1.2;font-weight:600;color:var(--ink);opacity:.75}
