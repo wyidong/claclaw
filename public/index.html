@@ -286,6 +286,8 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 /* 标题栏功能按钮：和浮动朗读键一样大的圆圈，底透明；底边和第二行对齐、往上伸进第一行（第一行没有可点的，透明底不挡字） */
 .hd-ic{flex:none;display:grid;place-items:center;width:42px;height:42px;margin-top:-20px;padding:0;border:1px solid transparent;border-radius:50%;background:color-mix(in srgb,var(--muted) 12%,transparent);color:color-mix(in srgb,var(--muted) 60%,var(--line));font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s}   /* 平时淡淡的底色、没有边框；暂时不能点（压缩中、刚点过）才出现边框，颜色和字一样 */
 .hd-ic.lock{border-color:currentColor}
+#popBtn{display:none}@media (min-width:1000px){html:not(.solo) #popBtn{display:grid}}   /* 弹出成独立窗口：只在电脑上 */
+html.solo #backBtn{display:none!important}   /* 弹出窗口只放这一个会话，没有列表可回 */
 .hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .hd-ic:active{opacity:.5}
 @media (max-width:999px){.hd-ic{touch-action:none;position:relative;z-index:3;opacity:.5;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.hd-ic:active{opacity:1}}   /* 手机上圆球能左右拖，拖到标题上要盖在字上；平时半透明，按住/拖动时不透明 */
@@ -1689,6 +1691,7 @@ select.pe-in{text-align-last:right}
     </div>
     <!-- 第二行右边的功能区：以后更多按钮也放这里。模型 · 推理强度 · 权限 只是文字，只有 › 能点开会话设置 -->
     <div id="hdAct">
+      <button type="button" id="popBtn" class="hd-ic" aria-label="弹出成独立窗口" title="弹出成独立窗口"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg></button>
       <button type="button" id="ctxBtn" class="hd-ic hd-ctx" hidden></button>
       <button type="button" id="ttsMute" class="hd-ic" hidden></button>
       <div id="cfgBtn" data-m="default"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span><button type="button" id="cfgGo" aria-label="模型、推理强度、权限" title="模型、推理强度、权限"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg></button></div>
@@ -2043,6 +2046,8 @@ function clawById(k){for(var i=0;i<CLAW_T.length;i++)if(CLAW_T[i].id===k)return 
 function clawOf(id){var c=clawT(id);return c?c.id:'claude'}
 function hk(k){return 'claclaw.'+k}
 var DESKTOP=window.matchMedia('(min-width:1000px)');
+// 弹出窗口（电脑上标题栏「弹出」开的独立小窗，地址带 ?s=会话&solo=1）：只显示这一个会话，不记成「上次打开的会话」、刷新还是它
+var SOLO=new URLSearchParams(location.search).get('solo')==='1';if(SOLO)document.documentElement.classList.add('solo');
 var COARSE=window.matchMedia('(pointer:coarse)'),shiftEnter=false;
 var enterSend=(function(){try{return localStorage.getItem('claclaw.enterSend')!=='0'}catch(_){return true}})();
 function kbSend(){return enterSend&&COARSE.matches}
@@ -3618,7 +3623,7 @@ function onEvent(m){
     else if(m.cwdShort&&!m.group){var tk=function(n){return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?Math.round(n/1000)+'k':String(n)};var ts=m.tokSum,dt=m.usage&&m.usage.tokens;if(!ts&&dt)ts={in:(dt.uncachedInputTokens||0)+(dt.cacheReadTokens||0)+(dt.cacheWriteTokens||0),out:dt.outputTokens||0};   // DeepSeek：用现成的累计用量（含子任务）
     addSys((ts&&(ts.in||ts.out)?'↑'+tk(ts.in)+' ↓'+tk(ts.out)+' · ':'')+m.cwdShort+(m.branch?' · '+m.branch:''));feed.lastElementChild.classList.add('sys-dir')}   // 会话 ID 标题栏有，这里只给目录，靠左
     }
-    localStorage.setItem(hk('session'),m.id);
+    if(!SOLO)localStorage.setItem(hk('session'),m.id);
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
     commands=m.commands||[];syncCmdMenu();   // 输入框里已经有「/」时，弹层立刻换成这个会话的命令
@@ -3875,6 +3880,7 @@ function setHeader(){
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   $('#nm').textContent=t||dir||'会话';
+  if(SOLO)document.title=(t||dir||'会话')+' · claclaw';
   var sid=$('#sid');sid.textContent='';
   var full=/^[0-9a-f]{8}-/i.test(session.id);   // Claude 的 UUID：放完整 ID、只露出前 8 位；其它的直接放短 ID
   var idEl=document.createElement('span');idEl.className='hid';idEl.title=session.id;idEl.textContent=full?session.id:shortId(session.id);
@@ -3912,7 +3918,7 @@ function connect(){
     wsSend({t:'visible',on:pageVisible()});
     if(wantPeer){wantPeer=false;history.replaceState(null,'','/');if(!DESKTOP.matches){goList();openPeerView();return}openPeerView()}
     var fromUrl=new URLSearchParams(location.search).get('s');
-    if(fromUrl||location.search)history.replaceState(null,'','/');
+    if(!SOLO&&(fromUrl||location.search))history.replaceState(null,'','/');
     if(pendingOpen)fromUrl=pendingOpen;
     var last=fromUrl||(session?session.id:localStorage.getItem(hk('session')));
     if(!DESKTOP.matches&&!fromUrl){
@@ -7030,6 +7036,12 @@ function ttsSync(){
 }
 // 喇叭：点一下开 / 关这个会话的播报；手机长按、电脑双击（或右键）选这个会话用的声音
 var muteClickT=0;
+// 弹出成独立窗口：同一个会话再点就是把已经弹出的那个窗口提到前面
+$('#popBtn').addEventListener('click',function(){
+  if(!session)return;
+  var w=window.open('/?s='+encodeURIComponent(session.id)+'&solo=1','claclaw-'+session.id.replace(/[^\w]/g,''),'popup,width=600,height=900');
+  if(w)try{w.focus()}catch(_){}
+});
 $('#ttsMute').addEventListener('click',function(e){
   if(ttsLongFired(this))return;
   if(!COARSE.matches&&!e.ttsNow){var me0=this;clearTimeout(muteClickT);muteClickT=setTimeout(function(){var ev=new MouseEvent('click');ev.ttsNow=1;me0.dispatchEvent(ev)},260);return}   // 电脑：等一下看是不是双击
