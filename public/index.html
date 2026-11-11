@@ -6785,7 +6785,7 @@ function ttsMuteShow(force){
   b.hidden=!(tts.on&&session);if(b.hidden)return;
   var off=ttsSessMuted(),cv=ttsSessCustom(session.id);if(b.dataset.st===(off?'off':'on')&&b.classList.contains('cv')===cv&&!force)return;
   b.dataset.st=off?'off':'on';b.innerHTML=MUTE_IC[b.dataset.st];b.classList.toggle('off',off);b.classList.toggle('cv',cv);   // cv：这个会话单独设了声音或语速（角上一个小点）
-  b.setAttribute('aria-label',(off?'这个会话已关闭播报，点一下恢复':'这个会话正在播报，点一下关闭')+(COARSE.matches?'；长按':'；双击')+'选这个会话的声音和语速');b.title=b.getAttribute('aria-label');
+  b.setAttribute('aria-label',(off?'这个会话已关闭播报，点一下恢复':'这个会话正在播报，点一下关闭')+'；声音和语速在右边 › 的会话设置里');b.title=b.getAttribute('aria-label');
 }
 function ttsOk(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
 // 声音：列出这台设备上的中文语音，好听的排前面（和 dsh-tts-reader 的经验一样：默认取第一个中文语音往往最难听）。
@@ -7428,7 +7428,6 @@ function ttsSync(){
   ttsMuteShow();
 }
 // 喇叭：点一下开 / 关这个会话的播报；手机长按、电脑双击（或右键）选这个会话用的声音
-var muteClickT=0;
 // 弹出成独立窗口：同一个会话再点就是把已经弹出的那个窗口提到前面
 var shellPopout=false;
 // 弹出窗口：同一个会话只在一处输入。弹出后主窗口让出这个会话（换到列表里下一个，没有就空着）；
@@ -7475,9 +7474,8 @@ $('#popBtn').addEventListener('click',function(){
   if(!session)return;
   popOut(session.id);
 });
+// 喇叭：只管这个会话播报的开 / 关（手机上和别的圆球一样能拖、长按开关重力滚动）；选声音、语速统一去右边 › 的会话设置
 $('#ttsMute').addEventListener('click',function(e){
-  if(ttsLongFired(this))return;
-  if(!COARSE.matches&&!e.ttsNow){var me0=this;clearTimeout(muteClickT);muteClickT=setTimeout(function(){var ev=new MouseEvent('click');ev.ttsNow=1;me0.dispatchEvent(ev)},260);return}   // 电脑：等一下看是不是双击
   if(!session||this.classList.contains('lock'))return;
   var me=this;me.classList.add('lock');setTimeout(function(){me.classList.remove('lock')},400);   // 防连击：边框闪一下就消失
   if(ttsMuted[session.id])delete ttsMuted[session.id];
@@ -7485,8 +7483,6 @@ $('#ttsMute').addEventListener('click',function(e){
   try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
   ttsMuteShow();ttsShowStop();
 });
-$('#ttsMute').addEventListener('dblclick',function(e){e.preventDefault();clearTimeout(muteClickT);ttsSessPick()});
-ttsLongPress($('#ttsMute'),function(){if(COARSE.matches&&$('#ttsMute').dataset.st!=='on')return;ttsSessPick()});   // 手机上播报关着时长按是开关重力滚动（见标题栏圆球），不选声音
 // 可选的声音（和设置里「声音」下拉框一样：语音管理里勾上的，带别名）
 function ttsChoices(){
   var vs0=ttsVoices(),srv0=tts.srv||[];
@@ -7498,7 +7494,6 @@ function ttsChoices(){
 function ttsSessSay(t){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);ttsStop();ttsManual=true;var sv=ttsSrvVoice();if(sv)srvSay([t],sv);else if(ttsOk()){var u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=ttsR();var dv=ttsDevVoice();if(dv)u.voice=dv;speechSynthesis.speak(u)}}
 function ttsSessRateSave(){var ks=Object.keys(ttsSessR);if(ks.length>300)delete ttsSessR[ks[0]];try{localStorage.setItem('claclaw.ttsSessRate',JSON.stringify(ttsSessR))}catch(_){}}
 // 这个会话的声音和语速：放在会话设置里（标题栏右边 › →「朗读」）；长按 / 双击喇叭直接打开会话设置并滚到这一栏
-function ttsSessPick(){if(!session||/^gp[:-]/.test(session.id))return;openCfg();var sec=$('#cfgTtsSec');if(!sec)return;var p=sec.closest('.cfg-p'),go=function(){if(p)p.scrollTop=sec.getBoundingClientRect().top-p.getBoundingClientRect().top+p.scrollTop-12};[150,600,1500].forEach(function(t){setTimeout(go,t)})}   // 模型列表是后取的，取回来上面会变长：多对几次位置
 function renderCfgTts(){
   var sel=$('#cfgVoice');if(!sel||!session)return;
   var sid=session.id,go=function(){
@@ -7673,8 +7668,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
 (function(){
   var balls=[$('#ctxBtn'),$('#notifBtn'),$('#ttsMute')],ncAt=0,tilt=null,asked=false,raf=0,lastT=0,drag=null;
   balls.forEach(function(b){b._o=0;b._v=0});
-  // 喇叭在播报开着时不能拖、不跟着重力滚（长按留给「选这个会话的声音」）；关了播报照旧能拖
-  function fixed(b){return b.id==='ttsMute'&&b.dataset.st==='on'}
+  function fixed(b){return false}   // 喇叭不再有长按选声音，三个球都能拖
   function on(){return !DESKTOP.matches}
   function vis(){return balls.filter(function(b){return !b.hidden&&b.offsetParent})}
   function put(b){b.style.transform=b._o?'translateX('+b._o.toFixed(1)+'px)':''}
