@@ -3881,7 +3881,7 @@ function setHeader(){
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   $('#nm').textContent=t||dir||'会话';
-  if(SOLO)document.title=(t||dir||'会话')+' · claclaw';
+  if(SOLO){document.title=(t||dir||'会话')+' · claclaw';try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'title',text:document.title},'*')}catch(_){}}   // 弹出窗口在外壳里：窗口标题由外壳设
   var sid=$('#sid');sid.textContent='';
   var full=/^[0-9a-f]{8}-/i.test(session.id);   // Claude 的 UUID：放完整 ID、只露出前 8 位；其它的直接放短 ID
   var idEl=document.createElement('span');idEl.className='hid';idEl.title=session.id;idEl.textContent=full?session.id:shortId(session.id);
@@ -6317,6 +6317,7 @@ window.addEventListener('message',function(e){
   var i=m.type==='insets'?m:m.type==='embedded'?m.insets:null;
   if(i&&typeof i.bottom==='number')document.documentElement.style.setProperty('--sab',Math.max(0,Math.min(80,i.bottom))+'px');
   if(m.type==='embedded')postTheme();   // 外壳准备好了再报一次颜色（开头那次可能早于外壳记下这个 iframe）
+  if(m.type==='embedded')shellPopout=!!m.popout;   // 外壳会开弹出窗口（开在外壳地址下，是 App 自己的窗口，没有地址栏）
 });
 // 嵌在 clarelay 外壳里：告诉外壳正在看哪个会话（外壳据此不推这个会话的通知）；回列表、切到后台时为 null
 var lastViewing,shellHidden=false;
@@ -7038,8 +7039,10 @@ function ttsSync(){
 // 喇叭：点一下开 / 关这个会话的播报；手机长按、电脑双击（或右键）选这个会话用的声音
 var muteClickT=0;
 // 弹出成独立窗口：同一个会话再点就是把已经弹出的那个窗口提到前面
+var shellPopout=false;
 $('#popBtn').addEventListener('click',function(){
   if(!session)return;
+  if(shellPopout)try{window.parent.postMessage({clarelay:1,type:'popout',path:'/?s='+encodeURIComponent(session.id)+'&solo=1',name:session.id,w:600,h:900},'*');return}catch(_){}
   var w=window.open('/?s='+encodeURIComponent(session.id)+'&solo=1','claclaw-'+session.id.replace(/[^\w]/g,''),'popup,width=600,height=900');
   if(w)try{w.focus()}catch(_){}
 });
