@@ -287,7 +287,12 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .hd-ic{flex:none;display:grid;place-items:center;width:42px;height:42px;margin-top:-20px;padding:0;border:1px solid transparent;border-radius:50%;background:color-mix(in srgb,var(--muted) 12%,transparent);color:color-mix(in srgb,var(--muted) 60%,var(--line));font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s}   /* 平时淡淡的底色、没有边框；暂时不能点（压缩中、刚点过）才出现边框，颜色和字一样 */
 .hd-ic.lock{border-color:currentColor}
 #popBtn{display:none}@media (min-width:1000px){html:not(.solo) #popBtn{display:grid}}   /* 弹出成独立窗口：只在电脑上 */
-html.solo #backBtn{display:none!important}   /* 弹出窗口只放这一个会话，没有列表可回 */
+html.solo #backBtn{display:none!important}
+html.solo.has-skin #hdCard{grid-template-columns:44px minmax(78px,1fr) auto}   /* 弹出窗口有头像：头像占两行高 */
+html.solo.has-skin #sessBtn .dot{grid-row:1/3;position:relative;width:44px;height:44px}
+html.solo.has-skin #sessBtn .dot img.sk{width:44px;height:44px;border-radius:10px;object-fit:cover}
+html.solo.has-skin #sessBtn .dot .wx-cl{position:absolute;right:1px;bottom:1px;display:grid;place-items:center;width:16px;height:16px;pointer-events:none;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25))}
+html.solo.has-skin #sessBtn .dot .wx-cl :is(svg,img){width:14px;height:14px;background:none}   /* 弹出窗口只放这一个会话，没有列表可回 */
 @media (min-width:1000px){html.solo #app{grid-template-columns:0 0 minmax(0,1fr);padding:0}html.solo :is(#rail,#sheet){display:none!important}html.solo #app::after{display:none}}   /* 弹出窗口再宽也只放聊天区：不要左边栏和会话列表 */
 .hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .hd-ic:active{opacity:.5}
@@ -3654,6 +3659,7 @@ function onEvent(m){
     session.dir=(m.cwdShort||'').split('/').pop()||'';
     $('#sessBtn .dot').innerHTML=clawIcon(clawOf(m.id));
     setHeader();postViewing();
+    if(SOLO&&!(soloSkin&&soloSkin.id===m.id))soloSkinLoad(m.id);
     $('#sessBtn .dot').classList.remove('off');
     sessionModes=m.modes||['default','acceptEdits','plan','auto','dontAsk'];
     // dsh / OpenCode / OpenClaw：会话设置里只有模型（从模型库 + 各 Claw 自带的里选），没有推理强度和权限模式
@@ -3924,10 +3930,22 @@ $('#ctxBtn').addEventListener('click',function(){
     ctxShow();
   });
 })();
+var soloSkin=null;   // 弹出窗口：这个会话的头像 / 网名 {id, skin}，从「最近」列表里取
+function soloSkinLoad(id){
+  fetch('/api/recent').then(function(r){return r.json()}).then(function(a){
+    var x=(Array.isArray(a)?a:[]).find(function(y){return y.id===id});
+    soloSkin={id:id,skin:x&&x.skin||null};if(session&&session.id===id)setHeader();
+  }).catch(function(){});
+}
 function setHeader(){
   if(typeof ttsMuteShow==='function'){ttsMuteShow();try{if(tts)ttsShowStop()}catch(_){}}
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
+  // 弹出窗口：换过头像 / 网名的会话，左上角用头像（Claw 是右下角水印）+ 网名，和「最近」列表一样
+  var sk=SOLO&&soloSkin&&soloSkin.id===session.id?soloSkin.skin:null;
+  document.documentElement.classList.toggle('has-skin',!!(sk&&sk.av));
+  if(sk&&sk.av)$('#sessBtn .dot').innerHTML='<img class="sk" alt="" src="/avatars/'+esc(sk.av)+'"><span class="wx-cl">'+clawIcon(clawOf(session.id))+'</span>';
+  if(sk&&sk.name)t=sk.name;
   $('#nm').textContent=t||dir||'会话';
   if(SOLO){document.title=(t||dir||'会话')+' · claclaw';try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'title',text:document.title},'*')}catch(_){}}   // 弹出窗口在外壳里：窗口标题由外壳设
   var sid=$('#sid');sid.textContent='';
