@@ -54,12 +54,17 @@ test('常规维护：本仓库干净时 npm check / test / restart 直接放行'
   const o = { repos: [proj], clean: () => true };
   for (const c of ['npm test', 'npm t', 'npm run check', 'npm run -s check', 'npm run restart', 'npm test 2>&1 | tail -5',
     'cd ' + proj + ' && git pull --ff-only && npm run -s check && npm test', 'git pull origin main && npm run restart',
-    'npm run restart -- main-0b8d73d', 'npm run restart -- main-0b8d73d 2>&1 | tail -1', 'npm run restart -- 拉代码 v1.2'])
+    'npm run restart -- main-0b8d73d', 'npm run restart -- main-0b8d73d 2>&1 | tail -1', 'npm run restart -- 拉代码 v1.2',
+    'npm test >/tmp/tst.log 2>&1; echo TEST=$?; grep -E "^ℹ (tests|pass|fail|skipped)" /tmp/tst.log; npm run restart 2>&1 | tail -1',
+    'git fetch -q origin && git merge -q --ff-only origin/main && git log --oneline -1 && npm run check >/tmp/chk.log 2>&1; echo CHECK=$?',
+    'npm run check > /tmp/a_b-1.log', 'npm test >> /tmp/t.log 2>&1'])
     assert.equal(bashRisk(c, proj, roots, o), null, c);
   assert.equal(bashRisk('npm test', path.join(proj, '.worktrees', 'x'), roots, o), null);
   // 多带参数、别的脚本、别的目录、不干净、没传 repos：都要确认
   for (const c of ['npm install', 'npm run build', 'npm test -- --x', 'npm --prefix /tmp test', 'npm run restart now', 'npx foo', 'FOO=1 npm test',
-    'npm run restart --', 'npm run restart -- --x', 'npm run restart -- a$(id)', 'npm run restart -- "$HOME"', 'npm run restart -- a; rm -rf x', 'npm run check -- x'])
+    'npm run restart --', 'npm run restart -- --x', 'npm run restart -- a$(id)', 'npm run restart -- "$HOME"', 'npm run restart -- a; rm -rf x', 'npm run check -- x',
+    'npm test > /tmp/../etc/x', 'npm test >/tmp/d/x.log', 'npm test > ~/x.log', 'npm test >/tmpx', 'echo a > ' + proj + '/x',
+    'git merge origin/main', 'git merge --ff-only feature', 'git merge --ff-only origin/a..b', 'git merge --ff-only -m x origin/main', 'git merge --ff-only origin/main origin/x'])
     assert.ok(bashRisk(c, proj, roots, o), c);
   assert.ok(bashRisk('npm test', path.join(H, 'other'), roots, o));
   assert.ok(bashRisk('cd ' + data + ' && npm test', proj, roots, o));

@@ -66,6 +66,9 @@ const ROUTINE_NPM = new Set(['test', 't', 'run check', 'run test', 'run restart'
 const NOTE_WORD = /^[\p{L}\p{N}._:/#@+][\p{L}\p{N}._\-:/#@+]*$/u;
 const routineNpm = a => ROUTINE_NPM.has(a.join(' '))
   || (a.length > 3 && a[0] === 'run' && a[1] === 'restart' && a[2] === '--' && a.slice(3).every(w => NOTE_WORD.test(w)));
+// git merge --ff-only origin/<分支>：只快进，不会丢本地提交；只认 origin 上的分支（别处的代码会被后面的测试 / 重启执行）
+const ffFromOrigin = a => a.includes('--ff-only') && a.every(x => /^(-q|--quiet|--ff-only)$/.test(x) || /^origin\/\w[\w./-]*$/.test(x) && !x.includes('..'))
+  && a.filter(x => !/^-/.test(x)).length === 1;
 // dir 可能已经过 expand() 归一化（cd 之后），repos 是调用方给的原始路径：两边都归一再比
 const inRepo = (dir, repos) => repos.some(r => norm(dir) === norm(r) || inside(dir, path.join(r, '.worktrees')));
 
@@ -121,6 +124,8 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
   if (/\$'/.test(unquoted(s))) return "命令里有 $'…' 转义串";
   for (const m of unquoted(s, true).matchAll(/\$([A-Za-z_][A-Za-z0-9_]*)/g)) if (!SAFE_VARS.has(m[1])) return '读取环境变量 $' + m[1];
   s = s.replace(/\s\d?>\s*\/dev\/null/g, ' ').replace(/\s2>&1/g, ' ');
+  // 输出写到 /tmp 下的一个文件（npm test >/tmp/t.log 这类临时日志）：不算写用户的文件。只认 /tmp 下一层、文件名只有字母数字 . _ -
+  s = s.replace(/(^|\s)\d?>>?\s*\/tmp\/[\w.-]+(?=$|[\s;&|])/g, '$1');
   if (/>/.test(unquoted(s))) return '命令会写文件';
   const segs = segments(s);
   if (!segs.length) return '空命令';
@@ -137,6 +142,7 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
     if (c === 'jq' && args.some(a => /\$ENV|\benv\b/.test(a))) return 'jq 读取环境变量';
     if (c === 'git') {
       const sub = args[0];
+      if (sub === 'merge' && ffFromOrigin(args.slice(1))) continue;   // 版本更新：只快进到 origin 上的分支，和 pull --ff-only 一样
       if (!SAFE_GIT.has(sub)) return 'git ' + (sub || '');
       if (args.some(a => /^--(output|exec|upload-pack|receive-pack|ext-diff)/.test(a) || /^-[cC]$/.test(a))) return 'git 带了会执行或写文件的参数';
       if ((sub === 'show' || sub === 'cat-file') && args.slice(1).some(a => { const i = a.indexOf(':'); return i >= 0 && SENSITIVE_NAME.test(a.slice(i + 1)); })) return '读敏感位置（git 里提交过的 ' + sub + '）';   // HEAD:.env 这类
