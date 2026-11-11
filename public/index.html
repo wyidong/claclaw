@@ -527,13 +527,8 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 .peer .md pre{background:var(--surface)}
 .sys-dir{align-self:flex-start!important;text-align:left!important}
 .sys{align-self:center;max-width:92%;min-width:0;text-align:center;color:var(--muted);font-size:13px;line-height:1.45;white-space:pre-line;overflow-wrap:anywhere}   /* 报错里的长网址也要折行，不然把聊天区撑宽 */
-.think{align-self:flex-start;display:flex;align-items:center;gap:5px;padding:6px 0}
-.think .tt{margin-left:6px;font-size:13px;color:var(--muted)}
 /* ════ 公共 · 加载动画、刷新按钮 ════ */
 /* 顶部图标不闪：干活的闪烁在底部工作条上 */
-.think i{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.5;animation:blink 1.1s infinite}
-.think i:nth-child(2){animation-delay:.18s}.think i:nth-child(3){animation-delay:.36s}
-@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
 @keyframes rlspin{to{transform:rotate(360deg)}}
 #bgReload{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-22px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 不仔细看看不出来 */
 #bgReload:active{opacity:.4}
@@ -647,7 +642,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-row.collab:not(.wx) .s-item::before{left:0;top:0}
 .s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
 
-@media (prefers-reduced-motion:reduce){.think i,.tool[data-k="run"] .st,.tgroup[data-k="run"] .tg-h .st{animation:none}}
+@media (prefers-reduced-motion:reduce){.tool[data-k="run"] .st,.tgroup[data-k="run"] .tg-h .st{animation:none}}
 #dock{position:relative}
 /* ════ 公共 · 底部输入区 ════ */
 /* 底部输入区：分割线以下没有任何边框和底色块，靠光标和淡色提示表明这里能输入；
@@ -675,7 +670,6 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #composer:not(.nosend) #atBtn{right:42px}
 #composer.grp #ta,#composer.grp.nosend #ta{padding-right:48px}
 #composer.grp:not(.nosend) #ta{padding-right:88px}
-#sugBtn{position:absolute;right:42px;top:2px;width:40px;height:40px;padding:0;border:0;background:none;color:var(--accent);display:grid;place-items:center;z-index:1}
 #cmdMenu{position:absolute;left:10px;right:10px;bottom:calc(100% + 6px);max-height:46vh;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.14);z-index:4;padding:4px}
 .cmd{display:block;width:100%;min-height:48px;padding:7px 10px;border:0;border-radius:9px;background:none;text-align:left}
 .cmd[aria-selected="true"]{background:var(--bg)}
@@ -1766,7 +1760,6 @@ select.pe-in{text-align-last:right}
   #composer:not(.nosend) #atBtn{right:100px}
   #composer.grp #ta,#composer.grp.nosend #ta,#composer.grp:not(.nosend) #ta{padding-right:20px}
   #composer.busy #ta{padding-right:20px}
-  #sugBtn{bottom:-37px;top:auto;right:110px}
 }
 /* 弹出窗口（窄，走手机布局）：输入区也用电脑那套——大输入面板、拖顶边调高低（规则照抄上面电脑端那段，只对 .solo） */
 @media (max-width:999px){
@@ -1789,7 +1782,6 @@ select.pe-in{text-align-last:right}
   html.solo #composer:not(.nosend) #atBtn{right:100px}
   html.solo #composer.grp #ta,html.solo #composer.grp.nosend #ta,html.solo #composer.grp:not(.nosend) #ta{padding-right:20px}
   html.solo #composer.busy #ta{padding-right:20px}
-  html.solo #sugBtn{bottom:-37px;top:auto;right:110px}
   body.row-drag{cursor:row-resize;user-select:none}
 }
 </style>
@@ -1898,7 +1890,6 @@ select.pe-in{text-align-last:right}
       <input type="file" id="fileIn" multiple hidden>
       <div id="taWrap">
         <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
-        <button type="button" id="sugBtn" hidden aria-label="填入建议" title="填入建议"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 5v5.5a2.5 2.5 0 0 1-2.5 2.5H5"/><path d="M8.5 9.5 5 13l3.5 3.5"/></svg></button>
       </div>
       <button type="button" id="stopBtn" aria-label="停止" title="停止 Claude 当前的工作" hidden></button>
       <button type="button" id="atBtn" hidden aria-label="@ 成员" title="@ 成员">@</button>
@@ -2216,13 +2207,14 @@ function clawT(id){id=String(id||'');for(var i=0;i<CLAW_T.length;i++)if(id.index
 function clawById(k){for(var i=0;i<CLAW_T.length;i++)if(CLAW_T[i].id===k)return CLAW_T[i];return null}
 function clawOf(id){var c=clawT(id);return c?c.id:'claude'}
 function hk(k){return 'claclaw.'+k}
+function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(_){return false}}   // 配额满 / 隐私模式会抛错：存不上就算了，别让后面的流程中断
 var DESKTOP=window.matchMedia('(min-width:1000px)');
 // 弹出窗口（电脑上标题栏「弹出」开的独立小窗，地址带 ?s=会话&solo=1）：只显示这一个会话，不记成「上次打开的会话」、刷新还是它
 var SOLO=new URLSearchParams(location.search).get('solo')==='1';if(SOLO)document.documentElement.classList.add('solo');
 var COARSE=window.matchMedia('(pointer:coarse)'),shiftEnter=false;
 var enterSend=(function(){try{return localStorage.getItem('claclaw.enterSend')!=='0'}catch(_){return true}})();
 function kbSend(){return enterSend&&COARSE.matches}
-var feed=$('#feed'),dock=$('#dock'),ta=$('#ta'),sendBtn=$('#send'),taWrap=$('#taWrap'),sugBtn=$('#sugBtn');
+var feed=$('#feed'),dock=$('#dock'),ta=$('#ta'),sendBtn=$('#send'),taWrap=$('#taWrap');
 
 var ICON_SEND='<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 18V4.5M5 10.5l6-6 6 6"/></svg>';
 var ICON_STOP='<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true"><rect x="3.5" y="3.5" width="11" height="11" rx="2"/></svg>';
@@ -2371,7 +2363,7 @@ function mdInline(s){
     return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>');
   });
   s=s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>'+COPY_BTN)});
-  s=s.replace(/(^|[\s(（：:，、；])(https?:\/\/[^\s<)），。、；！？」]+)/g,function(_,pre,u){return pre+put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'+COPY_BTN)});
+  s=s.replace(/(^|[\s(（：:，、；])(https?:\/\/[^\s<)），。、；！？」\u0000]+)/g,function(_,pre,u){return pre+put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'+COPY_BTN)});
   // 引号里的一整句（让用户转贴的话，如 "审 claclaw 033fdab…"）：后面跟复制图标，只复制引号里面的内容
   s=s.replace(/(&quot;|“|「)([^\n\u0000]{10,300}?)(&quot;|”|」)/g,function(m,o,c,e){
     if((o==='&quot;')!==(e==='&quot;')||(o==='“')!==(e==='”')||/^\s|\s$/.test(c))return m;
@@ -2488,7 +2480,6 @@ function md(src){
   return out.join('');
 }
 function scrollDown(force){
-  if(thinkEl&&thinkEl!==feed.lastChild)feed.appendChild(thinkEl); // 工作中指示永远在最后
   if(force)stick=true;if(stick)feed.scrollTop=feed.scrollHeight;
 }
 feed.addEventListener('scroll',function(){stick=feed.scrollHeight-feed.scrollTop-feed.clientHeight<80});
@@ -2897,13 +2888,16 @@ $('#fview .fv-share').addEventListener('click',function(){if(fvBlob)saveBlob(fvB
 // 发过的图片：原图也存在本机（按发出去的压缩图算个指纹对应），聊天记录里点开看原图
 function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
+var lbUrl='';   // 预览里原图的 ObjectURL：换图、关预览、退回压缩图时释放，免得整张原图一直留在内存里
+function lbFree(){if(lbUrl){URL.revokeObjectURL(lbUrl);lbUrl=''}}
+function closeLightbox(){lightbox.classList.remove('on');lbFree()}
 function showImage(src){
-  var im=lightbox.querySelector('img');im.onerror=null;im._zs=1;im.removeAttribute('style');im.src=src;lightbox.classList.add('on');
+  var im=lightbox.querySelector('img');im.onerror=null;im._zs=1;im.removeAttribute('style');im.src=src;lbFree();lightbox.classList.add('on');
   var m=/^data:image\/[\w.+-]+;base64,(.+)$/.exec(src||''),hk2=/^\/api\/himg\?.*[?&]k=([^&]+)/.exec(src||'');   // 历史图片是网址，带着原图的 key
   var key=m?imgKey(m[1]):hk2?decodeURIComponent(hk2[1]):'';if(!key||!window.indexedDB)return;
   vidStore('readonly',function(st){return st.get('img:'+key)}).then(function(rec){
     if(!rec||!rec.blob||!lightbox.classList.contains('on')||im.src!==src)return;
-    var u=URL.createObjectURL(rec.blob);im.onerror=function(){im.onerror=null;im.src=src};im.src=u;   // 原图打不开（比如 HEIC）就退回压缩图
+    var u=lbUrl=URL.createObjectURL(rec.blob);im.onerror=function(){im.onerror=null;im.src=src;if(lbUrl===u)lbFree()};im.src=u;   // 原图打不开（比如 HEIC）就退回压缩图
   }).catch(function(){});
 }
 // 预览图双指缩放 / 双击放大：改图片宽度、在外面的滚动框里平移，不让浏览器缩放整页（整页放大时底下各层一起重画，iOS 上闪）
@@ -2941,7 +2935,7 @@ function pinchZoom(box,dbl){
   ['gesturestart','gesturechange'].forEach(function(n){box.addEventListener(n,function(e){e.preventDefault()})});   // iOS：别让系统再缩整页
 }
 pinchZoom($('#fview .fv-b'),true);pinchZoom(lightbox,false);
-lightbox.addEventListener('click',function(){if(Date.now()-pinchAt<400)return;lightbox.classList.remove('on')});   // 刚捏完松手不算点
+lightbox.addEventListener('click',function(){if(Date.now()-pinchAt<400)return;closeLightbox()});   // 刚捏完松手不算点
 // 回复里的 Markdown 图片：点开全屏；加载完再滚到底，免得图片撑高后看不到最新内容
 feed.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))showImage(e.target.src)});
 feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))scrollDown()},true);
@@ -3135,12 +3129,10 @@ function dirLine(m){
 }
 new MutationObserver(function(){var d=feed.querySelector(':scope>.sys-dir');if(d&&d!==feed.lastElementChild)feed.appendChild(d)}).observe(feed,{childList:true});
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
-var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
-// 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
-// 工作状态只在输入框上方的状态条显示（以前消息区底部还有一个「思考中」，和状态条重复）
+var workSince=0,workTimer=null,workLabel='思考中';
+// 工作状态只在输入框上方的状态条显示（以前消息区底部还有一个「思考中」，和状态条重复，已去掉）；think 只换状态条上的字
 function think(on,label){
   if(label)workLabel=label;
-  if(thinkEl){thinkEl.remove();thinkEl=null}
   tickWork();
 }
 function fmtSec(sec){return sec<60?sec+'s':Math.floor(sec/60)+'m'+('0'+sec%60).slice(-2)+'s'}
@@ -3166,7 +3158,6 @@ function dsFeeTitle(u){
 var lastEvt=0;   // 最近一次收到这个会话的事件（输出、工具开始/结束……）
 function tickWork(){
   var sec=workSince?Math.floor((Date.now()-workSince)/1000):0;
-  if(thinkEl)thinkEl.querySelector('.tt').textContent=workLabel+(sec?' · '+fmtSec(sec):'');
   var bar=$('#workBar');
   if(!busy){bar.hidden=true;return}
   var quiet=lastEvt?Math.floor((Date.now()-lastEvt)/1000):0,stuck=quiet>=90;
@@ -3357,7 +3348,6 @@ function syncSuggestion(){
   var on=!!suggestion&&!ta.value&&!busy&&!!session;
   ta.placeholder=on?suggestion:session&&session.group?'发消息，@ 谁谁回':PLACEHOLDER;
   taWrap.classList.toggle('sug',on);
-  sugBtn.hidden=true;   // 不再单独放「↵ 填入」按钮：输入框空着时点灰色的发送键就是填入建议
   syncSend();
 }
 // 手机上点按钮填入建议不唤起键盘：多数时候直接再点一次发送；要改再点输入框
@@ -3369,7 +3359,6 @@ function acceptSuggestion(noKb){
   if(noKb===true&&COARSE.matches&&document.activeElement!==ta)return;
   ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
 }
-sugBtn.addEventListener('click',function(){acceptSuggestion(true)});
 
 // ---------- 发图片：选图 / 拍照 / 粘贴，先在手机上压缩再发 ----------
 
@@ -3456,8 +3445,9 @@ function sendVideoJob(){
 function compressImage(f){
   var keep=(f.type==='image/png'&&f.size<1.5e6)||(f.type==='image/gif'&&f.size<3e6)||(f.type==='image/webp'&&f.size<1.5e6);
   return new Promise(function(resolve,reject){
-    var img=new Image();
+    var img=new Image(),u=URL.createObjectURL(f);
     img.onload=function(){
+      URL.revokeObjectURL(u);   // 尺寸已读到、下面 drawImage 用的是已解码的图，不再需要这个地址
       var w=img.naturalWidth,h=img.naturalHeight,max=2000;
       if(keep&&w<=max&&h<=max){
         var fr=new FileReader();
@@ -3469,8 +3459,8 @@ function compressImage(f){
       var g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);
       resolve({media_type:'image/jpeg',data:c.toDataURL('image/jpeg',0.85).split(',')[1]});
     };
-    img.onerror=reject;
-    img.src=URL.createObjectURL(f);
+    img.onerror=function(e){URL.revokeObjectURL(u);reject(e)};
+    img.src=u;
   });
 }
 // 每个会话各自的待发送内容（文字 + 图片）：切会话时把输入框里的收起来、换成新会话的；不在会话之间共用
@@ -3741,9 +3731,9 @@ $('#bAlways').addEventListener('click',function(){reply('allow_session')});
 
 function onEvent(m){
   if(m.t==='login.update'){loginEvent(m);return}
-  if(/^(user|ai\.|tool\.|peer|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;
   if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
+  if(/^(user|ai\.|tool\.|peer$|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;   // 放在过滤别的会话之后；peer$：配对申请 peer.pair 不算聊天内容
   if(narration)narration.onEvent(m);   // 过程播报：只读事件，不改现有逻辑
   switch(m.t){
   case 'session.opened':
@@ -3791,7 +3781,7 @@ function onEvent(m){
     if(m.compacted)addSys('会话已压缩，历史已重新加载');
     if(m.cwdShort&&!m.group)dirLine(m);
     }
-    if(!SOLO)localStorage.setItem(hk('session'),m.id);
+    if(!SOLO)lsSet(hk('session'),m.id);
     if(!SOLO&&typeof soloAlive==='function'&&soloAlive(m.id))setTimeout(function(){soloLeave(m.id)},0);   // 这个会话开在弹出窗口里（比如刷新后又打开了上次的会话）：主窗口让出来
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
@@ -4227,7 +4217,7 @@ ta.addEventListener('keydown',function(e){
     if(e.key==='ArrowUp'){e.preventDefault();cmdSel=(cmdSel+1)%cmdShown.length;syncCmdMenu();return}
     if(e.key==='ArrowDown'){e.preventDefault();cmdSel=(cmdSel-1+cmdShown.length)%cmdShown.length;syncCmdMenu();return}
     if(e.key==='Tab'||(e.key==='Enter'&&!e.isComposing&&ta.value!=='/'+cmdShown[cmdSel].name)){e.preventDefault();pickCmd(cmdSel);return}
-    if(e.key==='Escape'){cmdMenu.hidden=true;return}
+    if(e.key==='Escape'){if(!cmdMenu.hidden)e.preventDefault();cmdMenu.hidden=true;return}
   }
   if(e.key==='Tab'&&!e.shiftKey&&!ta.value&&suggestion){e.preventDefault();acceptSuggestion();return}
   if(e.key==='Enter')shiftEnter=e.shiftKey;
@@ -4265,9 +4255,9 @@ function cfgNote(extra){
   var parts=[];if(claudeSess()&&(cfg.models||cfg.model)){parts.push(curModelLabel()+(cfg.pick==='default'?'（默认）':''));if(cfg.effort)parts.push('推理强度 '+effortLabel(cfg.effort))}
   parts.push('权限 '+ml.label);
   var t='已切换为 '+parts.join(' · ')+(extra?'。'+extra:'');
-  var l=feed.lastElementChild;if(l&&(l===thinkEl||l.classList.contains('sys-dir')))l=l.previousElementSibling;
+  var l=feed.lastElementChild;if(l&&l.classList.contains('sys-dir'))l=l.previousElementSibling;
   if(l&&l.dataset&&l.dataset.cfg){l.textContent=t;return}
-  addSys(t);var n=feed.lastElementChild;if(n===thinkEl)n=n.previousElementSibling;if(n)n.dataset.cfg='1';
+  addSys(t);var n=feed.lastElementChild;if(n)n.dataset.cfg='1';
 }
 // ---------- 会话设置：模型 / 推理强度 / 权限（标题栏右边的按钮 + 面板）----------
 // 模型列表由服务器从 Claude Code 实时取（这个账号能用哪些就列哪些），只有 Claude 会话有
@@ -4484,7 +4474,6 @@ $('#cfgGo').addEventListener('click',function(){
 });
 $('#cfgX').addEventListener('click',closeCfg);
 $('#cfgDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeCfg()});
-document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#cfgDlg').classList.contains('on'))closeCfg()});
 function applyModel(m){
   if('lib' in m)cfg.lib=m.lib||null;
   if(m.models){cfg.models=m.models;if(!cfg.lib)lastModels=m.models}   // lastModels 给新建对话框用：只记 Claude 自己的模型
@@ -6242,7 +6231,7 @@ function drawList(arr,claw){
         h.addEventListener('click',function(){
           var f=foldedGroups(),open=box.hidden;box.hidden=!open;h.setAttribute('aria-expanded',String(open));
           if(open)delete f[g.key];else f[g.key]=1;
-          localStorage.setItem('claclaw.folded',JSON.stringify(f));
+          lsSet('claclaw.folded',JSON.stringify(f));
           h.blur();   // 不留焦点：免得之后按空格 / 回车时被意外折叠或展开
         });
         list.appendChild(h);list.appendChild(box);cur=box;return;
@@ -6520,7 +6509,6 @@ function ctxMenu(x,y,items){
   var w=ctxEl.offsetWidth,h=ctxEl.offsetHeight;ctxEl.style.left=Math.min(x,innerWidth-w-6)+'px';ctxEl.style.top=Math.min(y,innerHeight-h-6)+'px';
 }
 document.addEventListener('mousedown',function(e){if(ctxEl&&!ctxEl.contains(e.target))ctxClose()},true);
-document.addEventListener('keydown',function(e){if(e.key==='Escape')ctxClose()});
 document.addEventListener('scroll',ctxClose,true);window.addEventListener('blur',ctxClose);
 function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
 function closeSheet(){showDlg(sheet,false)}
@@ -6632,7 +6620,7 @@ function resumeTail(m){
   // 有新记录：去掉实时画的部分（含工作中指示、发送中的消息），从新记录接着画
   for(var n=tail;n&&n!==feed;n=n.parentElement)while(n.nextSibling)n.nextSibling.remove();   // 它在工具组里：组里它后面的、组后面的都去掉
   feed.querySelectorAll('.tg-l>.tool:not([data-h])').forEach(function(t){var g=t.closest('.tgroup');t.remove();tgUpdate(g)});   // 实时画进前面组里的工具卡片也去掉
-  thinkEl=null;if(outbox)outbox.el=null;
+  if(outbox)outbox.el=null;
   if(redo){var g0=last.closest('.tgroup');last.remove();tgUpdate(g0);return idx-start}
   return idx-start+1;
 }
@@ -6677,7 +6665,6 @@ function fillShort(){
 var feedOwner=null;   // 聊天区现在画的是哪个会话：只有它的内容才能存进它的缓存（防止 A 的内容存到 B 名下）
 function saveFeed(id){
   if(!id||!feed.firstChild||feedOwner!==id)return;
-  if(thinkEl){thinkEl.remove();thinkEl=null}
   var need=Math.max(600,feed.clientHeight*1.5),acc=0,kept=0,n=feed.lastElementChild;
   while(n&&acc<need){acc+=n.offsetHeight||0;if(n.dataset.h)kept++;kept+=n.querySelectorAll('[data-h]').length;n=n.previousElementSibling}   // 工具组里的卡片各算一条
   while(n){var p=n.previousElementSibling;n.remove();n=p}   // 一屏以外的都扔掉
@@ -7846,7 +7833,20 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   mark();
 })();
 function notice(t){if(mList)toast(t);else addSys(t)}
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){if(lightbox.classList.contains('on'))lightbox.classList.remove('on');else if(dissEl.classList.contains('on'))dsBack();else if(delDlg.classList.contains('on'))closeDel();else if(keyDlg.classList.contains('on'))closeKey();else if(newDlg.classList.contains('on'))closeNew();else closeSheet()}});
+// Esc 统一在这里：一次只关最上面那一层（以前会话设置、右键菜单各有一个 handler，按一下会连带把会话列表也关掉）
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape'||e.defaultPrevented)return;   // 输入框自己处理过的（改名时取消、命令菜单收起）不再往下关
+  if(ctxEl)ctxClose();
+  else if(lightbox.classList.contains('on'))closeLightbox();
+  else if($('#vplayer').classList.contains('on'))closeVideo();
+  else if($('#fview').classList.contains('on'))$('#fview .fv-x').click();
+  else if(keyDlg.classList.contains('on'))closeKey();
+  else if(delDlg.classList.contains('on'))closeDel();
+  else if(dissEl.classList.contains('on'))dsBack();
+  else if($('#cfgDlg').classList.contains('on'))closeCfg();
+  else if(newDlg.classList.contains('on'))closeNew();
+  else if(!DESKTOP.matches)closeSheet();   // 电脑上会话列表常驻，不关
+});
 
 // ---------- 推送通知：https + 添加到主屏幕后才能开（iOS 16.4+） ----------
 
