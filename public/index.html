@@ -3003,6 +3003,20 @@ function gStatTail(){var el=$('#gStat');if(el&&el.parentNode===feed&&feed.lastEl
 // 显示用的短 ID：Claude 会话取 UUID 前 8 位；OpenClaw 会话（oc:agent:<agent>:<名字>）取名字部分
 function clawName(id){var c=clawT(id);return c?c.name:'Claude'}
 function shortId(id){id=String(id||'');var c=clawT(id);if(c&&c.strip)return id.replace(c.strip,'').slice(0,8);if(/^oc:/.test(id)){var p=id.replace(/^oc:(agent:)?/,'').split(':'),q=p[p.length-1]||p[0];return /^[0-9a-f]{8}-/i.test(q)?q.slice(0,8):q}return id.slice(0,8)}
+// 聊天区最下面那一行「↑输入 ↓输出 · 目录 · 分支」：一个会话只有一行，始终贴在最后一条消息下面（下面的 MutationObserver 挪），
+// 每轮结束（Claude 的 turn.done、DeepSeek 的 usage）更新 token 数。会话 ID 标题栏有，这里只给目录，靠左
+function dirTok(n){return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?Math.round(n/1000)+'k':String(n)}
+function dirLine(m){
+  var ts=m.tokSum,dt=m.usage&&m.usage.tokens;
+  if(!ts&&dt)ts={in:(dt.uncachedInputTokens||0)+(dt.cacheReadTokens||0)+(dt.cacheWriteTokens||0),out:dt.outputTokens||0};   // DeepSeek：用现成的累计用量（含子任务）
+  var el=feed.querySelector(':scope>.sys-dir');
+  if(!el){if(!m.cwdShort)return;el=document.createElement('div');el.className='sys sys-dir';feed.appendChild(el)}
+  if(m.cwdShort)el.dataset.where=m.cwdShort+(m.branch?' · '+m.branch:'');
+  if(ts&&(ts.in||ts.out))el.dataset.tok='↑'+dirTok(ts.in)+' ↓'+dirTok(ts.out);
+  el.textContent=(el.dataset.tok?el.dataset.tok+' · ':'')+(el.dataset.where||'');
+  scrollDown();
+}
+new MutationObserver(function(){var d=feed.querySelector(':scope>.sys-dir');if(d&&d!==feed.lastElementChild)feed.appendChild(d)}).observe(feed,{childList:true});
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var thinkEl=null,workSince=0,workTimer=null,workLabel='思考中';
 // 只要还在处理就一直挂在消息最下面（scrollDown 里会把它挪到最后），只有等你确认权限时才收起
@@ -3677,8 +3691,7 @@ function onEvent(m){
     if(m.group)gStat(m.group.status);
     syncSuggestion();
     if(m.compacted)addSys('会话已压缩，历史已重新加载');
-    else if(m.cwdShort&&!m.group){var tk=function(n){return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$/,'')+'M':n>=1000?Math.round(n/1000)+'k':String(n)};var ts=m.tokSum,dt=m.usage&&m.usage.tokens;if(!ts&&dt)ts={in:(dt.uncachedInputTokens||0)+(dt.cacheReadTokens||0)+(dt.cacheWriteTokens||0),out:dt.outputTokens||0};   // DeepSeek：用现成的累计用量（含子任务）
-    addSys((ts&&(ts.in||ts.out)?'↑'+tk(ts.in)+' ↓'+tk(ts.out)+' · ':'')+m.cwdShort+(m.branch?' · '+m.branch:''));feed.lastElementChild.classList.add('sys-dir')}   // 会话 ID 标题栏有，这里只给目录，靠左
+    if(m.cwdShort&&!m.group)dirLine(m);
     }
     if(!SOLO)localStorage.setItem(hk('session'),m.id);
     if(!SOLO&&typeof soloAlive==='function'&&soloAlive(m.id))setTimeout(function(){soloLeave(m.id)},0);   // 这个会话开在弹出窗口里（比如刷新后又打开了上次的会话）：主窗口让出来
@@ -3812,7 +3825,7 @@ function onEvent(m){
     if(session){session.ctx=m.tokens||null;if(m.compacted){session.ctxDone=session.ctxAsk?(m.tokens||-1):0;session.ctxAsk=false;clearTimeout(ctxAskTimer)}else session.ctxDone=0;ctxShow()}
     break;
   case 'usage':   // DeepSeek：累计 token / 估算费用（每轮结束；长回合里每 2.5 分钟）
-    if(session&&m.usage){session.usage=m.usage;renderFee()}
+    if(session&&m.usage){session.usage=m.usage;renderFee();dirLine({usage:m.usage})}
     break;
   case 'session.meta':   // 会话信息变了（OpenClaw 换了模型）：更新标题栏
     if(session&&m.cwdShort){session.cwdShort=m.cwdShort;session.dir=m.cwdShort.split('/').pop()||'';setHeader()}
@@ -3821,6 +3834,7 @@ function onEvent(m){
     think(true,m.text);break;
   case 'turn.done':
     ttsHush=false;
+    if(m.tokSum)dirLine({tokSum:m.tokSum});
     if(session&&session.ctxAsk){var askS=session;clearTimeout(ctxAskTimer);ctxAskTimer=setTimeout(function(){if(askS.ctxAsk){askS.ctxAsk=false;if(session===askS)ctxShow()}},5000)}   // 5 秒内没等到「压缩完」（取消、出错）：恢复成可以再点（OpenClaw 的结果在一轮结束后才到）
     refreshList();
     if(m.error)addSys('本轮结束：'+m.error);
@@ -4145,7 +4159,7 @@ function cfgNote(extra){
   var parts=[];if(claudeSess()&&(cfg.models||cfg.model)){parts.push(curModelLabel()+(cfg.pick==='default'?'（默认）':''));if(cfg.effort)parts.push('推理强度 '+effortLabel(cfg.effort))}
   parts.push('权限 '+ml.label);
   var t='已切换为 '+parts.join(' · ')+(extra?'。'+extra:'');
-  var l=feed.lastElementChild;if(l===thinkEl&&l)l=l.previousElementSibling;
+  var l=feed.lastElementChild;if(l&&(l===thinkEl||l.classList.contains('sys-dir')))l=l.previousElementSibling;
   if(l&&l.dataset&&l.dataset.cfg){l.textContent=t;return}
   addSys(t);var n=feed.lastElementChild;if(n===thinkEl)n=n.previousElementSibling;if(n)n.dataset.cfg='1';
 }

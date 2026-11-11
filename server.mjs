@@ -1982,7 +1982,8 @@ class Runner {
         // 实际一直走这里：插话记录也要在这里清，否则留到下一轮，重新打开会话时又被补显示出来
         if (!this.sawState) { this.busy = false; this.steered = []; }
         this.peerTurn = null;
-        this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined });
+        let tokSum = null; try { tokSum = usageOf(jsonlPathOf(this.info)); } catch {}   // 累计 token：网页聊天区最下面那行跟着更新
+        this.emit({ t: 'turn.done', subtype: m.subtype, cost: m.total_cost_usd, error: m.subtype !== 'success' ? (m.errors || []).join('; ') || m.subtype : undefined, tokSum });
         this.notify(m.subtype === 'success' ? snippet(m.result, '回复完了') : '这一轮出错结束了', 'done-' + this.id);
         // 有插话排着时 CLI 可能接着干：网页端的「工作中」以 CLI 的 idle 为准，这里先把状态同步回去
         if (this.sawState && this.busy) this.emit({ t: 'busy', on: true });
