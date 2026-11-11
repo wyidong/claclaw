@@ -2815,6 +2815,13 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
       return fs.createReadStream(f).pipe(res);
     }
+    // 界面字体（public/fonts/，开源字体，授权见同目录 OFL-*.txt）：登录页也用，免登录；文件名不变就长期缓存
+    const font = url.pathname.match(/^\/fonts\/([a-z0-9-]+\.woff2)$/);
+    const fontFile = font && path.join(ROOT, 'public', 'fonts', font[1]);
+    if (fontFile && fs.existsSync(fontFile)) {
+      res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=2592000' });
+      return fs.createReadStream(fontFile).pipe(res);
+    }
     // 英文界面的词典 + 翻译引擎（登录页也用，免登录；里面只有界面文字）
     if (url.pathname === '/i18n/en.js') {
       res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache' });

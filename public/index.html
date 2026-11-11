@@ -73,6 +73,7 @@ window.__sc=(function(){
 </script>
 <style>html.boot #app{filter:blur(8px);opacity:.45}</style>
 <style>
+@font-face{font-family:"Nunito";font-style:normal;font-weight:400 800;font-display:swap;src:url(/fonts/nunito-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}   /* 圆润的英文 / 数字：苹果设备用系统自带的圆体（ui-rounded），别的浏览器用这个（开源，授权见 public/fonts/OFL-Nunito.txt）；中文仍是系统字体 */
 /* ════════ 主题：一共 15 套 ════════
    阳白明亮（light）、阴黑暗沉（dark）、九紫离火，加上流变时辰的 12 个时辰（子丑寅卯辰巳午未申酉戌亥，每个时辰算一套）。
    这一段只放「各套主题不一样的地方」，按套分块：
@@ -89,7 +90,7 @@ window.__sc=(function(){
   --allow:#17794A;--on-allow:#FFFFFF;--deny:#B23A2E;--warn:#A86200;
   --add-bg:#E2F3E8;--del-bg:#FBE5E2;--code-bg:#E9ECEF;--banner-bg:#FFF4DC;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --sans:ui-rounded,"SF Pro Rounded","Nunito",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
   /* 协同对方的 7 组配色（b 名字底色 / f 名字字色）；深色模式下面另有一套。字色和底色的对比度都在 6.4:1 以上 */
   --strip:var(--surface);--strip-line:var(--line);--rail-on:var(--bg);
   --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
@@ -752,10 +753,13 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 @media (hover:hover){.ds-tb tr.r:hover td,.ds-tb tr.q:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 .ds-rec{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
 .ds-rec b{color:var(--ink);font-weight:600}
-.ds-pg{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;margin:8px 0;font-size:12px;color:var(--muted)}
+.ds-pg{display:flex;flex-wrap:nowrap;gap:5px;align-items:center;justify-content:flex-end;margin:8px 0;font-size:12px;color:var(--muted)}
+.ds-pg>span:first-child{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}   /* 分页始终一行：放不下时说明字先省略 */
+.ds-pg>*{flex:none}
 .ds-pg button{min-width:30px;height:28px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:none;color:var(--ink);font:inherit;font-size:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .ds-pg button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .ds-pg button:disabled{opacity:.35;cursor:default}
+@media (max-width:600px){.ds-pg{gap:4px}.ds-pg button{min-width:26px;padding:0 5px}}   /* 手机：按钮紧凑一点，中间页（两头各有省略号）也放得下一行 */
 .ds-q{margin:6px 0;padding:10px 12px;border-radius:12px;background:var(--user-bg);white-space:pre-wrap;word-break:break-word;line-height:1.5}
 .ds-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .ds-chip{padding:2px 9px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
@@ -2721,9 +2725,11 @@ function dsBead(t,max,dim){   // 立体感（照 dsh 的球）：左上一块白
 }
 function dsPager(n){
   var pages=Math.ceil(n/DS_PAGE);if(pages<=1)return '';
-  var h='<div class="ds-pg"><span>第 '+(n-dissPage*DS_PAGE)+'–'+Math.max(1,n-(dissPage+1)*DS_PAGE+1)+' 轮 / 共 '+n+' 轮</span><button type="button" data-pg="'+(dissPage-1)+'"'+(dissPage<=0?' disabled':'')+'>‹</button>';
+  var R=window.matchMedia('(max-width:600px)').matches?1:2;   // 手机：当前页前后各只显示 1 页、说明字缩短，整排保持一行
+  var a=n-dissPage*DS_PAGE,z=Math.max(1,n-(dissPage+1)*DS_PAGE+1);
+  var h='<div class="ds-pg"><span>'+(R<2?a+'–'+z+' / '+n:'第 '+a+'–'+z+' 轮 / 共 '+n+' 轮')+'</span><button type="button" data-pg="'+(dissPage-1)+'"'+(dissPage<=0?' disabled':'')+'>‹</button>';
   for(var p=0;p<pages;p++){
-    if(pages>9&&Math.abs(p-dissPage)>2&&p!==0&&p!==pages-1){if(Math.abs(p-dissPage)===3)h+='<span>…</span>';continue}
+    if(pages>2*R+5&&Math.abs(p-dissPage)>R&&p!==0&&p!==pages-1){if(Math.abs(p-dissPage)===R+1)h+='<span>…</span>';continue}
     h+='<button type="button" data-pg="'+p+'"'+(p===dissPage?' class="on"':'')+'>'+(p+1)+'</button>';
   }
   return h+'<button type="button" data-pg="'+(dissPage+1)+'"'+(dissPage>=pages-1?' disabled':'')+'>›</button></div>';
