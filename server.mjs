@@ -3559,6 +3559,8 @@ wss.on('connection', (ws, req) => {
         try { opts = c?.cls?.preview() || null; } catch {}
         return send({ t: 'claw.opts', claw: m.claw, opts });
       }
+      // 新建对话框勾了「随机头像和网名」：建好就给新会话随机配一套（「最近」里显示）
+      const newSkin = (id) => { if (m.t === 'session.new' && m.skin === true) try { skins.random(id); } catch (e) { log('skin random', e.message); } };
       if (m.t === 'session.new' && (isOc(m.from) || m.claw === 'openclaw')) {
         ensureSkill('openclaw');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
         // OpenClaw：网关新建会话（没有目录的概念），建好直接打开
@@ -3572,6 +3574,7 @@ wss.on('connection', (ws, req) => {
         r.subscribe(ws);
         const pg = await r.open();
         log('new openclaw session', r.key);
+        newSkin(id);
         return send({
           t: 'session.opened', id, title: title || r.title || '新会话', cwd: 'OpenClaw', cwdShort: 'OpenClaw' + (r.model ? ' · ' + r.model : ''),
           mode: 'default', modes: ['default'], busy: false, claw: 'openclaw', xmodels: r.xmodels(), commands: r.commands || [],
@@ -3606,6 +3609,7 @@ wss.on('connection', (ws, req) => {
         runner = r;
         r.subscribe(ws);
         log('new ' + c.logName + ' session', r.sid, 'in', cwd);
+        newSkin(r.id);
         return send({
           t: 'session.opened', id: r.id, title: '新会话', cwd, cwdShort: r.metaLine(), claw: c.id, xmodels: r.xmodels(),
           mode: 'default', modes: ['default'], busy: false, history: [], pending: [], suggestion: null,
@@ -3651,6 +3655,7 @@ wss.on('connection', (ws, req) => {
         rememberWebSession(id, inherited);
         runner.subscribe(ws);
         log('new session', id.slice(0, 8), 'in', cwd, 'mode', inherited, from ? 'sibling of ' + from.sessionId.slice(0, 8) : '');
+        newSkin(id);
         send({
           t: 'session.opened', id, title: info.summary, cwd: info.cwd, cwdShort: relPath(info.cwd, null),
           mode: runner.mode, modes: runner.allowedModes, busy: false, history: [], pending: [], suggestion: null,

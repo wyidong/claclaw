@@ -85,5 +85,12 @@ export function makeSkins(DATA, ROOT) {
     if (!fs.existsSync(f)) fs.writeFileSync(f, buf, { mode: 0o600 });
     return 'u/' + name;
   };
-  return { all, set, upload, index, fileOf, typeOf };
+  // 随机一套：所有头像（含本机组）里抽一个、网名里抽一个（新建会话时勾了「随机头像和网名」）
+  const random = (id) => {
+    const ix = index(), avs = [];
+    for (const g of ix.groups) for (const f of g.items) avs.push(g.base + '/' + f);
+    const pick = a => (a.length ? a[crypto.randomInt(a.length)] : null);
+    return set(id, { av: pick(avs), name: pick(ix.names) });
+  };
+  return { all, set, random, upload, index, fileOf, typeOf };
 }

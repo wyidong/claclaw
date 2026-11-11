@@ -992,6 +992,9 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .dlg h3{margin:0 0 6px;font-size:17px;overflow-wrap:anywhere}
 .dlg p{margin:0 0 12px;font-size:13px;color:var(--muted)}
 .dlg label{display:block;font-size:14px;margin:10px 0 4px}
+.dlg .newNmRow{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.dlg label.newSkin{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}   /* 勾上：建好的会话在「最近」里随机配一套头像和网名 */
+.dlg label.newSkin input{flex:none;width:16px;height:16px;min-height:0;margin:0;padding:0;accent-color:var(--accent)}
 .dlg input{width:100%;box-sizing:border-box;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit}
 .dlg input:focus{outline:none;border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}   /* 不要浏览器默认的粗黑焦点框 */
 .dlg .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
@@ -1811,7 +1814,7 @@ select.pe-in{text-align-last:right}
     <form class="dlg" id="newForm" role="dialog" aria-label="新建会话">
       <h3>新建会话</h3>
       <p class="newIn">在 <input id="newDir" class="plainIn" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="目录"> 新建</p>
-      <label for="newName">名字（可以留空）</label>
+      <div class="newNmRow"><label for="newName">名字（可以留空）</label><label class="newSkin"><input type="checkbox" id="newSkin" checked>随机头像和网名</label></div>
       <input id="newName" autocomplete="off">
       <div id="newPick" hidden>
         <label>模型</label><div class="chips" id="newModels" role="radiogroup" aria-label="模型"></div>
@@ -7743,7 +7746,7 @@ function newSibling(s){
   $('#newForm .newIn').hidden=oc;$('#newForm h3').textContent=oc?'新建 OpenClaw 会话':'新建'+(cn?' '+cn+' ':'')+'会话';
   var d=$('#newDir');d.value=(s.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   d.style.width=Math.max(8,d.value.length+1)+'ch';
-  $('#newName').value='';$('#newErr').textContent='';
+  $('#newName').value='';$('#newErr').textContent='';$('#newSkin').checked=true;   // 随机头像和网名：每次默认勾上
   // Claude 会话：可以选模型 / 推理强度 / 权限；默认「沿用」= 用参照会话的
   var isClaude=!NOT_CLAUDE.test(s.id||'')&&(!s.claw||s.claw==='claude');
   var ms=isClaude?(cfg.models&&cfg.models.length&&!cfg.lib?cfg.models:lastModels):null;   // 当前是模型库会话时 cfg.models 是那个 Key 的模型，不能当 Claude 的列
@@ -7812,6 +7815,7 @@ $('#newForm').addEventListener('submit',function(e){
   e.preventDefault();if(!newFrom)return;
   var dir=$('#newDir').value.trim(),orig=(newFrom.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   var msg={t:'session.new',from:newFrom.id,title:$('#newName').value};
+  if($('#newSkin').checked)msg.skin=true;
   if(newFrom.claw)msg.claw=newFrom.claw;
   if(dir&&(dir!==orig||!newFrom.id))msg.cwd=dir;   // 改了目录（或没有参照会话）才带上；服务器会检查目录是否存在
   if(newPick.model)msg.model=newPick.model;

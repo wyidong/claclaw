@@ -529,6 +529,7 @@ var I18N={dict:{
 "晓雨 · 台湾":"HsiaoYu · Taiwan",
 "普通":"Light",
 "阳白明亮":"Yang Bright",
+"随机头像和网名":"Random avatar & nickname",
 "头像和网名":"Avatar & nickname",
 "网名（不填用会话原名）":"Nickname (blank = session name)",
 "从本地上传…":"Upload…",
