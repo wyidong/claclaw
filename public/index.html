@@ -418,7 +418,6 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #gNew[hidden]{display:none}
 #rClear{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#rClear:hover{color:var(--danger,#d33)}#rClear[hidden]{display:none}
 #sSearch[hidden]{display:none}.s-gap{flex:1}
-#sPeer{flex:none;position:relative;width:40px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sPeer:hover{color:var(--accent)}#sPeer.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}
 #sReload{display:none}   /* 只在手机的最近 / 会话页顶栏显示 */
 #sReload.dot::after,#railReload.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 有新版本：点一下刷新 */
 #railReload{position:relative}
@@ -427,12 +426,12 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #sVoice[hidden]{display:none}
 #sVoice{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover{color:var(--accent)}
 #rClear:disabled{opacity:.35;cursor:default}#rClear:disabled:hover{color:var(--muted);background:none}
-@media (min-width:1000px){   /* 电脑：新建、群、语音管理、协同挨着排在左边，清空最近在最右；左边栏不再放协同 */
-  #gNew,#rClear,#sVoice,#sPeer{width:34px;height:32px;margin:0;border-radius:8px}
-  #gNew:hover,#rClear:hover,#sVoice:hover,#sPeer:hover{background:var(--bg)}
+@media (min-width:1000px){   /* 电脑：新建、群、语音管理挨着排在左边，清空最近在最右；左边栏不再放协同 */
+  #gNew,#rClear,#sVoice{width:34px;height:32px;margin:0;border-radius:8px}
+  #gNew:hover,#rClear:hover,#sVoice:hover{background:var(--bg)}
   /* 图标之间的空白 = 第一个图标离列表左边的距离（12px）：按钮 = 图标宽 + 两边各 6px，再用负边距抵掉 8px 的 gap */
-  #gNew{width:36px}#sPeer{width:34px}#sVoice{width:33px}
-  #gNew,#sPeer,#sVoice{margin-left:-8px}
+  #gNew{width:36px}#sVoice{width:33px}
+  #gNew,#sVoice{margin-left:-8px}
   #railPeer{display:none!important}
   /* 刷新：从左栏挪到这里，放在语音管理右边，和手机同一个图标；左栏那个按钮只留着给脚本点（不显示） */
   #sReload{flex:none;position:relative;display:grid;place-items:center;width:32px;height:32px;margin:0 0 0 -8px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
@@ -446,7 +445,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 :is(#grpPane,#avPane) .gp-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 :is(#grpPane,#avPane) .gp-hd b{font-size:16px}
 :is(#grpPane,#avPane) .gp-x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
-:is(#grpPane,#avPane) input.gp-in{width:100%;box-sizing:border-box;height:36px;padding:0 10px;margin-bottom:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
+:is(#grpPane,#avPane) input.gp-in{width:100%;box-sizing:border-box;height:40px;padding:0 12px;margin-bottom:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
 :is(#grpPane,#avPane) .gp-list{flex:1;min-height:120px;overflow-y:auto;overscroll-behavior:contain}
 :is(#grpPane,#avPane) .gp-sec{font-size:12px;color:var(--muted);margin:10px 2px 4px}
 #grpPane label.gp-row{display:flex;align-items:center;gap:9px;padding:7px 4px;border-radius:9px;cursor:pointer}
@@ -594,7 +593,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .opt[aria-checked="true"]{border-color:var(--accent);background:var(--user-bg)}
 .opt .ol{font-weight:600}
 .opt .od{display:block;font-size:13px;color:var(--muted);margin-top:1px}
-.opt-other{margin-top:6px;width:100%;box-sizing:border-box;min-height:44px;padding:9px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit}
+.opt-other{margin-top:6px;width:100%;box-sizing:border-box;min-height:44px;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit}
 .opt-other:focus{outline:none;border-color:var(--accent)}
 .tool .answers{margin:0;padding:10px 12px;font-size:14px}
 .tool .answers b{font-weight:600}
@@ -651,9 +650,6 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #taWrap.sug #ta::placeholder{opacity:.9}
 #attachBtn,#send{position:absolute;top:2px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1}
 #attachBtn{left:-8px;color:var(--muted)}
-#micBtn{position:absolute;top:2px;left:26px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--muted);-webkit-tap-highlight-color:transparent}   /* 语音输入（试验）：一键开始听，再点停止 */
-#micBtn.on{color:var(--deny);animation:pulse 1.2s infinite}
-#composer.mic #ta{padding-left:68px}
 #send{right:2px;color:var(--accent)}
 #send:disabled,#send.sugfill{color:var(--muted);opacity:.45;cursor:default}
 #send.sugfill{cursor:pointer}
@@ -996,7 +992,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .dlg .newNmRow{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .dlg label.newSkin{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}   /* 勾上：建好的会话在「最近」里随机配一套头像和网名 */
 .dlg label.newSkin input{flex:none;width:16px;height:16px;min-height:0;margin:0;padding:0;accent-color:var(--accent)}
-.dlg input{width:100%;box-sizing:border-box;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit}
+.dlg input{width:100%;box-sizing:border-box;min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
 .dlg input:focus{outline:none;border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}   /* 不要浏览器默认的粗黑焦点框 */
 .dlg .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
 .dlg .err{min-height:1.4em;margin-top:10px;color:var(--deny);font-size:14px}
@@ -1128,8 +1124,8 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #app.m-list #sReload{flex:none;position:relative;display:grid;place-items:center;width:42px;height:38px;margin-left:-6px;border:0;border-radius:10px;background:none;color:var(--muted);cursor:pointer}
   #app.m-list #sNew{width:45px;margin-left:-4px}   /* 图标离左边 18px */
   /* 图标之间空 20px：按钮 = 图标宽 + 两边各 10px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
-  #app.m-list #gNew{width:46px}#app.m-list #sPeer{width:47px}#app.m-list #sVoice{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
-  #app.m-list #gNew,#app.m-list #sPeer,#app.m-list #sVoice{margin-left:-6px}
+  #app.m-list #gNew{width:46px}#app.m-list #sVoice{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
+  #app.m-list #gNew,#app.m-list #sVoice{margin-left:-6px}
   #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
@@ -1166,6 +1162,9 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #setBack{position:absolute;left:0;top:env(safe-area-inset-top,0px);bottom:0;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
 }
 #mtabs{display:none}
+body:is(.kb,.kbf) #app.m-list #mtabs{display:none!important}   /* 键盘弹出时收起底部菜单：不然它浮在键盘上面挡住正在填的输入框 */
+body.kb :is(#loginPane,#avPane,#grpPane){top:var(--vvo,0px);bottom:auto;height:var(--vvh,100%)}   /* 挂在 body 上的弹层：只占键盘上面那块 */
+body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:calc(var(--vvh,100vh) - 10px);overflow-y:auto}
 #setTop{display:none}
 #clawPane{display:none}
 #clawTop{display:none}   /* Claw 页的标题条：只在电脑端显示 */
@@ -1183,7 +1182,7 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
 #hostPane .pg-hd{margin-top:-17px}
 #hostPane .pe-back{left:-12px}   /* 宿主页有内边距：箭头位置对齐设置页 */
 .pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
-.pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
+.pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
 @media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#grpPane input.gp-in,#avPane input.gp-in,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select){font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
 .pe-in.left,.pe-in.left::placeholder{text-align:left}
@@ -1196,21 +1195,73 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
 .md-key.on{-webkit-user-select:all;user-select:all}
 .md-kbtns{flex:none;display:flex;gap:8px}
 .md-kbtns .pe-btn{height:30px;padding:0 12px;font-size:13px}
+/* Key 详情：一行一项，小标题在上、无框输入在下；Key 后面两个小药丸按钮；保存整行宽；删除放最底下 */
+.h-row.md-f{flex-direction:column;align-items:stretch;gap:4px;min-height:0;padding:11px 14px 10px}
+.md-lb{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;line-height:18px;color:var(--muted);transition:color .15s}
+.md-fmtx{color:var(--muted);opacity:.85}
+.h-row.md-f:focus-within .md-lb{color:var(--accent)}
+.md-in{display:block;width:100%;min-width:0;height:26px;margin:0;padding:0;border:0;background:transparent;color:var(--ink);font:inherit;font-size:15px;outline:none;box-sizing:border-box;text-overflow:ellipsis}
+textarea.md-in{height:auto;min-height:38px;margin-top:2px;padding:7px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);line-height:22px;resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;transition:border-color .15s}
+textarea.md-in::placeholder{font-family:inherit;font-size:13px;line-height:22px}   /* 占位字小一号（框里的字手机上要 16px 防放大，占位字不受影响） */
+/* 所有输入框一个样子：1px 浅边、10px 圆角；点进去边框变主题色、外面一圈淡淡的主题色光晕（不要浏览器默认的蓝 / 黑焦点框）；占位字小一号、淡色。
+   :is() 里有 ID，优先级盖过各处单独写的规则 */
+:is(.pe-in,.lg-in,.opt-other,#sSearch,textarea.md-in,.dlg input:not(.plainIn):not([type=checkbox]):not([type=radio]),#grpPane input.gp-in,#avPane input.gp-in):focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+:is(.pe-in,.lg-in,.opt-other,#sSearch,textarea.md-in,.dlg input:not(.plainIn):not([type=checkbox]):not([type=radio]),#grpPane input.gp-in,#avPane input.gp-in)::placeholder{color:var(--muted);opacity:.7;font-size:13px}
+textarea.md-in:focus-visible{outline:none}
+.md-secret{-webkit-text-security:disc}   /* Key 用多行框也打点（不用 password 框：放不下时看不全提示） */
+.md-in::placeholder{color:var(--muted);opacity:.6}
+.md-kv{display:flex;align-items:center;gap:10px;min-height:28px}
+.md-kv .md-key{flex:1;min-width:0;font-family:inherit;font-size:15px;letter-spacing:.5px}
+.md-pill{height:28px;padding:0 13px;border:0;border-radius:14px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);font:inherit;font-size:13px;font-weight:500;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.md-pill:active{opacity:.6}
+.md-acts{margin:0}
+.md-save{display:block;width:100%;height:46px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink,#fff);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+.md-save:active{opacity:.8}
+.md-mrow{gap:10px}
+.h-row .k.md-mn{flex:1;min-width:0;font-weight:500}
+.md-caps{flex:none;display:flex;gap:4px}
+.md-caps i{font-style:normal;padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted);font-size:11.5px;line-height:16px}
+.md-acts2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 0}
+.md-btn2{height:42px;border:0;border-radius:12px;background:var(--bg);color:var(--accent);font:inherit;font-size:14.5px;font-weight:500;cursor:pointer}
+.md-btn2:active{opacity:.6}
+.md-btn2[hidden]{display:none}
+.md-acts2.one{grid-template-columns:1fr}
+.md-ro{font-size:15px;line-height:24px;color:var(--muted);overflow-wrap:anywhere}
+/* 字号层次：小标题 13px 灰；填的值（输入框、选择框、Key、ID）都是 15px（手机 16px），同一种字体 */
+.h-row.md-f>.md-fk{position:relative;display:block;margin-top:2px}   /* 接口格式：和输入框一个样子的选择框 */
+.h-row.md-f>.md-fk::after{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
+.md-sel{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;line-height:26px;cursor:pointer}
+.h-row.md-f>.md-fk .md-sel{display:block;width:100%;min-height:38px;padding:7px 30px 7px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);line-height:22px;box-sizing:border-box}
+.h-row.md-f>.md-fk .md-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+.md-fko{position:relative;display:inline-flex;align-items:center;color:var(--muted)}   /* 小标题右边的格式：看着是小字，点开是系统选择框（透明盖在上面，16px 免得 iOS 放大） */
+.md-fko select{position:absolute;inset:0;width:100%;opacity:0;font-size:16px;cursor:pointer}
+@media (pointer:coarse){.md-kv .md-key,.md-ro{font-size:16px}}
+.md-danger{margin:10px 0 6px}
+.md-danger button{display:block;width:100%;height:46px;border:0;border-radius:12px;background:var(--bg);color:var(--deny);font:inherit;font-size:15px;cursor:pointer}
+.md-danger button:active{opacity:.6}
+.h-row.md-swrow{cursor:pointer}
+.h-row.md-swrow .k{flex:1;min-width:0}
+.md-swrow .k small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.md-sw{flex:none;-webkit-appearance:none;appearance:none;position:relative;width:46px;height:28px;margin:0;border-radius:14px;background:var(--line);cursor:pointer;transition:background .2s}
+.md-sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.md-sw:checked{background:var(--allow,var(--accent))}
+.md-sw:checked::after{transform:translateX(18px)}
+.md-sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pe-ss input[type=checkbox],.md-pick input[type=checkbox]{accent-color:var(--accent)}   /* 勾选框用主题色，不要系统蓝 */
 .md-fk{display:flex;align-items:center}
 .md-fk::after{content:'▾';margin-left:4px;font-size:12px;color:var(--muted);pointer-events:none}
 .md-fmt{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;cursor:pointer}
 .md-addk .k{color:var(--muted);font-size:14px}
-.md-more>summary{list-style:none;display:flex;align-items:center;gap:7px;margin:0 14px;padding:2px 0;font-size:14px;color:var(--muted);cursor:pointer}
+.md-more>summary{list-style:none;display:flex;align-items:center;gap:7px;margin:-4px 14px 0;padding:4px 0;font-size:13.5px;color:var(--muted);cursor:pointer}
 .md-more>summary::-webkit-details-marker{display:none}
 .md-more>summary::before{content:'';width:6px;height:6px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
 .md-more[open]>summary{margin-bottom:10px}
 .md-more[open]>summary::before{transform:rotate(45deg)}
 .md-h2{margin-top:16px}
 .md-solo .pe-in{flex:1;min-width:0;width:100%;max-width:none;text-align:left}   /* 添加 / 编辑 Key：输入框占满一行，说明在占位字里 */
-.md-main{margin-top:14px}
+.md-main{margin-top:0}
 .md-eps2:empty{display:none}
 .md-eps2{margin-top:10px}
-#mdFmt0{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;cursor:pointer}
 .md-pid{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
 .pe-ta::placeholder{text-align:left}
@@ -1333,6 +1384,7 @@ select.pe-in{text-align-last:right}
 .pe-err{margin:8px 14px 0;font-size:13px;color:var(--deny)}
 .pe-ok{margin:8px 14px 0;font-size:13px;color:var(--allow)}
 #hostBody{display:flex;flex-direction:column;gap:18px}
+#hostBody>div:empty{display:none}   /* 还没内容的占位块（提示、消息）不占一份间距 */
 .h-empty{padding:40px 16px;text-align:center;color:var(--muted)}
 .h-h{margin:0 14px 7px;font-size:12.5px;color:var(--muted)}
 .h-card{background:var(--bg);border-radius:12px;overflow:hidden}
@@ -1804,7 +1856,6 @@ select.pe-in{text-align-last:right}
     <div id="roBar" hidden><span class="ro-t"></span><button type="button" class="ro-go" hidden>接管</button></div>
     <div id="composer">
       <button type="button" id="attachBtn" aria-label="添加图片"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4.5v13M4.5 11h13"/></svg></button>
-      <button type="button" id="micBtn" hidden aria-label="语音输入" title="语音输入（试验）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
       <input type="file" id="fileIn" multiple hidden>
       <div id="taWrap">
         <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
@@ -1905,7 +1956,7 @@ select.pe-in{text-align-last:right}
       <!-- 线条图标的规格（列表顶栏、左栏）：24×24 网格、线宽 1.8、页面上同一个尺寸（电脑 22px，手机 26px），不再逐个调大小。
            图形按看起来一样大来画（实际画出来的最长边，网格单位）：圆形 ≈18.8（加号、会话气泡）、宽形 ≈19（群、语音、显示器）、
            方块 ≈17.5（Claw 四格）、协同 ≈17.7、刷新 ≈16.4（两段弧带箭头，撑满一圈显大）、齿轮 ≈20（齿之间是空的）；新加图标照这个画 -->
-      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.4"/><path d="M12 7.82v8.36M7.82 12h8.36"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.87" cy="7.93" r="3.34"/><path d="M2.6 19.42c0-3.45 2.82-5.74 6.27-5.74s6.27 2.3 6.27 5.74"/><path d="M15.66 4.69a3.34 3.34 0 0 1 0 6.48"/><path d="M17.74 13.98c2.09 0.73 3.66 2.72 3.66 5.43"/></svg></button><button type="button" id="sPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.99" cy="6.54" r="2.84"/><circle cx="18.01" cy="17.46" r="2.84"/><path d="M8.29 8.5l7.43 6.99"/><path d="M14.19 3.81h6.01V9.81"/><path d="M9.81 20.19H3.81V14.19"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.64 15.18H4.27a1.82 1.82 0 0 1-1.82-1.82V6.09a1.82 1.82 0 0 1 1.82-1.82h10.91a1.82 1.82 0 0 1 1.82 1.82v3.18"/><path d="M6.09 7.91h0.01M9.73 7.91h0.01M13.36 7.91h0.01M6.09 11.55h4.55"/><path d="M13.82 14.27v2.73M16.55 11.55v8.19M19.28 13.36v4.55M21.55 15v1.27"/></svg></button><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 12a8.2 8.2 0 0 1 8.2-8.2a8.88 8.88 0 0 1 6.14 2.5L20.2 8.36"/><path d="M20.2 3.8v4.56h-4.56"/><path d="M20.2 12a8.2 8.2 0 0 1-8.2 8.2a8.88 8.88 0 0 1-6.14-2.5L3.8 15.64"/><path d="M8.36 15.64H3.8v4.56"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)" stroke-width="1.89"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.4"/><path d="M12 7.82v8.36M7.82 12h8.36"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.87" cy="7.93" r="3.34"/><path d="M2.6 19.42c0-3.45 2.82-5.74 6.27-5.74s6.27 2.3 6.27 5.74"/><path d="M15.66 4.69a3.34 3.34 0 0 1 0 6.48"/><path d="M17.74 13.98c2.09 0.73 3.66 2.72 3.66 5.43"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.64 15.18H4.27a1.82 1.82 0 0 1-1.82-1.82V6.09a1.82 1.82 0 0 1 1.82-1.82h10.91a1.82 1.82 0 0 1 1.82 1.82v3.18"/><path d="M6.09 7.91h0.01M9.73 7.91h0.01M13.36 7.91h0.01M6.09 11.55h4.55"/><path d="M13.82 14.27v2.73M16.55 11.55v8.19M19.28 13.36v4.55M21.55 15v1.27"/></svg></button><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 12a8.2 8.2 0 0 1 8.2-8.2a8.88 8.88 0 0 1 6.14 2.5L20.2 8.36"/><path d="M20.2 3.8v4.56h-4.56"/><path d="M20.2 12a8.2 8.2 0 0 1-8.2 8.2a8.88 8.88 0 0 1-6.14-2.5L3.8 15.64"/><path d="M8.36 15.64H3.8v4.56"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)" stroke-width="1.89"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -3278,25 +3329,6 @@ sugBtn.addEventListener('click',function(){acceptSuggestion(true)});
 // ---------- 发图片：选图 / 拍照 / 粘贴，先在手机上压缩再发 ----------
 
 var MAX_IMAGES=5,attachments=[],attsEl=$('#atts'),fileIn=$('#fileIn');
-// ---------- 语音输入（试验）：浏览器自带的语音识别（iOS 走苹果听写）。加号右边的麦克风：一键开始听，再点一下停止；识别出来的字接到输入框里 ----------
-var SR=window.SpeechRecognition||window.webkitSpeechRecognition,micBtn=$('#micBtn'),micRec=null;
-function micShow(){var on=!!SR&&COARSE.matches;micBtn.hidden=!on;$('#composer').classList.toggle('mic',on)}
-micBtn.addEventListener('click',function(){
-  if(micRec){try{micRec.stop()}catch(_){}return}
-  try{ttsStop()}catch(_){}   // 正在念的先停：iOS 放着声音时一开麦克风就被打断（aborted）
-  var r;try{r=new SR()}catch(e){toast('这里用不了语音识别：'+e.message);return}
-  r.lang='zh-CN';r.continuous=true;r.interimResults=true;
-  var base=ta.value,fin='';
-  r.onresult=function(e){var interim='';for(var i=e.resultIndex;i<e.results.length;i++){var x=e.results[i];if(x.isFinal)fin+=x[0].transcript;else interim+=x[0].transcript}
-    ta.value=base+(base&&!/\s$/.test(base)?' ':'')+fin+interim;ta.dispatchEvent(new Event('input',{bubbles:true}))};
-  var t0=Date.now();
-  r.onerror=function(e){if(e.error==='aborted'&&Date.now()-t0<2000)toast('麦克风没开起来（被打断了），再点一下试试');else if(e.error!=='aborted'&&e.error!=='no-speech')toast('语音识别出错：'+(e.error||'未知'));try{clog('speech error '+e.error+' after '+(Date.now()-t0)+'ms tts='+(typeof srvPlaying==='function'&&srvPlaying()?1:0)+' standalone='+!!navigator.standalone+' embedded='+(window.parent!==window))}catch(_){}};
-  r.onend=function(){micRec=null;micBtn.classList.remove('on');syncSend()};
-  try{r.start();micRec=r;micBtn.classList.add('on');toast('说吧，再点一下停止')}catch(e){toast('启动失败：'+e.message);try{clog('speech start fail '+e.message)}catch(_){}}
-});
-micShow();
-// 发送时关掉语音输入：开着麦克风时 iOS 不放声音（自动播报播不出来），而且关晚了还会把识别出的字又写回已经清空的输入框
-function micOff(){var r=micRec;if(!r)return;r.onresult=null;r.onerror=null;try{r.abort()}catch(_){try{r.stop()}catch(__){}}}
 $('#attachBtn').addEventListener('click',function(){if(attachments.length>=MAX_IMAGES){addSys('一次最多 '+MAX_IMAGES+' 张图片');return}fileIn.click()});
 fileIn.addEventListener('change',function(){addFiles(fileIn.files);fileIn.value=''});
 // 粘贴图片：整个页面都接（焦点不在输入框时也能粘），items 和 files 两种来源都看（Safari 有时只给 files）
@@ -4055,7 +4087,6 @@ function run(text){
   cmdMenu.hidden=true;
   var images=[],video=null;
   attachments.forEach(function(a){if(a.video)video={kind:a.video.kind||'video',id:a.video.id,name:a.video.name,file:a.video.file,url:a.url,size:a.video.size};else{images.push({media_type:a.media_type,data:a.data});if(a.orig)vidSave('img:'+imgKey(a.data),a.orig,a.orig.name,'image');URL.revokeObjectURL(a.url)}});
-  micOff();
   attachments=[];renderAtts();   // 视频的预览地址留着：聊天区那条消息还要用
   ta.value='';ta.style.height='auto';ta.style.overflowY='hidden';
   busy=true;setDock('busy');
@@ -4537,12 +4568,12 @@ function renderVoices(){
       if(k.set&&!vcKeyEdit)top='<div class="h-row"><span class="k">API Key</span><span class="v pe-mono">••••'+esc(k.tail)+'</span></div>'+
         '<div class="h-row"><span class="k">已开通</span><span class="v">'+esc((k.res||[]).join('、')||'—')+'</span></div>'+
         '<div class="pe-btns"><button type="button" class="pe-btn" data-act="vc-key-edit">更换 Key</button><button type="button" class="pe-btn del" data-act="vc-key-del">清除 Key</button></div>';
-      else top='<div class="h-row md-solo"><input id="vcKey" class="pe-in left mono" type="password" maxlength="1000" autocomplete="off" placeholder="粘贴 API Key（火山控制台 → 豆包语音 → API Key 管理）"></div>'+
+      else top='<div class="h-row md-f"><label class="md-lb" for="vcKey">API Key</label><textarea id="vcKey" rows="1" class="md-in mono md-secret" maxlength="1000" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴 API Key（火山控制台 → 豆包语音 → API Key 管理）"></textarea></div>'+
         '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="vc-key-save">保存</button>'+(k.set?'<button type="button" class="pe-btn" data-act="vc-key-cancel">取消</button>':'')+'</div>';
     }else if(!e.ready)top='<div class="h-row vc-hint">电脑上还没装（在电脑上运行 tools/setup-edge-tts.sh）</div>';
     h+=vcSec(e.name,e.free?'免费':'付费',e.hint,top+list.map(function(v){return vcRow('srv:'+v.name,srvLabel(v))}).join(''),list.map(function(v){return 'srv:'+v.name}));
   });
-  $('#hostBody').innerHTML=h;
+  $('#hostBody').innerHTML=h;mdGrow();
   document.querySelectorAll('#hostBody .vc-grp[data-mixed]').forEach(function(c){c.indeterminate=true});
 }
 function vcAct(act,a){
@@ -4626,26 +4657,37 @@ function openModels(from){
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
 function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');return a.join(' · ')}
 function mdlField(id,label,val,attrs,wide,mono){return '<div class="h-row'+(wide?' pe-urlrow':'')+'"><span class="k">'+label+'</span><input id="'+id+'" class="pe-in'+(wide?' left mono':mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}
-function mdlIn(id,val,attrs,mono){return '<div class="h-row md-solo"><input id="'+id+'" class="pe-in left'+(mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}   // 不带左边标题，说明写在占位字里
+function mdlIn(id,val,attrs,mono,label){   // Key 详情的输入行：上面一行小标题，下面无框输入（点进去小标题变主题色）
+  var sec=/type="password"/.test(attrs||'');attrs=(attrs||'').replace(/\s*type="password"/,'');
+  return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+esc(label||'')+'</label><textarea id="'+id+'" rows="1" class="md-in'+(mono?' mono':'')+(sec?' md-secret':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" '+attrs+'>'+esc(val==null?'':String(val))+'</textarea></div>'}
 function mdlMask(p){return p.hasKey?'••••••••'+p.keyLast4:'没有 Key'}
 function mdlHost(u){try{return new URL(u).host}catch(_){return u||''}}
 function mdlEps0(p){return Object.keys(p.endpoints).map(function(f){return [f,p.endpoints[f]]})}
 // 按地址猜接口格式（新加时跟着填的地址变，手动选过就不再变）
 function mdlGuess(u){u=String(u||'').toLowerCase();if(/\/openai(\/|$)/.test(u))return 'openai';if(/anthropic/.test(u))return 'anthropic';if(/generativelanguage\.googleapis\.com|aiplatform\.googleapis\.com/.test(u))return 'gemini';return 'openai'}
+// 多行输入框（Key、接口地址、备注…）：一行放不下就自动长高；不收换行（回车不换行，粘进来的换行去掉）
+function mdGrow(el){(el?[el]:document.querySelectorAll('#hostBody textarea.md-in')).forEach(function(t){if(!t.offsetParent)return;t.style.height='auto';t.style.height=t.scrollHeight+'px'})}
+$('#hostBody').addEventListener('input',function(e){var t=e.target;if(t.tagName==='TEXTAREA'&&t.classList.contains('md-in')){if(/[\r\n]/.test(t.value)){var c=t.selectionStart;t.value=t.value.replace(/[\r\n]+/g,'');try{t.setSelectionRange(c-1,c-1)}catch(_){}}mdGrow(t)}});
+$('#hostBody').addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.tagName==='TEXTAREA'&&e.target.classList.contains('md-in'))e.preventDefault()});
+$('#hostBody').addEventListener('toggle',function(){mdGrow()},true);
+if(window.MutationObserver)new MutationObserver(function(){mdGrow()}).observe($('#hostBody'),{childList:true,subtree:true});   // 协同等页面自己重画的，画完也量一下   // 「更多设置」展开后里面的框才量得到高度
+window.addEventListener('resize',function(){if(hostView==='models'||hostView==='voices')mdGrow()});
+function mdlFmtX(){var x=document.querySelector('#hostBody .md-fmtx'),r=x&&x.closest('.md-ep');if(!r)return;var u=r.querySelector('.md-url').value.trim(),f=r.querySelector('.md-fmt').value;x.textContent=u?MDL_FMT[f]||f:'格式自动判断'}   // 接口地址标题右边：认出来的格式
 function mdlEpMain(fmt,url,auto){
-  return '<div class="h-row md-solo md-ep"><input type="hidden" class="md-fmt" value="'+esc(fmt)+'"'+(auto?' data-auto="1"':'')+'>'+
-    '<input class="pe-in left mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="接口地址，比如 https://api.deepseek.com（格式自动判断）" value="'+esc(url||'')+'"></div>'}
-function mdlFmtRow(fmt){return '<div class="h-row"><span class="k">接口格式</span><span class="md-fk" style="margin-left:auto"><select id="mdFmt0" aria-label="接口格式">'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></div>'}
+  return '<div class="h-row md-f md-ep"><label class="md-lb" for="mdUrl0">接口地址<span class="md-fmtx">'+esc(url?MDL_FMT[fmt]||fmt:'格式自动判断')+'</span></label><input type="hidden" class="md-fmt" value="'+esc(fmt)+'"'+(auto?' data-auto="1"':'')+'>'+
+    '<textarea id="mdUrl0" rows="1" class="md-in mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="比如 https://api.deepseek.com">'+esc(url||'')+'</textarea></div>'}
+function mdlFmtRow(fmt){return '<div class="h-row md-f"><label class="md-lb" for="mdFmt0">接口格式</label><span class="md-fk"><select id="mdFmt0" class="md-sel" aria-label="接口格式">'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></div>'}
 function mdlEpRow(fmt,url,auto){
-  return '<div class="h-row pe-urlrow md-ep"><span class="k md-fk"><select class="md-fmt" aria-label="接口格式"'+(auto?' data-auto="1"':'')+'>'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span>'+
-    '<input class="pe-in left mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…" value="'+esc(url||'')+'"></div>'}
+  return '<div class="h-row md-f md-ep"><span class="md-lb"><span>接口地址</span><span class="md-fk md-fko"><span class="md-fv">'+esc(MDL_FMT[fmt]||fmt)+'</span><select class="md-fmt" aria-label="接口格式"'+(auto?' data-auto="1"':'')+'>'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></span>'+
+    '<textarea rows="1" class="md-in mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">'+esc(url||'')+'</textarea></div>'}
 function mdlKeyHtml(p){
   var k=mdlKey&&mdlKey.id===p.id&&mdlKey.show?mdlKey.key:'';
-  return '<div class="h-row md-keyrow"><span class="md-key'+(k?' on':'')+'">'+esc(k||mdlMask(p))+'</span><span class="md-kbtns"><button type="button" class="pe-btn" data-act="mdl-key-show">'+(k?'隐藏':'查看')+'</button><button type="button" class="pe-btn" data-act="mdl-key-copy">复制</button></span></div>'}
+  return '<div class="h-row md-f md-keyrow"><span class="md-lb">Key</span><div class="md-kv"><span class="md-key'+(k?' on':'')+'">'+esc(k||mdlMask(p))+'</span><span class="md-kbtns"><button type="button" class="md-pill" data-act="mdl-key-show">'+(k?'隐藏':'查看')+'</button><button type="button" class="md-pill" data-act="mdl-key-copy">复制</button></span></div></div>'}
 function mdlModelsHtml(p){
   return hSec('模型（'+p.models.length+'）',(p.models.map(function(m){
-      return '<div class="h-row h-link" data-act="mdl-model" data-id="'+esc(m.id)+'"><span class="k" style="flex:1;min-width:0">'+esc(m.name||m.id)+(m.name?'<span class="md-sub">'+esc(m.id)+'</span>':'')+'</span><span class="v" style="flex:none">'+esc(mdlCaps(m))+'</span><span class="chev" aria-hidden="true"></span></div>'}).join('')||'<div class="h-row"><span class="v" style="text-align:left">还没有模型</span></div>'))+
-    '<div class="pe-btns pe-end"><button type="button" class="pe-btn" data-act="mdl-fetch">从接口读取</button><button type="button" class="pe-btn" data-act="mdl-model-new">手动添加</button></div>'+mdlRemoteHtml(p)}
+      var caps=mdlCaps(m).split(' · ').filter(Boolean).map(function(c){return '<i>'+esc(c)+'</i>'}).join('');
+      return '<div class="h-row h-link md-mrow" data-act="mdl-model" data-id="'+esc(m.id)+'"><span class="k md-mn">'+esc(m.name||m.id)+(m.name?'<span class="md-sub">'+esc(m.id)+'</span>':'')+'</span><span class="md-caps">'+caps+'</span><span class="chev" aria-hidden="true"></span></div>'}).join('')||'<div class="h-row"><span class="v" style="text-align:left">还没有模型，从接口读取或手动添加</span></div>'))+
+    '<div class="md-acts2"><button type="button" class="md-btn2" data-act="mdl-fetch">从接口读取</button><button type="button" class="md-btn2" data-act="mdl-model-new">＋ 手动添加</button></div>'+mdlRemoteHtml(p)}
 function mdlRemoteHtml(p){
   var r=mdlRemote&&mdlRemote.id===p.id?mdlRemote:null;if(!r)return '';
   if(r.busy)return '<div class="pe-note">正在从接口读取模型列表…</div>';
@@ -4667,26 +4709,29 @@ function renderModels(){
     h+=pgHd('data-act="mdl-back"','返回模型管理',p?p.name+(p.label?' · '+p.label:''):tpl?'再加一个 '+tpl.name+' 的 Key':'添加 Key')+errBox;
     var f0=eps[0]?eps[0][0]:'openai';
     // 默认只露三个框：Key、接口地址（格式按地址自动判断）、备注；其他收进「更多」
-    h+='<div class="h-card md-main">'+(needKey?mdlIn('mdKey','','type="password" maxlength="1000" placeholder="Key（必填）"',true):'<div id="mdKeyBox">'+mdlKeyHtml(p)+'</div>')+
+    h+='<div class="h-card md-main">'+(needKey?mdlIn('mdKey','','type="password" maxlength="1000" placeholder="必填"',true,'Key'):'<div id="mdKeyBox">'+mdlKeyHtml(p)+'</div>')+
       mdlEpMain(f0,eps[0]?eps[0][1]:'',!src)+
-      mdlIn('mdLabel',p&&p.label||'','maxlength="40" placeholder="备注（可不填），比如 公司、个人"')+'</div>';
-    var more=(needKey?'':mdlIn('mdKey','','type="password" maxlength="1000" placeholder="换 Key（留空不改）"',true))+
+      mdlIn('mdLabel',p&&p.label||'','maxlength="40" placeholder="可不填，比如 公司、个人"',false,'备注')+'</div>';
+    var more=(needKey?'':mdlIn('mdKey','','type="password" maxlength="1000" placeholder="留空不改"',true,'换 Key'))+
       mdlFmtRow(f0)+
-      (p?'<div class="h-row"><span class="k">ID</span><span class="v pe-mono">'+esc(p.id)+'</span></div>':mdlIn('mdId','','maxlength="32" placeholder="ID（可不填，自动生成）"',true));
-    h+='<details class="md-more"><summary>更多</summary><div class="h-card">'+more+'</div>'+
+      (p?'<div class="h-row md-f"><span class="md-lb">ID</span><span class="md-ro">'+esc(p.id)+'</span></div>':mdlIn('mdId','','maxlength="32" placeholder="可不填，自动生成"',true,'ID'));
+    h+='<details class="md-more"><summary>更多设置</summary><div class="h-card">'+more+'</div>'+
       '<div class="h-card md-eps2" id="mdEps2">'+eps.slice(1).map(function(e){return mdlEpRow(e[0],e[1])}).join('')+'</div>'+
-      '<div class="pe-btns"><button type="button" class="pe-btn" data-act="mdl-ep-add"'+(eps.length>=mdl.formats.length?' hidden':'')+'>同一个 Key 再加一个其他格式的地址</button></div></details>';
-    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-save">'+(p?'保存':'添加')+'</button>'+(p?'<button type="button" class="pe-btn del" data-act="mdl-prov-del">删除这个 Key</button>':'')+'</div>';
-    if(p)h+='<div id="mdModels">'+mdlModelsHtml(p)+'</div>';
+      '<div class="md-acts2 one"><button type="button" class="md-btn2" data-act="mdl-ep-add"'+(eps.length>=mdl.formats.length?' hidden':'')+'>＋ 同一个 Key 再加一个其他格式的地址</button></div></details>';
+    h+='<div class="md-acts"><button type="button" class="md-save" data-act="mdl-prov-save">'+(p?'保存':'添加')+'</button></div>';
+    if(p)h+='<div id="mdModels">'+mdlModelsHtml(p)+'</div><div class="md-danger"><button type="button" data-act="mdl-prov-del">删除这个 Key</button></div>';   // 删除放到最底下，和保存分开
   }else if(mm){
     var pp=mdlProv(mm[1]),m=pp&&mm[2]?pp.models.find(function(x){return x.id===mm[2]}):null;
     if(!pp||(mm[2]&&!m)){mdlSub=pp?'p:'+pp.id:'';return renderModels()}
     h+=pgHd('data-act="mdl-back"','返回 '+pp.name,m?(m.name||m.id):'添加模型')+errBox;
-    h+=hSec(pp.name+(pp.label?' · '+pp.label:'')+'（…'+pp.keyLast4+'）',mdlField('mdMId','模型 ID',m?m.id:'','maxlength="120" placeholder="调用接口时用的名字，比如 deepseek-v4-pro"',true)+
-      mdlField('mdMName','显示名',m?m.name:'','maxlength="60" placeholder="可不填"')+
-      mdlField('mdMCtx','上下文（token）',m?m.context:'','type="number" inputmode="numeric" min="1000" placeholder="可不填，比如 128000"',false,true));
-    h+='<div><div class="h-h">能力</div><div class="h-card"><div class="pe-ss"><label><input type="checkbox" id="mdMVision"'+(m&&m.vision?' checked':'')+'><span>能识图</span></label><label><input type="checkbox" id="mdMReason"'+(m&&m.reasoning?' checked':'')+'><span>会推理（思考）</span></label></div></div></div>';
-    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-model-save">'+(m?'保存':'添加')+'</button>'+(m?'<button type="button" class="pe-btn del" data-act="mdl-model-del">删除模型</button>':'')+'</div>';
+    // 和 Key 详情同一套：小标题在上、输入框在下；能力是开关；保存整行宽，删除放最底下
+    h+=hSec(pp.name+(pp.label?' · '+pp.label:'')+'（…'+pp.keyLast4+'）',mdlIn('mdMId',m?m.id:'','maxlength="120" placeholder="调用接口时用的名字，比如 deepseek-v4-pro"',false,'模型 ID')+
+      mdlIn('mdMName',m?m.name:'','maxlength="60" placeholder="可不填，不填就显示模型 ID"',false,'显示名')+
+      mdlIn('mdMCtx',m?m.context:'','inputmode="numeric" maxlength="9" placeholder="可不填，比如 128000"',false,'上下文（token）'));
+    var sw=function(id,on,t,sub){return '<label class="h-row md-swrow"><span class="k">'+t+'<small>'+sub+'</small></span><input type="checkbox" class="md-sw" id="'+id+'"'+(on?' checked':'')+'></label>'};
+    h+=hSec('能力',sw('mdMVision',m&&m.vision,'能识图','发图片时用得上')+sw('mdMReason',m&&m.reasoning,'会推理（思考）','能开推理强度'));
+    h+='<div class="md-acts"><button type="button" class="md-save" data-act="mdl-model-save">'+(m?'保存':'添加')+'</button></div>';
+    if(m)h+='<div class="md-danger"><button type="button" data-act="mdl-model-del">删除模型</button></div>';
   }else{
     h+=pgHd('data-act="mdl-back"','返回','模型管理')+errBox;
     var groups=[],gi={};   // 按供应商分组，组的顺序按第一次出现
@@ -4698,10 +4743,10 @@ function renderModels(){
           '<span class="v" style="flex:none">'+p.models.length+' 个模型</span><span class="chev" aria-hidden="true"></span></div>'}).join('')+
         '<div class="h-row h-link md-addk" data-act="mdl-prov-new" data-from="'+esc(g.items[0].id)+'"><span class="k">＋ 再加一个 '+esc(g.name)+' 的 Key</span></div>');
     }).join('')||'<div class="pe-note">还没有添加 Key。点下面「添加 Key」：填 Key 和接口地址就行，其他的都可以不填。</div>';
-    h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-new">添加 Key</button></div>';
+    h+='<div class="md-acts2 one"><button type="button" class="md-btn2" data-act="mdl-prov-new">＋ 添加 Key</button></div>';
     h+='<div class="pe-note">按接口地址的域名分供应商。各 Claw 的会话里选模型时，从这里加过的模型里选。Key 只存在这台电脑上（data/models.json），列表只显示最后 4 位；查看或复制完整的 Key 要再输一次 claclaw 的密码。</div>';
   }
-  $('#hostBody').innerHTML=h;
+  $('#hostBody').innerHTML=h;mdGrow();
 }
 // 出错只改错误那一行，不重画（填了一半的内容还在）
 function mdlErr(msg){var el=$('#mdErr');if(!el){mdlMsg={err:msg};renderModels();return}el.textContent=msg;el.hidden=false;try{el.scrollIntoView({block:'nearest'})}catch(_){}}
@@ -4744,7 +4789,7 @@ function mdlAct(act,a){
     var used={};document.querySelectorAll('#hostBody .md-fmt').forEach(function(s){used[s.value]=1});
     box.insertAdjacentHTML('beforeend',mdlEpRow(mdl.formats.filter(function(f){return !used[f]})[0]||mdl.formats[0],''));
     if(document.querySelectorAll('#hostBody .md-ep').length>=mdl.formats.length)a.hidden=true;
-    box.lastElementChild.querySelector('.md-url').focus();return;
+    mdGrow();box.lastElementChild.querySelector('.md-url').focus();return;
   }
   if(act==='mdl-prov-save'&&pm){
     var eps={},dup='';
@@ -4856,11 +4901,11 @@ $('#hostBody').addEventListener('click',function(e){
 });
 $('#hostBody').addEventListener('input',function(e){
   if(e.target.id==='pePoolQ'){peerPoolQ=e.target.value;var l=$('#pePoolList');if(l&&peerCfg)l.innerHTML=poolListHtml(peerCfg)}   // 协同会话页搜索：只重画列表
-  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden')f0.value=fs.value}}   // 模型管理：接口格式跟着地址猜
+  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden')f0.value=fs.value}mdlFmtX()}   // 模型管理：接口格式跟着地址猜
 });
 $('#hostBody').addEventListener('change',function(e){
-  if(e.target.classList.contains('md-fmt'))e.target.removeAttribute('data-auto');
-  if(e.target.id==='mdFmt0'){var h0=document.querySelector('#hostBody .md-ep .md-fmt[type="hidden"]');if(h0){h0.value=e.target.value;h0.removeAttribute('data-auto')}}   // 「更多」里手动选了主地址的格式：不再跟着地址猜   // 手动选过格式：不再跟着地址猜
+  if(e.target.classList.contains('md-fmt')){e.target.removeAttribute('data-auto');var fv=e.target.parentNode.querySelector('.md-fv');if(fv)fv.textContent=MDL_FMT[e.target.value]||e.target.value}
+  if(e.target.id==='mdFmt0'){var h0=document.querySelector('#hostBody .md-ep .md-fmt[type="hidden"]');if(h0){h0.value=e.target.value;h0.removeAttribute('data-auto')}mdlFmtX()}   // 「更多」里手动选了主地址的格式：不再跟着地址猜   // 手动选过格式：不再跟着地址猜
   // 会话池：勾 / 取消马上提交
   if(e.target.closest&&e.target.closest('#hostBody .pe-ss.pool')){var id=e.target.value,arr=(peerCfg.sessions||[]).slice();
     if(e.target.checked){if(arr.indexOf(id)<0)arr.push(id)}else arr=arr.filter(function(x){return x!==id});poolSave(arr)}
@@ -4911,7 +4956,7 @@ function peerCheckNow(){
 // 页面开着时来了配对申请：顶部横幅（App 在前台时系统通知往往不弹），15 秒后自动收起
 var pairBannerT=null;
 function pairBanner(m){
-  if(!($('#app').classList.contains('host-on')&&hostView==='peer')){$('#railPeer').classList.add('dot');$('#sPeer').classList.add('dot')}   // 左边栏「协同」也标红点
+  if(!($('#app').classList.contains('host-on')&&hostView==='peer')){$('#railPeer').classList.add('dot')}   // 左边栏「协同」也标红点
   var el=$('#pairBanner');
   if(!el){el=document.createElement('button');el.type='button';el.id='pairBanner';document.body.appendChild(el);
     el.addEventListener('click',function(){el.classList.remove('on');openPeerView()})}
@@ -4926,12 +4971,11 @@ function openPeerView(){
   mTab('host');hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();
 }
 // 左边栏的「协同」快捷入口：在协同页时亮起（这时「设置」不亮）；有配对申请时带红点
-function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#sPeer').classList.remove('dot');$('#railSet').classList.remove('on')}}
+function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#railSet').classList.remove('on')}}
 $('#railPeer').addEventListener('click',function(){peerFromList='';openPeerView()});
-// 手机列表顶上的「语音管理」「协同」：从列表进的，返回时回到列表（不是设置 / 宿主页）
+// 手机列表顶上的「语音管理」：从列表进的，返回时回到列表（不是设置 / 宿主页）
 var peerFromList='';
 var listTab=function(){return listMode==='recent'?'recent':'chats'};
-$('#sPeer').addEventListener('click',function(){peerFromList=listTab();openPeerView()});
 $('#sVoice').addEventListener('click',function(){var t=listTab();peerFromList=t;openVoices()});
 // 电脑左栏的「模型管理」快捷入口：直接打开 宿主 → 模型管理，在模型管理页时亮起
 // 附近的 claclaw（局域网里开着协同的电脑，Bonjour 广播找到的）
@@ -5150,7 +5194,7 @@ function peerAddHtml(c){
       '<div class="h-row"><span class="k">配对码</span><input id="peCode" class="pe-in mono" inputmode="numeric" maxlength="2" placeholder="对方告诉你的两位数"></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-finish">完成配对</button><button type="button" class="pe-btn" data-act="peer-cancel">取消</button></div>')
     :
-      '<div class="h-row pe-urlrow"><span class="k">对方地址</span><textarea id="peUrl" class="pe-in pe-ta mono" rows="2" placeholder="对方给的协同地址（局域网的，或带 #pin= 的中继地址）"></textarea></div>'+
+      '<div class="h-row md-f"><label class="md-lb" for="peUrl">对方地址</label><textarea id="peUrl" class="md-in" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="对方给的协同地址（局域网的，或带 #pin= 的中继地址）"></textarea></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-start">申请配对</button></div>')+
     '</div><div class="pe-note">申请后对方页面上会出现一个两位数配对码，问对方要来填上就配好了，之后双方都能主动找对方。</div></div>';
   return h;
@@ -5236,7 +5280,7 @@ function peerNetHtml(c){
         (r.primary?'':'<button type="button" class="pe-btn pe-mini" data-act="relay-primary" data-i="'+r.i+'">设为主</button>')+
         '<button type="button" class="pe-btn del pe-mini" data-act="relay-remove" data-i="'+r.i+'" data-host="'+esc(r.host||'')+'">删除</button></div>';
     }).join('')+
-    '<div class="h-row pe-urlrow"><span class="k">'+(c.relayInvite?'加一个':'邀请码')+'</span><textarea id="peRelayInv" class="pe-in pe-ta mono" rows="2" placeholder="粘贴中继邀请码 clarelay1.…'+(c.relayInvite?'（加进来先当备用）':'')+'"></textarea></div>'+
+    '<div class="h-row md-f"><label class="md-lb" for="peRelayInv">'+(c.relayInvite?'再加一个邀请码':'邀请码')+'</label><textarea id="peRelayInv" class="md-in" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴中继邀请码 clarelay1.…'+(c.relayInvite?'（加进来先当备用）':'')+'"></textarea></div>'+
     '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">'+(c.relayInvite?'添加中继':'保存邀请码')+'</button></div>'+
     '</div><div class="pe-note">不在同一个局域网时经中继互发，可以同时连几个（主 → 备）：联系对方时先局域网、再主中继、再备用中继。中继地址每次联系对方时自动告诉它（用 claclaw 的对方会自动更新），换中继、加备用都不用重新配对。</div></div>';
   return h;
@@ -7501,7 +7545,7 @@ document.addEventListener('visibilitychange',function(){
 function ttsInChat(){return !!session&&!(mList&&!DESKTOP.matches)&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on')}
 // 点屏幕顺便解锁声音（iPhone 要用户手势才让放）：只在会话里点才解锁，这个会话关了播报也不解锁。
 // 解锁会放一段无声音频，iPhone 灵动岛会亮一下播放状态，在列表里点来点去不该亮
-document.addEventListener('pointerdown',function(e){if(micRec||(micBtn&&micBtn.contains(e.target)))return;if(!ttsInChat()||ttsSessMuted())return;ttsUnlock()},{capture:true});
+document.addEventListener('pointerdown',function(e){if(!ttsInChat()||ttsSessMuted())return;ttsUnlock()},{capture:true});
 ttsSync();
 // 视频：本机保留天数、空间上限（存在这台设备上）
 (function(){
@@ -7965,6 +8009,30 @@ $('#logout').addEventListener('click',function(){
   fetch('/api/logout',{method:'POST'}).finally(function(){localStorage.removeItem(hk('session'));location.replace('/login')});
 });
 
+// 手机上点进输入框（键盘要弹出）：body 加 kbf，收起底部菜单；再把正在填的框滚到看得见的中间（iOS 自己滚的常被底部菜单挡住）。
+// 嵌在 clarelay 外壳的 iframe 里时，键盘弹出是外壳把 iframe 变矮，页面里 innerHeight 和可视高度一起变，靠高度差认不出键盘——所以按焦点认
+function kbTyping(el){return !!el&&!el.readOnly&&!el.disabled&&(el.tagName==='TEXTAREA'||(el.tagName==='INPUT'&&!/^(checkbox|radio|range|button|submit|reset|file|color|hidden)$/i.test(el.type)))}
+function kbReveal(el,delay){
+  if(!kbTyping(el)||el.closest('#dock'))return;   // 聊天输入框在底栏里，不用滚
+  setTimeout(function(){
+    if(document.activeElement!==el)return;
+    var sp=el.parentElement;while(sp&&sp!==document.body){var oy=getComputedStyle(sp).overflowY;if((oy==='auto'||oy==='scroll')&&sp.scrollHeight>sp.clientHeight+1)break;sp=sp.parentElement}
+    if(!sp||sp===document.body)return;
+    var vh=window.visualViewport?Math.min(window.visualViewport.height,innerHeight):innerHeight;
+    var cr=sp.getBoundingClientRect(),top=Math.max(cr.top,0)+56,bot=Math.min(cr.bottom,vh)-12,r=el.getBoundingClientRect();   // 上面留出钉住的标题栏
+    if(r.top>=top&&r.bottom<=bot)return;   // 已经看得见就不动
+    sp.scrollTop+=(r.top+r.height/2)-(top+bot)/2;   // 只滚它所在的那个滚动区（不用 scrollIntoView：在 iframe 里会连外壳一起滚）
+  },delay);
+}
+(function(){
+  var t=0;
+  document.addEventListener('focusin',function(e){
+    if(DESKTOP.matches||!TOUCH||!kbTyping(e.target))return;
+    clearTimeout(t);document.body.classList.add('kbf');
+    kbReveal(e.target,180);kbReveal(e.target,500);   // 键盘弹出、页面变矮要一会儿：量两次
+  });
+  document.addEventListener('focusout',function(){clearTimeout(t);t=setTimeout(function(){if(!kbTyping(document.activeElement))document.body.classList.remove('kbf')},150)});   // 换到下一个框不算收起
+})();
 if(window.visualViewport){
   var app=$('#app');
   var wasKb=false;
@@ -7976,12 +8044,14 @@ if(window.visualViewport){
     wasKb=kb;
     app.style.height=Math.max(200,vh)+'px';
     window.scrollTo(0,0);follow();scrollDown();
+    if(kb)kbReveal(document.activeElement,120);
   };
   // 键盘弹出时 iOS 会把可视区域往下挪（页面本身不动），顶栏就有一截钻到状态栏下面、被新版 iOS 加上模糊；
   // 让整个界面跟着可视区域走，顶栏始终贴在状态栏下面
   var follow=function(){
     var off=Math.max(0,Math.round(window.visualViewport.offsetTop||0));
     app.style.transform=off?'translateY('+off+'px)':'';
+    document.documentElement.style.setProperty('--vvo',off+'px');   // 挂在 body 上的弹层（头像、建群、登录）也跟着可视区域走
   };
   fit();
   // 键盘收起（输入框失焦）时主动复位，别等 iOS
