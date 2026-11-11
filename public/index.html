@@ -278,7 +278,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .where:empty{display:none}
 #sessBtn .where bdi{direction:ltr;unicode-bidi:isolate}
 /* 会话设置按钮：标题栏右边，两行——上「模型 · 推理强度」、下权限模式（颜色跟模式走）；点开是底部面板 */
-#hdAct{flex:none;display:flex;align-items:flex-end;gap:6px;min-width:0;max-width:60%;cursor:pointer}
+#hdAct{flex:none;display:flex;align-items:flex-end;gap:6px;min-width:0;max-width:60%}
 #cfgBtn{flex:none;display:flex;align-items:center;align-self:flex-end;min-width:0;color:var(--muted);text-align:left}
 /* 只有 › 能点：图标小，点击范围往四周透明扩大 */
 #cfgGo{position:relative;flex:none;align-self:flex-end;display:grid;place-items:center;width:22px;height:22px;margin:0 11px 0 2px;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 手机：› 和下面发送键（输入区右边往里 22px 的中线）在同一条竖线上 */
@@ -1098,7 +1098,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 /* ════ 公共 · 手机布局 ════ */
 /* ---------- 手机：像微信，首页是会话列表，点进去是聊天页，左上角返回 ---------- */
 #backBtn{display:none}
-/* 标题栏两行网格：手机、电脑一样（第一行 ● 会话名；第二行 模型 · 推理强度 · 权限  ID ······ 圆球 ›，除了 ID 和圆球点哪里都打开会话设置）。
+/* 标题栏两行网格：手机、电脑一样（第一行 ● 会话名；第二行 模型 · 推理强度 · 权限  ID ······ 圆球 ›，只有 › 打开会话设置）。
    会话名、ID 嵌在 #sessBtn 里：把外层拆掉（display:contents），直接排进 #hdCard 的网格；目录、右箭头、未读红点不在标题栏显示 */
 #sessBtn>svg{display:none}
 #sessBtn.unr::after{display:none}
@@ -1833,7 +1833,7 @@ select.pe-in{text-align-last:right}
       </span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
     </div>
-    <!-- 第二行：左边 模型 · 推理强度 · 权限、会话 ID（点 ID 复制），右边圆球（弹出窗口、上下文、通知、播报）和 ›；除了 ID 和圆球，这一行点哪里都打开会话设置 -->
+    <!-- 第二行：左边 模型 · 推理强度 · 权限、会话 ID（点 ID 复制），右边圆球（弹出窗口、上下文、通知、播报）和 ›；只有 › 打开会话设置 -->
     <div id="hdAct">
       <div id="cfgBtn" data-m="default"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span></div>
       <span class="sid" id="sid"></span>
@@ -4411,9 +4411,9 @@ function notifToggle(){
   postJson('/api/notif-off',{id:sid,off:off}).then(function(r){if(r.status===404)throw new Error('电脑上的 claclaw 还没更新到这个功能，等它重启后再试');return r.json().catch(function(){throw new Error('电脑返回的不对（HTTP '+r.status+'）')}).then(function(j){if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j})}).then(function(j){notifOffMap=j||{};notifShow();notifBall();toast(off?'这个会话的通知已关闭':'这个会话的通知已打开')}).catch(function(e){toast('没改成：'+e.message)});
 }
 function closeCfg(){var d=$('#cfgDlg');showDlg(d,false)}
-// 标题栏第二行：除了会话 ID（点了复制）和圆球，点哪里都打开会话设置（只读、群聊没有设置）
-$('#hdAct').addEventListener('click',function(e){
-  if(e.target.closest('.hd-ic,#sid .hid,#sid .fee')||!session||document.body.classList.contains('ro')||$('#cfgBtn').style.display==='none')return;
+// 标题栏第二行：只有右边 › 打开会话设置（只读、群聊没有设置）。圆球点了会换图标（innerHTML），冒泡到这里时 e.target 已不在按钮里，不能靠 closest 排除
+$('#cfgGo').addEventListener('click',function(){
+  if(!session||document.body.classList.contains('ro')||$('#cfgBtn').style.display==='none')return;
   openCfg();
 });
 $('#cfgX').addEventListener('click',closeCfg);
