@@ -53,11 +53,13 @@ test('进项目目录不算碰敏感，之后每段照样检查', () => {
 test('常规维护：本仓库干净时 npm check / test / restart 直接放行', () => {
   const o = { repos: [proj], clean: () => true };
   for (const c of ['npm test', 'npm t', 'npm run check', 'npm run -s check', 'npm run restart', 'npm test 2>&1 | tail -5',
-    'cd ' + proj + ' && git pull --ff-only && npm run -s check && npm test', 'git pull origin main && npm run restart'])
+    'cd ' + proj + ' && git pull --ff-only && npm run -s check && npm test', 'git pull origin main && npm run restart',
+    'npm run restart -- main-0b8d73d', 'npm run restart -- main-0b8d73d 2>&1 | tail -1', 'npm run restart -- 拉代码 v1.2'])
     assert.equal(bashRisk(c, proj, roots, o), null, c);
   assert.equal(bashRisk('npm test', path.join(proj, '.worktrees', 'x'), roots, o), null);
   // 多带参数、别的脚本、别的目录、不干净、没传 repos：都要确认
-  for (const c of ['npm install', 'npm run build', 'npm test -- --x', 'npm --prefix /tmp test', 'npm run restart now', 'npx foo', 'FOO=1 npm test'])
+  for (const c of ['npm install', 'npm run build', 'npm test -- --x', 'npm --prefix /tmp test', 'npm run restart now', 'npx foo', 'FOO=1 npm test',
+    'npm run restart --', 'npm run restart -- --x', 'npm run restart -- a$(id)', 'npm run restart -- "$HOME"', 'npm run restart -- a; rm -rf x', 'npm run check -- x'])
     assert.ok(bashRisk(c, proj, roots, o), c);
   assert.ok(bashRisk('npm test', path.join(H, 'other'), roots, o));
   assert.ok(bashRisk('cd ' + data + ' && npm test', proj, roots, o));

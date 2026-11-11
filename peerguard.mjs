@@ -61,6 +61,11 @@ const SAFE_VARS = new Set(['HOME', 'USER', 'LOGNAME', 'PWD', 'OLDPWD', 'SHELL', 
 // 跑的是仓库里提交过的代码——和「拉代码 + 重启」本来就会跑的一样，用户认可这是常规操作，不用每次确认。
 // 参数要一字不差，多带一个都不算；仓库里有没提交的改动（可能是这一轮刚改的）就照样确认，免得「先改代码再跑测试」绕过去。
 const ROUTINE_NPM = new Set(['test', 't', 'run check', 'run test', 'run restart']);
+// 例外：npm run restart -- <备注>。备注只写进重启日志（tools/restart-when-idle.mjs 不解析它），只许字母数字、中文和 . _ - : / # @ +，
+// 不许 - 开头（不像选项）
+const NOTE_WORD = /^[\p{L}\p{N}._:/#@+][\p{L}\p{N}._\-:/#@+]*$/u;
+const routineNpm = a => ROUTINE_NPM.has(a.join(' '))
+  || (a.length > 3 && a[0] === 'run' && a[1] === 'restart' && a[2] === '--' && a.slice(3).every(w => NOTE_WORD.test(w)));
 // dir 可能已经过 expand() 归一化（cd 之后），repos 是调用方给的原始路径：两边都归一再比
 const inRepo = (dir, repos) => repos.some(r => norm(dir) === norm(r) || inside(dir, path.join(r, '.worktrees')));
 
@@ -124,7 +129,7 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
     const w = words(seg);
     const c = w[0];
     const args = w.slice(1);
-    if (c === 'npm' && inRepo(dir, repos) && ROUTINE_NPM.has(args.filter(a => !/^(-s|--silent|-q|--quiet)$/.test(a)).join(' '))) {
+    if (c === 'npm' && inRepo(dir, repos) && routineNpm(args.filter(a => !/^(-s|--silent|-q|--quiet)$/.test(a)))) {
       if (!clean(dir)) return '仓库里有没提交的改动，npm 会执行它们';
       continue;
     }
