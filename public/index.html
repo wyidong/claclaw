@@ -4572,7 +4572,8 @@ function renderVoices(){
     var list=(tts.srv||[]).filter(function(v){return v.name.indexOf(e.id+':')===0}),top='';
     if(e.needKey){
       var k=e.key||{};
-      if(k.set&&!vcKeyEdit)top='<div class="h-row"><span class="k">API Key</span><span class="v pe-mono">••••'+esc(k.tail)+'</span></div>'+
+      var kv=mdlKey&&mdlKey.id==='tts:volc'&&mdlKey.show?mdlKey.key:'';   // 查看 / 复制和模型库的 Key 一样：先输 claclaw 密码，看到的 1 分钟后自动藏起
+      if(k.set&&!vcKeyEdit)top='<div class="h-row md-f md-keyrow"><span class="md-lb">API Key</span><div class="md-kv"><span class="md-key'+(kv?' on':'')+'">'+esc(kv||'••••'+k.tail)+'</span><span class="md-kbtns"><button type="button" class="md-pill" data-act="vc-key-show">'+(kv?'隐藏':'查看')+'</button><button type="button" class="md-pill" data-act="vc-key-copy">复制</button></span></div></div>'+
         '<div class="h-row"><span class="k">已开通</span><span class="v">'+esc((k.res||[]).join('、')||'—')+'</span></div>'+
         '<div class="pe-btns"><button type="button" class="pe-btn" data-act="vc-key-edit">更换 Key</button><button type="button" class="pe-btn del" data-act="vc-key-del">清除 Key</button></div>';
       else top='<div class="h-row md-f"><label class="md-lb" for="vcKey">API Key</label><textarea id="vcKey" rows="1" class="md-in mono md-secret" maxlength="1000" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴 API Key（火山控制台 → 豆包语音 → API Key 管理）"></textarea></div>'+
@@ -4592,6 +4593,8 @@ function vcAct(act,a){
     var v=ttsVoices().find(function(x){return x.voiceURI===id});if(!v||!ttsOk())return;
     var u=new SpeechSynthesisUtterance(t);u.lang=v.lang||'zh-CN';u.rate=tts.rate;u.voice=v;speechSynthesis.speak(u);return;
   }
+  if(act==='vc-key-show'){if(mdlKey&&mdlKey.id==='tts:volc'){mdlKey.show=!mdlKey.show;renderVoices()}else keyAsk('tts:volc','show');return}
+  if(act==='vc-key-copy'){if(mdlKey&&mdlKey.id==='tts:volc')copyText(mdlKey.key,mdlCopyFail);else keyAsk('tts:volc','copy');return}
   if(act==='vc-key-edit'){vcKeyEdit=true;renderVoices();var i=$('#vcKey');if(i)i.focus();return}
   if(act==='vc-key-cancel'){vcKeyEdit=false;renderVoices();return}
   if(act==='vc-key-save'||act==='vc-key-del'){
@@ -4600,7 +4603,7 @@ function vcAct(act,a){
     if(act==='vc-key-del'&&!confirm('清除豆包语音的 API Key？清除后豆包的声音不能用了'))return;
     vcMsg='';toast(key?'正在用这个 Key 试合成一句…':'正在清除…');
     postJson('/api/tts/volc',{key:key}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'保存失败');return j})}).then(function(j){
-      vcKeyEdit=false;toast(j.set?'Key 可用，已保存':'已清除');vcLoad();
+      vcKeyEdit=false;if(mdlKey&&mdlKey.id==='tts:volc')mdlKey=null;toast(j.set?'Key 可用，已保存':'已清除');vcLoad();
     }).catch(function(e){vcMsg=e.message;renderVoices()});
   }
 }
@@ -4774,7 +4777,7 @@ function mdlFetch(id){
   }).catch(function(e){if(mdlRemote&&mdlRemote.id===id){mdlRemote={id:id,err:'读取失败：'+e.message};mdlModelsUpd()}});
 }
 function mdlModelsUpd(){var p=mdlRemote&&mdlProv(mdlRemote.id),el=$('#mdModels');if(p&&el&&mdlSub==='p:'+p.id)el.innerHTML=mdlModelsHtml(p)}
-function mdlKeyUpd(){var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
+function mdlKeyUpd(){if(hostView==='voices'&&typeof renderVoices==='function'){renderVoices();return}var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
 function mdlRemember(id,k,show){clearTimeout(mdlKeyT);mdlKey={id:id,key:k,show:show};mdlKeyUpd();mdlKeyT=setTimeout(mdlForget,60000)}
 function mdlForget(){clearTimeout(mdlKeyT);if(!mdlKey)return;mdlKey=null;mdlKeyUpd()}
 function mdlCopyFail(){if(mdlKey){mdlKey.show=true;mdlKeyUpd()}toast('复制不了，已显示出来，长按选择')}
@@ -4836,7 +4839,7 @@ $('#clawModels').addEventListener('click',function(){openModels('claw')});
 // 查看 / 复制完整 Key：再输一次 claclaw 用户名和密码
 var keyDlg=$('#keyDlg'),keyFor=null;   // {id,mode:'show'|'copy'}
 function keyAsk(id,mode){
-  var p=mdlProv(id);if(!p)return;
+  var p=id==='tts:volc'?{name:'豆包语音'}:mdlProv(id);if(!p)return;
   keyFor={id:id,mode:mode};
   $('#keyTitle').textContent=(mode==='copy'?'复制':'查看')+' '+p.name+(p.label?' · '+p.label:'')+' 的 Key';
   $('#keyU').value='';$('#keyP').value='';$('#keyErr').textContent='';$('#keyGo').disabled=false;$('#keyGo').textContent=mode==='copy'?'复制':'查看';

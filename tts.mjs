@@ -103,6 +103,8 @@ function volcSpeaker(id, sec = '') {
   return { sp, additions: Object.keys(add).length ? JSON.stringify(add) : null };
 }
 const volcCfg = () => { try { return JSON.parse(fs.readFileSync(VOLC_FILE, 'utf8')) || {}; } catch { return {}; } };
+// 完整的 Key：只给「查看 / 复制 Key」（先核对过 claclaw 密码）用
+export function volcKey() { return String(volcCfg().key || ''); }
 export function volcInfo() { const c = volcCfg(); return { set: !!c.key, tail: c.key ? String(c.key).slice(-4) : '', res: c.res || [] }; }
 // 合成一句：返回 mp3。出错的信息里不带 Key
 // sec：同一段朗读的会话 ID（section_id，只 2.0 认）：豆包按它记住前面念过的，后面的语气接着来；请求要一句念完再发下一句（网页那边串着发）

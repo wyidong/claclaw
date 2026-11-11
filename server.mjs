@@ -30,7 +30,7 @@ import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText, attKind, ATT_MA
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './copilot.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate, ocStartGateway } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
-import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
+import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcKey, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
 import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAddr } from './peerrtc.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
@@ -2994,7 +2994,8 @@ const handler = async (req, res) => {
       }
       clearFails(ip);
       let key;
-      try { key = revealKey(loadStore(MODELS_FILE), String(body.id || '')); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
+      if (body.id === 'tts:volc') { key = volcKey(); if (!key) return sendJson(res, 400, { error: '还没填豆包语音的 Key' }); }   // 语音管理里豆包的 Key，同一套核对
+      else try { key = revealKey(loadStore(MODELS_FILE), String(body.id || '')); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
       log('models key shown', String(body.id).slice(0, 40), 'to', ip, 'via', via);
       return sendJson(res, 200, { key });
     }
