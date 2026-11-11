@@ -98,7 +98,7 @@ window.__sc=(function(){
 /* ── ② 阴黑暗沉（「跟随系统」且系统是深色时也用这套） ── */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
-    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
     --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
     --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
@@ -107,7 +107,7 @@ window.__sc=(function(){
   }
 }
 :root[data-theme="dark"]{
-    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
   --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
   --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
@@ -195,7 +195,7 @@ window.__sc=(function(){
 :root[data-theme="shichen"].sc-img:not(.sc-dark){--muted:color-mix(in srgb,var(--ink) 72%,var(--surface))}   /* 铺了图：说明字压在图上，石板灰看不清，调深 */
 /* ── ③ 流变时辰 · 阴（脏）公共（丑寅巳午酉戌）：浅色正文 / 标题，提示色、玻璃按钮、协同配色用深色主题那一套 ── */
 :root[data-theme="shichen"].sc-dark{--ink:#ECEEF0;--title:#ECEEF0;
-  --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+  --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB}
 /* ── ④ 12 个时辰各自的颜色：按五行配色（子丑木 · 绿，寅卯金 · 银灰，辰巳土 · 黄，午未火 · 红，申酉水 · 蓝，戌亥相火 · 橙——和午未的君火红分开） ──
    阳 · 腑（子卯辰未申亥）：淡底 / 细边 / 选中 / 代码底是本行色相的淡色，强调色、标题是同色相的深色，正文近黑带一点色；外圈比淡底深一档。
@@ -1047,7 +1047,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .cfg-opt .t{font-size:15.5px;font-weight:600}
 .cfg-opt .s{font-size:12.5px;line-height:1.4;color:var(--muted)}
 .cfg-opt .ck{flex:none;width:20px;height:20px;border:1.5px solid var(--line);border-radius:50%;box-sizing:border-box}
-.cfg-opt[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent)}   /* 选中 / 打开：和 Agent 卡片选中一样凸起（左上向光细亮边 + 背光柔和投影） */
+.cfg-opt[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),var(--sel-sh,0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent))}   /* 深色主题用 --sel-sh：只要贴身一点暗影，不要底下外扩的光雾；选中 / 打开：和 Agent 卡片选中一样凸起（左上向光细亮边 + 背光柔和投影） */
 .cfg-opt[aria-checked="true"] .ck{visibility:hidden}   /* 选中的已经凸起了，再点也没变化：不再画单选圈（占位留着，免得文字换行跳动） */
 .cfg-use{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 12px;padding:12px 14px;border-radius:14px;background:var(--bg)}
 .cfg-use b{font-size:14.5px;font-weight:600}
@@ -1070,7 +1070,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 @keyframes cfgPulse{to{opacity:.25}}
 .cfg-seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:4px;border-radius:14px;background:var(--bg)}
 .cfg-seg button{min-height:40px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;font-size:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.cfg-seg button[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%),var(--user-bg);color:var(--accent);font-weight:600;box-shadow:inset 1px 1px 0 var(--gl-hi),0 6px 14px -8px color-mix(in srgb,var(--accent) 50%,transparent),0 2px 5px -2px color-mix(in srgb,var(--ink) 14%,transparent)}   /* 选中的一档凸起，不用实心色块 */
+.cfg-seg button[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%),var(--user-bg);color:var(--accent);font-weight:600;box-shadow:inset 1px 1px 0 var(--gl-hi),var(--sel-sh,0 6px 14px -8px color-mix(in srgb,var(--accent) 50%,transparent),0 2px 5px -2px color-mix(in srgb,var(--ink) 14%,transparent))}   /* 选中的一档凸起，不用实心色块 */
 .cfg-seg button:disabled{opacity:.3;cursor:default}
 .btn.del{background:var(--deny);color:#fff;border-color:var(--deny)}
 .btn.cancel{background:transparent;color:var(--ink);border-color:var(--line)}
@@ -1166,7 +1166,7 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
   #mtabs{gap:4px}
   #mtabs button{border-radius:12px;transition:background .15s,box-shadow .15s}
-  #mtabs button.on{color:var(--accent);background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 25%,transparent),transparent 60%);box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 45%,transparent),0 3px 8px -5px rgba(0,0,0,.2)}   /* 选中这一栏：底色不变，只一点点凸起（左上细亮边 + 很淡的投影） */
+  #mtabs button.on{color:var(--accent);background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 15%,transparent),transparent 60%),rgba(255,255,255,.03);box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 25%,transparent),0 3px 8px -5px rgba(0,0,0,.2)}   /* 选中这一栏：只一点点凸起（左上细亮边 + 很淡的投影）；底下垫一层很淡的白——浅色底上看不出，深色底上稍亮一点，背光那侧的边才看得出来 */
   #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* 放 logo 时去掉「会话」两个字（文字的主题色和 logo 的颜色不搭），logo 放大占满图标 + 文字的位置，按钮高度不变 */
   #mtabs button.logo>span:not(.tlogo){display:none}
@@ -1500,7 +1500,7 @@ select.pe-in{text-align-last:right}
 .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
 .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
 .claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底（和会话列表选中色一致） */
-:root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent)}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
+:root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),var(--sel-sh,0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent))}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
 .claw-card:disabled{opacity:.45;cursor:default}
 .claw-card.claw-down>:not(.claw-start){opacity:.45}   /* 装了没启动、能在这里启动的（OpenClaw）：灰着，「启动」按钮不灰 */
 .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
