@@ -5782,8 +5782,8 @@ function sessSoundPlay(name,preview){
   if(c.state==='suspended'&&c.resume)c.resume().catch(function(){});
   var key=name||'';
   if(!sndBuf[key])sndBuf[key]=fetch('/api/sound/file?name='+encodeURIComponent(key)).then(function(r){if(!r.ok)throw new Error(r.status);return r.arrayBuffer()}).then(function(a){return new Promise(function(ok,no){c.decodeAudioData(a,ok,no)})});
-  sndBuf[key].then(function(buf){var src=c.createBufferSource(),g=c.createGain();g.gain.value=.7;src.buffer=buf;src.connect(g);g.connect(c.destination);src.start(0)})
-    .catch(function(){delete sndBuf[key];narrBeep()});   // 电脑上取不到声音文件（比如 Linux）：退回网页合成的两声「叮」
+  return sndBuf[key].then(function(buf){var src=c.createBufferSource(),g=c.createGain();g.gain.value=.7;src.buffer=buf;src.connect(g);g.connect(c.destination);src.start(0);return buf.duration*1000})
+    .catch(function(){delete sndBuf[key];narrBeep();return 600});   // 电脑上取不到声音文件（比如 Linux）：退回网页合成的两声「叮」
 }
 function skinOf(id){var x=(lastList||[]).find(function(y){return y.id===id});return (x&&x.skin)||{}}
 function shkRow(row,id){
@@ -5795,13 +5795,14 @@ function shkAll(){document.querySelectorAll('#sList .s-row.wx').forEach(function
 function msgArrive(id){
   if(session&&id===session.id&&!mList&&!document.hidden)return;   // 正看着的会话不用提醒
   var sk=skinOf(id);
-  if(!sk.still){shakeAt[id]=Date.now();shkAll();setTimeout(shkAll,SHK_MS+60)}
-  if(document.hidden||!sk.snd||sk.snd==='off'||Date.now()-sndLast<1500)return;   // 这个会话没开个性提示音：网页里不响
+  var shook=false,shake=function(){if(shook||sk.still)return;shook=true;shakeAt[id]=Date.now();shkAll();setTimeout(shkAll,SHK_MS+60)};
+  if(document.hidden||!sk.snd||sk.snd==='off'||Date.now()-sndLast<1500)return shake();   // 这个会话没开个性提示音：网页里不响，直接抖
   sndLast=Date.now();
+  var wait=setTimeout(shake,3000);   // 声音迟迟出不来：不等了，先抖
   (notifLoaded?Promise.resolve():notifLoad()).then(function(){   // 各会话的通知开关还没取过（没打开过会话）：先取
-    if(notifOffMap[id])return;
-    sndInfo().then(function(j){if(DESKTOP.matches&&!COARSE.matches&&j.on)return;sessSoundPlay(sk.snd||'',false)});
-  });
+    if(notifOffMap[id])return 0;
+    return sndInfo().then(function(j){if(DESKTOP.matches&&!COARSE.matches&&j.on)return 0;return sessSoundPlay(sk.snd||'',false)});
+  }).then(function(){clearTimeout(wait);shake()},function(){clearTimeout(wait);shake()});   // 声音一响才跟着抖（取文件、解码要时间，先抖的话声音来时已经抖完了）
 }
 function skinPick(ix){   // 随机一套：所有头像里抽一个，网名里抽一个
   var all=[];ix.groups.forEach(function(g){g.items.forEach(function(f){all.push(g.base+'/'+f)})});
