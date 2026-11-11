@@ -3,6 +3,7 @@
 //   stdin/stdout 一行一条 JSON-RPC。收到的 session/update、权限请求按 sessionId 交给对应的 runner。
 // - AcpRunner：网页里打开的一个会话（接口和 Claude 的 Runner 对齐：send / interrupt / replyPermission / subscribe …）。
 //   各家只写差异：怎么接上会话、历史从哪读、模型名怎么显示、上下文大小从哪来、确认条怎么显示。
+import { autoCompactDue, autoCompactRun } from './autocompact.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { storeNow, splitGroups } from './modelpick.mjs';
@@ -578,12 +579,15 @@ export class AcpRunner {
       const c = this.ctxNow(), compacted = this.compactAsked && !error;
       this.compactAsked = false;
       if (c !== undefined && (c !== this.ctxSent || compacted)) { this.ctx = c; this.ctxSent = c; this.emit({ t: 'ctx', tokens: c, ...(compacted ? { compacted: true } : {}) }); }
+      if (compacted) this.autoCompactAt = 0;
     }
     this.busy = false;
     this.emit({ t: 'turn.done', subtype, error: error || (reason === 'cancelled' ? '已中断' : reason === 'max_tokens' ? '回复超出长度上限' : reason === 'refusal' ? '模型拒绝回答' : undefined) });
     this.onActivity?.(this.id, null);
     if (reason !== 'command') this.onTurnDone?.(this, ok, this.lastText);
     if (this.queue.length && this.sendQueued()) return;   // 中断后也照发：通常就是「停下，改做这个」
+    // 上下文超过设置里的自动压缩线：这个 Claw 支持 /compact 就自动压一次（压缩这一轮自己不再触发）
+    if (ok && reason !== 'command' && (this.commands || []).some(c => c?.name === 'compact') && autoCompactDue(this)) { autoCompactRun(this); return; }
     if (!this.subs.size) this.dispose();
   }
   // 排队的消息：合成一条发出（中间空一行），图片按顺序带上

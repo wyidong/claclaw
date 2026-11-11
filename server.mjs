@@ -34,6 +34,7 @@ import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcKey, volcSetKey, ttsEngines
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
 import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAddr } from './peerrtc.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
+import { AUTO_COMPACT, AUTO_COMPACT_CHOICES, autoCompactDue, autoCompactRun } from './autocompact.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { userTextOf, dissectClaude, dissectDs, dissectKimi, dissectMini } from './dissect.mjs';
@@ -1959,7 +1960,7 @@ class Runner {
           this.emit({ t: 'cmd.out', text: String(m.content || '') });
         } else if (m.subtype === 'compact_boundary') {
           const c = m.compact_metadata || {};
-          this.ctx = c.post_tokens ?? null; this.emit({ t: 'ctx', tokens: this.ctx, compacted: true });
+          this.ctx = c.post_tokens ?? null; this.autoCompactAt = 0; this.emit({ t: 'ctx', tokens: this.ctx, compacted: true });
           const k = n => (n >= 1000 ? Math.round(n / 1000) + 'k' : String(n ?? '?'));
           this.emit({ t: 'sys', text: (c.trigger === 'auto' ? '已自动压缩会话历史' : '已压缩会话历史') + '（' + k(c.pre_tokens) + (c.post_tokens != null ? ' → ' + k(c.post_tokens) : '') + ' tokens）' });
         } else if (m.subtype === 'commands_changed') {
@@ -1968,7 +1969,7 @@ class Runner {
           // CLI 自己报的忙/闲，比 result 更准：插话的消息可能在 result 之后又开一轮，idle 才是真正结束
           this.sawState = true;
           if (m.state === 'running' && !this.busy) { this.busy = true; this.busySince = Date.now(); this.cancelClose(); this.emit({ t: 'busy', on: true }); }
-          else if (m.state === 'idle' && this.busy) { this.busy = false; this.steered = []; this.emit({ t: 'busy', on: false }); this.maybeScheduleClose(); }
+          else if (m.state === 'idle' && this.busy) { this.busy = false; this.steered = []; this.emit({ t: 'busy', on: false }); this.maybeScheduleClose(); this.maybeAutoCompact(); }
         } else if (m.subtype === 'status') {
           // 不需要显示
         }
@@ -1988,6 +1989,7 @@ class Runner {
         // 有插话排着时 CLI 可能接着干：网页端的「工作中」以 CLI 的 idle 为准，这里先把状态同步回去
         if (this.sawState && this.busy) this.emit({ t: 'busy', on: true });
         this.maybeScheduleClose();
+        if (!this.sawState) this.maybeAutoCompact();
       }
     }
   }
@@ -2214,6 +2216,10 @@ class Runner {
     this.closeTimer = setTimeout(() => this.dispose(), this.unsent() ? Math.max(IDLE_CLOSE_NEW_MS, idleCloseMs()) : idleCloseMs());
   }
   cancelClose() { clearTimeout(this.closeTimer); this.closeTimer = null; }
+  // 一轮结束：上下文超过设置里的自动压缩线就发 /compact（稍等一下，确认真的闲下来了）
+  maybeAutoCompact() {
+    setTimeout(() => { if (!this.closed && !this.busy && !this.pending.size && autoCompactDue(this)) { log('auto compact', this.id.slice(0, 8), this.ctx); autoCompactRun(this); } }, 800);
+  }
 
   dispose(reason) {
     if (this.closed) return;
@@ -2254,6 +2260,9 @@ const WEB_SESSIONS = path.join(DATA, 'web-sessions.json');
 const SETTINGS = path.join(DATA, 'settings.json');
 const SOUND_OK = process.platform === 'darwin' || process.platform === 'win32';
 function settings() { return readJson(SETTINGS); }
+// 上下文自动压缩线（k token，0 = 从不，默认从不）：Claude 和支持 /compact 的 Claw 每轮结束后超过就自动压缩
+const autoCompactK = () => { const v = Number(settings().autoCompactK) || 0; return v > 0 && v <= 2000 ? Math.round(v) : 0; };
+AUTO_COMPACT.k = autoCompactK;
 function saveSettings(patch) {
   const next = { ...settings(), ...patch };
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
@@ -2319,7 +2328,7 @@ function announceDsOpened(r) {
   const pg = historyPage(hist, hist.total, HISTORY_PAGE);
   const payload = {
     t: 'session.opened', sessionId: r.id, id: r.id, title: r.title, cwd: r.cwd, cwdShort: r.metaLine(), claw: 'deepseek', xmodels: r.xmodels(),
-    mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, compacted: true, ctx: (r.ctx = dsCtx(r.id)),
+    mode: 'default', modes: ['default'], busy: r.busy, commands: r.commands, compacted: true, ctx: (r.ctx = dsCtx(r.id), r.autoCompactAt = 0, r.ctx),
     history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
     pending: [...r.pending.values()].map(p => p.req), suggestion: null, usage: dsUsage(r.id),
     busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0,
@@ -3041,12 +3050,13 @@ const handler = async (req, res) => {
         if (body.idleCloseMin != null) patch.idleCloseMin = Math.min(1440, Math.max(1, Math.round(Number(body.idleCloseMin) || 10)));
         if (body.takeoverMin != null) patch.takeoverMin = Math.min(1440, Math.max(0, Math.round(Number(body.takeoverMin) || 0)));
         if (PUSH_VIA.includes(body.pushVia)) patch.pushVia = body.pushVia;
+        if (body.autoCompactK != null) patch.autoCompactK = Math.min(2000, Math.max(0, Math.round(Number(body.autoCompactK) || 0)));
         if (body.uploadKeepDays != null) patch.uploadKeepDays = Math.min(3650, Math.max(1, Math.round(Number(body.uploadKeepDays) || KEEP_DAYS_DEFAULT)));
         saveSettings(patch);
         if (patch.uploadKeepDays) cleanUploads(UPLOADS, patch.uploadKeepDays);
         log('session settings', JSON.stringify(patch));
       }
-      return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin(), uploadKeepDays: uploadKeepDays(), pushVia: pushVia(), clarelayPush: devConfigured() ? devStatus() : null });
+      return sendJson(res, 200, { idleCloseMin: minutesSetting('idleCloseMin', 10, 1), takeoverMin: takeoverMin(), autoCompactK: autoCompactK(), autoCompactChoices: AUTO_COMPACT_CHOICES, uploadKeepDays: uploadKeepDays(), pushVia: pushVia(), clarelayPush: devConfigured() ? devStatus() : null });
     }
     // 技能：列表（每个技能在各安装位置的状态）、安装、卸载
     if (url.pathname === '/api/skills' || url.pathname.startsWith('/api/skills/')) {

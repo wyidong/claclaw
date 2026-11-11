@@ -905,7 +905,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #setPane .set-item select{flex:none;max-width:45%;border:0;background:none;color:var(--muted);font:inherit;font-size:16px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;padding:4px 18px 4px 4px;cursor:pointer;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
 #setPane .set-num{flex:none;display:flex;align-items:center;gap:2px;color:var(--muted);font-size:14.5px}
-#setPane .set-num input{width:64px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;text-align:right;padding:4px 6px}
+#setPane .set-num input{width:64px;border:1px solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;text-align:left;padding:4px 6px}
 #setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
 /* ════ 公共 · 朗读 ════ */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
@@ -2096,8 +2096,10 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">会话</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">上下文压缩提示<small>超过这个大小，标题栏出现压缩按钮（默认 128k）</small></span>
+          <label class="set-item"><span class="lb">上下文压缩提示<small>超过就显示压缩按钮，默认 128k</small></span>
             <span class="set-num"><input id="setCtxK" type="number" inputmode="numeric" min="8" max="2000" step="1" placeholder="128" aria-label="上下文压缩提示（k）">k</span></label>
+          <label class="set-item"><span class="lb">自动压缩上下文<small>每轮回复完，上下文超过这个大小就自动压缩（Claude、DeepSeek；所有设备共用）</small></span>
+            <select id="setAutoCompact"><option value="0">从不</option><option value="100">100k</option><option value="150">150k</option><option value="200">200k</option><option value="300">300k</option></select></label>
           <button type="button" class="set-item" id="setEnterSend" hidden><span class="lb">键盘回车键发送<small>开：回车发送；关：回车换行</small></span><span class="sw" aria-hidden="true"></span></button>
         </div>
       </div>
@@ -3894,6 +3896,9 @@ function onEvent(m){
     break;
   case 'busy':
     setBusy(!!m.on);
+    break;
+  case 'ctx.auto':   // 服务端按设置自动压缩：标题栏显示「压缩中」
+    if(session){session.ctxAsk=true;session.ctxDone=0;ctxShow()}
     break;
   case 'ctx':   // 上下文大小变了（每次 API 调用、压缩完）
     if(session){session.ctx=m.tokens||null;if(m.compacted){session.ctxDone=session.ctxAsk?(m.tokens||-1):0;session.ctxAsk=false;clearTimeout(ctxAskTimer)}else session.ctxDone=0;ctxShow()}
@@ -7875,6 +7880,7 @@ function showSessSet(j){
   var cp=j.clarelayPush,pv=$('#pushViaRow');pv.hidden=!cp;
   if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='自动：clarelay '+(cp.online?'在线，走 clarelay':'不在线，claclaw 自己推')}
   if(j.uploadKeepDays){var uk=$('#setUpKeep'),uv=String(j.uploadKeepDays);if(![].some.call(uk.options,function(o){return o.value===uv})){var o2=document.createElement('option');o2.value=uv;o2.textContent=uv+' 天';uk.appendChild(o2)}uk.value=uv}
+  if(j.autoCompactK!=null){var ac=$('#setAutoCompact'),av=String(j.autoCompactK);if(![].some.call(ac.options,function(o){return o.value===av})){var o3=document.createElement('option');o3.value=av;o3.textContent=av+'k';ac.appendChild(o3)}ac.value=av}
   [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
     var sel=$(x[0]),v=String(x[1]);
     if(![].some.call(sel.options,function(o){return o.value===v})){var o=document.createElement('option');o.value=v;o.textContent=v+' 分钟';sel.appendChild(o)}
@@ -7884,6 +7890,10 @@ function showSessSet(j){
 $('#setPushVia').addEventListener('change',function(){
   postJson('/api/settings/session',{pushVia:this.value})
     .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
+});
+$('#setAutoCompact').addEventListener('change',function(){
+  postJson('/api/settings/session',{autoCompactK:Number(this.value)})
+    .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast(j.autoCompactK?'已保存：超过 '+j.autoCompactK+'k 自动压缩':'已关闭自动压缩')});
 });
 ['#setIdle','#setTake','#setUpKeep'].forEach(function(id){
   $(id).addEventListener('change',function(){
