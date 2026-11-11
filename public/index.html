@@ -1457,6 +1457,7 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .wx-av img.tile{border-radius:22.5%}
 #sList .s-row.wx .wx-av{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:pointer}   /* 点头像换头像 / 网名，长按随机一套：不弹系统的图片菜单 */
 #sList .s-row.wx .wx-av img.sk{width:100%;height:100%;border-radius:inherit;object-fit:cover;pointer-events:none}
+#sList .s-row.wx .wx-av:has(>img.sk){border-color:transparent;background:transparent}   /* 换了头像的不要边框；默认的 Claw 图标照旧有框 */
 #sList .s-row.wx .wx-cl{position:absolute;right:1px;bottom:1px;display:grid;place-items:center;width:16px;height:16px;pointer-events:none;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25))}   /* 换了头像：右下角透明底的小水印，标出是哪个 Claw */
 #sList .s-row.wx .wx-cl svg,#sList .s-row.wx .wx-cl img{width:14px;height:14px;background:none}
 #sList .s-row.wx .wx-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:13px 0;border-bottom:.5px solid var(--line)}
@@ -1514,6 +1515,7 @@ select.pe-in{text-align-last:right}
   #rail{position:relative;border-right:0;padding-top:calc((var(--hd-h,56px) - 39px) / 2);
     background:var(--strip)}   /* 左栏整条一个底色，和顶部那条同色，不画横线 */
   #railCur{margin:-2.5px 0 calc(var(--hd-h,56px) / 2 - 20px)}   /* 顶上那格（原 logo 的位置）：竖直居中在顶部那条里，「最近」从这条下面开始 */
+  #railChats{margin-top:8px}   /* 「最近」：中心和列表第一个会话的头像齐平（行从顶部那条下面开始，头像中心在行高一半 38px 处） */
   #sheet::after{content:'';position:absolute;top:var(--hd-h,56px);bottom:0;right:0;width:1px;background:var(--line);pointer-events:none;z-index:3}
   /* 列表栏 + 聊天区是一整块：外面一圈细边框、四角圆角，左边是图标栏、右下留一点边（底色同顶部那条）。
      圆角外面那一小块用同色的外阴影盖住（只扩 6px，盖不到图标栏的按钮） */
@@ -1709,8 +1711,9 @@ select.pe-in{text-align-last:right}
 </script>
   <!-- 电脑端最左边的图标栏（像微信 / Teams）；手机上隐藏 -->
   <nav id="rail" aria-label="导航">
-    <!-- 最上面（原来放 logo 的位置）：当前选中的 Claw，点开它的会话（图标随 Claw 换）；「最近」和 Claw 页（选 Claw、模型管理）在下面一组 -->
+    <!-- 最上面（原来放 logo 的位置）：当前选中的 Claw，点开它的会话（图标随 Claw 换）；紧接着「最近」，和列表第一个会话的头像齐平；Claw 页（选 Claw、模型管理）在下面一组 -->
     <button type="button" id="railCur" aria-label="会话" title="会话"></button>
+    <button type="button" id="railChats" class="on" aria-label="最近" title="最近"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.4 10.73a8.85 8.85 0 0 1-12.83 7.85L2.6 20.13l1.55-5.42A8.85 8.85 0 1 1 21.4 10.73z"/></svg></button>
     <span class="gap"></span>
     <!-- 各个 Claw 的图标（只当图标库用：clawIcon、Claw 卡片从这里拷图标；不显示，电脑端切 Claw 在 Claw 页里） -->
     <div id="rclaws">
@@ -1731,7 +1734,6 @@ select.pe-in{text-align-last:right}
     <button type="button" class="rclaw" data-claw="copilot" aria-label="Copilot CLI" title="Copilot CLI"><svg class="cp-mark" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.922 16.992c-.861 1.495-5.859 5.023-11.922 5.023-6.063 0-11.061-3.528-11.922-5.023A.641.641 0 0 1 0 16.736v-2.869a.841.841 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.195 10.195 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952 1.399-1.136 3.392-2.093 6.122-2.093 2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.832.832 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256ZM12.172 11h-.344a4.323 4.323 0 0 1-.355.508C10.703 12.455 9.555 13 7.965 13c-1.725 0-2.989-.359-3.782-1.259a2.005 2.005 0 0 1-.085-.104L4 11.741v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.323 4.323 0 0 1-.355-.508h-.016.016Zm.641-2.935c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/><path d="M14.5 14.25a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1Zm-5 0a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1Z"/></svg></button>
     </div>
     <span class="rsep"></span>
-    <button type="button" id="railChats" class="on" aria-label="最近" title="最近"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.4 10.73a8.85 8.85 0 0 1-12.83 7.85L2.6 20.13l1.55-5.42A8.85 8.85 0 1 1 21.4 10.73z"/></svg></button>
     <button type="button" id="railClaw" aria-label="Claw" title="Claw（切换 Claw、模型管理）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3.25" y="3.25" width="7.21" height="7.21" rx="2.06"/><rect x="13.54" y="3.25" width="7.21" height="7.21" rx="2.06"/><rect x="3.25" y="13.54" width="7.21" height="7.21" rx="2.06"/><rect x="13.54" y="13.54" width="7.21" height="7.21" rx="2.06"/></svg></button>
     <button type="button" id="railReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
     <button type="button" id="railPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="7" r="2.6"/><circle cx="17.5" cy="17" r="2.6"/><path d="M8.6 8.8l6.8 6.4"/><path d="M14 4.5h5.5V10"/><path d="M10 19.5H4.5V14"/></svg></button>
