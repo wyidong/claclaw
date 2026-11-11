@@ -1629,6 +1629,30 @@ select.pe-in{text-align-last:right}
   #composer.busy #ta{padding-right:20px}
   #sugBtn{bottom:-37px;top:auto;right:110px}
 }
+/* 弹出窗口（窄，走手机布局）：输入区也用电脑那套——大输入面板、拖顶边调高低（规则照抄上面电脑端那段，只对 .solo） */
+@media (max-width:999px){
+  html.solo #dock{padding:0;border-top:1px solid var(--line)}
+  html.solo #dock>#perm,html.solo #dock>#ask,html.solo #dock>#cmdMenu,html.solo #dock>#atts{margin:10px max(20px,calc((100% - 960px) / 2)) 0}
+  html.solo #composer{height:var(--compH,190px);box-sizing:border-box;padding-bottom:42px;display:flex;flex-direction:column}
+  html.solo #taWrap{flex:1;min-height:0}
+  html.solo #ta{height:100%!important;min-height:0;max-height:none;padding:14px 20px 4px;font-size:15px;line-height:1.6}
+  html.solo #dockGrip{display:block;position:absolute;left:0;right:0;top:-5px;height:10px;z-index:3;cursor:row-resize}
+  html.solo #dockGrip::after{content:'';position:absolute;left:50%;top:3px;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--accent);opacity:0;transition:opacity .15s}
+  html.solo #dockGrip:hover::after,html.solo #dockGrip.drag::after{opacity:.55}
+  html.solo #attachBtn{top:auto;bottom:5px;left:12px;width:34px;height:34px;border-radius:8px}
+  html.solo #attachBtn:hover{background:var(--bg);color:var(--ink)}
+  html.solo #send{top:auto;bottom:6px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
+  html.solo #send:disabled,html.solo #send.sugfill{background:var(--code-bg);color:var(--muted);opacity:1}
+  html.solo #stopBtn{top:auto;bottom:6px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
+  html.solo #stopBtn:hover{background:var(--del-bg)}
+  html.solo #atBtn{top:auto;bottom:6px;right:16px;width:32px;height:32px;border-radius:6px;font-size:18px}
+  html.solo #atBtn:hover{background:var(--bg)}
+  html.solo #composer:not(.nosend) #atBtn{right:100px}
+  html.solo #composer.grp #ta,html.solo #composer.grp.nosend #ta,html.solo #composer.grp:not(.nosend) #ta{padding-right:20px}
+  html.solo #composer.busy #ta{padding-right:20px}
+  html.solo #sugBtn{bottom:-37px;top:auto;right:110px}
+  body.row-drag{cursor:row-resize;user-select:none}
+}
 </style>
 <script>(function(){var r=document.documentElement;if(r.getAttribute('data-theme')!=='shichen')return;var b=getComputedStyle(r).getPropertyValue(matchMedia('(min-width:1000px)').matches?'--sc-out':'--bg').trim();if(b)document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})})();</script>   <!-- 流变时辰：状态栏颜色要等上面的样式读进来才知道 -->
 </head>
@@ -3421,7 +3445,7 @@ function pickCmd(i){
 function setDock(s){dock.dataset.state=s;syncSend()}
 // 「发送」永远是发送；工作中另外放出一个「停止」，两个按钮不会因为打字变来变去
 function syncSend(){
-  var d=DESKTOP.matches,at=attachments||[];
+  var d=DESKTOP.matches||SOLO,at=attachments||[];   // 弹出窗口用电脑那套输入区：按钮写字
   sendBtn.innerHTML=d?'发送':ICON_SEND;sendBtn.setAttribute('aria-label','发送');
   sendBtn.disabled=!(ta.value.trim()||at.length)||!session||at.some(function(a){return !a.data});
   // 输入框空着、有建议（灰字）时：发送键保持灰色样子，但能点，点了把建议填进输入框（不直接发）
@@ -5417,9 +5441,10 @@ $('#hostBack').addEventListener('click',function(){mTab('set')});
   var MIN=90,lim=function(h){var tot=$('#feed').offsetHeight+$('#composer').offsetHeight;return Math.round(Math.max(MIN,Math.min(Math.max(MIN,tot*.5),h)))};
   var apply=function(h){h=lim(h);app.style.setProperty('--compH',h+'px');return h};
   var saved=0;try{saved=+localStorage.getItem('claclaw.compH')||0}catch(_){}
-  if(saved)requestAnimationFrame(function(){if(DESKTOP.matches)apply(saved)});
+  var on=function(){return DESKTOP.matches||SOLO};   // 弹出窗口再窄也能拖
+  if(saved)requestAnimationFrame(function(){if(on())apply(saved)});
   g.addEventListener('pointerdown',function(e){
-    if(e.button!==0||!DESKTOP.matches)return;e.preventDefault();
+    if(e.button!==0||!on())return;e.preventDefault();
     var y0=e.clientY,h0=$('#composer').offsetHeight,h=h0;
     g.setPointerCapture(e.pointerId);g.classList.add('drag');document.body.classList.add('row-drag');
     var mv=function(ev){h=apply(h0+y0-ev.clientY)};
@@ -5428,7 +5453,7 @@ $('#hostBack').addEventListener('click',function(){mTab('set')});
     g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);
   });
   g.addEventListener('dblclick',function(){app.style.removeProperty('--compH');try{localStorage.removeItem('claclaw.compH')}catch(_){}});
-  addEventListener('resize',function(){var cur=parseInt(app.style.getPropertyValue('--compH'))||0;if(cur&&DESKTOP.matches)apply(cur)});
+  addEventListener('resize',function(){var cur=parseInt(app.style.getPropertyValue('--compH'))||0;if(cur&&on())apply(cur)});
 })();
 // 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
 // 刚发出（或别的设备在这个会话里发出）一条消息：列表里「最后一条消息」立刻换成它，不等列表刷新
