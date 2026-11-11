@@ -5623,7 +5623,7 @@ function drawRecent(arr){
     applySearch();renderUnread();renderActivity();
 }
 // ---------- 会话头像和网名（「最近」列表）----------
-// 点头像：打开换头像 / 网名的页面（预设、本机才有的、从本地上传；网名选预设或自己写）；长按头像：随机换一套，马上生效
+// 点头像：打开换头像 / 网名的页面（预设、本机才有的、从本地上传；网名选预设或自己写；可以只随机头像、只随机网名或一起随机）；长按头像：只随机换头像，马上生效
 // 存在电脑上（data/skins.json），所有设备看到的一样；预设图在仓库 public/avatars/，本机才有的在 data/avatars/<组>/
 var skinIx=null;
 function skinIndex(){
@@ -5643,8 +5643,8 @@ function skinPick(ix){   // 随机一套：所有头像里抽一个，网名里�
   var r=function(a){return a.length?a[Math.floor(Math.random()*a.length)]:''};
   return {av:r(all),name:r(ix.names||[])};
 }
-function skinRandom(s){
-  skinIndex().then(function(ix){var x=skinPick(ix);return skinSave(s,x).then(function(){toast('换成了「'+(x.name||s.title)+'」')})}).catch(function(e){toast(e.message||'换不了')});
+function skinRandom(s){   // 长按头像：只随机换头像，网名不动
+  skinIndex().then(function(ix){var x=skinPick(ix);return skinSave(s,{av:x.av}).then(function(){toast('头像换好了')})}).catch(function(e){toast(e.message||'换不了')});
 }
 function skinAv(el,s){
   var t=null,fired=0,x0=0,y0=0;
@@ -5663,7 +5663,7 @@ function openSkin(s){
   if(!p){p=document.createElement('div');p.id='avPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
   var k=s.claw||clawOf(s.id),sk=s.skin||{},cur={av:sk.av||'',name:sk.name||''},tab='av';
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>头像和网名</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
-    +'<div class="av-me"><span class="av-pv"></span><input class="gp-in av-nm" maxlength="40" placeholder="网名（不填用会话原名）"><button type="button" class="av-dice" title="随机一套" aria-label="随机一套">🎲</button></div>'
+    +'<div class="av-me"><span class="av-pv"></span><input class="gp-in av-nm" maxlength="40" placeholder="网名（不填用会话原名）"><button type="button" class="av-dice" title="头像和网名一起随机" aria-label="头像和网名一起随机">🎲</button></div>'
     +'<div class="av-tabs"><button type="button" data-t="av">头像</button><button type="button" data-t="nm">网名</button></div>'
     +'<div class="gp-list av-list"><div class="gp-sec">加载中…</div></div>'
     +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go">保存</button></div></div>';
@@ -5684,10 +5684,11 @@ function openSkin(s){
     if(!ix)return;
     if(tab==='av'){
       var ops=document.createElement('div');ops.className='av-ops';
-      ops.innerHTML='<button type="button" class="av-up">从本地上传…</button><button type="button" class="av-def">用 Claw 图标</button><input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/heic" hidden>';
+      ops.innerHTML='<button type="button" class="av-up">从本地上传…</button><button type="button" class="av-def">用 Claw 图标</button><button type="button" class="av-rav">随机头像</button><input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/heic" hidden>';
       var fi=ops.querySelector('input');
       ops.querySelector('.av-up').addEventListener('click',function(){fi.click()});
       ops.querySelector('.av-def').addEventListener('click',function(){cur.av='';preview();mark()});
+      ops.querySelector('.av-rav').addEventListener('click',function(){cur.av=skinPick(ix).av;preview();mark();showOn()});
       fi.addEventListener('change',function(){var f=fi.files&&fi.files[0];fi.value='';if(f)skinUpload(f).then(function(ref){cur.av=ref;preview();mark()}).catch(function(e){toast(e.message||'上传失败')})});
       list.appendChild(ops);
       ix.groups.forEach(function(g){
@@ -5697,6 +5698,9 @@ function openSkin(s){
         list.appendChild(grid);
       });
     }else{
+      var ops2=document.createElement('div');ops2.className='av-ops';ops2.innerHTML='<button type="button" class="av-rnm">随机网名</button>';
+      ops2.querySelector('.av-rnm').addEventListener('click',function(){cur.name=skinPick(ix).name;nm.value=cur.name;mark();showOn()});
+      list.appendChild(ops2);
       var h=document.createElement('div');h.className='gp-sec';h.textContent='点一个用它；也可以在上面自己写';list.appendChild(h);
       var box=document.createElement('div');box.className='av-names';
       (ix.names||[]).forEach(function(n){var bt=document.createElement('button');bt.type='button';bt.dataset.nm=n;bt.textContent=n;box.appendChild(bt)});
@@ -5709,7 +5713,8 @@ function openSkin(s){
     var n=e.target.closest('[data-nm]');if(n){cur.name=n.dataset.nm;nm.value=cur.name;mark()}
   });
   p.querySelectorAll('.av-tabs button').forEach(function(x){x.addEventListener('click',function(){tab=x.dataset.t;draw();list.scrollTop=0})});
-  p.querySelector('.av-dice').addEventListener('click',function(){if(!ix)return;var x=skinPick(ix);cur.av=x.av;cur.name=x.name;nm.value=x.name;preview();mark();var on=list.querySelector('[aria-pressed="true"]');if(on)on.scrollIntoView({block:'nearest'})});
+  function showOn(){var on=list.querySelector('[aria-pressed="true"]');if(on)on.scrollIntoView({block:'nearest'})}   // 随机到的那个滚到看得见
+  p.querySelector('.av-dice').addEventListener('click',function(){if(!ix)return;var x=skinPick(ix);cur.av=x.av;cur.name=x.name;nm.value=x.name;preview();mark();showOn()});
   p.querySelector('.gp-go').addEventListener('click',function(){
     var go=this;go.disabled=true;
     skinSave(s,{av:cur.av||null,name:cur.name.trim()||null}).then(close).catch(function(e){toast(e.message||'保存失败')}).then(function(){go.disabled=false});
