@@ -1031,6 +1031,10 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .cfg-p h4{display:flex;align-items:baseline;gap:8px;margin:16px 2px 8px;font-size:13px;font-weight:600;color:var(--muted)}
 .cfg-p h4 span{font-weight:400;font-size:12.5px}
 .cfg-list{display:flex;flex-direction:column;gap:8px}
+.cfg-list[role="radiogroup"]{gap:4px;padding:4px;border-radius:16px;background:var(--bg)}   /* 模型、权限：和推理强度一样合成一块，选中的那项凸起 */
+.cfg-list[role="radiogroup"]>.cfg-opt{border-radius:12px}.cfg-list[role="radiogroup"]>.cfg-opt:not([aria-checked="true"]){background:none}
+.cfg-list[role="radiogroup"]>.cfg-g{margin:6px 10px 0}
+.cfg-list[role="radiogroup"]>.cfg-empty{padding:12px 10px}
 .cfg-tog .sw{flex:none;position:relative;width:46px;height:28px;border-radius:14px;background:var(--line);transition:background .2s}
 .cfg-tog .sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
 .cfg-tog[aria-checked="true"] .sw{background:var(--allow)}.cfg-tog[aria-checked="true"] .sw::after{transform:translateX(18px)}
@@ -1038,14 +1042,14 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .cfg-sel select{flex:none;max-width:60%;border:0;background:none;color:var(--ink);font:inherit;font-size:15px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;cursor:pointer}
 .cfg-sel,.cfg-rate{box-sizing:border-box;min-width:0;max-width:100%}.cfg-sel .tx{flex:none}.cfg-sel select{flex:1 1 0;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cfg-rate input{min-width:0}.cfg-rate{flex-direction:column;align-items:stretch;gap:6px;cursor:default}.cfg-rh{display:flex;align-items:center;gap:8px;width:100%}.cfg-rate input{accent-color:var(--accent)}.cfg-rh span{color:var(--muted);font-size:13px}
 .cfg-rh button{margin-left:auto;border:0;background:none;color:var(--accent);font:inherit;font-size:13px;cursor:pointer}.cfg-rate .rate-row{display:flex;align-items:center;gap:8px;width:100%}.cfg-rate input{flex:1}.cfg-rate .rate-end{flex:none;font-size:12.5px;color:var(--muted)}
-.cfg-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background .15s}
+.cfg-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 14px;border:0;border-radius:14px;background:var(--user-bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s,box-shadow .15s}   /* 和 Agent 卡片一样：靠底色分块，不画边框 */
 .cfg-opt .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .cfg-opt .t{font-size:15.5px;font-weight:600}
 .cfg-opt .s{font-size:12.5px;line-height:1.4;color:var(--muted)}
 .cfg-opt .ck{flex:none;width:20px;height:20px;border:1.5px solid var(--line);border-radius:50%;box-sizing:border-box}
-.cfg-opt[aria-checked="true"]{border-color:var(--accent);background:var(--user-bg)}
-.cfg-opt[aria-checked="true"] .ck{border:6px solid var(--accent);background:var(--surface)}
-.cfg-use{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 12px;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--bg)}
+.cfg-opt[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent)}   /* 选中 / 打开：和 Agent 卡片选中一样凸起（左上向光细亮边 + 背光柔和投影） */
+.cfg-opt[aria-checked="true"] .ck{visibility:hidden}   /* 选中的已经凸起了，再点也没变化：不再画单选圈（占位留着，免得文字换行跳动） */
+.cfg-use{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 12px;padding:12px 14px;border-radius:14px;background:var(--bg)}
 .cfg-use b{font-size:14.5px;font-weight:600}
 .cfg-use .cu-bar{position:relative;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
 .cfg-use .cu-bar .pace{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;border-radius:1px;background:var(--ink);opacity:.35}
@@ -1064,9 +1068,9 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .cfg-empty{padding:14px 4px;font-size:13.5px;color:var(--muted)}
 .cfg-opt.busy,.cfg-seg button.busy{opacity:.55;animation:cfgPulse 1s ease-in-out infinite alternate}
 @keyframes cfgPulse{to{opacity:.25}}
-.cfg-seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.cfg-seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:4px;border-radius:14px;background:var(--bg)}
 .cfg-seg button{min-height:40px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;font-size:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.cfg-seg button[aria-checked="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.cfg-seg button[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%),var(--user-bg);color:var(--accent);font-weight:600;box-shadow:inset 1px 1px 0 var(--gl-hi),0 6px 14px -8px color-mix(in srgb,var(--accent) 50%,transparent),0 2px 5px -2px color-mix(in srgb,var(--ink) 14%,transparent)}   /* 选中的一档凸起，不用实心色块 */
 .cfg-seg button:disabled{opacity:.3;cursor:default}
 .btn.del{background:var(--deny);color:#fff;border-color:var(--deny)}
 .btn.cancel{background:transparent;color:var(--ink);border-color:var(--line)}
@@ -1160,7 +1164,9 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
     padding:4px max(6px,env(safe-area-inset-right)) calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px))) max(6px,env(safe-area-inset-left))}
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
-  #mtabs button.on{color:var(--accent)}
+  #mtabs{gap:4px}
+  #mtabs button{border-radius:12px;transition:background .15s,box-shadow .15s}
+  #mtabs button.on{color:var(--accent);background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 25%,transparent),transparent 60%);box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 45%,transparent),0 3px 8px -5px rgba(0,0,0,.2)}   /* 选中这一栏：底色不变，只一点点凸起（左上细亮边 + 很淡的投影） */
   #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* 放 logo 时去掉「会话」两个字（文字的主题色和 logo 的颜色不搭），logo 放大占满图标 + 文字的位置，按钮高度不变 */
   #mtabs button.logo>span:not(.tlogo){display:none}
@@ -4388,11 +4394,11 @@ function renderWorkUse(){
   el.hidden=!parts.length;el.innerHTML=parts.join(' · ');el.title=tips.join('；');
 }
 function renderCfgUse(){
-  var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&!!(u.five_hour||u.seven_day);
+  var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&['five_hour','seven_day'].some(function(k){var pc=usePace(u[k],k);return USE_PREVIEW?!!u[k]:pc&&pc.over});   // 和「思考中」右边一样：超过平均进度才显示
   sec.hidden=!show;if(!show)return;
   $('#cfgUseNote').textContent=u.at?'上次回复时 · '+ago(u.at):'';
   $('#cfgUse').innerHTML=[['five_hour','5 小时',0],['seven_day','本周',1]].map(function(r){
-    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100),pc=usePace(w,r[0]);
+    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100),pc=usePace(w,r[0]);if(!USE_PREVIEW&&!(pc&&pc.over))return '';   // 没超的那条不显示
     return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80||pc&&pc.over?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i>'+(pc?'<em class="pace" style="left:'+Math.round(pc.allow*100)+'%" title="到现在为止平均可用 '+Math.round(pc.allow*100)+'%"></em>':'')+'</span><span class="cu-pct'+(pc&&pc.over?' over':'')+'">'+p+'%</span>'+
       '<small>'+esc(w.stale?'已过重置时间，下次回复后更新':cuReset(w.resetsAt,r[2]))+'</small>';
   }).join('');
