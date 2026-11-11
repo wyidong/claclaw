@@ -2098,7 +2098,7 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <label class="set-item"><span class="lb">上下文压缩提示<small>超过就显示压缩按钮，默认 128k</small></span>
             <span class="set-num"><input id="setCtxK" type="number" inputmode="numeric" min="8" max="2000" step="1" placeholder="128" aria-label="上下文压缩提示（k）">k</span></label>
-          <label class="set-item"><span class="lb">自动压缩上下文<small>每轮回复完，上下文超过这个大小就自动压缩（Claude、DeepSeek；所有设备共用）</small></span>
+          <label class="set-item"><span class="lb">自动压缩上下文<small>回复完超过就自动压缩</small></span>
             <select id="setAutoCompact"><option value="0">从不</option><option value="100">100k</option><option value="150">150k</option><option value="200">200k</option><option value="300">300k</option></select></label>
           <button type="button" class="set-item" id="setEnterSend" hidden><span class="lb">键盘回车键发送<small>开：回车发送；关：回车换行</small></span><span class="sw" aria-hidden="true"></span></button>
         </div>

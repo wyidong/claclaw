@@ -712,7 +712,7 @@ var I18N={dict:{
 "登录后连接本机的 Claude 会话":"Log in to connect to this computer's Claude sessions",
 "目录":"Directory",
 "自动压缩上下文":"Auto-compact context",
-"每轮回复完，上下文超过这个大小就自动压缩（Claude、DeepSeek；所有设备共用）":"After each reply, compact automatically once the context exceeds this size (Claude, DeepSeek; shared by all devices)",
+"回复完超过就自动压缩":"Compact after a reply once over this",
 "已关闭自动压缩":"Auto-compact turned off",
 "从不":"Never",
 "直连":"Direct",
