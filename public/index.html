@@ -157,7 +157,7 @@ window.__sc=(function(){
    变量：--sc-b 本时辰的代表色（铺图时图片没加载出来先垫的底色） / --title 标题字色（卡片风格共用的变量） / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
 :root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface);--allow:var(--accent);--on-allow:var(--accent-ink)}
 :root[data-theme="shichen"] #setPane #setScImgRow{display:flex}   /* 设置里的「时辰背景」只在这套主题下出现 */
-:root[data-theme="shichen"] .claw-card[aria-current="true"]{background:var(--user-bg)}
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底，选中的靠强调色边框区分 */
 /* 时辰背景选「图片」：图铺在整页最底下；列表 / 设置 / 宿主页的底变透明露出图，顶栏 / 底栏 / 左栏是半透明的淡底毛玻璃，卡片仍是白底 */
 :root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
 :root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
@@ -229,7 +229,7 @@ window.__sc=(function(){
    哪些块按这个规矩来，在脚本的 BDR 表里（bdSync）；它换主题、换时辰、换图、电脑 / 手机切换时实际比一次两边的底色，
    底色不同就在 <html> 上加 nb-xxx，下面这些规则把边框去掉。等确认的提醒边框不算在内，照常显示。 */
 :root.nb-tool #feed .tool:not([data-k="wait"]),:root.nb-tgh #feed .tgroup:not([data-k="wait"]) .tg-h,:root.nb-uvid #feed .uvid,
-:root.nb-srow #sList .s-row,:root.nb-sitem #sList .s-item:not([aria-current="true"]),:root.nb-set #setPane .set-card,:root.nb-hcard #hostPane .h-card,:root.nb-claw #clawPane :is(.claw-card,.claw-tool){border-color:transparent!important}
+:root.nb-srow #sList .s-row,:root.nb-sitem #sList .s-item:not([aria-current="true"]),:root.nb-set #setPane .set-card,:root.nb-hcard #hostPane .h-card,:root.nb-claw #clawPane :is(.claw-card:not([aria-current="true"]),.claw-tool){border-color:transparent!important}
 :root.nb-dock #app #dock{border-top-color:transparent!important}
 :root.nb-hd #app header{border-bottom-color:transparent!important}
 :root.nb-stop #app #sTop,:root.nb-settop #app #setTop{border-bottom-color:transparent!important}
@@ -1464,7 +1464,8 @@ select.pe-in{text-align-last:right}
 .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
 .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
 .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
-.claw-card[aria-current="true"]{border-color:var(--user-bg);background:var(--user-bg)}   /* 选中：浅绿底，和会话列表一致 */
+.claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底（和会话列表选中色一致） */
+:root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent)}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
 .claw-card:disabled{opacity:.45;cursor:default}
 .claw-card.claw-down>:not(.claw-start){opacity:.45}   /* 装了没启动、能在这里启动的（OpenClaw）：灰着，「启动」按钮不灰 */
 .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
@@ -1968,10 +1969,10 @@ select.pe-in{text-align-last:right}
           <span class="claw-tx"><b>模型管理</b><small id="clawModelsSub">各家模型的 Key、接口地址和模型</small></span>
           <span class="chev" aria-hidden="true"></span>
         </button>
-        <!-- Claw 列表：按出品方分组（海外 / 国内 / 开源），每行两个；跟整页一起滚，背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
+        <!-- Claw 列表：按出品方分组（美国 / 中国 / 开源），每行两个；跟整页一起滚，背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
         <div id="clawList">
           <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、Copilot CLI 中任意一个后再来。</div>
-          <div class="claw-g"><div class="claw-h">海外 Agent</div><div class="claw-grid">
+          <div class="claw-g"><div class="claw-h">美国 Agent</div><div class="claw-grid">
             <button type="button" class="claw-card" data-claw="claude">
               <span class="claw-tx"><b>Claude Code</b><small>Anthropic</small></span>
               <span class="claw-st"></span>
@@ -1988,7 +1989,7 @@ select.pe-in{text-align-last:right}
               <span class="claw-ds">打开终端里开的 Copilot CLI 会话列表</span>
             </button>
           </div></div>
-          <div class="claw-g"><div class="claw-h">国产 Agent</div><div class="claw-grid">
+          <div class="claw-g"><div class="claw-h">中国 Agent</div><div class="claw-grid">
             <button type="button" class="claw-card" data-claw="deepseek">
               <span class="claw-tx"><b>DeepSeek Harness</b><small>深度求索</small></span>
               <span class="claw-st"></span>
