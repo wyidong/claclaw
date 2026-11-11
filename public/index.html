@@ -98,7 +98,7 @@ window.__sc=(function(){
 /* ── ② 阴黑暗沉（「跟随系统」且系统是深色时也用这套） ── */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
-    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--sel-sh2:0 7px 14px -5px rgba(0,0,0,.65),0 2px 4px -1px rgba(0,0,0,.4);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
     --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
     --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
     --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
@@ -107,7 +107,7 @@ window.__sc=(function(){
   }
 }
 :root[data-theme="dark"]{
-    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--sel-sh2:0 7px 14px -5px rgba(0,0,0,.65),0 2px 4px -1px rgba(0,0,0,.4);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
   --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
   --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
@@ -195,7 +195,7 @@ window.__sc=(function(){
 :root[data-theme="shichen"].sc-img:not(.sc-dark){--muted:color-mix(in srgb,var(--ink) 72%,var(--surface))}   /* 铺了图：说明字压在图上，石板灰看不清，调深 */
 /* ── ③ 流变时辰 · 阴（脏）公共（丑寅巳午酉戌）：浅色正文 / 标题，提示色、玻璃按钮、协同配色用深色主题那一套 ── */
 :root[data-theme="shichen"].sc-dark{--ink:#ECEEF0;--title:#ECEEF0;
-  --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+  --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--sel-sh2:0 7px 14px -5px rgba(0,0,0,.65),0 2px 4px -1px rgba(0,0,0,.4);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
   --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB}
 /* ── ④ 12 个时辰各自的颜色：按五行配色（子丑木 · 绿，寅卯金 · 银灰，辰巳土 · 黄，午未火 · 红，申酉水 · 蓝，戌亥相火 · 橙——和午未的君火红分开） ──
    阳 · 腑（子卯辰未申亥）：淡底 / 细边 / 选中 / 代码底是本行色相的淡色，强调色、标题是同色相的深色，正文近黑带一点色；外圈比淡底深一档。
@@ -1500,7 +1500,7 @@ select.pe-in{text-align-last:right}
 .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
 .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
 .claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底（和会话列表选中色一致） */
-:root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),var(--sel-sh,0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent))}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
+:root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 70%,transparent),transparent 50%,color-mix(in srgb,var(--accent) 10%,transparent)),var(--user-bg);box-shadow:inset 1.5px 1.5px 0 var(--gl-hi),var(--sel-sh2,0 14px 26px -10px color-mix(in srgb,var(--accent) 55%,transparent),0 4px 10px -3px color-mix(in srgb,var(--ink) 18%,transparent));transform:translateY(-1px)}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
 .claw-card:disabled{opacity:.45;cursor:default}
 .claw-card.claw-down>:not(.claw-start){opacity:.45}   /* 装了没启动、能在这里启动的（OpenClaw）：灰着，「启动」按钮不灰 */
 .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
