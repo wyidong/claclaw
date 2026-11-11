@@ -1045,6 +1045,14 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .cfg-opt .ck{flex:none;width:20px;height:20px;border:1.5px solid var(--line);border-radius:50%;box-sizing:border-box}
 .cfg-opt[aria-checked="true"]{border-color:var(--accent);background:var(--user-bg)}
 .cfg-opt[aria-checked="true"] .ck{border:6px solid var(--accent);background:var(--surface)}
+.cfg-use{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 12px;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--bg)}
+.cfg-use b{font-size:14.5px;font-weight:600}
+.cfg-use .cu-bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.cfg-use .cu-bar i{display:block;height:100%;border-radius:4px;background:var(--accent)}
+.cfg-use .cu-bar.hi i{background:var(--warn)}
+.cfg-use .cu-pct{font-size:14px;font-variant-numeric:tabular-nums;text-align:right;min-width:3em}
+.cfg-use small{grid-column:2/-1;margin:-2px 0 6px;font-size:12px;color:var(--muted)}
+.cfg-use small:last-child{margin-bottom:0}
 .cfg-opt .md{flex:none;width:10px;height:10px;border-radius:50%;background:var(--muted)}
 .cfg-opt .md[data-m="accept"]{background:var(--warn)}
 .cfg-opt .md[data-m="plan"]{background:var(--accent)}
@@ -1925,6 +1933,8 @@ select.pe-in{text-align-last:right}
     <div class="cfg-p" role="dialog" aria-label="会话设置">
       <div class="cfg-grab"></div>
       <div class="cfg-h"><b>会话设置</b><button type="button" id="cfgX" aria-label="关闭">×</button></div>
+      <!-- Claude 订阅用量：整个账号共用，数据是最近一次回复时 Claude 带回来的；用模型库 Key 的会话、别的 Claw 不显示 -->
+      <section id="cfgUseSec" hidden><h4>Claude 用量<span id="cfgUseNote"></span></h4><div class="cfg-use" id="cfgUse"></div></section>
       <section id="cfgModelSec" hidden><h4>模型<span id="cfgLibNote"></span></h4><div class="cfg-list" id="cfgModels" role="radiogroup" aria-label="模型"></div></section>
       <section id="cfgEffortSec" hidden><h4>推理强度<span id="cfgEffortNote"></span></h4><div class="cfg-seg" id="cfgEfforts" role="radiogroup" aria-label="推理强度"></div></section>
       <section id="cfgModeSec"><h4>权限</h4><div class="cfg-list" id="cfgModes" role="radiogroup" aria-label="权限"></div></section>
@@ -3937,6 +3947,9 @@ function onEvent(m){
     if(/^(xmodel|xeffort|xmode):/.test(String(cfgBusy)))cfgBusy=null;
     renderCfgBtn();renderCfg();
     break;
+  case 'claude.usage':
+    claudeUse=m.usage||null;if($('#cfgDlg').classList.contains('on'))renderCfgUse();
+    break;
   case 'models': case 'model':
     applyModel(m);
     if(m.changed)cfgNote();
@@ -4340,8 +4353,27 @@ function renderXCfg(){
     });
   });
 }
+// 会话设置里的 Claude 用量：5 小时、本周两条，过 80% 变色
+var claudeUse=null;
+function cuReset(ms,week){
+  if(!ms)return '';var d=ms-Date.now();if(d<=0)return '已重置';
+  if(!week||d<86400000){var h=Math.floor(d/3600000),mi=Math.ceil(d%3600000/60000);if(mi===60){h++;mi=0}return (h&&mi?h+' 小时 '+mi+' 分':h?h+' 小时':mi+' 分')+'后重置'}
+  var t=new Date(ms);return '周'+'日一二三四五六'[t.getDay()]+' '+t.getHours()+':'+String(t.getMinutes()).padStart(2,'0')+' 重置';
+}
+function renderCfgUse(){
+  var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&!!(u.five_hour||u.seven_day);
+  sec.hidden=!show;if(!show)return;
+  $('#cfgUseNote').textContent=u.at?'上次回复时 · '+ago(u.at):'';
+  $('#cfgUse').innerHTML=[['five_hour','5 小时',0],['seven_day','本周',1]].map(function(r){
+    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100);
+    return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i></span><span class="cu-pct">'+p+'%</span>'+
+      '<small>'+esc(w.stale?'已过重置时间，下次回复后更新':cuReset(w.resetsAt,r[2]))+'</small>';
+  }).join('');
+}
+function loadCfgUse(){fetch('/api/claude-usage').then(function(r){return r.json()}).then(function(j){claudeUse=j.usage||null;renderCfgUse()}).catch(function(){})}
 function renderCfg(){
   var dlg=$('#cfgDlg');if(!dlg||!dlg.classList.contains('on'))return;
+  renderCfgUse();
   if(xcfg)return renderXCfg();
   $('#cfgModeSec').hidden=false;
   var ms=claudeSess()&&cfg.models&&cfg.models.length?cfg.models:null;
@@ -4390,7 +4422,7 @@ function renderCfg(){
     mb.appendChild(b);
   });
 }
-function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();notifShow();renderCfgTts();notifLoad()}
+function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();loadCfgUse();notifShow();renderCfgTts();notifLoad()}
 // 会话设置 › 通知：关了这个会话回复完、出错、来消息都不推送、不响；要你确认权限时照样通知
 var notifOffMap={};
 function notifShow(){var b=$('#cfgNotif');if(!b||!session)return;var on=!notifOffMap[session.id];b.setAttribute('aria-checked',on?'true':'false');$('#cfgNotifSub').textContent=on?'回复完、出错、来消息时推送通知':'已关：不推送、不响提示音（要你确认权限时照样通知）'}

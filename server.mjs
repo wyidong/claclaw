@@ -44,6 +44,7 @@ const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
+import { makeClaudeUsage } from './claudeusage.mjs';
 import { DATA, verify, verifyMaster, verifyMasterPassword, verifyPassword, anyNoPassword, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
 import { makeSkins } from './skins.mjs';
@@ -122,6 +123,7 @@ function argPort() {
 const PORT = Number(argPort() ?? process.env.CLACLAW_PORT ?? 8787);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('端口不合法：' + (argPort() ?? process.env.CLACLAW_PORT));
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const claudeUsage = makeClaudeUsage(DATA);   // Claude 订阅 5 小时 / 周用量（data/claude-usage.json）
 const skins = makeSkins(DATA, ROOT, { soundOk: (n) => soundList().includes(n) });   // 会话的头像和网名（data/skins.json）
 const REGISTRY = path.join(os.homedir(), '.claude', 'sessions');
 const HOME = os.homedir();
@@ -1973,6 +1975,8 @@ class Runner {
         } else if (m.subtype === 'status') {
           // 不需要显示
         }
+      } else if (m.type === 'rate_limit_event') {
+        if (!this.lib && claudeUsage.note(m.rate_limit_info)) this.emit({ t: 'claude.usage', usage: claudeUsage.get() });
       } else if (m.type === 'prompt_suggestion') {
         // 在 result 之后才到；只保留最新一条，重新打开会话时也带上
         this.suggestion = m.suggestion;
@@ -3042,6 +3046,7 @@ const handler = async (req, res) => {
       }
       return sendJson(res, 200, modelsPublic(loadStore(MODELS_FILE)));
     }
+    if (url.pathname === '/api/claude-usage' && req.method === 'GET') return sendJson(res, 200, { usage: claudeUsage.get() });
     if (url.pathname === '/api/settings/session') {
       if (req.method === 'POST') {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
