@@ -7574,7 +7574,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   try{im.value=localStorage.getItem('claclaw.scImg')==='1'?'1':''}catch(_){}
   im.addEventListener('change',function(){
     try{if(im.value)localStorage.setItem('claclaw.scImg','1');else localStorage.removeItem('claclaw.scImg')}catch(_){}
-    if(window.__sc&&sel.value==='shichen')window.__sc.apply();
+    if(window.__sc&&document.documentElement.getAttribute('data-theme')==='shichen')window.__sc.apply();   // 单选某个时辰（sel.value 是 shichen@N）也要立刻换
   });
 })();
 // 手机端：标题栏的玻璃圆球（上下文用量、朗读开关）可以左右拖，拖到标题上看玻璃浮在字上的效果；
