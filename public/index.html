@@ -288,6 +288,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 .hd-ic.lock{border-color:currentColor}
 #popBtn{display:none}@media (min-width:1000px){html:not(.solo) #popBtn{display:grid}}   /* 弹出成独立窗口：只在电脑上 */
 html.solo #backBtn{display:none!important}   /* 弹出窗口只放这一个会话，没有列表可回 */
+@media (min-width:1000px){html.solo #app{grid-template-columns:0 0 minmax(0,1fr);padding:0}html.solo :is(#rail,#sheet){display:none!important}html.solo #app::after{display:none}}   /* 弹出窗口再宽也只放聊天区：不要左边栏和会话列表 */
 .hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .hd-ic:active{opacity:.5}
 @media (max-width:999px){.hd-ic{touch-action:none;position:relative;z-index:3;opacity:.5;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.hd-ic:active{opacity:1}}   /* 手机上圆球能左右拖，拖到标题上要盖在字上；平时半透明，按住/拖动时不透明 */
