@@ -498,6 +498,17 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #avPane .av-pv svg,#avPane .av-pv img.claw{width:32px;height:32px;object-fit:contain}
 #avPane .av-me input.gp-in{flex:1;min-width:0;margin:0}
 #avPane .av-dice{flex:none;width:40px;height:36px;border:0;border-radius:9px;background:var(--bg);font-size:19px;cursor:pointer}
+#avPane .av-opts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:-2px 2px 10px}   /* 个性提示音 / 抖一抖：一行两个小开关，不抢换头像的戏；提示音打开才多出选声音的一行 */
+#avPane .av-o{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px;color:var(--muted);cursor:pointer}
+#avPane .av-o .md-sw{width:36px;height:22px;border-radius:11px}
+#avPane .av-o .md-sw::after{top:2px;left:2px;width:18px;height:18px}
+#avPane .av-o .md-sw:checked::after{transform:translateX(14px)}
+#avPane .av-pick{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;color:var(--muted)}
+#avPane .av-pick[hidden]{display:none}
+#avPane .av-sndw{position:relative;display:flex;align-items:center;gap:4px;min-width:0;max-width:136px;padding:3px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:14px;color:var(--ink)}
+#avPane .av-sndv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#avPane .av-sndw::after{content:'▾';flex:none;font-size:11px;color:var(--muted)}
+#avPane .av-snd{position:absolute;inset:0;width:100%;opacity:0;font-size:16px;cursor:pointer}   /* 透明的下拉盖在字上：点字就是选，字号 16 免得 iPhone 放大 */
 #avPane .av-tabs{display:flex;gap:6px;margin-bottom:6px}
 #avPane .av-tabs button{flex:1;height:32px;border:0;border-radius:9px;background:var(--bg);color:var(--muted);font:inherit;font-size:14px;cursor:pointer}
 #avPane .av-tabs button[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,var(--bg));color:var(--accent);font-weight:600}
@@ -1524,6 +1535,9 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .wx-av img.tile{border-radius:22.5%}
 #sList .s-row.wx .wx-av{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:pointer}   /* 点头像换头像 / 网名，长按随机一套：不弹系统的图片菜单 */
 #sList .s-row.wx .wx-av img.sk{width:100%;height:100%;border-radius:inherit;object-fit:cover;pointer-events:none}
+#sList .s-row.wx.shk .wx-av{animation:avShk .4s linear 6 both;animation-delay:var(--shk-d,0ms)}   /* 来消息：头像连着抖 2.4 秒就停 */
+@keyframes avShk{0%,100%{transform:none}20%{transform:translateX(-2px) rotate(-8deg)}45%{transform:translateX(2px) rotate(7deg)}70%{transform:translateX(-1.5px) rotate(-5deg)}88%{transform:translateX(1px) rotate(3deg)}}
+@media (prefers-reduced-motion:reduce){#sList .s-row.wx.shk .wx-av{animation:none}}
 #sList .s-row.wx .wx-av:has(>img.sk){border-color:transparent;background:transparent}   /* 换了头像的不要边框；默认的 Claw 图标照旧有框 */
 #sList .s-row.wx .wx-cl{position:absolute;right:1px;bottom:1px;display:grid;place-items:center;width:16px;height:16px;pointer-events:none;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25))}   /* 换了头像：右下角透明底的小水印，标出是哪个 Claw */
 #sList .s-row.wx .wx-cl svg,#sList .s-row.wx .wx-cl img{width:14px;height:14px;background:none}
@@ -3944,7 +3958,8 @@ function onEvent(m){
     prependHistory(m);
     break;
   case 'unread':
-    var unNew=m.unread||{},unUp=Object.keys(unNew).some(function(id){return (unNew[id]||0)>(unread[id]||0)});
+    var unNew=m.unread||{},unIds=Object.keys(unNew).filter(function(id){return (unNew[id]||0)>(unread[id]||0)}),unUp=unIds.length>0;
+    if(unreadBase)unIds.forEach(msgArrive);unreadBase=true;   // 连上后的第一份只是现状，不算「来消息」
     unread=unNew;renderUnread();
     // 「最近」像微信：有会话来了新回复就重新排，它跳到最上面（列表看得见时才取）
     if(unUp&&listMode==='recent'&&(DESKTOP.matches||mList)){clearTimeout(recentTimer);recentTimer=setTimeout(function(){if(listMode==='recent')loadRecent()},800)}
@@ -4055,6 +4070,7 @@ function connect(){
   var again=function(){if(me!==ws)return;connBanner('连接已断开，正在重连…');clearTimeout(wsRetryT);wsRetryT=setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)))};
   ws.onopen=function(){
     if(me!==ws)return;
+    unreadBase=false;
     if(!wsOpenAt)wsOpenAt=Math.round(performance.now());
     setTimeout(function(){var q=clogQ;clogQ=[];q.forEach(function(t){wsSend({t:'clog',text:t})})},0);
     retry=0;banner(null);connState(false);
@@ -4382,7 +4398,7 @@ function notifBall(){
   b.classList.toggle('off',off);b.title=off?'这个会话的通知已关闭，点一下打开':'这个会话正在推送通知，点一下关闭';b.setAttribute('aria-label',b.title);
 }
 var notifLoaded=false;
-function notifLoad(){fetch('/api/notif-off').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){notifOffMap=j;notifLoaded=true;notifShow();notifBall()}}).catch(function(){})}
+function notifLoad(){return fetch('/api/notif-off').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){notifOffMap=j;notifLoaded=true;notifShow();notifBall()}}).catch(function(){})}
 $('#notifBtn').addEventListener('click',notifToggle);
 $('#cfgNotif').addEventListener('click',notifToggle);
 function notifToggle(){
@@ -5691,6 +5707,7 @@ function drawRecent(arr){
     arr.forEach(function(s){
       var row=document.createElement('div');row.className='s-row wx'+(s.peer?' collab':'');row.dataset.id=s.id;
       if(unread[s.id]||s.unread)row.classList.add('unread');
+      if(shakeAt[s.id])shkRow(row,s.id);   // 列表重画时还在抖的接着抖完
       var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
       var bz=s.busyElsewhere;if(bz&&!bz.canTakeover)b.dataset.busy='1';
@@ -5743,11 +5760,47 @@ function skinIndex(){
   return fetch('/avatars/index.json').then(function(r){needLogin(r);if(!r.ok)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){if(!j||!Array.isArray(j.groups))throw new Error('服务端还没更新，重启 claclaw 后可用');skinIx=j;return j});
 }
 function skinSave(s,patch){
-  return postJson('/api/skin',{id:s.id,av:patch.av,name:patch.name}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){
+  return postJson('/api/skin',{id:s.id,av:patch.av,name:patch.name,snd:patch.snd,still:patch.still}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){
     if(!j.ok)throw new Error(j.error||'保存失败');
     if(j.skin)s.skin=j.skin;else delete s.skin;
     if(lastList){lastList.forEach(function(x){if(x.id===s.id){if(j.skin)x.skin=j.skin;else delete x.skin}});listSave('recent',lastList);if(listMode==='recent')drawRecent(lastList)}
     return j.skin;
+  });
+}
+// ---------- 个性提示音 / 头像抖一抖（「头像和网名」里按会话设）----------
+// 来新消息（未读数变多）时：头像抖几下就停；网页开着就在网页里响这个会话选的提示音（声音文件是电脑上的提示音，/api/sound/file 转成 wav）
+// 会话设置里关了通知（铃铛）就不响，抖照样抖；电脑上开了「电脑提示音」时，电脑网页不再响（电脑自己会响，免得响两声）
+var sndInfoP=null,sndAC=null,sndBuf={},sndLast=0,shakeAt={},SHK_MS=2450;
+function sndInfo(){if(!sndInfoP)sndInfoP=fetch('/api/sound').then(function(r){return r.json()}).catch(function(){sndInfoP=null;return {}});return sndInfoP}
+function sndCtx(){var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;if(!sndAC)try{sndAC=new AC()}catch(_){return null}return sndAC}
+document.addEventListener('pointerdown',function(){   // iPhone：声音要在手指点过之后才放得出来——每次点的时候顺手把它唤醒
+  var c=sndAC;if(!c||c.state==='running')return;
+  try{c.resume&&c.resume().catch(function(){});var b=c.createBuffer(1,1,22050),src=c.createBufferSource();src.buffer=b;src.connect(c.destination);src.start(0)}catch(_){}
+},true);
+function sessSoundPlay(name,preview){
+  var c=sndCtx();if(!c)return;
+  if(c.state==='suspended'&&c.resume)c.resume().catch(function(){});
+  var key=name||'';
+  if(!sndBuf[key])sndBuf[key]=fetch('/api/sound/file?name='+encodeURIComponent(key)).then(function(r){if(!r.ok)throw new Error(r.status);return r.arrayBuffer()}).then(function(a){return new Promise(function(ok,no){c.decodeAudioData(a,ok,no)})});
+  sndBuf[key].then(function(buf){var src=c.createBufferSource(),g=c.createGain();g.gain.value=.7;src.buffer=buf;src.connect(g);g.connect(c.destination);src.start(0)})
+    .catch(function(){delete sndBuf[key];narrBeep()});   // 电脑上取不到声音文件（比如 Linux）：退回网页合成的两声「叮」
+}
+function skinOf(id){var x=(lastList||[]).find(function(y){return y.id===id});return (x&&x.skin)||{}}
+function shkRow(row,id){
+  var t=shakeAt[id],e=t?Date.now()-t:SHK_MS;
+  if(e>=SHK_MS){if(t)delete shakeAt[id];row.classList.remove('shk');return}
+  row.style.setProperty('--shk-d',(-e)+'ms');row.classList.add('shk');
+}
+function shkAll(){document.querySelectorAll('#sList .s-row.wx').forEach(function(r){shkRow(r,r.dataset.id)})}
+function msgArrive(id){
+  if(session&&id===session.id&&!mList&&!document.hidden)return;   // 正看着的会话不用提醒
+  var sk=skinOf(id);
+  if(!sk.still){shakeAt[id]=Date.now();shkAll();setTimeout(shkAll,SHK_MS+60)}
+  if(document.hidden||!sk.snd||sk.snd==='off'||Date.now()-sndLast<1500)return;   // 这个会话没开个性提示音：网页里不响
+  sndLast=Date.now();
+  (notifLoaded?Promise.resolve():notifLoad()).then(function(){   // 各会话的通知开关还没取过（没打开过会话）：先取
+    if(notifOffMap[id])return;
+    sndInfo().then(function(j){if(DESKTOP.matches&&!COARSE.matches&&j.on)return;sessSoundPlay(sk.snd||'',false)});
   });
 }
 function skinPick(ix){   // 随机一套：所有头像里抽一个，网名里抽一个
@@ -5773,9 +5826,11 @@ function skinAv(el,s){
 function openSkin(s){
   var p=$('#avPane');
   if(!p){p=document.createElement('div');p.id='avPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
-  var k=s.claw||clawOf(s.id),sk=s.skin||{},cur={av:sk.av||'',name:sk.name||''},tab='av',sel={av:false,nm:false};   // sel：🎲 随机哪样（只按下一样就只随机那样；都按下 / 都没按就一起随机）
+  var k=s.claw||clawOf(s.id),sk=s.skin||{},cur={av:sk.av||'',name:sk.name||'',snd:sk.snd||'',still:!!sk.still},tab='av',sel={av:false,nm:false};   // sel：🎲 随机哪样（只按下一样就只随机那样；都按下 / 都没按就一起随机）
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>头像和网名</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
     +'<div class="av-me"><span class="av-pv"></span><input class="gp-in av-nm" maxlength="40" placeholder="网名（不填用会话原名）"><button type="button" class="av-dice" title="头像和网名一起随机" aria-label="头像和网名一起随机">🎲</button></div>'
+    +'<div class="av-opts"><label class="av-o" title="来消息时头像抖几下"><span class="k">抖一抖</span><input type="checkbox" class="md-sw av-shk"></label><label class="av-o"><span class="k">提示音</span><input type="checkbox" class="md-sw av-son"></label>'
+    +'<label class="av-pick" hidden><span class="av-sndw"><span class="av-sndv"></span><select class="av-snd" aria-label="选声音"></select></span><span class="av-nh"></span></label></div>'
     +'<div class="av-tabs"><button type="button" data-t="av">头像</button><button type="button" data-t="nm">网名</button></div>'
     +'<div class="gp-list av-list"><div class="gp-sec">加载中…</div></div>'
     +'<div class="gp-ft"><button type="button" class="gp-cancel av-clr" title="头像和网名都不设置（保存后生效）">清除</button><span class="av-sp"></span><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go">保存</button></div></div>';
@@ -5784,6 +5839,31 @@ function openSkin(s){
   p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel:not(.av-clr)').addEventListener('click',close);
   var pv=p.querySelector('.av-pv'),nm=p.querySelector('.av-nm'),list=p.querySelector('.av-list'),ix=null;
   nm.value=cur.name;nm.title='原名：'+s.title;
+  // 个性提示音 / 抖一抖：选了就试听（网页里响，不在电脑上响）；会话设置里关了通知（铃铛）就不响，抖照样抖
+  // 提示音默认关；打开才出现选声音的一行（选了就试听，网页里响）。会话设置里关了通知（铃铛）就不响，抖照样抖
+  var snd=p.querySelector('.av-snd'),sndv=p.querySelector('.av-sndv'),son=p.querySelector('.av-son'),pick=p.querySelector('.av-pick'),shk=p.querySelector('.av-shk'),nh=p.querySelector('.av-nh'),dflt='',lastPick='';   // 打开时先用设置里的电脑提示音
+  if(cur.snd==='off')cur.snd='';
+  shk.checked=!cur.still;shk.addEventListener('change',function(){cur.still=!shk.checked});
+  function sndShow(){
+    son.checked=!!cur.snd;pick.hidden=!cur.snd;
+    var o=snd.options[snd.selectedIndex];sndv.textContent=o?o.textContent:'';
+    nh.textContent=notifOffMap[s.id]?'已关通知':'';nh.title=notifOffMap[s.id]?'这个会话关了通知，不会响':'';
+  }
+  sndShow();
+  if(!notifLoaded)notifLoad().then(sndShow);
+  sndInfo().then(function(j){
+    var short=function(n){return /^l:/.test(n)?n.slice(2).replace(/\.[^.]+$/,''):(SOUND_CN[n]||n)};
+    (j.sounds||[]).forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=short(n);snd.appendChild(o)});
+    if(cur.snd&&(j.sounds||[]).indexOf(cur.snd)<0){var o=document.createElement('option');o.value=cur.snd;o.textContent=short(cur.snd)+'（已不在）';snd.appendChild(o)}
+    dflt=j.name||(j.sounds||[])[0]||'';
+    if(cur.snd)snd.value=cur.snd;sndShow();
+    if(!j.supported)son.closest('.av-o').hidden=true;   // 电脑上没有提示音可选（Linux）
+  });
+  son.addEventListener('change',function(){
+    if(son.checked){cur.snd=lastPick||dflt||snd.value;snd.value=cur.snd;if(cur.snd)sessSoundPlay(cur.snd,true)}else cur.snd='';
+    sndShow();
+  });
+  snd.addEventListener('change',function(){cur.snd=lastPick=snd.value;sndShow();if(cur.snd)sessSoundPlay(cur.snd,true)});
   nm.addEventListener('input',function(){cur.name=nm.value;mark()});
   function preview(){pv.innerHTML=cur.av?'<img alt="" src="/avatars/'+esc(cur.av)+'">':clawIcon(k)}
   function mark(){
@@ -5833,10 +5913,10 @@ function openSkin(s){
     if(both||sel.nm){cur.name=x.name;nm.value=x.name}
     preview();mark();
   });
-  p.querySelector('.av-clr').addEventListener('click',function(){cur.av='';cur.name='';nm.value='';preview();mark()});
+  p.querySelector('.av-clr').addEventListener('click',function(){cur.av='';cur.name='';nm.value='';preview();mark()});   // 只清头像和网名，提示音 / 抖一抖不动
   p.querySelector('.gp-go').addEventListener('click',function(){
     var go=this;go.disabled=true;
-    skinSave(s,{av:cur.av||null,name:cur.name.trim()||null}).then(close).catch(function(e){toast(e.message||'保存失败')}).then(function(){go.disabled=false});
+    skinSave(s,{av:cur.av||null,name:cur.name.trim()||null,snd:cur.snd||null,still:cur.still}).then(close).catch(function(e){toast(e.message||'保存失败')}).then(function(){go.disabled=false});
   });
   preview();mark();
   skinIndex().then(function(j){ix=j;draw()}).catch(function(e){list.innerHTML='<div class="gp-sec"></div>';list.firstChild.textContent=e.message||'加载失败'});
@@ -6098,6 +6178,7 @@ function drawList(arr,claw){
       // 协同会话的样式叫 collab，不能叫 peer：.peer 是聊天里「别的会话发来的消息」的样式
       var row=document.createElement('div');row.className='s-row'+(s.peer?' collab':'');row.dataset.id=s.id;
       if(unread[s.id]||s.unread)row.classList.add('unread');
+      if(shakeAt[s.id])shkRow(row,s.id);   // 列表重画时还在抖的接着抖完
       var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
       var bz=s.busyElsewhere;
@@ -6157,7 +6238,7 @@ function drawList(arr,claw){
 }
 // ---------- 未读红点 + 应用角标 ----------
 // 服务器推来未读表（会话 ID → 条数）：会话行红点、图标栏「会话」红点、手机顶部红点、Dock/主屏幕图标角标
-var unread={};
+var unread={},unreadBase=false;
 // ---------- 会话列表里的工作状态 ----------
 // 服务器推来「会话 → 正在做什么」（思考中 / 回复中 / 运行命令 / 等你确认……），正在干活的行变绿，时间换成状态
 var activity={};
@@ -7746,6 +7827,7 @@ var soundBtn=$('#soundBtn');
 var SOUND_CN={Basso:'低沉',Blow:'吹气',Bottle:'瓶子',Frog:'蛙鸣',Funk:'放克',Glass:'玻璃',Hero:'英雄',Morse:'摩斯',Ping:'乒',Pop:'啵',Purr:'呼噜',Sosumi:'Sosumi',Submarine:'潜水艇',Tink:'叮'};
 function soundLabel(n){if(/^l:/.test(n))return n.slice(2).replace(/\.[^.]+$/,'')+' · 本机';return (SOUND_CN[n]||n)+(SOUND_CN[n]&&SOUND_CN[n]!==n?'（'+n+'）':'')}   // l: 开头的是电脑上 data/sounds/ 里自己放的
 function showSound(j){
+  sndInfoP=Promise.resolve(j);
   soundBtn.hidden=!j.supported;
   var sel=$('#soundSel');
   $('#soundPick').hidden=!(j.supported&&j.on);

@@ -53,3 +53,14 @@ test('上传：只收 png / jpeg / webp，内容要对得上，按哈希存同�
   assert.throws(() => sk.upload('data:image/svg+xml;base64,PHN2Zz4='), /只支持/);
   assert.throws(() => sk.upload('data:image/jpeg;base64,' + Buffer.from('hello').toString('base64')), /对不上/);
 });
+
+test('个性提示音 / 抖一抖：只收认识的声音或 off，只有这两样也留下这一条，清掉就删', () => {
+  const s2 = makeSkins(fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-skins2-')), ROOT, { soundOk: (n) => n === 'Glass' });
+  assert.deepEqual(s2.set('a', { snd: 'Glass' }), { snd: 'Glass' });
+  assert.deepEqual(s2.set('a', { still: true }), { snd: 'Glass', still: true });
+  assert.deepEqual(s2.set('a', { snd: 'off' }), { snd: 'off', still: true });
+  assert.throws(() => s2.set('a', { snd: 'Nope' }), /没有这个提示音/);
+  assert.deepEqual(s2.set('a', { av: null, name: null }), { snd: 'off', still: true });   // 清头像网名不动提示音
+  assert.equal(s2.set('a', { snd: null, still: false }), null);
+  assert.equal(s2.all().a, undefined);
+});

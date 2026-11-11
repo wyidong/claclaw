@@ -1,5 +1,6 @@
 // 会话的头像和网名（「最近」列表里点头像换；长按随机一套）
-// 存在 data/skins.json：{ 会话 ID: { av: 头像引用, name: 网名 } }，两样都可以只有一样。
+// 存在 data/skins.json：{ 会话 ID: { av: 头像引用, name: 网名, snd: 提示音, still: true } }，都可以只有一部分。
+// snd：这个会话来消息时的提示音（电脑提示音 + 网页开着时手机上响），'off' = 不响，没有 = 用设置里的；still：来消息时头像不抖（默认抖几下）
 // 头像引用（网址就是 /avatars/<引用>）：
 //   p/<组>/<文件>  仓库自带的预设（public/avatars/，来源和授权见那里的 LICENSE.md）
 //   l/<组>/<文件>  只在本机的图（data/avatars/<组>/，比如版权不能进仓库的经典 QQ 头像），别的电脑上没有
@@ -16,7 +17,7 @@ const LOCAL_NAMES = { qq: '经典 QQ', 'qq-oicq': '初代 OICQ', 'qq-2019': 'QQ 
 export const NAME_MAX = 40;
 export const UPLOAD_MAX = 1536 * 1024;
 
-export function makeSkins(DATA, ROOT) {
+export function makeSkins(DATA, ROOT, { soundOk = () => true } = {}) {
   const FILE = path.join(DATA, 'skins.json');
   const REPO = path.join(ROOT, 'public', 'avatars');
   const LOCAL = path.join(DATA, 'avatars');
@@ -52,8 +53,8 @@ export function makeSkins(DATA, ROOT) {
     }
     return { groups: local.concat(groups), names: Array.isArray(base.names) ? base.names : [] };
   };
-  // 改一个会话：av / name 传 null 或空就清掉；两样都没了就删掉这一条
-  const set = (id, { av, name } = {}) => {
+  // 改一个会话：av / name / snd 传 null 或空就清掉；什么都没了就删掉这一条
+  const set = (id, { av, name, snd, still } = {}) => {
     if (typeof id !== 'string' || !id || id.length > 200) throw Object.assign(new Error('会话 ID 不对'), { code: 400 });
     const m = all(), cur = { ...(m[id] || {}) };
     if (av !== undefined) {
@@ -66,7 +67,13 @@ export function makeSkins(DATA, ROOT) {
       if (n.length > NAME_MAX) throw Object.assign(new Error('网名太长了（最多 ' + NAME_MAX + ' 个字）'), { code: 400 });
       if (n) cur.name = n; else delete cur.name;
     }
-    if (cur.av || cur.name) m[id] = cur; else delete m[id];
+    if (snd !== undefined) {
+      if (snd === null || snd === '') delete cur.snd;
+      else if (typeof snd !== 'string' || snd.length > 120 || (snd !== 'off' && !soundOk(snd))) throw Object.assign(new Error('没有这个提示音'), { code: 400 });
+      else cur.snd = snd;
+    }
+    if (still !== undefined) { if (still === true) cur.still = true; else delete cur.still; }
+    if (cur.av || cur.name || cur.snd || cur.still) m[id] = cur; else delete m[id];
     writeJsonAtomic(FILE, m);
     return m[id] || null;
   };
