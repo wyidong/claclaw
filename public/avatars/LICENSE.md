@@ -5,7 +5,7 @@
 | 目录 | 名字 | 作者 | 授权 | 原始出处 |
 |---|---|---|---|---|
 | animal/ | 动物（Animal Pack Remastered） | Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://kenney.nl/assets/animal-pack-redux |
-| cartoon/ | 动物卡通（Fluent Emoji 3D，缩到 128px） | Microsoft | [MIT](cartoon/LICENSE-MIT.txt) | https://github.com/microsoft/fluentui-emoji |
+| cartoon/ | 动物卡通（Fluent Emoji 3D，缩到 128px；四象、12 生肖按五行配色重新着色） | Microsoft | [MIT](cartoon/LICENSE-MIT.txt) | https://github.com/microsoft/fluentui-emoji |
 | adventurer/ | 冒险少年（Adventurer） | Lisa Wischofsky | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/1184595184137881796 |
 | big-smile/ | 大笑脸（Custom Avatar） | Ashley Seo | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/881358461963645496 |
 | toon-head/ | 卡通头（ToonHead） | Johan Melin | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/1589627891082866389 |
