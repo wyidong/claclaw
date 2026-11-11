@@ -1047,9 +1047,11 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .cfg-opt[aria-checked="true"] .ck{border:6px solid var(--accent);background:var(--surface)}
 .cfg-use{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 12px;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--bg)}
 .cfg-use b{font-size:14.5px;font-weight:600}
-.cfg-use .cu-bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.cfg-use .cu-bar{position:relative;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.cfg-use .cu-bar .pace{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;border-radius:1px;background:var(--ink);opacity:.35}
 .cfg-use .cu-bar i{display:block;height:100%;border-radius:4px;background:var(--accent)}
 .cfg-use .cu-bar.hi i{background:var(--warn)}
+.cfg-use .cu-pct.over{color:var(--warn)}
 .cfg-use .cu-pct{font-size:14px;font-variant-numeric:tabular-nums;text-align:right;min-width:3em}
 .cfg-use small{grid-column:2/-1;margin:-2px 0 6px;font-size:12px;color:var(--muted)}
 .cfg-use small:last-child{margin-bottom:0}
@@ -1090,6 +1092,10 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 #rail .rclaw.busy .km-mark .eyes,.claw-card.busy .km-mark .eyes,#mtabs button.busy .km-mark .eyes,#workBar .wlogo .km-mark .eyes,#sessBtn .dot.busy .km-mark .eyes{animation:kmblink 2.4s ease-in-out infinite}
 @keyframes kmblink{0%,82%,100%{transform:scaleY(1)}88%{transform:scaleY(.12)}94%{transform:scaleY(1)}}
 #workBar.quiet{color:var(--warn)}
+#workUse{margin-left:auto;flex:none;font-variant-numeric:tabular-nums;cursor:pointer;white-space:nowrap}
+#workUse .over{color:var(--warn)}
+body:has(#ttsStop:not([hidden])) #workUse{margin-right:46px}   /* 右下角浮着朗读按钮：让开 */
+@media (min-width:1000px){body:has(#ttsStop:not([hidden])) #workUse{margin-right:58px}}
 #workBar.quiet .wlogo{animation-duration:3.6s}
 #bannerT.link{cursor:pointer;text-decoration:underline}
 
@@ -1859,7 +1865,7 @@ select.pe-in{text-align-last:right}
 
   <main id="feed" aria-live="polite"></main>
   <!-- 工作状态：在聊天区底部、输入框外面（输入框是用户自己的地方） -->
-  <div id="workBar" hidden><span class="wlogo" id="workLogo"></span><span id="workT"></span></div>
+  <div id="workBar" hidden><span class="wlogo" id="workLogo"></span><span id="workT"></span><span id="workUse" hidden></span></div>
 
   <div id="dock" data-state="idle">
     <div id="perm">
@@ -3158,7 +3164,7 @@ function tickWork(){
   var bar=$('#workBar');
   if(!busy){bar.hidden=true;return}
   var quiet=lastEvt?Math.floor((Date.now()-lastEvt)/1000):0,stuck=quiet>=90;
-  bar.hidden=false;bar.classList.toggle('quiet',stuck);
+  bar.hidden=false;bar.classList.toggle('quiet',stuck);renderWorkUse();
   var lg=$('#workLogo'),ck=clawOf(session&&session.id);
   if(lg.dataset.k!==ck){lg.innerHTML=clawIcon(ck);lg.dataset.k=ck;lg.title=clawName(session&&session.id)+' 正在工作'}
   $('#workT').textContent=workLabel+(sec?' · 已 '+fmtSec(sec):'')+
@@ -3948,7 +3954,7 @@ function onEvent(m){
     renderCfgBtn();renderCfg();
     break;
   case 'claude.usage':
-    claudeUse=m.usage||null;if($('#cfgDlg').classList.contains('on'))renderCfgUse();
+    claudeUse=m.usage||null;if($('#cfgDlg').classList.contains('on'))renderCfgUse();renderWorkUse();
     break;
   case 'models': case 'model':
     applyModel(m);
@@ -4360,13 +4366,34 @@ function cuReset(ms,week){
   if(!week||d<86400000){var h=Math.floor(d/3600000),mi=Math.ceil(d%3600000/60000);if(mi===60){h++;mi=0}return (h&&mi?h+' 小时 '+mi+' 分':h?h+' 小时':mi+' 分')+'后重置'}
   var t=new Date(ms);return '周'+'日一二三四五六'[t.getDay()]+' '+t.getHours()+':'+String(t.getMinutes()).padStart(2,'0')+' 重置';
 }
+// 用得比「平均」快才提醒：本周按天、5 小时按小时摊——第 n 天（第 n 小时）用量不超过 n/7（n/5）就算正常
+var USE_WIN={five_hour:[5,3600000],seven_day:[7,86400000]};
+function usePace(w,k){
+  var z=USE_WIN[k];if(!w||w.stale||!w.resetsAt||!z)return null;
+  var left=w.resetsAt-Date.now(),len=z[0]*z[1];if(left<=0||left>len)return null;
+  var n=Math.min(z[0],Math.max(1,Math.ceil((len-left)/z[1]))),allow=n/z[0];
+  return {n:n,allow:allow,over:w.used>allow+1e-9};
+}
+// 工作中那一行右边：只有用超了才出现，点了打开会话设置看详情
+var useFetchAt=0,USE_PREVIEW=false;   // true = 预览：不管超没超都显示（超了的变色）
+function renderWorkUse(){
+  var el=$('#workUse');if(!el)return;
+  var u=claudeUse,on=busy&&claudeSess()&&!cfg.lib&&!xcfg;
+  if(on&&!u&&Date.now()-useFetchAt>60000){useFetchAt=Date.now();fetch('/api/claude-usage').then(function(r){return r.json()}).then(function(j){if(!claudeUse)claudeUse=j.usage||null;renderWorkUse()}).catch(function(){})}
+  var parts=[],tips=[];
+  if(on&&u)[['five_hour','5h','5 小时','小时'],['seven_day','周','本周','天']].forEach(function(r){
+    var w=u[r[0]],pc=usePace(w,r[0]);if(!pc||!pc.over&&!USE_PREVIEW)return;
+    parts.push('<span'+(pc.over?' class="over"':'')+'>'+r[1]+' '+Math.round(w.used*100)+'%</span>');tips.push(r[2]+'已用 '+Math.round(w.used*100)+'%，第 '+pc.n+' '+r[3]+'平均可用到 '+Math.round(pc.allow*100)+'%');
+  });
+  el.hidden=!parts.length;el.innerHTML=parts.join(' · ');el.title=tips.join('；');
+}
 function renderCfgUse(){
   var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&!!(u.five_hour||u.seven_day);
   sec.hidden=!show;if(!show)return;
   $('#cfgUseNote').textContent=u.at?'上次回复时 · '+ago(u.at):'';
   $('#cfgUse').innerHTML=[['five_hour','5 小时',0],['seven_day','本周',1]].map(function(r){
-    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100);
-    return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i></span><span class="cu-pct">'+p+'%</span>'+
+    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100),pc=usePace(w,r[0]);
+    return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80||pc&&pc.over?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i>'+(pc?'<em class="pace" style="left:'+Math.round(pc.allow*100)+'%" title="到现在为止平均可用 '+Math.round(pc.allow*100)+'%"></em>':'')+'</span><span class="cu-pct'+(pc&&pc.over?' over':'')+'">'+p+'%</span>'+
       '<small>'+esc(w.stale?'已过重置时间，下次回复后更新':cuReset(w.resetsAt,r[2]))+'</small>';
   }).join('');
 }
@@ -4422,6 +4449,7 @@ function renderCfg(){
     mb.appendChild(b);
   });
 }
+document.getElementById('workUse').addEventListener('click',function(){openCfg()});
 function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();loadCfgUse();notifShow();renderCfgTts();notifLoad()}
 // 会话设置 › 通知：关了这个会话回复完、出错、来消息都不推送、不响；要你确认权限时照样通知
 var notifOffMap={};
