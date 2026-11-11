@@ -45,6 +45,7 @@ setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(()
 setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
 import { DATA, verify, verifyMaster, verifyMasterPassword, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
+import { makeSkins } from './skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
 import { INSTALLS, installStart, installState } from './install.mjs';
@@ -120,6 +121,7 @@ function argPort() {
 const PORT = Number(argPort() ?? process.env.CLACLAW_PORT ?? 8787);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('端口不合法：' + (argPort() ?? process.env.CLACLAW_PORT));
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const skins = makeSkins(DATA, ROOT);   // 会话的头像和网名（data/skins.json）
 const REGISTRY = path.join(os.homedir(), '.claude', 'sessions');
 const HOME = os.homedir();
 
@@ -3130,7 +3132,31 @@ const handler = async (req, res) => {
       } catch (e) { log('dissect error', id.slice(0, 8), e && e.message); return sendJson(res, 500, { error: '解剖失败：' + String((e && e.message) || e) }); }
     }
     if (url.pathname === '/api/recent' && req.method === 'GET') {
-      return sendJson(res, 200, await recentList());
+      const arr = await recentList(), sk = skins.all();
+      for (const x of arr) if (sk[x.id]) x.skin = sk[x.id];   // 换过的头像 / 网名
+      return sendJson(res, 200, arr);
+    }
+    // 会话头像：预设清单、图片本身（预设 / 本机 / 上传的）、改某个会话的头像和网名、上传本地图片
+    if (url.pathname === '/avatars/index.json' && req.method === 'GET') {
+      return sendJson(res, 200, skins.index());
+    }
+    if (url.pathname.startsWith('/avatars/') && req.method === 'GET') {
+      const f = skins.fileOf(decodeURIComponent(url.pathname.slice(9)));
+      if (!f) { res.writeHead(404, { 'cache-control': 'no-store' }); return res.end(); }
+      res.writeHead(200, { 'content-type': skins.typeOf(f), 'cache-control': 'private, max-age=604800', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" });
+      return fs.createReadStream(f).pipe(res);
+    }
+    if (url.pathname === '/api/skin' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      const b = await jsonBody(req, 8 * 1024, null);
+      if (!b || typeof b !== 'object') return sendJson(res, 400, { error: 'bad request' });
+      try { return sendJson(res, 200, { ok: true, skin: skins.set(b.id, { av: b.av, name: b.name }) }); } catch (e) { return sendJson(res, e.code || 500, { error: e.message }); }
+    }
+    if (url.pathname === '/api/skin/upload' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+      const b = await jsonBody(req, 2200 * 1024, null);
+      if (!b || typeof b !== 'object') return sendJson(res, 400, { error: '图片太大了，或者不是图片' });
+      try { return sendJson(res, 200, { ok: true, av: skins.upload(b.data) }); } catch (e) { return sendJson(res, e.code || 500, { error: e.message }); }
     }
     if (url.pathname === '/api/recent/clear' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });

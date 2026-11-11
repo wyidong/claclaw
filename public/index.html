@@ -434,16 +434,16 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
   #sReload:hover{color:var(--accent);background:var(--bg)}
   #railReload{display:none!important}
 }
-#grpPane{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35)}
-#grpPane.on{display:flex}
-#grpPane .gp-card{width:100%;max-width:520px;max-height:86vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box}
-@media (min-width:1000px){#grpPane{align-items:center}#grpPane .gp-card{border-radius:16px}}
-#grpPane .gp-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-#grpPane .gp-hd b{font-size:16px}
-#grpPane .gp-x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
-#grpPane input.gp-in{width:100%;box-sizing:border-box;height:36px;padding:0 10px;margin-bottom:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
-#grpPane .gp-list{flex:1;min-height:120px;overflow-y:auto;overscroll-behavior:contain}
-#grpPane .gp-sec{font-size:12px;color:var(--muted);margin:10px 2px 4px}
+:is(#grpPane,#avPane){position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35)}
+:is(#grpPane,#avPane).on{display:flex}
+:is(#grpPane,#avPane) .gp-card{width:100%;max-width:520px;max-height:86vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box}
+@media (min-width:1000px){:is(#grpPane,#avPane){align-items:center}:is(#grpPane,#avPane) .gp-card{border-radius:16px}}
+:is(#grpPane,#avPane) .gp-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+:is(#grpPane,#avPane) .gp-hd b{font-size:16px}
+:is(#grpPane,#avPane) .gp-x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
+:is(#grpPane,#avPane) input.gp-in{width:100%;box-sizing:border-box;height:36px;padding:0 10px;margin-bottom:8px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
+:is(#grpPane,#avPane) .gp-list{flex:1;min-height:120px;overflow-y:auto;overscroll-behavior:contain}
+:is(#grpPane,#avPane) .gp-sec{font-size:12px;color:var(--muted);margin:10px 2px 4px}
 #grpPane label.gp-row{display:flex;align-items:center;gap:9px;padding:7px 4px;border-radius:9px;cursor:pointer}
 #grpPane label.gp-row:hover{background:var(--bg)}
 #grpPane .gp-row input{flex:none;width:18px;height:18px;accent-color:var(--accent)}
@@ -481,11 +481,30 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #grpPane .gp-nh .fd-o,#grpPane .gp-node.open>.gp-nh .fd-c{display:none}
 #grpPane .gp-node.open>.gp-nh .fd-o{display:block}
 #grpPane .gp-kids{padding-left:18px}
-#grpPane .gp-ft{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
-#grpPane .gp-ft button{height:36px;padding:0 16px;border-radius:9px;border:0;font:inherit;font-size:14.5px;cursor:pointer}
-#grpPane .gp-go{background:var(--accent);color:#fff}
-#grpPane .gp-go:disabled{opacity:.45;cursor:default}
-#grpPane .gp-cancel{background:var(--bg);color:var(--ink)}
+:is(#grpPane,#avPane) .gp-ft{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+:is(#grpPane,#avPane) .gp-ft button{height:36px;padding:0 16px;border-radius:9px;border:0;font:inherit;font-size:14.5px;cursor:pointer}
+:is(#grpPane,#avPane) .gp-go{background:var(--accent);color:#fff}
+:is(#grpPane,#avPane) .gp-go:disabled{opacity:.45;cursor:default}
+:is(#grpPane,#avPane) .gp-cancel{background:var(--bg);color:var(--ink)}
+/* 会话头像和网名（「最近」里点头像打开；长按头像随机一套）：外框、标题、按钮和建群同一套（上面 :is(#grpPane,#avPane)） */
+#avPane .av-me{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+#avPane .av-pv{flex:none;position:relative;display:grid;place-items:center;width:52px;height:52px;border-radius:12px;background:var(--bg);overflow:hidden}
+#avPane .av-pv img{width:100%;height:100%;object-fit:cover}
+#avPane .av-pv svg,#avPane .av-pv img.claw{width:32px;height:32px;object-fit:contain}
+#avPane .av-me input.gp-in{flex:1;min-width:0;margin:0}
+#avPane .av-dice{flex:none;width:40px;height:36px;border:0;border-radius:9px;background:var(--bg);font-size:19px;cursor:pointer}
+#avPane .av-tabs{display:flex;gap:6px;margin-bottom:6px}
+#avPane .av-tabs button{flex:1;height:32px;border:0;border-radius:9px;background:var(--bg);color:var(--muted);font:inherit;font-size:14px;cursor:pointer}
+#avPane .av-tabs button[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,var(--bg));color:var(--accent);font-weight:600}
+#avPane .av-ops{display:flex;gap:6px;margin:4px 0 2px}
+#avPane .av-ops button{height:30px;padding:0 12px;border:0;border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+#avPane .av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(50px,1fr));gap:6px}
+#avPane .av-grid button{aspect-ratio:1;padding:0;border:2px solid transparent;border-radius:11px;background:var(--bg);overflow:hidden;cursor:pointer}
+#avPane .av-grid img{display:block;width:100%;height:100%;object-fit:cover}
+#avPane .av-grid button[aria-pressed="true"]{border-color:var(--accent)}
+#avPane .av-names{display:flex;flex-wrap:wrap;gap:6px}
+#avPane .av-names button{max-width:100%;padding:5px 10px;border:1.5px solid transparent;border-radius:999px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#avPane .av-names button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 .cmd .c-ic{display:inline-flex;vertical-align:-3px;margin-right:6px}
 .peer code{font-family:var(--mono);font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
 .peer .md pre{background:var(--surface)}
@@ -1154,7 +1173,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 .pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:.5px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
-@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#grpPane input.gp-in,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select){font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
+@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#grpPane input.gp-in,#avPane input.gp-in,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select){font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
 .pe-in.left,.pe-in.left::placeholder{text-align:left}
 .md-sub{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 /* 模型管理：Key 列表、Key 详情、接口格式下拉、「更多」、从接口读到的模型 */
@@ -1424,6 +1443,10 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .wx-av{position:relative;flex:none;display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:var(--surface);border:.5px solid var(--line)}
 #sList .s-row.wx .wx-av svg,#sList .s-row.wx .wx-av img{display:block;width:30px;height:30px;object-fit:contain}
 #sList .s-row.wx .wx-av img.tile{border-radius:22.5%}
+#sList .s-row.wx .wx-av{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:pointer}   /* 点头像换头像 / 网名，长按随机一套：不弹系统的图片菜单 */
+#sList .s-row.wx .wx-av img.sk{width:100%;height:100%;border-radius:inherit;object-fit:cover;pointer-events:none}
+#sList .s-row.wx .wx-cl{position:absolute;right:1px;bottom:1px;display:grid;place-items:center;width:16px;height:16px;pointer-events:none;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25))}   /* 换了头像：右下角透明底的小水印，标出是哪个 Claw */
+#sList .s-row.wx .wx-cl svg,#sList .s-row.wx .wx-cl img{width:14px;height:14px;background:none}
 #sList .s-row.wx .wx-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:13px 0;border-bottom:.5px solid var(--line)}
 #sList .s-row.wx:last-child .wx-b{border-bottom:0}
 #sList .s-row.wx .wx-top{display:flex;align-items:baseline;gap:8px;min-width:0}
@@ -5539,19 +5562,22 @@ function drawRecent(arr){
       if(session&&s.id===session.id)b.setAttribute('aria-current','true');
       var bz=s.busyElsewhere;if(bz&&!bz.canTakeover)b.dataset.busy='1';
       b.innerHTML='<span class="wx-av"></span><span class="wx-b"><span class="wx-top"><span class="t"></span><span class="when"></span></span><span class="m"><span class="cwd"></span></span></span>';
-      var k=s.claw||clawOf(s.id);
-      b.querySelector('.wx-av').innerHTML=clawIcon(k)+'<span class="wx-bd"></span>';b.querySelector('.wx-av').dataset.claw=k;
-      b.querySelector('.t').textContent=s.title;
+      var k=s.claw||clawOf(s.id),sk=s.skin||{},shown=sk.name||s.title,av=b.querySelector('.wx-av');
+      // 换过头像：头像是选的图，右下角小标记是哪个 Claw；换过网名：标题显示网名（原名在悬停提示里，搜索也认原名）
+      av.innerHTML=(sk.av?'<img class="sk" alt="" src="/avatars/'+esc(sk.av)+'"><span class="wx-cl">'+clawIcon(k)+'</span>':clawIcon(k))+'<span class="wx-bd"></span>';av.dataset.claw=k;
+      if(sk.name)row.dataset.ot=s.title;
+      skinAv(av,s);
+      b.querySelector('.t').textContent=shown;
       if(s.peerLast){   // 协同会话：名字用最近通信的那个对方的标识色（和按目录分组的列表、协同页一致）
         row.classList.add('ptint',peerPc(s.peerLast));
-        var tn=document.createElement('span');tn.className='ptn';tn.textContent=s.title;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
+        var tn=document.createElement('span');tn.className='ptn';tn.textContent=shown;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
       }
       var dir=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'';
       var c=b.querySelector('.cwd');c.textContent=s.lastPrompt||s.branch||dir;c.title=(s.cwd||'')+(s.branch?'\n'+(s.claw&&s.claw!=='claude'?'模型：':'分支：')+s.branch:'');
       var whenTxt=s.unsent?'新建':wxTime(s.at||s.lastModified);
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
       if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';
-      b.title=CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管'):'')+(s.peerLast?'\n最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at):'');
+      b.title=(sk.name?'原名：'+s.title+'\n':'')+CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管'):'')+(s.peerLast?'\n最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at):'');
       b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
       // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
       var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
@@ -5575,9 +5601,120 @@ function drawRecent(arr){
     if(grpOnly)list.appendChild(ga);
     applySearch();renderUnread();renderActivity();
 }
+// ---------- 会话头像和网名（「最近」列表）----------
+// 点头像：打开换头像 / 网名的页面（预设、本机才有的、从本地上传；网名选预设或自己写）；长按头像：随机换一套，马上生效
+// 存在电脑上（data/skins.json），所有设备看到的一样；预设图在仓库 public/avatars/，本机才有的在 data/avatars/<组>/
+var skinIx=null;
+function skinIndex(){
+  if(skinIx)return Promise.resolve(skinIx);
+  return fetch('/avatars/index.json').then(function(r){needLogin(r);if(!r.ok)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){if(!j||!Array.isArray(j.groups))throw new Error('服务端还没更新，重启 claclaw 后可用');skinIx=j;return j});
+}
+function skinSave(s,patch){
+  return postJson('/api/skin',{id:s.id,av:patch.av,name:patch.name}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){
+    if(!j.ok)throw new Error(j.error||'保存失败');
+    if(j.skin)s.skin=j.skin;else delete s.skin;
+    if(lastList){lastList.forEach(function(x){if(x.id===s.id){if(j.skin)x.skin=j.skin;else delete x.skin}});listSave('recent',lastList);if(listMode==='recent')drawRecent(lastList)}
+    return j.skin;
+  });
+}
+function skinPick(ix){   // 随机一套：所有头像里抽一个，网名里抽一个
+  var all=[];ix.groups.forEach(function(g){g.items.forEach(function(f){all.push(g.base+'/'+f)})});
+  var r=function(a){return a.length?a[Math.floor(Math.random()*a.length)]:''};
+  return {av:r(all),name:r(ix.names||[])};
+}
+function skinRandom(s){
+  skinIndex().then(function(ix){var x=skinPick(ix);return skinSave(s,x).then(function(){toast('换成了「'+(x.name||s.title)+'」')})}).catch(function(e){toast(e.message||'换不了')});
+}
+function skinAv(el,s){
+  var t=null,fired=0,x0=0,y0=0;
+  var stop=function(){clearTimeout(t);t=null};
+  el.addEventListener('pointerdown',function(e){
+    if(e.button)return;x0=e.clientX;y0=e.clientY;stop();
+    t=setTimeout(function(){t=null;fired=Date.now();if(navigator.vibrate)try{navigator.vibrate(15)}catch(_){}skinRandom(s)},550);
+  });
+  el.addEventListener('pointermove',function(e){if(t&&(Math.abs(e.clientX-x0)>8||Math.abs(e.clientY-y0)>8))stop()});   // 手指一动就是在滑列表 / 左滑删除，不算长按
+  ['pointerup','pointercancel','pointerleave'].forEach(function(ev){el.addEventListener(ev,stop)});
+  el.addEventListener('click',function(e){e.stopPropagation();e.preventDefault();if(Date.now()-fired<900)return;openSkin(s)});   // 不打开会话
+  el.addEventListener('contextmenu',function(e){if(TOUCH&&!DESKTOP.matches)e.preventDefault()});
+}
+function openSkin(s){
+  var p=$('#avPane');
+  if(!p){p=document.createElement('div');p.id='avPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
+  var k=s.claw||clawOf(s.id),sk=s.skin||{},cur={av:sk.av||'',name:sk.name||''},tab='av';
+  p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>头像和网名</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
+    +'<div class="av-me"><span class="av-pv"></span><input class="gp-in av-nm" maxlength="40" placeholder="网名（不填用会话原名）"><button type="button" class="av-dice" title="随机一套" aria-label="随机一套">🎲</button></div>'
+    +'<div class="av-tabs"><button type="button" data-t="av">头像</button><button type="button" data-t="nm">网名</button></div>'
+    +'<div class="gp-list av-list"><div class="gp-sec">加载中…</div></div>'
+    +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go">保存</button></div></div>';
+  p.classList.add('on');
+  var close=function(){p.classList.remove('on')};
+  p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel').addEventListener('click',close);
+  var pv=p.querySelector('.av-pv'),nm=p.querySelector('.av-nm'),list=p.querySelector('.av-list'),ix=null;
+  nm.value=cur.name;nm.title='原名：'+s.title;
+  nm.addEventListener('input',function(){cur.name=nm.value;mark()});
+  function preview(){pv.innerHTML=cur.av?'<img alt="" src="/avatars/'+esc(cur.av)+'">':clawIcon(k)}
+  function mark(){
+    list.querySelectorAll('[data-av]').forEach(function(x){x.setAttribute('aria-pressed',String(x.dataset.av===cur.av))});
+    list.querySelectorAll('[data-nm]').forEach(function(x){x.setAttribute('aria-pressed',String(x.dataset.nm===cur.name.trim()))});
+    p.querySelectorAll('.av-tabs button').forEach(function(x){x.setAttribute('aria-pressed',String(x.dataset.t===tab))});
+  }
+  function draw(){
+    list.innerHTML='';
+    if(!ix)return;
+    if(tab==='av'){
+      var ops=document.createElement('div');ops.className='av-ops';
+      ops.innerHTML='<button type="button" class="av-up">从本地上传…</button><button type="button" class="av-def">用 Claw 图标</button><input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/heic" hidden>';
+      var fi=ops.querySelector('input');
+      ops.querySelector('.av-up').addEventListener('click',function(){fi.click()});
+      ops.querySelector('.av-def').addEventListener('click',function(){cur.av='';preview();mark()});
+      fi.addEventListener('change',function(){var f=fi.files&&fi.files[0];fi.value='';if(f)skinUpload(f).then(function(ref){cur.av=ref;preview();mark()}).catch(function(e){toast(e.message||'上传失败')})});
+      list.appendChild(ops);
+      ix.groups.forEach(function(g){
+        var h=document.createElement('div');h.className='gp-sec';h.textContent=g.name+(g.local?' · 只在这台电脑上有':'');list.appendChild(h);
+        var grid=document.createElement('div');grid.className='av-grid';
+        g.items.forEach(function(f){var ref=g.base+'/'+f,bt=document.createElement('button');bt.type='button';bt.dataset.av=ref;bt.innerHTML='<img alt="" loading="lazy" src="/avatars/'+esc(ref)+'">';grid.appendChild(bt)});
+        list.appendChild(grid);
+      });
+    }else{
+      var h=document.createElement('div');h.className='gp-sec';h.textContent='点一个用它；也可以在上面自己写';list.appendChild(h);
+      var box=document.createElement('div');box.className='av-names';
+      (ix.names||[]).forEach(function(n){var bt=document.createElement('button');bt.type='button';bt.dataset.nm=n;bt.textContent=n;box.appendChild(bt)});
+      list.appendChild(box);
+    }
+    mark();
+  }
+  list.addEventListener('click',function(e){
+    var a=e.target.closest('[data-av]');if(a){cur.av=a.dataset.av;preview();mark();return}
+    var n=e.target.closest('[data-nm]');if(n){cur.name=n.dataset.nm;nm.value=cur.name;mark()}
+  });
+  p.querySelectorAll('.av-tabs button').forEach(function(x){x.addEventListener('click',function(){tab=x.dataset.t;draw();list.scrollTop=0})});
+  p.querySelector('.av-dice').addEventListener('click',function(){if(!ix)return;var x=skinPick(ix);cur.av=x.av;cur.name=x.name;nm.value=x.name;preview();mark();var on=list.querySelector('[aria-pressed="true"]');if(on)on.scrollIntoView({block:'nearest'})});
+  p.querySelector('.gp-go').addEventListener('click',function(){
+    var go=this;go.disabled=true;
+    skinSave(s,{av:cur.av||null,name:cur.name.trim()||null}).then(close).catch(function(e){toast(e.message||'保存失败')}).then(function(){go.disabled=false});
+  });
+  preview();mark();
+  skinIndex().then(function(j){ix=j;draw()}).catch(function(e){list.innerHTML='<div class="gp-sec"></div>';list.firstChild.textContent=e.message||'加载失败'});
+}
+// 本地图片：在网页里裁成正方形、缩到 256，再传（原图可能好几 MB）
+function skinUpload(file){
+  return new Promise(function(ok,no){
+    var u=URL.createObjectURL(file),im=new Image();
+    im.onload=function(){
+      URL.revokeObjectURL(u);
+      var n=Math.min(im.naturalWidth,im.naturalHeight);if(!n){no(new Error('读不了这张图'));return}
+      var S=Math.min(256,n),c=document.createElement('canvas');c.width=c.height=S;
+      c.getContext('2d').drawImage(im,(im.naturalWidth-n)/2,(im.naturalHeight-n)/2,n,n,0,0,S,S);
+      var d=c.toDataURL('image/webp',.88);if(d.indexOf('data:image/webp')!==0)d=c.toDataURL('image/png');   // Safari 旧版不会出 webp
+      postJson('/api/skin/upload',{data:d}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){if(!j.ok)throw new Error(j.error||'上传失败');ok(j.av)}).catch(no);
+    };
+    im.onerror=function(){URL.revokeObjectURL(u);no(new Error('读不了这张图（换 PNG / JPEG 试试）'))};
+    im.src=u;
+  });
+}
 function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
-  document.querySelectorAll('#sList>.s-row').forEach(function(r){r.hidden=!!q&&(r.textContent+' '+(r.dataset.id||'')).toLowerCase().indexOf(q)<0});
+  document.querySelectorAll('#sList>.s-row').forEach(function(r){r.hidden=!!q&&(r.textContent+' '+(r.dataset.ot||'')+' '+(r.dataset.id||'')).toLowerCase().indexOf(q)<0});
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
     var h=box.previousElementSibling,label=h.dataset.path||(h.querySelector('.gn')||{}).textContent||'',hit=0;
     box.querySelectorAll('.s-row').forEach(function(r){var ok=!q||(label+' '+r.textContent+' '+(r.dataset.id||'')).toLowerCase().indexOf(q)>=0;r.hidden=!ok;if(ok)hit++});
