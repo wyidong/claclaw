@@ -1306,10 +1306,20 @@ select.pe-in{text-align-last:right}
 .vc-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:6px;background:var(--surface);font-size:11px;line-height:18px;color:var(--muted)}.vc-tag.paid{color:#b45309}
 .h-row.vc-hint{font-size:13px;color:var(--muted);min-height:0}.vc-ht{flex:1;min-width:0}
 .vc-all{flex:none;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer}.vc-all input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
-.h-row.vc-row{gap:8px}.h-row.vc-row .vc-on{flex:none;width:18px;height:18px;margin:0;accent-color:var(--accent)}
-.h-row.vc-row .vc-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.h-row.vc-row .vc-al{flex:none;width:34%;max-width:200px;margin-left:0;text-align:left}
-.vc-try{flex:none;width:30px;height:30px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}.vc-try svg{width:18px;height:18px}
+/* 一个声音一行：勾选框 · 名字（就是别名输入框，看着像字，点了才像输入框）+ 下面一行小字（平台 · 性别 · 原名）· 试听圆钮 */
+.h-row.vc-row{gap:12px;min-height:0;padding:10px 14px}
+.h-row.vc-row+.h-row.vc-row::before{left:46px}
+.h-row.vc-row .vc-on{flex:none;width:20px;height:20px;margin:0;accent-color:var(--accent);cursor:pointer}
+.vc-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.vc-al{display:block;width:calc(100% + 12px);min-width:0;height:28px;margin:-2px -6px;padding:0 6px;border:0;border-radius:7px;background:transparent;color:var(--ink);font:inherit;font-size:15.5px;font-weight:500;text-overflow:ellipsis;box-sizing:border-box;transition:background .15s,box-shadow .15s}
+.vc-al:hover{background:color-mix(in srgb,var(--muted) 8%,transparent)}
+.vc-al:focus{outline:none;background:var(--surface);box-shadow:0 0 0 1.5px var(--accent)}
+.vc-sub{font-size:12.5px;line-height:1.4;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vc-sub:empty{display:none}
+.h-row.vc-row.off .vc-main{opacity:.45}
+.vc-try{flex:none;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--accent) 11%,transparent);color:var(--accent);display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s}.vc-try svg{width:18px;height:18px;margin-left:2px}
+.vc-try:active{transform:scale(.9)}
+@media (pointer:coarse){.vc-al{font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就放大页面 */
 .pe-btn{height:34px;padding:0 14px;border:0;border-radius:9px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
 .pe-btn.pri{background:var(--accent);color:var(--accent-ink);font-weight:600}
 .pe-btn.del{color:var(--deny)}
@@ -4497,9 +4507,14 @@ function vcLoad(){
   fetch('/api/tts/engines').then(function(r){return r.ok?r.json():null}).then(function(j){if(Array.isArray(j)){vcEng=j;vcSum()}return ttsLoadSrv()}).then(function(){renderVoices()}).catch(function(){});
 }
 function vcSum(){var el=$('#setVoicesSub');if(!el||!vcEng)return;var v=vcEng.find(function(e){return e.id==='volc'});el.textContent='本机、微软免费；豆包'+(v&&v.ready?'已填 Key':'要填 API Key')}
+// 「晓北 · 东北话（微软 · 女）」拆成名字「晓北 · 东北话」和小字「微软 · 女」；起了别名的小字后面带原名
+function vcSplit(name){var m=/^(.*?)（([^（）]*)）$/.exec(name);return m?{main:m[1],meta:m[2]}:{main:name,meta:''}}
+function vcSubTxt(name,alias){var p=vcSplit(name),a=[];if(p.meta)a.push(p.meta);if(alias&&alias!==p.main&&alias!==name)a.push('原名 '+p.main);return a.join(' · ')}
 function vcRow(id,name){
-  return '<div class="h-row vc-row"><input type="checkbox" class="vc-on" data-id="'+esc(id)+'"'+(vcOff(id)?'':' checked')+' aria-label="放进声音列表"><span class="k vc-n">'+esc(name)+'</span>'+
-    '<input class="pe-in vc-al" data-id="'+esc(id)+'" data-def="'+esc(name)+'" maxlength="20" autocomplete="off" placeholder="'+esc(name)+'" value="'+esc(vcAlias(id)||name)+'" aria-label="别名">'+
+  var p=vcSplit(name),al=vcAlias(id),off=vcOff(id);
+  return '<div class="h-row vc-row'+(off?' off':'')+'"><input type="checkbox" class="vc-on" data-id="'+esc(id)+'"'+(off?'':' checked')+' aria-label="放进声音列表">'+
+    '<div class="vc-main"><input class="vc-al" data-id="'+esc(id)+'" data-def="'+esc(p.main)+'" data-name="'+esc(name)+'" maxlength="20" autocomplete="off" enterkeyhint="done" placeholder="'+esc(p.main)+'" value="'+esc(al||p.main)+'" aria-label="别名（点了可以改）" title="点了可以改别名">'+
+    '<div class="vc-sub">'+esc(vcSubTxt(name,al))+'</div></div>'+
     '<button type="button" class="vc-try" data-act="vc-try" data-id="'+esc(id)+'" aria-label="试听" title="试听">'+GM_PLAY.say+'</button></div>'}
 // 每个平台一段；ids：这段里的声音，标题行右边一个「全选」（全开 / 全关，部分开时是半选）
 var vcGroups={};
@@ -4511,7 +4526,7 @@ function vcSec(name,tag,hint,rows,ids){
 function renderVoices(){
   if(hostView!=='voices')return;
   var h=pgHd('data-act="vc-back"',peerFromList?'返回':'返回设置','语音管理')+'<div class="pe-err"'+(vcMsg?'':' hidden')+'>'+esc(vcMsg)+'</div>';
-  h+='<div class="vc-tip">勾上的声音出现在设置的「声音」列表和长按喇叭的列表里（默认只勾了几个常用的）；别名可以改，清空就回到原名。点 ▶ 试听。</div>';
+  h+='<div class="vc-tip">勾上的声音出现在设置的「声音」列表和长按喇叭的列表里（默认只勾了几个常用的）；点名字可以改别名，清空就回到原名。点 ▶ 试听。</div>';
   var dev=ttsVoices();
   h+=vcSec('本机','免费','这台设备（浏览器）自带的声音，不用配置',dev.map(function(v){return vcRow(v.voiceURI,ttsLabel(v))}).join('')||'<div class="h-row vc-hint">这台设备没有中文声音</div>',dev.map(function(v){return v.voiceURI}));
   if(!vcEng)h+='<div class="h-empty">加载中…</div>';
@@ -4553,16 +4568,17 @@ function vcAct(act,a){
 }
 $('#hostBody').addEventListener('change',function(e){
   var t=e.target;if(hostView!=='voices'||!t.dataset||!t.dataset.id)return;
-  if(t.classList.contains('vc-on')){vcSetOn(t.dataset.id,t.checked);try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}ttsPickVoice();vcGrpSync()}
-  else if(t.classList.contains('vc-al')){var v=t.value.trim(),d=t.dataset.def||'';if(!v)t.value=d;vcSet(t.dataset.id,'alias',v&&v!==d?v:'')}   // 清空 = 回到原名
+  if(t.classList.contains('vc-on')){vcSetOn(t.dataset.id,t.checked);try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}ttsPickVoice();vcGrpSync();t.closest('.vc-row').classList.toggle('off',!t.checked)}
+  else if(t.classList.contains('vc-al')){var v=t.value.trim(),d=t.dataset.def||'',full=t.dataset.name||d;if(!v)t.value=d;var al=v&&v!==d&&v!==full?v:'';vcSet(t.dataset.id,'alias',al);var sb=t.parentNode.querySelector('.vc-sub');if(sb)sb.textContent=vcSubTxt(full,al)}   // 清空 = 回到原名
 });
+$('#hostBody').addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('vc-al')){e.preventDefault();e.target.blur()}});   // 改别名按回车就收起键盘、保存
 // 全选：这一段的声音全开 / 全关
 $('#hostBody').addEventListener('change',function(e){
   var t=e.target;if(hostView!=='voices'||!t.classList||!t.classList.contains('vc-grp'))return;
   (vcGroups[t.dataset.grp]||[]).forEach(function(id){vcSetOn(id,t.checked)});
   try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}
   ttsPickVoice();
-  document.querySelectorAll('#hostBody .vc-on').forEach(function(c){if((vcGroups[t.dataset.grp]||[]).indexOf(c.dataset.id)>=0)c.checked=t.checked});
+  document.querySelectorAll('#hostBody .vc-on').forEach(function(c){if((vcGroups[t.dataset.grp]||[]).indexOf(c.dataset.id)>=0){c.checked=t.checked;c.closest('.vc-row').classList.toggle('off',!t.checked)}});
 });
 function vcGrpSync(){document.querySelectorAll('#hostBody .vc-grp').forEach(function(g){var ids=vcGroups[g.dataset.grp]||[],on=ids.filter(function(id){return !vcOff(id)}).length;g.checked=on===ids.length;g.indeterminate=on>0&&on<ids.length})}
 $('#setVoices').addEventListener('click',openVoices);
