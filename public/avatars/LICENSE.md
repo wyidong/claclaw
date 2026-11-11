@@ -5,6 +5,7 @@
 | 目录 | 名字 | 作者 | 授权 | 原始出处 |
 |---|---|---|---|---|
 | animal/ | 动物（Animal Pack Remastered） | Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://kenney.nl/assets/animal-pack-redux |
+| cartoon/ | 动物卡通（Fluent Emoji 3D，缩到 128px） | Microsoft | [MIT](cartoon/LICENSE-MIT.txt) | https://github.com/microsoft/fluentui-emoji |
 | adventurer/ | 冒险少年（Adventurer） | Lisa Wischofsky | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/1184595184137881796 |
 | big-smile/ | 大笑脸（Custom Avatar） | Ashley Seo | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/881358461963645496 |
 | toon-head/ | 卡通头（ToonHead） | Johan Melin | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/1589627891082866389 |
@@ -18,6 +19,6 @@
 | pixel-art/ | 像素人（Pixel Art） | DiceBear | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://www.figma.com/community/file/1198754108850888330 |
 | bottts/ | 机器人（Bottts） | Pablo Stanley | [Free for personal and commercial use](https://bottts.com/) | https://bottts.com/ |
 
-人物各组（animal 以外）用 [DiceBear](https://www.dicebear.com) 9.x 按固定种子生成，生成后未改动；每个 SVG 里也带着这份作者 / 授权信息。
+人物各组（animal、cartoon 以外）用 [DiceBear](https://www.dicebear.com) 9.x 按固定种子生成，生成后未改动；每个 SVG 里也带着这份作者 / 授权信息。
 
 index.json 里的 `names` 是预设网名（当年 QQ 上流行的非主流网名，都是短句）。

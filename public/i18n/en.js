@@ -549,7 +549,7 @@ var I18N={dict:{
 "随机一套":"Random set",
 "头像":"Avatar",
 "网名":"Nickname",
-"动物":"Animals",
+"动物":"Animals","动物卡通":"Cartoon animals",
 "阴黑暗沉":"Yin Dark",
 "自动切换":"Auto",
 "固定主题":"Fixed themes",
