@@ -3649,6 +3649,7 @@ function onEvent(m){
     addSys((ts&&(ts.in||ts.out)?'↑'+tk(ts.in)+' ↓'+tk(ts.out)+' · ':'')+m.cwdShort+(m.branch?' · '+m.branch:''));feed.lastElementChild.classList.add('sys-dir')}   // 会话 ID 标题栏有，这里只给目录，靠左
     }
     if(!SOLO)localStorage.setItem(hk('session'),m.id);
+    if(!SOLO&&typeof soloAlive==='function'&&soloAlive(m.id))setTimeout(function(){soloLeave(m.id)},0);   // 这个会话开在弹出窗口里（比如刷新后又打开了上次的会话）：主窗口让出来
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
     commands=m.commands||[];syncCmdMenu();   // 输入框里已经有「/」时，弹层立刻换成这个会话的命令
@@ -5474,6 +5475,7 @@ function liveLastPrompt(id,text){
 }
 // 点会话行：打开（别处占着的先确认接管）
 function rowOpen(s,row,b,bz){
+  if(!SOLO&&typeof soloAlive==='function'&&soloAlive(s.id)){soloFocus(s.id);return}   // 已经弹出去了：提到前面，不在主窗口再开一份
   closeSheet();
   if(bz&&NOT_CLAUDE.test(s.id)){   // 其他 Claw：还是要先接管才能打开；Claude 的直接只读打开（输入框处有说明和「接管」）
     if(!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
@@ -6157,6 +6159,7 @@ document.addEventListener('visibilitychange',function(){
   takePendingOpen().then(function(id){if(id==='view:peer')openPeerView();else if(id)openFromNotice(id)});   // 从后台回来：消息可能丢了，以这条记录为准
 });
 function openFromNotice(id){
+  if(!SOLO&&typeof soloAlive==='function'&&soloAlive(id)){soloFocus(id);return}
   if(session&&session.id===id&&!mList){if(shellOpen===id){clog('shell open 已在这个会话');shellOpen=null}return}
   pendingOpen=id;
   if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);$('#where').textContent='';goChat()}
@@ -7065,11 +7068,49 @@ function ttsSync(){
 var muteClickT=0;
 // 弹出成独立窗口：同一个会话再点就是把已经弹出的那个窗口提到前面
 var shellPopout=false;
+// 弹出窗口：同一个会话只在一处输入。弹出后主窗口让出这个会话（换到列表里下一个，没有就空着）；
+// 之后在主窗口点它 = 把弹出窗口提到前面。主窗口和弹出窗口靠 BroadcastChannel 互相知道（同源同浏览器，外壳里也通）：
+// 弹出窗口每 2 秒报一次「我开着 X」，关掉时说一声；主窗口 7 秒没听到就当它关了
+var soloCh=null,soloSeen={};
+try{soloCh=new BroadcastChannel('claclaw-solo')}catch(_){}
+function soloAlive(id){return !!(soloSeen[id]&&Date.now()-soloSeen[id]<7000)}
+function popName(id){return 'claclaw-'+String(id).replace(/[^\w]/g,'')}
+function popOut(id){
+  var path='/?s='+encodeURIComponent(id)+'&solo=1';
+  if(shellPopout)try{window.parent.postMessage({clarelay:1,type:'popout',path:path,name:id,w:600,h:900},'*');return}catch(_){}
+  // 已经开着：只取回那个窗口提到前面（带地址再开会把它刷新一遍）
+  var w=soloAlive(id)?window.open('',popName(id)):window.open(path,popName(id),'popup,width=600,height=900');
+  if(w)try{w.focus()}catch(_){}
+}
+function soloFocus(id){if(soloCh)soloCh.postMessage({t:'focus',id:id});popOut(id)}
+// 主窗口让出正在看的这个会话
+function soloLeave(id){
+  if(SOLO||!session||session.id!==id)return;
+  var next=(lastList||[]).find(function(x){return x.id!==id&&!x.group&&!soloAlive(x.id)});
+  if(next){wsSend({t:'session.open',id:next.id,mode:mode});return}
+  wsSend({t:'session.leave'});if(feedOwner===session.id)saveFeed(session.id);feedOwner=null;session=null;setBusy(false);
+  feed.innerHTML='';$('#nm').textContent='选择会话';$('#sid').textContent='';$('#where').textContent='';
+  try{localStorage.removeItem(hk('session'))}catch(_){}
+  refreshList();
+}
+if(soloCh){
+  if(SOLO){
+    var soloId=function(){return session?session.id:new URLSearchParams(location.search).get('s')};
+    var soloHere=function(){var id=soloId();if(id)soloCh.postMessage({t:'here',id:id})};
+    soloHere();setInterval(soloHere,2000);
+    soloCh.onmessage=function(e){var m=e.data||{};if(m.t==='who')soloHere();else if(m.t==='focus'&&m.id===soloId())try{window.focus()}catch(_){}};
+    addEventListener('pagehide',function(){var id=soloId();if(id)soloCh.postMessage({t:'bye',id:id})});
+  }else{
+    soloCh.onmessage=function(e){var m=e.data||{};if(!m.id)return;
+      if(m.t==='here'){var was=soloAlive(m.id);soloSeen[m.id]=Date.now();if(!was&&session&&session.id===m.id)soloLeave(m.id)}
+      else if(m.t==='bye')delete soloSeen[m.id];
+    };
+    soloCh.postMessage({t:'who'});
+  }
+}
 $('#popBtn').addEventListener('click',function(){
   if(!session)return;
-  if(shellPopout)try{window.parent.postMessage({clarelay:1,type:'popout',path:'/?s='+encodeURIComponent(session.id)+'&solo=1',name:session.id,w:600,h:900},'*');return}catch(_){}
-  var w=window.open('/?s='+encodeURIComponent(session.id)+'&solo=1','claclaw-'+session.id.replace(/[^\w]/g,''),'popup,width=600,height=900');
-  if(w)try{w.focus()}catch(_){}
+  popOut(session.id);
 });
 $('#ttsMute').addEventListener('click',function(e){
   if(ttsLongFired(this))return;
