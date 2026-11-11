@@ -84,6 +84,21 @@ export function verify(username, password) {
   return null;
 }
 
+// 已登录后再确认一次身份（看完整的 Key 这类）：只核对密码——两组账号里有密码的任一组对上就行。
+// 没设密码的账号光凭密码确认不了，这时要带上用户名（等同 verify）
+export function verifyPassword(password, username) {
+  const a = loadAuth();
+  if (!a) return null;
+  password = String(password ?? '');
+  if (password) {
+    if (a.lastSet?.hasPassword && check(password, a.lastSet)) return 'lastSet';
+    if (a.master.hasPassword !== false && check(password, a.master)) return 'master';
+  }
+  return username != null && String(username).trim() ? verify(username, password) : null;
+}
+// 有没有不设密码的账号（有的话确认身份时还要用户名）
+export const anyNoPassword = () => { const a = loadAuth(); return !!a && (a.master.hasPassword === false || a.lastSet?.hasPassword === false); };
+
 // 只认初始账号（删除会话这类危险操作用）
 export function verifyMaster(username, password) {
   const a = loadAuth();

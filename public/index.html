@@ -1885,9 +1885,9 @@ select.pe-in{text-align-last:right}
   <div id="keyDlg" aria-hidden="true">
     <form class="dlg" id="keyForm" role="dialog" aria-label="查看 Key">
       <h3 id="keyTitle"></h3>
-      <p>完整的 Key 要再输一次 claclaw 的用户名和密码（登录这个网页用的那组）。</p>
-      <label for="keyU">用户名</label>
-      <input id="keyU" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <p>完整的 Key 要再输一次 claclaw 的密码（登录这个网页用的那个）。</p>
+      <label for="keyU" id="keyUL" hidden>用户名</label>
+      <input id="keyU" hidden autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <label for="keyP">密码</label>
       <input id="keyP" type="password" autocomplete="off">
       <div class="row">
@@ -4699,7 +4699,7 @@ function renderModels(){
         '<div class="h-row h-link md-addk" data-act="mdl-prov-new" data-from="'+esc(g.items[0].id)+'"><span class="k">＋ 再加一个 '+esc(g.name)+' 的 Key</span></div>');
     }).join('')||'<div class="pe-note">还没有添加 Key。点下面「添加 Key」：填 Key 和接口地址就行，其他的都可以不填。</div>';
     h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="mdl-prov-new">添加 Key</button></div>';
-    h+='<div class="pe-note">按接口地址的域名分供应商。各 Claw 的会话里选模型时，从这里加过的模型里选。Key 只存在这台电脑上（data/models.json），列表只显示最后 4 位；查看或复制完整的 Key 要再输一次 claclaw 的用户名和密码。</div>';
+    h+='<div class="pe-note">按接口地址的域名分供应商。各 Claw 的会话里选模型时，从这里加过的模型里选。Key 只存在这台电脑上（data/models.json），列表只显示最后 4 位；查看或复制完整的 Key 要再输一次 claclaw 的密码。</div>';
   }
   $('#hostBody').innerHTML=h;
 }
@@ -4788,7 +4788,7 @@ function keyAsk(id,mode){
   keyFor={id:id,mode:mode};
   $('#keyTitle').textContent=(mode==='copy'?'复制':'查看')+' '+p.name+(p.label?' · '+p.label:'')+' 的 Key';
   $('#keyU').value='';$('#keyP').value='';$('#keyErr').textContent='';$('#keyGo').disabled=false;$('#keyGo').textContent=mode==='copy'?'复制':'查看';
-  showDlg(keyDlg,true);$('#keyU').focus();
+  showDlg(keyDlg,true);($('#keyU').hidden?$('#keyP'):$('#keyU')).focus();
 }
 function closeKey(){showDlg(keyDlg,false);keyFor=null;$('#keyP').value=''}
 $('#keyNo').addEventListener('click',closeKey);
@@ -4796,9 +4796,9 @@ keyDlg.addEventListener('click',function(e){if(e.target===keyDlg)closeKey()});
 $('#keyForm').addEventListener('submit',function(e){
   e.preventDefault();if(!keyFor)return;
   var t=keyFor;$('#keyErr').textContent='';$('#keyGo').disabled=true;
-  var got=postJson('/api/models/key',{id:t.id,username:$('#keyU').value,password:$('#keyP').value}).then(function(r){
+  var got=postJson('/api/models/key',{id:t.id,username:$('#keyU').hidden?undefined:$('#keyU').value,password:$('#keyP').value}).then(function(r){
     if(r.status===401)location.replace('/login');
-    return r.json().then(function(j){if(!r.ok||!j.key){var er=new Error(j.error||'没拿到 Key');er.user=true;throw er}return j.key});
+    return r.json().then(function(j){if(!r.ok||!j.key){if(j.needUser&&$('#keyU').hidden){$('#keyU').hidden=$('#keyUL').hidden=false}var er=new Error(j.error||'没拿到 Key');er.user=true;throw er}return j.key});   // 有没设密码的账号：密码对不上时再让输用户名
   });
   // 复制要在这次点击里就发起（Safari 不许等网络回来再写剪贴板）：支持 ClipboardItem 就把「拿 Key」整个交给剪贴板
   var clip=null;

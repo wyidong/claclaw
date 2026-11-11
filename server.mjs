@@ -43,7 +43,7 @@ const STARTED_AT = Date.now();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
-import { DATA, verify, verifyMaster, verifyMasterPassword, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
+import { DATA, verify, verifyMaster, verifyMasterPassword, verifyPassword, anyNoPassword, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
 import { makeSkins } from './skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
@@ -2969,7 +2969,7 @@ const handler = async (req, res) => {
       }
       return sendJson(res, 200, claudeTokenPublic(req));
     }
-    // 模型库：看完整的 key 要再输一次 claclaw 用户名和密码（登录用的哪组都行），输错和登录一起计次数、会锁；日志不写 key
+    // 模型库：看完整的 key 要再输一次 claclaw 的密码（登录用的哪组都行；没设密码的账号要输用户名），输错和登录一起计次数、会锁；日志不写 key
     if (url.pathname === '/api/models/key' && req.method === 'POST') {
       if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const ip = realIp(req);
@@ -2978,12 +2978,12 @@ const handler = async (req, res) => {
       if (lf) return sendJson(res, 429, { error: tooManyTries(lf) });
       if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
       const body = await jsonBody(req, 4096);
-      const via = verify(body.username, body.password);
+      const via = verifyPassword(body.password, body.username);   // 只要密码（没设密码的账号才要用户名）
       if (!via) {
         const { n } = noteFail(ip);
         noteGlobalFail(req);
         log('models key: wrong credentials from', ip, 'fails=' + n);
-        return sendJson(res, 403, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '用户名或密码不对' });
+        return sendJson(res, 403, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '密码不对', needUser: anyNoPassword() || undefined });   // 有没设密码的账号：网页再显示用户名框
       }
       clearFails(ip);
       let key;
