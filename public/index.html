@@ -7625,13 +7625,14 @@ function syncPushBtn(){
 // 电脑提示音：推送时由运行 claclaw 的那台电脑（Mac / Windows）直接响一声（浏览器的网页通知常常没声音）
 var soundBtn=$('#soundBtn');
 var SOUND_CN={Basso:'低沉',Blow:'吹气',Bottle:'瓶子',Frog:'蛙鸣',Funk:'放克',Glass:'玻璃',Hero:'英雄',Morse:'摩斯',Ping:'乒',Pop:'啵',Purr:'呼噜',Sosumi:'Sosumi',Submarine:'潜水艇',Tink:'叮'};
+function soundLabel(n){if(/^l:/.test(n))return n.slice(2).replace(/\.[^.]+$/,'')+' · 本机';return (SOUND_CN[n]||n)+(SOUND_CN[n]&&SOUND_CN[n]!==n?'（'+n+'）':'')}   // l: 开头的是电脑上 data/sounds/ 里自己放的
 function showSound(j){
   soundBtn.hidden=!j.supported;
   var sel=$('#soundSel');
   $('#soundPick').hidden=!(j.supported&&j.on);
-  if(j.sounds&&sel.options.length!==j.sounds.length){
+  if(j.sounds&&[].map.call(sel.options,function(o){return o.value}).join('\n')!==j.sounds.join('\n')){
     sel.innerHTML='';
-    j.sounds.forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=(SOUND_CN[n]||n)+(SOUND_CN[n]&&SOUND_CN[n]!==n?'（'+n+'）':'');sel.appendChild(o)});
+    j.sounds.forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=soundLabel(n);sel.appendChild(o)});
   }
   if(j.name)sel.value=j.name;
   soundBtn.dataset.on=j.on?'1':'';
@@ -7643,7 +7644,7 @@ soundBtn.addEventListener('click',function(){
 });
 $('#soundSel').addEventListener('change',function(e){
   postJson('/api/sound',{name:e.target.value})
-    .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+(SOUND_CN[j.name]||j.name)+'」')});
+    .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+soundLabel(j.name)+'」')});
 });
 // 设置页里的数据（提示音、会话设置、电脑合成的声音）进设置页再拉，启动时少几个请求
 function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}

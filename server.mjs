@@ -2270,8 +2270,15 @@ function clientPrefs() {
 const SOUND_DIR = process.platform === 'win32' ? path.join(process.env.WINDIR || 'C:\\Windows', 'Media') : '/System/Library/Sounds';
 const SOUND_EXT = process.platform === 'win32' ? '.wav' : '.aiff';
 const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.toLowerCase().endsWith(SOUND_EXT)).map(f => f.slice(0, -SOUND_EXT.length)).sort(); } catch { return []; } })() : [];
+// 本机自己放的提示音：data/sounds/ 下的 wav（Mac 上 mp3 / aiff / m4a 也行），名字前加 l:，列在系统声音前面。
+// 版权不能进仓库的（比如经典 QQ 提示音）就放这里，只在这台电脑上有；放进去不用重启
+const LOCAL_SOUNDS = path.join(DATA, 'sounds');
+const LOCAL_SOUND_EXT = process.platform === 'win32' ? /\.wav$/i : /\.(wav|mp3|aiff?|m4a|caf)$/i;
+const localSoundList = () => { try { return fs.readdirSync(LOCAL_SOUNDS).filter(f => LOCAL_SOUND_EXT.test(f) && !f.startsWith('.')).sort().map(f => 'l:' + f); } catch { return []; } };
+const soundList = () => (SOUND_OK ? [...localSoundList(), ...SOUNDS] : []);
+const soundFile = (n) => (n.startsWith('l:') ? path.join(LOCAL_SOUNDS, path.basename(n.slice(2))) : path.join(SOUND_DIR, n + SOUND_EXT));
 const SOUND_DEFAULT = process.platform === 'win32' ? 'Windows Notify System Generic' : 'Glass';
-const soundName = () => (SOUNDS.includes(settings().soundName) ? settings().soundName : SOUNDS.includes(SOUND_DEFAULT) ? SOUND_DEFAULT : SOUNDS[0] || SOUND_DEFAULT);
+const soundName = () => { const all = soundList(), n = settings().soundName; return all.includes(n) ? n : all.includes(SOUND_DEFAULT) ? SOUND_DEFAULT : SOUNDS[0] || SOUND_DEFAULT; };
 // ---------- 各会话正在做什么（会话列表实时显示）----------
 const activityMap = {};
 let activityTimer = null;
@@ -2474,7 +2481,7 @@ function localSound(force = false) {
   if (!SOUND_OK || (!force && !settings().localSound)) return;
   if (!force && Date.now() - lastSound < 1500) return; // 几条通知挤在一起时只响一声
   lastSound = Date.now();
-  const file = path.join(SOUND_DIR, soundName() + SOUND_EXT);
+  const file = soundFile(soundName());
   if (process.platform !== 'win32') { execFile('afplay', [file], () => {}); return; }
   // 文件路径走环境变量，不拼进命令（名字里有空格、引号也没事）；起不来就算了，不响
   execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(New-Object Media.SoundPlayer $env:CLACLAW_WAV).PlaySync()'],
@@ -3075,14 +3082,14 @@ const handler = async (req, res) => {
       if (req.method === 'POST') {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         let body = await jsonBody(req, 1024);
-        if (typeof body.name === 'string' && SOUNDS.includes(body.name)) { saveSettings({ soundName: body.name }); localSound(true); } // 换声音：试听
+        if (typeof body.name === 'string' && soundList().includes(body.name)) { saveSettings({ soundName: body.name }); localSound(true); } // 换声音：试听
         if (typeof body.on === 'boolean') {
           saveSettings({ localSound: body.on });
           log('local sound', body.on ? 'on' : 'off');
           if (body.on) localSound(true); // 打开时响一声给你听
         }
       }
-      return sendJson(res, 200, { supported: SOUND_OK, on: SOUND_OK && !!settings().localSound, name: soundName(), sounds: SOUNDS });
+      return sendJson(res, 200, { supported: SOUND_OK, on: SOUND_OK && !!settings().localSound, name: soundName(), sounds: soundList() });
     }
     if (url.pathname === '/api/push/test' && req.method === 'POST') {
       localSound();
