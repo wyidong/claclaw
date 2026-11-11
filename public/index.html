@@ -268,7 +268,7 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .dot img.tile{border-radius:22.5%}
 #sessBtn .dot:empty{width:8px;height:8px;border-radius:50%;background:var(--allow)}
 #sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#sessBtn .sid{flex:none;font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
+#sid{font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
 #sessBtn svg{flex:none;color:var(--muted)}
 #sessBtn .st{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
 #sessBtn .r1{display:flex;align-items:center;min-width:0}
@@ -277,10 +277,10 @@ header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-
 #sessBtn .where:empty{display:none}
 #sessBtn .where bdi{direction:ltr;unicode-bidi:isolate}
 /* 会话设置按钮：标题栏右边，两行——上「模型 · 推理强度」、下权限模式（颜色跟模式走）；点开是底部面板 */
-#hdAct{flex:none;display:flex;align-items:flex-end;gap:6px;min-width:0;max-width:60%}
-#cfgBtn{flex:0 1 auto;display:flex;align-items:center;align-self:center;min-width:0;color:var(--muted);text-align:right;cursor:default}
+#hdAct{flex:none;display:flex;align-items:flex-end;gap:6px;min-width:0;max-width:60%;cursor:pointer}
+#cfgBtn{flex:none;display:flex;align-items:center;align-self:flex-end;min-width:0;color:var(--muted);text-align:left}
 /* 只有 › 能点：图标小，点击范围往四周透明扩大 */
-#cfgGo{position:relative;flex:none;display:grid;place-items:center;width:22px;height:22px;margin:0 -6px 0 2px;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}
+#cfgGo{position:relative;flex:none;align-self:flex-end;display:grid;place-items:center;width:22px;height:22px;margin:0 -6px 0 2px;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}
 #cfgGo::after{content:'';position:absolute;inset:-10px -6px}
 #cfgGo:active{opacity:.5}
 /* 标题栏功能按钮：和浮动朗读键一样大的圆圈，底透明；底边和第二行对齐、往上伸进第一行（第一行没有可点的，透明底不挡字） */
@@ -501,6 +501,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #avPane .av-tabs{display:flex;gap:6px;margin-bottom:6px}
 #avPane .av-tabs button{flex:1;height:32px;border:0;border-radius:9px;background:var(--bg);color:var(--muted);font:inherit;font-size:14px;cursor:pointer}
 #avPane .av-tabs button[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,var(--bg));color:var(--accent);font-weight:600}
+#avPane .gp-ft .av-sp{flex:1}
 #avPane .av-ops{display:flex;gap:6px;margin:4px 0 2px}
 #avPane .av-ops button{height:30px;padding:0 12px;border:0;border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
 #avPane .av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(50px,1fr));gap:6px}
@@ -923,7 +924,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #roBar[hidden]{display:none}
 #roBar .ro-t{flex:1}
 #roBar .ro-go{border:0;border-radius:999px;padding:6px 14px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer}
-body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
+body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!important}
 #ttsStop svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #ttsStop.on{color:var(--accent)}
 #ttsStop.on{animation:ttsw 1.4s ease-in-out infinite}
@@ -1086,7 +1087,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 /* ════ 公共 · 手机布局 ════ */
 /* ---------- 手机：像微信，首页是会话列表，点进去是聊天页，左上角返回 ---------- */
 #backBtn{display:none}
-/* 标题栏两行网格：手机、电脑一样（第一行 ● 会话名；第二行 ID ······ 模型 · 推理强度 · 权限 ›）。
+/* 标题栏两行网格：手机、电脑一样（第一行 ● 会话名；第二行 模型 · 推理强度 · 权限  ID ······ 圆球 ›，除了 ID 和圆球点哪里都打开会话设置）。
    会话名、ID 嵌在 #sessBtn 里：把外层拆掉（display:contents），直接排进 #hdCard 的网格；目录、右箭头、未读红点不在标题栏显示 */
 #sessBtn>svg{display:none}
 #sessBtn.unr::after{display:none}
@@ -1095,9 +1096,11 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
 #sessBtn .dot{grid-column:1;grid-row:1}
 #sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
 #sessBtn .where{display:none}
-#sid{grid-column:2;grid-row:2;align-self:stretch;display:flex;align-items:center;min-width:0;font-size:13px;line-height:22px}
+#hdAct{grid-column:1/-1;grid-row:2;align-self:stretch;max-width:none}   /* 第二行整行：模型 · 权限从 Claw 图标的左边开始排 */
+#sid{flex:0 1 auto;align-self:flex-end;display:flex;align-items:center;min-width:0;overflow:hidden;margin-left:12px;font-size:13px;line-height:22px;cursor:default}   /* 位置不够时先让 ID 收窄（模型、权限不截断） */
 #sid .hid{margin-left:0;line-height:22px}
-#hdAct{grid-column:3;grid-row:2;align-self:stretch;max-width:none}
+#hdAct .hd-fill{flex:1 1 0;min-width:4px;align-self:stretch}
+html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像占两行，第二行从头像右边开始 */
 #cfgBtn .c1{font-size:13px;line-height:22px}
 #cfgBtn .c2{font-size:13px;line-height:22px}
 #cfgBtn .c1:not(:empty)+.c2{margin-left:10px}   /* 权限名左右留一样的空：右边到 > 约 10px */
@@ -1108,7 +1111,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn{display:none!important}
   #backBtn.unr::after{content:'';position:absolute;top:9px;right:3px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
   /* 聊天页顶栏（手机）：两行，往状态栏下面的空白里贴——
      第一行  ‹  ● 会话名称（整行都给名字）
-     第二行       ID（点一下复制） ······ 模型 · 推理强度 · 权限 ›（点开会话设置）
+     第二行     模型 · 推理强度 · 权限  ID（点一下复制） ······ 圆球 ›（整行点开会话设置）
      返回键、绿点和名字对齐；目录、分支不放（聊天区「已恢复会话」那行有）。
      会话名、ID 嵌在 #sessBtn 里（电脑端是一行）：手机上把外层拆掉（display:contents），直接排进 #hdCard 的网格 */
   header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
@@ -1626,13 +1629,13 @@ select.pe-in{text-align-last:right}
   header{padding:0 20px;min-height:56px;border-bottom:1px solid var(--strip-line);background:var(--strip)}
   /* 和手机一样的两行（不显示目录，「已恢复会话」那行有）：
      第一行  ● 会话名称（整行）
-     第二行    ID ······ 模型 · 推理强度 · 权限 ›
+     第二行  模型 · 推理强度 · 权限  ID ······ 圆球 ›
      电脑端没有返回键；别的会话有未读看左边列表，这里不放红点 */
   header{gap:12px;padding:6px 20px}
   #sessBtn{border:0;background:none;padding:0;cursor:pointer}   /* 点会话名进解剖页：鼠标显示手型 */
   /* 和左边列表顶栏两行对齐：左边图标那行和会话名（Claw logo + 名字）同一高度，会话 ID 往下贴底、和左边主题色块那行同一高度 */
   #sTop{padding-bottom:23px}
-  #sid{position:relative;top:10px}
+  :is(#cfgBtn,#sid,#cfgGo){position:relative;top:10px}   /* 第二行的字（模型 · 权限、ID、›）一起往下，圆球不动 */
   #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
 
   /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
@@ -1740,17 +1743,21 @@ select.pe-in{text-align-last:right}
     <div id="sessBtn">
       <span class="dot"></span>
       <span class="st">
-        <span class="r1"><span class="nm" id="nm">选择会话</span><span class="sid" id="sid"></span><span class="mtag" id="modeTag" data-m="default"></span></span>
+        <span class="r1"><span class="nm" id="nm">选择会话</span><span class="mtag" id="modeTag" data-m="default"></span></span>
         <span class="where" id="where"></span>
       </span>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
     </div>
-    <!-- 第二行右边的功能区：以后更多按钮也放这里。模型 · 推理强度 · 权限 只是文字，只有 › 能点开会话设置 -->
+    <!-- 第二行：左边 模型 · 推理强度 · 权限、会话 ID（点 ID 复制），右边圆球（弹出窗口、上下文、通知、播报）和 ›；除了 ID 和圆球，这一行点哪里都打开会话设置 -->
     <div id="hdAct">
+      <div id="cfgBtn" data-m="default"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span></div>
+      <span class="sid" id="sid"></span>
+      <span class="hd-fill"></span>
       <button type="button" id="popBtn" class="hd-ic" aria-label="弹出成独立窗口" title="弹出成独立窗口"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg></button>
       <button type="button" id="ctxBtn" class="hd-ic hd-ctx" hidden></button>
+      <button type="button" id="notifBtn" class="hd-ic" hidden></button>
       <button type="button" id="ttsMute" class="hd-ic" hidden></button>
-      <div id="cfgBtn" data-m="default"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span><button type="button" id="cfgGo" aria-label="模型、推理强度、权限" title="模型、推理强度、权限"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg></button></div>
+      <button type="button" id="cfgGo" aria-label="模型、推理强度、权限" title="模型、推理强度、权限"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg></button>
     </div>
     </div>
   </header>
@@ -3681,7 +3688,7 @@ function onEvent(m){
     sessionModes=m.modes||['default','acceptEdits','plan','auto','dontAsk'];
     // dsh / OpenCode / OpenClaw：会话设置里只有模型（从模型库 + 各 Claw 自带的里选），没有推理强度和权限模式
     xcfg=NOT_CLAUDE.test(m.id)?(m.xmodels||{current:null,label:'',groups:null}):null;xcfgAsked=false;xcfgErr='';
-    $('#cfgMode').hidden=!!xcfg;$('#cfgBtn').style.display=m.group?'none':'';   // 群聊没有会话设置
+    $('#cfgMode').hidden=!!xcfg;$('#cfgBtn').style.display=$('#cfgGo').style.display=m.group?'none':'';   // 群聊没有会话设置
     cfg={models:null,model:null,effort:null,pick:'default',lib:null};cfgBusy=null;applyModel(m);
     setMode(m.mode,false);
     if(!reuse){
@@ -3956,6 +3963,7 @@ function soloSkinLoad(id){
 }
 function setHeader(){
   if(typeof ttsMuteShow==='function'){ttsMuteShow();try{if(tts)ttsShowStop()}catch(_){}}
+  if(typeof notifBall==='function'){notifBall();if(session&&!notifLoaded)notifLoad()}   // 通知圆球：第一次打开会话时取一次各会话的开关
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   // 弹出窗口：换过头像 / 网名的会话，左上角用头像（Claw 是右下角水印）+ 网名，和「最近」列表一样
@@ -4309,16 +4317,32 @@ function renderCfg(){
     mb.appendChild(b);
   });
 }
-function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();notifShow();renderCfgTts();fetch('/api/notif-off').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){notifOffMap=j;notifShow()}}).catch(function(){})}
+function openCfg(){if(xcfg&&!xcfg.groups&&xcfgErr){xcfgErr='';xcfgAsked=false}var d=$('#cfgDlg');showDlg(d,true);renderCfg();notifShow();renderCfgTts();notifLoad()}
 // 会话设置 › 通知：关了这个会话回复完、出错、来消息都不推送、不响；要你确认权限时照样通知
 var notifOffMap={};
 function notifShow(){var b=$('#cfgNotif');if(!b||!session)return;var on=!notifOffMap[session.id];b.setAttribute('aria-checked',on?'true':'false');$('#cfgNotifSub').textContent=on?'回复完、出错、来消息时推送通知':'已关：不推送、不响提示音（要你确认权限时照样通知）'}
-$('#cfgNotif').addEventListener('click',function(){
+var NOTIF_IC={on:'<svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+  off:'<svg viewBox="0 0 24 24"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/></svg>'};
+// 标题栏「通知」圆球：和会话设置里的「这个会话的通知」是同一个开关
+function notifBall(){
+  var b=$('#notifBtn');if(!b)return;b.hidden=!session;if(!session)return;
+  var off=!!notifOffMap[session.id];if(b.dataset.st!==(off?'off':'on')){b.dataset.st=off?'off':'on';b.innerHTML=NOTIF_IC[b.dataset.st]}
+  b.classList.toggle('off',off);b.title=off?'这个会话的通知已关闭，点一下打开':'这个会话正在推送通知，点一下关闭';b.setAttribute('aria-label',b.title);
+}
+var notifLoaded=false;
+function notifLoad(){fetch('/api/notif-off').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){notifOffMap=j;notifLoaded=true;notifShow();notifBall()}}).catch(function(){})}
+$('#notifBtn').addEventListener('click',notifToggle);
+$('#cfgNotif').addEventListener('click',notifToggle);
+function notifToggle(){
   if(!session)return;var sid=session.id,off=!notifOffMap[sid];
-  postJson('/api/notif-off',{id:sid,off:off}).then(function(r){if(r.status===404)throw new Error('电脑上的 claclaw 还没更新到这个功能，等它重启后再试');return r.json().catch(function(){throw new Error('电脑返回的不对（HTTP '+r.status+'）')}).then(function(j){if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j})}).then(function(j){notifOffMap=j||{};notifShow();toast(off?'这个会话的通知已关闭':'这个会话的通知已打开')}).catch(function(e){toast('没改成：'+e.message)});
-});
+  postJson('/api/notif-off',{id:sid,off:off}).then(function(r){if(r.status===404)throw new Error('电脑上的 claclaw 还没更新到这个功能，等它重启后再试');return r.json().catch(function(){throw new Error('电脑返回的不对（HTTP '+r.status+'）')}).then(function(j){if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j})}).then(function(j){notifOffMap=j||{};notifShow();notifBall();toast(off?'这个会话的通知已关闭':'这个会话的通知已打开')}).catch(function(e){toast('没改成：'+e.message)});
+}
 function closeCfg(){var d=$('#cfgDlg');showDlg(d,false)}
-$('#cfgGo').addEventListener('click',openCfg);
+// 标题栏第二行：除了会话 ID（点了复制）和圆球，点哪里都打开会话设置（只读、群聊没有设置）
+$('#hdAct').addEventListener('click',function(e){
+  if(e.target.closest('.hd-ic,#sid .hid,#sid .fee')||!session||document.body.classList.contains('ro')||$('#cfgBtn').style.display==='none')return;
+  openCfg();
+});
 $('#cfgX').addEventListener('click',closeCfg);
 $('#cfgDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeCfg()});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#cfgDlg').classList.contains('on'))closeCfg()});
@@ -5675,15 +5699,15 @@ function skinAv(el,s){
 function openSkin(s){
   var p=$('#avPane');
   if(!p){p=document.createElement('div');p.id='avPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
-  var k=s.claw||clawOf(s.id),sk=s.skin||{},cur={av:sk.av||'',name:sk.name||''},tab='av';
+  var k=s.claw||clawOf(s.id),sk=s.skin||{},cur={av:sk.av||'',name:sk.name||''},tab='av',sel={av:false,nm:false};   // sel：🎲 随机哪样（只按下一样就只随机那样；都按下 / 都没按就一起随机）
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>头像和网名</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
     +'<div class="av-me"><span class="av-pv"></span><input class="gp-in av-nm" maxlength="40" placeholder="网名（不填用会话原名）"><button type="button" class="av-dice" title="头像和网名一起随机" aria-label="头像和网名一起随机">🎲</button></div>'
     +'<div class="av-tabs"><button type="button" data-t="av">头像</button><button type="button" data-t="nm">网名</button></div>'
     +'<div class="gp-list av-list"><div class="gp-sec">加载中…</div></div>'
-    +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go">保存</button></div></div>';
+    +'<div class="gp-ft"><button type="button" class="gp-cancel av-clr" title="头像和网名都不设置（保存后生效）">清除</button><span class="av-sp"></span><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go">保存</button></div></div>';
   p.classList.add('on');
   var close=function(){p.classList.remove('on')};
-  p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel').addEventListener('click',close);
+  p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel:not(.av-clr)').addEventListener('click',close);
   var pv=p.querySelector('.av-pv'),nm=p.querySelector('.av-nm'),list=p.querySelector('.av-list'),ix=null;
   nm.value=cur.name;nm.title='原名：'+s.title;
   nm.addEventListener('input',function(){cur.name=nm.value;mark()});
@@ -5691,18 +5715,18 @@ function openSkin(s){
   function mark(){
     list.querySelectorAll('[data-av]').forEach(function(x){x.setAttribute('aria-pressed',String(x.dataset.av===cur.av))});
     list.querySelectorAll('[data-nm]').forEach(function(x){x.setAttribute('aria-pressed',String(x.dataset.nm===cur.name.trim()))});
-    p.querySelectorAll('.av-tabs button').forEach(function(x){x.setAttribute('aria-pressed',String(x.dataset.t===tab))});
+    p.querySelectorAll('.av-tabs button').forEach(function(x){x.setAttribute('aria-pressed',String(sel[x.dataset.t]))});
+    var d=p.querySelector('.av-dice'),only=sel.av!==sel.nm?(sel.av?'随机头像':'随机网名'):'头像和网名一起随机';d.title=only;d.setAttribute('aria-label',only);
   }
   function draw(){
     list.innerHTML='';
     if(!ix)return;
     if(tab==='av'){
       var ops=document.createElement('div');ops.className='av-ops';
-      ops.innerHTML='<button type="button" class="av-up">从本地上传…</button><button type="button" class="av-def">用 Claw 图标</button><button type="button" class="av-rav">随机头像</button><input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/heic" hidden>';
+      ops.innerHTML='<button type="button" class="av-up">从本地上传…</button><button type="button" class="av-def">用 Claw 图标</button><input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/heic" hidden>';
       var fi=ops.querySelector('input');
       ops.querySelector('.av-up').addEventListener('click',function(){fi.click()});
       ops.querySelector('.av-def').addEventListener('click',function(){cur.av='';preview();mark()});
-      ops.querySelector('.av-rav').addEventListener('click',function(){cur.av=skinPick(ix).av;preview();mark();showOn()});
       fi.addEventListener('change',function(){var f=fi.files&&fi.files[0];fi.value='';if(f)skinUpload(f).then(function(ref){cur.av=ref;preview();mark()}).catch(function(e){toast(e.message||'上传失败')})});
       list.appendChild(ops);
       ix.groups.forEach(function(g){
@@ -5712,9 +5736,6 @@ function openSkin(s){
         list.appendChild(grid);
       });
     }else{
-      var ops2=document.createElement('div');ops2.className='av-ops';ops2.innerHTML='<button type="button" class="av-rnm">随机网名</button>';
-      ops2.querySelector('.av-rnm').addEventListener('click',function(){cur.name=skinPick(ix).name;nm.value=cur.name;mark();showOn()});
-      list.appendChild(ops2);
       var h=document.createElement('div');h.className='gp-sec';h.textContent='点一个用它；也可以在上面自己写';list.appendChild(h);
       var box=document.createElement('div');box.className='av-names';
       (ix.names||[]).forEach(function(n){var bt=document.createElement('button');bt.type='button';bt.dataset.nm=n;bt.textContent=n;box.appendChild(bt)});
@@ -5726,9 +5747,19 @@ function openSkin(s){
     var a=e.target.closest('[data-av]');if(a){cur.av=a.dataset.av;preview();mark();return}
     var n=e.target.closest('[data-nm]');if(n){cur.name=n.dataset.nm;nm.value=cur.name;mark()}
   });
-  p.querySelectorAll('.av-tabs button').forEach(function(x){x.addEventListener('click',function(){tab=x.dataset.t;draw();list.scrollTop=0})});
-  function showOn(){var on=list.querySelector('[aria-pressed="true"]');if(on)on.scrollIntoView({block:'nearest'})}   // 随机到的那个滚到看得见
-  p.querySelector('.av-dice').addEventListener('click',function(){if(!ix)return;var x=skinPick(ix);cur.av=x.av;cur.name=x.name;nm.value=x.name;preview();mark();showOn()});
+  // 头像 / 网名：点一下按下（🎲 只随机这一样），再点松开；下面列表跟着换
+  p.querySelectorAll('.av-tabs button').forEach(function(x){x.addEventListener('click',function(){
+    var t=x.dataset.t;sel[t]=!sel[t];
+    var v=sel.av!==sel.nm?(sel.av?'av':'nm'):t;
+    if(v!==tab){tab=v;draw();list.scrollTop=0}else mark();
+  })});
+  p.querySelector('.av-dice').addEventListener('click',function(){   // 随机后列表不滚动
+    if(!ix)return;var x=skinPick(ix),both=sel.av===sel.nm;
+    if(both||sel.av)cur.av=x.av;
+    if(both||sel.nm){cur.name=x.name;nm.value=x.name}
+    preview();mark();
+  });
+  p.querySelector('.av-clr').addEventListener('click',function(){cur.av='';cur.name='';nm.value='';preview();mark()});
   p.querySelector('.gp-go').addEventListener('click',function(){
     var go=this;go.disabled=true;
     skinSave(s,{av:cur.av||null,name:cur.name.trim()||null}).then(close).catch(function(e){toast(e.message||'保存失败')}).then(function(){go.disabled=false});
@@ -7266,7 +7297,7 @@ function soloLeave(id){
   var next=(lastList||[]).find(function(x){return x.id!==id&&!x.group&&!soloAlive(x.id)});
   if(next){wsSend({t:'session.open',id:next.id,mode:mode});return}
   wsSend({t:'session.leave'});if(feedOwner===session.id)saveFeed(session.id);feedOwner=null;session=null;setBusy(false);
-  feed.innerHTML='';$('#nm').textContent='选择会话';$('#sid').textContent='';$('#where').textContent='';
+  feed.innerHTML='';$('#nm').textContent='选择会话';$('#sid').textContent='';$('#where').textContent='';setHeader();
   try{localStorage.removeItem(hk('session'))}catch(_){}
   refreshList();
 }
@@ -7485,7 +7516,7 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
 // 手机端：标题栏的玻璃圆球（上下文用量、朗读开关）可以左右拖，拖到标题上看玻璃浮在字上的效果；
 // 第一次拖完顺带请求「运动与方向」授权（iOS 必须由手指操作触发），授权后手机左右一歪它就滚过去，两个球互相碰
 (function(){
-  var balls=[$('#ctxBtn'),$('#ttsMute')],ncAt=0,tilt=null,asked=false,raf=0,lastT=0,drag=null;
+  var balls=[$('#ctxBtn'),$('#notifBtn'),$('#ttsMute')],ncAt=0,tilt=null,asked=false,raf=0,lastT=0,drag=null;
   balls.forEach(function(b){b._o=0;b._v=0});
   // 喇叭在播报开着时不能拖、不跟着重力滚（长按留给「选这个会话的声音」）；关了播报照旧能拖
   function fixed(b){return b.id==='ttsMute'&&b.dataset.st==='on'}

@@ -530,6 +530,8 @@ var I18N={dict:{
 "普通":"Light",
 "阳白明亮":"Yang Bright",
 "头像换好了":"Avatar changed",
+"清除":"Clear",
+"头像和网名都不设置（保存后生效）":"Remove avatar and nickname (takes effect on Save)",
 "头像和网名一起随机":"Randomize both",
 "随机网名":"Random nickname",
 "随机头像":"Random avatar",
