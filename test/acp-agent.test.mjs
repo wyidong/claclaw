@@ -98,7 +98,8 @@ test('进程自己退出：没回的请求失败，状态清掉，下次 use 重
   await ag.stop();
 });
 
-test('agent 关了 stdin 还往里写（EPIPE）：不会变成未捕获异常，按进程死掉处理', { timeout: 15000 }, async () => {
+// Windows 上子进程关了自己的 stdin 但没退时，往管道里写不报错（只是堆在缓冲里），要等进程退出才报 EOF：这个场景在 Windows 上造不出来
+test('agent 关了 stdin 还往里写（EPIPE）：不会变成未捕获异常，按进程死掉处理', { timeout: 15000, skip: process.platform === 'win32' && 'Windows 管道对端关了不报 EPIPE' }, async () => {
   const { ag } = mkAgent();
   const logs = [];
   await ag.use((...a) => logs.push(a.join(' ')));

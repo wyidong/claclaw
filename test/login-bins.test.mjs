@@ -33,12 +33,13 @@ test('各 Claw 登录用的程序就是它们会话里起的那个', () => {
 test('qoder / minimax 的程序目录：findBin 第二个参数是目录，装在官方位置的能找到', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'login-bins-home-'));
   const put = (...p) => { const f = path.join(home, ...p); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, '#!/bin/sh\n'); fs.chmodSync(f, 0o755); return fs.realpathSync(f); };
-  const qd = put('.qoder', 'bin', 'qodercli', 'qodercli');
-  const mm = put('.minimax-code', 'bin', 'mcode');
+  const ext = process.platform === 'win32' ? '.exe' : '';   // Windows 上 findBin 只认带后缀的（PATHEXT）
+  const qd = put('.qoder', 'bin', 'qodercli', 'qodercli' + ext);
+  const mm = put('.minimax-code', 'bin', 'mcode' + ext);
   const js = `const [{ qdBin }, { mmBin }] = await Promise.all([import('./qoder.mjs'), import('./minimax.mjs')]); console.log(JSON.stringify([qdBin(), mmBin()]));`;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', js], {
     cwd: ROOT, encoding: 'utf8',
-    env: { ...process.env, HOME: home, CLACLAW_DATA: fs.mkdtempSync(path.join(os.tmpdir(), 'login-bins-data-')) },
+    env: { ...process.env, HOME: home, USERPROFILE: home, CLACLAW_DATA: fs.mkdtempSync(path.join(os.tmpdir(), 'login-bins-data-')) },
   });
   assert.deepEqual(JSON.parse(out.trim().split('\n').pop()), [qd, mm]);
 });
