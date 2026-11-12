@@ -13,7 +13,7 @@ import zlib from 'node:zlib';
 import { execFileSync, execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { query, listSessions, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { query, listSessions, getSessionInfo, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured } from './devnotify.mjs';
@@ -1632,7 +1632,7 @@ async function peerHandler(req, res) {
     if (dupKey) peerSeen.set(dupKey, { at: Date.now(), result });
     // 60 秒内没回完：先回 202「已收到」+ 编号，连接放掉（经中继的连接等久了会被线路挂断，回复会丢），回完再主动发到对方的会话
     const id = msgId || crypto.randomUUID();
-    let first; try { first = await Promise.race([result, new Promise(r => setTimeout(() => r(null), PEER_ACCEPT_MS))]); } catch (e) { peerBusy.delete(info.sessionId); throw e; }
+    let first, acceptT; try { first = await Promise.race([result, new Promise(r => { acceptT = setTimeout(() => r(null), PEER_ACCEPT_MS); })]); } catch (e) { peerBusy.delete(info.sessionId); if (dupKey) peerSeen.delete(dupKey); throw e; } finally { clearTimeout(acceptT); }   // 出错的不留：同一个编号重发要能再投递
     if (!first) {
       const acc = { ok: true, accepted: true, status: 202, id, note: '处理时间较长，回复稍后单独发来，开头写「回复 ' + id + '」' };
       if (dupKey) { peerSeen.set(dupKey, { at: Date.now(), result: Promise.resolve([202, acc]) }); peerSeenDisk.set(dupKey, seenRecord(202, acc)); }
@@ -2627,6 +2627,13 @@ function cookieToken(req) {
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)claclaw_sid=([^;]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
+// 按 id 找一个 Claude 会话：先只读那一个文件；读不到（没有可提取摘要的等）再用开着的 runner、最后全量列表兜底
+async function claudeInfo(id, alt) {
+  if (!id) return alt || null;
+  try { const i = await getSessionInfo(id); if (i) return i; } catch {}
+  if (alt) return alt;
+  return (await listSessions({ includeProgrammatic: true, limit: 100000 })).find(s => s.sessionId === id) || null;
+}
 const authed = req => checkToken(cookieToken(req));
 
 function sendJson(res, code, obj, headers = {}) {
@@ -2747,8 +2754,7 @@ async function handleDelete(req, res) {
     log('deleted session', body.id);
     return sendJson(res, 200, { ok: true });
   }
-  const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
-  const info = list.find(s => s.sessionId === body.id);
+  const info = await claudeInfo(body.id);
   if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
   const holders = foreignHolders(info.sessionId);
   if (holders.length) return sendJson(res, 409, { error: '这个会话正在' + (holders[0].entrypoint === 'cli' ? '终端' : holders[0].entrypoint === 'claude-vscode' ? ' VS Code ' : '别处') + '打开，先关掉再删' });
@@ -2793,11 +2799,11 @@ async function handleRename(req, res) {
     log('renamed ' + c.id + ' session', body.id);
     return sendJson(res, 200, { ok: true, title: accepted });
   }
-  const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
-  const info = list.find(s => s.sessionId === body.id);
+  const info = await claudeInfo(body.id);
   if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
   await renameSession(info.sessionId, title, info.cwd ? { dir: info.cwd } : undefined);
-  runners.get(info.sessionId)?.emit({ t: 'session.renamed', title });
+  const r = runners.get(info.sessionId);
+  if (r) { if (r.info) r.info.customTitle = title; r.emit({ t: 'session.renamed', title }); }   // 推送标题、协同的发信人名跟着变
   log('renamed session', info.sessionId.slice(0, 8));
   sendJson(res, 200, { ok: true, title });
 }
@@ -2870,6 +2876,8 @@ const handler = async (req, res) => {
       if (url.pathname.startsWith('/api/')) return sendJson(res, 401, { error: 'login required' });
       return go(setUp ? '/login' : '/setup');
     }
+    // 改东西的请求一律要同源（同站别的端口上的页面也会带 cookie，SameSite 挡不住）
+    if (req.method !== 'GET' && req.method !== 'HEAD' && !sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
     if (url.pathname === '/' || url.pathname === '/index.html') {
       // 页面版本 = 文件内容的短哈希 + 修改时间，改了页面自动变，用来确认手机拿到的是不是新页面
       const file = path.join(ROOT, 'public', 'index.html');
@@ -2893,7 +2901,6 @@ const handler = async (req, res) => {
     }
     // 聊天里点文件路径：本机网页（127.0.0.1 直连）用电脑上的 App 打开；别的设备返回文件信息，再用 /api/fs/read 读回去预览
     if ((url.pathname === '/api/fs/open' || url.pathname === '/api/fs/read') && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
       let body = await jsonBody(req, 8192);
       if (url.pathname === '/api/fs/read') {
@@ -2927,7 +2934,6 @@ const handler = async (req, res) => {
       return fs.createReadStream(t).pipe(res);
     }
     if ((url.pathname === '/api/upload/video' || url.pathname === '/api/upload/doc') && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const doc = url.pathname === '/api/upload/doc';
       let fname = ''; try { fname = decodeURIComponent(String(req.headers['x-file-name'] || '')); } catch {}
       try { const v = await saveVideo(req, UPLOADS, { doc, name: fname, keepDays: uploadKeepDays() }); log('video uploaded', v.id, (v.bytes / 1048576).toFixed(1) + 'MB'); return sendJson(res, 200, { id: v.id, bytes: v.bytes }); }
@@ -2972,7 +2978,6 @@ const handler = async (req, res) => {
     // Claude 长期令牌：只给后 4 位；登录了 claclaw 的网页（本机、局域网、clarelay）都能设置、替换、清除
     if (url.pathname === '/api/claude-token') {
       if (req.method === 'POST') {
-        if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         let body = await jsonBody(req, 4096);
         if (body.clear === true) {
@@ -2994,7 +2999,6 @@ const handler = async (req, res) => {
     }
     // 模型库：看完整的 key 要再输一次 claclaw 的密码（登录用的哪组都行；没设密码的账号要输用户名），输错和登录一起计次数、会锁；日志不写 key
     if (url.pathname === '/api/models/key' && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const ip = realIp(req);
       if (globalLocked(req)) return sendJson(res, 429, { error: globalLockMsg() });
       const lf = lockedFor(ip);
@@ -3018,7 +3022,6 @@ const handler = async (req, res) => {
     // 模型库（Claw 页 → 模型管理）：登录了的网页都能看、能改；列表只给 key 后 4 位，日志不写 key
     if (url.pathname === '/api/models') {
       if (req.method === 'POST') {
-        if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         let body = {};
         try { body = JSON.parse(await readBody(req, 65536)); } catch { return sendJson(res, 400, { error: '请求格式不对' }); }
@@ -3079,7 +3082,6 @@ const handler = async (req, res) => {
     // 帮用户装第一个 Agent（见 install.mjs）：GET 取进度，POST {claw} 开始装（只能装 INSTALLS 里列的）
     if (url.pathname === '/api/claws/install') {
       if (req.method === 'POST') {
-        if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
         const b = await jsonBody(req, 1024);
         const id = String(b?.claw || '');
@@ -3090,7 +3092,6 @@ const handler = async (req, res) => {
     }
     // 临时启动装了没开的 Claw（现在只有 OpenClaw 网关）：POST {claw}，马上回，网页接着查 /api/claws 等它起来
     if (url.pathname === '/api/claws/start' && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
       const b = await jsonBody(req, 1024);
       if (String(b?.claw || '') !== 'openclaw') return sendJson(res, 400, { error: '这个 Claw 不用启动' });
@@ -3172,8 +3173,7 @@ const handler = async (req, res) => {
         }
         if (/^(op|oc):/.test(id)) return sendJson(res, 501, { error: '这个 Claw 还不支持解剖' });
         if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(res, 400, { error: '会话 ID 不对' });
-        const list = await listSessions({ includeProgrammatic: true, limit: 500 });
-        const info = list.find(s => s.sessionId === id) || runners.get(id)?.info;
+        const info = await claudeInfo(id, runners.get(id)?.info);
         if (!info) return sendJson(res, 404, { error: '找不到这个会话' });
         const f = jsonlPathOf(info);
         if (!fs.existsSync(f)) return sendJson(res, 404, { error: '这个会话还没有记录' });
@@ -3199,19 +3199,16 @@ const handler = async (req, res) => {
       return fs.createReadStream(f).pipe(res);
     }
     if (url.pathname === '/api/skin' && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const b = await jsonBody(req, 8 * 1024, null);
       if (!b || typeof b !== 'object') return sendJson(res, 400, { error: 'bad request' });
       try { return sendJson(res, 200, { ok: true, skin: skins.set(b.id, { av: b.av, name: b.name, snd: b.snd, still: b.still }) }); } catch (e) { return sendJson(res, e.code || 500, { error: e.message }); }
     }
     if (url.pathname === '/api/skin/upload' && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const b = await jsonBody(req, 2200 * 1024, null);
       if (!b || typeof b !== 'object') return sendJson(res, 400, { error: '图片太大了，或者不是图片' });
       try { return sendJson(res, 200, { ok: true, av: skins.upload(b.data) }); } catch (e) { return sendJson(res, e.code || 500, { error: e.message }); }
     }
     if (url.pathname === '/api/recent/clear' && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       recentCleared = Date.now(); recentHidden = {};
       try { saveRecent(); } catch (e) { return sendJson(res, 500, { error: e.message }); }
       return sendJson(res, 200, { ok: true });
@@ -3244,7 +3241,6 @@ const handler = async (req, res) => {
       return sendJson(res, 200, { id: g.id, name: g.name, title: g.title, mirror: !!g.mirror, host: g.mirror ? '' : g.host || '', members: g.mirror ? [] : g.members.map(m => ({ id: m.id, peerId: m.peerId, peerName: m.peerName, title: m.title, claw: m.claw, name: m.name })) });
     }
     if ((url.pathname === '/api/group/create' || url.pathname === '/api/group/edit') && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const b = await jsonBody(req, 64 * 1024);
       try {
         if (url.pathname === '/api/group/create') { const g = groups.create({ name: b.name, members: await groupMembers(b.members), host: typeof b.host === 'string' ? b.host : '' }); return sendJson(res, 200, { ok: true, id: g.id }); }
@@ -3256,7 +3252,6 @@ const handler = async (req, res) => {
     }
     // 群从「最近」里拿掉（不解散，群列表里照样有；有新消息再回来）。/api/recent/hide 对群仍是解散（群列表左滑用）
     if (url.pathname === '/api/recent/unlist' && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       const b = await jsonBody(req, 1024);
       const id = String(b?.id || '').slice(0, 200);
       if (!id) return sendJson(res, 400, { error: '缺会话 id' });
@@ -3265,7 +3260,6 @@ const handler = async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
     if (url.pathname === '/api/recent/hide' && req.method === 'POST') {
-      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
       let b = await jsonBody(req, 1024);
       const id = String(b.id || '').slice(0, 200);
       if (!id) return sendJson(res, 400, { error: '缺会话 id' });
@@ -3672,8 +3666,7 @@ wss.on('connection', (ws, req) => {
       }
       if (m.t === 'session.new') {
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
-        const list = await listSessions({ includeProgrammatic: true, limit: 2000 });
-        const from = list.find(s => s.sessionId === m.from) || runners.get(m.from)?.info;
+        const from = await claudeInfo(m.from, runners.get(m.from)?.info);
         // 目录：默认用参照会话的目录；也可以指定别的目录（新建对话框里点目录可以改）
         let cwd = from?.cwd;
         if (typeof m.cwd === 'string' && m.cwd.trim()) {
@@ -3784,9 +3777,8 @@ wss.on('connection', (ws, req) => {
           busyFor: r.busy && r.busySince ? Date.now() - r.busySince : 0, pending: [], suggestion: null,
         });
       } else if (m.t === 'session.open') {
-        const list = await listSessions({ includeProgrammatic: true, limit: 500 });
-        // 刚新建、还没发过消息的会话不在列表里（没有会话文件），从开着的 runner 里拿
-        const info = list.find(s => s.sessionId === m.id) || runners.get(m.id)?.info;
+        // 刚新建、还没发过消息的会话没有会话文件，从开着的 runner 里拿
+        const info = await claudeInfo(m.id, runners.get(m.id)?.info);
         if (!info) return send({ t: 'error', message: '找不到这个会话' });
         if (!runners.has(m.id)) {
           if (info.cwd && !fs.existsSync(info.cwd)) return send({ t: 'error', message: '会话目录已不存在：' + info.cwd });

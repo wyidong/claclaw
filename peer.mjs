@@ -407,7 +407,7 @@ export async function peerCall(c, p, sub, opts = {}) {
       noteChan(p.id, url, true, cheap ? ms : null);
       trail.push(label(url) + ' ok ' + ms + 'ms');
       peerRoute.set(p.id, { via: url === DIRECT ? 'direct' : viaRelay ? 'relay' : 'lan', rel: viaRelay && relays.length > 1 ? (url === relays[0] ? 'main' : 'backup') : undefined, at: Date.now(), ms, trail: trail.join(' → ') });
-      if (!viaRelay && url !== DIRECT && url !== lan[0] && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; savePeer(c); }   // 局域网里换了能用的那个当首选
+      if (!viaRelay && url !== DIRECT && url !== lan[0] && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; const f = loadPeer(), q = f.peers.find(x => x.id === p.id); if (q) { q.inbox = url; q.inboxAlt = old; savePeer(f); } }   // 局域网里换了能用的那个当首选；重新读一遍再改（等回复期间配置可能被改过，不能整份用旧的覆盖）
       return j;
     } catch (e) {
       trail.push(label(url) + ' 失败(' + (e.code || e.message || '').toString().slice(0, 40) + ') ' + (Date.now() - t0) + 'ms'); err = e;

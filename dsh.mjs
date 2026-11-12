@@ -309,6 +309,7 @@ function startDshWeb(log) {
     stdio: ['ignore', 'pipe', 'pipe'], cwd: HOME,
     env: binEnv(),
   });
+  p.on('error', () => {});   // 兜底：ready 之后下面的 onError 会被摘掉，之后再出 'error'（如 kill 失败）别变成未捕获异常
   p.stdout.setEncoding('utf8');
   p.stderr.setEncoding('utf8');
   let out = '', err = '', stopped = false;
@@ -838,7 +839,7 @@ export async function dsRename(id, title) {
     if (runner.subs.size) throw Object.assign(new Error('当前会话正在网页里打开着，先切到别的会话再改名'), { code: 409 });
     if (runner.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
     runner.dispose();
-    await waitClosing(sid);   // 等 session/close 真正完成，再拿 dsh 的写入锁
+    await agent.waitClosing(sid);   // 等 session/close 真正完成，再拿 dsh 的写入锁
   }
   const lease = await acquireLease(path.dirname(file), sid);
   let backup = null;

@@ -1,6 +1,7 @@
 // 协同消息触发的那一轮：哪些工具调用可以直接放行，哪些要用户在手机上确认。
 // 思路是「白名单」：认得出是安全的才放行，其余一律确认（危险命令的写法太多，黑名单拦不全）。
 // 读文件也要管：这一轮的回复会传回对方，读到的钥匙、密码等于直接交出去。
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -24,15 +25,34 @@ const WIN = process.platform === 'win32';
 const norm = p => WIN ? String(p || '').replace(/\\/g, '/').toLowerCase() : String(p || '');
 const NHOME = norm(HOME);
 const isRoot = p => p === '/' || (WIN && /^[a-z]:\/?$/.test(p));
+let USER = '';
+try { USER = os.userInfo().username; } catch {}
+// ~name/…：shell 会换成那个用户的家目录（zsh 还有 hash -d 起的目录名）。本机用户名 → HOME；
+// 别的名字按「家目录的上级/名字」找，找不到就是认不出来（返回 null，调用方当成根目录：一律确认）
+function tildeHome(name, cwd) {
+  if (!name) return HOME;
+  if (name === '+') return cwd || HOME;                       // ~+ = $PWD
+  if (name === USER || name === path.basename(HOME)) return HOME;
+  if (/^[\w.-]+$/.test(name) && name !== '.' && name !== '..') {
+    const c = path.join(path.dirname(HOME), name);
+    try { if (fs.statSync(c).isDirectory()) return c; } catch {}
+  }
+  return null;                                                // ~-（$OLDPWD）、~1（目录栈）、不认识的名字
+}
 const expand = (p, cwd) => {
   let s = String(p || '').trim().replace(/^['"]|['"]$/g, '');
   if (!s) return '';
-  if (s === '~' || s.startsWith('~/')) s = HOME + s.slice(1);
+  const m = (WIN ? /^~([^/\\]*)([/\\].*)?$/ : /^~([^/]*)(\/.*)?$/).exec(s);
+  if (m) { const h = tildeHome(m[1], cwd); if (h == null) return '/'; s = h + (m[2] || ''); }
   else if (s.startsWith('$HOME')) s = HOME + s.slice(5);
   return norm(path.resolve(cwd || HOME, s));
 };
 const inside = (p, root) => { p = norm(p); root = norm(root); return p === root || p.startsWith(root.endsWith('/') ? root : root + '/'); };
 // 本身就是敏感内容：敏感文件，或在敏感目录里（不含「只是它们的上级」）
+// 源码文件名里带 passw / token / credential（passwd.mjs、token.test.js）多半是代码不是钥匙：
+// 递归扫描、通配符展开出来的这类不算（不然在本仓库 rg、wc -l *.mjs 都要确认）；直接点名读仍要确认
+const CODE_FILE = /\.(m?[jt]sx?|c[jt]s|py|go|rs|java|kt|swift|rb|php|c|cc|cpp|h|hpp|cs|vue|svelte|md)$/i;
+const looseName = n => SENSITIVE_NAME.test(n) && CODE_FILE.test(n) && !/(^|\/)\.env/i.test(n) && !/secret|(^|\/)id_|\.(pem|key)\b/i.test(n);
 const inSensitive = (a, roots) => SENSITIVE_NAME.test(a) || roots.some(r => inside(a, r));
 
 // 这个路径碰不碰得到敏感内容：本身敏感、在敏感目录里、或者是敏感目录的上级
@@ -42,6 +62,144 @@ export function touchesSensitive(p, cwd, roots) {
   if (SENSITIVE_NAME.test(a)) return true;
   if (isRoot(a) || a === NHOME || inside(HOME, a)) return true;
   return roots.some(r => inside(a, r) || inside(r, a));
+}
+
+// ---- 通配符、递归搜索：先看清楚到底会碰到哪些文件 ----
+// glob → 正则。* ? [..] 按 shell；Grep 工具的 glob 还有 ** 和 {a,b}。点开头的文件也算能匹配（宁可多问）
+function globToRe(g) {
+  let re = '', depth = 0;
+  for (let i = 0; i < g.length; i++) {
+    const ch = g[i];
+    if (ch === '*') {
+      if (g[i + 1] === '*') { i++; if (g[i + 1] === '/') { i++; re += '(?:.*/)?'; } else re += '.*'; }
+      else re += '[^/]*';
+    } else if (ch === '?') re += '[^/]';
+    else if (ch === '[') {
+      const j = g.indexOf(']', i + 2);
+      if (j < 0) { re += '\\['; continue; }
+      let body = g.slice(i + 1, j), neg = false;
+      if (body[0] === '!' || body[0] === '^') { neg = true; body = body.slice(1); }
+      re += '[' + (neg ? '^' : '') + body.replace(/[\\\]\[^]/g, '\\$&') + ']';
+      i = j;
+    } else if (ch === '{') { depth++; re += '(?:'; }
+    else if (ch === '}' && depth) { depth--; re += ')'; }
+    else if (ch === ',' && depth) re += '|';
+    else re += ch.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  }
+  try { return new RegExp('^' + re + ')'.repeat(depth) + '$', WIN ? 'i' : ''); } catch { return /[\s\S]*/; }   // 认不出来：当成什么都匹配
+}
+const GLOB_CH = /[*?[]/;
+// 通配符的路径（已展开成绝对路径）可能落进敏感目录、或是敏感目录 / 家目录的上级：~/.config/g?/hosts.yml、/Users/*
+function globHitsRoot(abs, roots) {
+  const ps = abs.replace(/\/+$/, '').split('/');
+  for (const t of roots.map(norm).concat(NHOME)) {
+    const ts = t.split('/'), n = Math.min(ps.length, ts.length);
+    let ok = true, deep = false;
+    for (let i = 0; i < n && ok; i++) {
+      if (ps[i].includes('**')) { deep = true; break; }
+      ok = globToRe(ps[i]).test(ts[i]);
+    }
+    if (!ok) continue;
+    if (deep || t !== NHOME || ps.length <= ts.length) return true;
+  }
+  return false;
+}
+const SCAN_SKIP = new Set(['.git', 'node_modules']);
+const SCAN_DEPTH = 8, SCAN_MAX = 10000, SCAN_FOUND = 200;
+// 递归搜索前先看一遍目录里有没有敏感文件（.env、钥匙……）、敏感目录、指向敏感位置的软链接。
+// 限深度、限数量：超了就当有（返回 limit），宁可多问。.git、node_modules 不进去（里面不放钥匙，进去就超限）
+function scanSensitive(root, roots) {
+  const found = [];
+  let level = [root], n = 0;
+  for (let d = 0; level.length; d++) {
+    if (d > SCAN_DEPTH) return { limit: true };
+    const next = [];
+    for (const dir of level) {
+      let ents;
+      try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+      for (const e of ents) {
+        if (++n > SCAN_MAX) return { limit: true };
+        const p = dir + (dir.endsWith('/') || dir.endsWith('\\') ? '' : '/') + e.name;
+        const rel = norm(path.relative(root, p)).split(path.sep).join('/');
+        let hit = (SENSITIVE_NAME.test(e.name) && !looseName(e.name)) || roots.some(r => inside(p, r));
+        if (!hit && e.isSymbolicLink()) {
+          try { const t = fs.realpathSync(p); hit = touchesSensitive(t, root, roots); } catch {}
+          if (hit) { found.push({ p, rel, file: false }); if (found.length >= SCAN_FOUND) return { limit: true }; }
+          continue;
+        }
+        if (hit) { found.push({ p, rel, file: !e.isDirectory() }); if (found.length >= SCAN_FOUND) return { limit: true }; continue; }
+        if (e.isDirectory() && !SCAN_SKIP.has(e.name)) next.push(p);
+      }
+    }
+    level = next;
+  }
+  return { found };
+}
+// 递归搜索 target 会不会读到敏感文件。glob / type：Grep 工具只搜匹配的文件（敏感目录、软链接不按它们过滤）
+function searchRisk(target, roots, glob = '', type = '') {
+  try { if (!fs.statSync(target).isDirectory()) return null; } catch { return null; }
+  const r = scanSensitive(target, roots);
+  if (r.limit) return '目录太大，确认不了里面没有敏感文件：' + target;
+  const gre = glob && !glob.startsWith('!') ? globToRe(glob) : null;
+  const hit = r.found.find(f => !f.file || ((!gre || gre.test(glob.includes('/') ? f.rel : f.rel.split('/').pop()))
+    && (!type || f.rel.split('/').pop().toLowerCase().includes(String(type).toLowerCase()))));
+  return hit ? '搜索的目录里有敏感文件 ' + hit.p : null;
+}
+// 带通配符的参数：按 shell 的规矩在 dir 下展开，返回 { paths }（没匹配上就是空，shell 会把原样的字传下去）或要确认的原因
+function globPaths(pat, dir, roots) {
+  const abs = expand(pat, dir);
+  if (globHitsRoot(abs, roots)) return '通配符可能匹配到敏感位置 ' + pat;
+  const segs = abs.split('/');
+  const i0 = segs.findIndex(x => GLOB_CH.test(x));
+  if (i0 < 0) return { paths: [abs] };
+  let base = segs.slice(0, i0).join('/') || '/';
+  if (/^[a-z]:$/i.test(base)) base += '/';
+  if (segs.slice(i0).some(x => x.includes('**'))) {   // zsh 的 ** 会递归：整棵树看一遍
+    const r = searchRisk(base, roots);
+    return r ? '通配符 ** ' + r : { paths: [] };
+  }
+  let cur = [base], n = 0;
+  for (let i = i0; i < segs.length && cur.length; i++) {
+    const s = segs[i];
+    if (!s) continue;
+    const next = [], join = c => c + (c.endsWith('/') ? '' : '/');
+    if (!GLOB_CH.test(s)) { for (const c of cur) next.push(join(c) + s); }
+    else {
+      const re = globToRe(s);
+      for (const c of cur) {
+        let ents;
+        try { ents = fs.readdirSync(c); } catch (e) { if (e.code === 'ENOENT' || e.code === 'ENOTDIR') continue; return '展不开通配符 ' + pat; }
+        if ((n += ents.length) > SCAN_MAX) return '通配符匹配太多 ' + pat;
+        for (const e of ents) if (re.test(WIN ? e.toLowerCase() : e)) next.push(join(c) + e);
+      }
+    }
+    cur = next;
+  }
+  return { paths: cur.filter(p => { try { fs.lstatSync(p); return true; } catch { return false; } }) };
+}
+
+// 只看文件名、不读内容的命令：参数不按路径查
+const NAME_ONLY = new Set(['echo', 'basename', 'dirname', 'true', 'pwd', 'uname', 'which']);
+// 白名单命令里会写文件、执行程序、改系统的参数
+function cmdOptRisk(c, args) {
+  const short = (a, re) => /^-[^-]/.test(a) && re.test(a.slice(1));
+  if (c === 'sort' && args.some(a => short(a, /o/) || /^--(output|compress-prog)/.test(a))) return 'sort 会写文件或执行程序';
+  if (c === 'uniq' && args.filter(a => a === '-' || !/^-/.test(a)).length >= 2) return 'uniq 第二个文件参数是输出（会写文件）';
+  if (c === 'tree' && args.some(a => short(a, /[oR]/) || /^--(output|o\b)/.test(a))) return 'tree 会写文件';
+  if (c === 'rg' && args.some(a => /^--(pre|hostname-bin)/.test(a))) return 'rg 会执行程序';
+  if (c === 'file' && args.some(a => short(a, /C/) || /^--compile/.test(a))) return 'file 会写文件';
+  if (c === 'date') {
+    // 只认显示：+格式、-u 这类开关、-d/-r/-v/-f 带的值；其余的位置参数（MMDDhhmm…）和 -s/--set 是改系统时间。
+    // BSD 的 -j 表示不改时间
+    const noSet = args.some(a => short(a, /j/));
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (/^--set/.test(a) || (short(a, /s/) && !/^-I/.test(a))) return 'date 改系统时间';
+      if (/^-([drvfz]|-date|-reference|-file)$/.test(a)) { i++; continue; }
+      if (!/^[-+]/.test(a) && !noSet) return 'date 改系统时间';
+    }
+  }
+  return null;
 }
 
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead']);
@@ -72,9 +230,12 @@ const ffFromOrigin = a => a.includes('--ff-only') && a.every(x => /^(-q|--quiet|
 // dir 可能已经过 expand() 归一化（cd 之后），repos 是调用方给的原始路径：两边都归一再比
 const inRepo = (dir, repos) => repos.some(r => norm(dir) === norm(r) || inside(dir, path.join(r, '.worktrees')));
 
-function words(seg) {
-  // 粗分词：引号里的空格不拆，反斜杠转义下一个字符（和 shell 一样）。分错只会多问，不会少问（每一段都要单独过检查）
-  const out = []; let cur = '', q = '';
+// 粗分词：引号里的空格不拆，反斜杠转义下一个字符（和 shell 一样）。分错只会多问，不会少问（每一段都要单独过检查）
+const words = seg => lex(seg).map(x => x.v);
+// 同上，每个词另外带 g：引号外出现过的 * ? [ { ( ) —— shell 会拿它们展开通配符 / 花括号（zsh 的 *(e:…:) 还会执行命令）
+function lex(seg) {
+  const out = []; let cur = '', q = '', g = '';
+  const push = () => { out.push({ v: cur, g }); cur = ''; g = ''; };
   for (let i = 0; i < seg.length; i++) {
     const ch = seg[i];
     if (q === "'") { if (ch === q) q = ''; else cur += ch; continue; }
@@ -85,10 +246,11 @@ function words(seg) {
     if (ch === '\\' && i + 1 < seg.length && (!q || /["\\$`]/.test(seg[i + 1]))) { cur += seg[++i]; continue; }
     if (q) { if (ch === q) q = ''; else cur += ch; continue; }
     if (ch === '"' || ch === "'") { q = ch; continue; }
-    if (/\s/.test(ch)) { if (cur) out.push(cur), cur = ''; continue; }
+    if (/\s/.test(ch)) { if (cur) push(); continue; }
+    if (/[*?[{}()]/.test(ch)) g += ch;
     cur += ch;
   }
-  if (cur) out.push(cur);
+  if (cur) push();
   return out;
 }
 
@@ -127,13 +289,18 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
   // 输出写到 /tmp 下的一个文件（npm test >/tmp/t.log 这类临时日志）：不算写用户的文件。只认 /tmp 下一层、文件名只有字母数字 . _ -
   s = s.replace(/(^|\s)\d?>>?\s*\/tmp\/[\w.-]+(?=$|[\s;&|])/g, '$1');
   if (/>/.test(unquoted(s))) return '命令会写文件';
+  // < 读文件：cat <~/.config/gh/hosts.yml。把 < 换成空格，后面的文件名成了单独的词，照样按路径查
+  { const u = unquoted(s); if (u.includes('<')) { let t = ''; for (let i = 0; i < s.length; i++) t += u[i] === '<' ? ' ' : s[i]; s = t; } }
   const segs = segments(s);
   if (!segs.length) return '空命令';
   let dir = cwd;
   for (const seg of segs) {
-    const w = words(seg);
+    const lx = lex(seg);
+    const w = lx.map(x => x.v);
     const c = w[0];
     const args = w.slice(1);
+    if (lx.some(x => /[{}]/.test(x.g))) return '命令里有花括号展开';            // .{e,x}nv → .env
+    if (lx.some(x => /[()]/.test(x.g))) return '命令里有括号（zsh 的通配符限定词能执行命令）';
     if (c === 'npm' && inRepo(dir, repos) && routineNpm(args.filter(a => !/^(-s|--silent|-q|--quiet)$/.test(a)))) {
       if (!clean(dir)) return '仓库里有没提交的改动，npm 会执行它们';
       continue;
@@ -145,7 +312,9 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
       if (sub === 'merge' && ffFromOrigin(args.slice(1))) continue;   // 版本更新：只快进到 origin 上的分支，和 pull --ff-only 一样
       if (!SAFE_GIT.has(sub)) return 'git ' + (sub || '');
       if (args.some(a => /^--(output|exec|upload-pack|receive-pack|ext-diff)/.test(a) || /^-[cC]$/.test(a))) return 'git 带了会执行或写文件的参数';
+      if (args.includes('--no-index')) return 'git ' + sub + ' --no-index 读仓库外的文件';
       if ((sub === 'show' || sub === 'cat-file') && args.slice(1).some(a => { const i = a.indexOf(':'); return i >= 0 && SENSITIVE_NAME.test(a.slice(i + 1)); })) return '读敏感位置（git 里提交过的 ' + sub + '）';   // HEAD:.env 这类
+      if (args.slice(1).some(a => !/^-/.test(a) && SENSITIVE_NAME.test(a))) return '读敏感文件（git ' + sub + '）';   // git log -p .env、git diff .env、git blame .env
       if (sub === 'grep' && args.some(a => /^(-O|--open-files-in-pager)/.test(a))) return 'git grep 用分页程序打开文件';   // -O<程序> 会执行命令
       if ((sub === 'branch' || sub === 'tag') && args.slice(1).some(a => /^-/.test(a) && !/^-(a|v|vv|r|l|-list|-all|-verbose|-show-current|-contains)$/.test(a))) return 'git ' + sub + ' 改动';
       if (sub === 'remote' && args.slice(1).some(a => /^(add|remove|rm|rename|set-url|set-head|prune)$/.test(a))) return 'git remote 改动';
@@ -165,16 +334,42 @@ export function bashRisk(cmd, cwd, roots, { repos = [], clean = () => false } = 
     // 进项目目录不算碰敏感（项目里有 data/ 也一样）：之后每一段照样按新目录检查，递归搜索仍要确认。
     // 家目录、根目录及其上级、敏感目录本身还是要确认
     if (c === 'cd') {
+      if (lx[1] && GLOB_CH.test(lx[1].g)) return '进入的目录带通配符';
       dir = expand(args[0] || '~', dir);
       if (isRoot(dir) || dir === NHOME || inside(HOME, dir) || inSensitive(dir, roots)) return '进入敏感目录';
       continue;
     }
+    const optRisk = cmdOptRisk(c, args);
+    if (optRisk) return optRisk;
+    if (NAME_ONLY.has(c)) continue;
     const paths = args.filter(a => !/^-/.test(a));
-    for (const a of paths) if (/[/\\~.]/.test(a) && touchesSensitive(a, dir, roots)) return '读敏感位置 ' + a;
+    // 要按路径查的：所有不是选项的参数、--opt=值 的值；带通配符的先在当前目录下展开（.e* → .env）
+    const cands = [];
+    for (const x of lx.slice(1)) {
+      let v = x.v;
+      if (/^-/.test(v)) { const m = /^--[\w-]+=(.+)$/.exec(v); if (!m) continue; v = m[1]; }
+      if (GLOB_CH.test(x.g) && GLOB_CH.test(v)) {
+        const r = globPaths(v, dir, roots);
+        if (typeof r === 'string') return r;
+        cands.push(...r.paths.filter(a => !looseName(path.basename(a))));
+        if (r.paths.length) continue;
+      }
+      cands.push(v);
+    }
+    for (const a of cands) if (touchesSensitive(a, dir, roots)) return '读敏感位置 ' + a;
     for (const a of paths) if (SENSITIVE_NAME.test(a)) return '读敏感文件 ' + a;
+    const recursive = args.some(a => /^-[a-zA-Z]*[rR]/.test(a) || /^--(recursive|dereference-recursive|directories=recurse)$/.test(a)
+      || /^-d\s*recurse$/.test(a)) || / -d recurse( |$)/.test(' ' + args.join(' ') + ' ');
     // 递归搜索没写路径：搜的是当前目录
-    if (SEARCH_CMDS.has(c) && (c === 'rg' || c === 'find' || c === 'du' || c === 'tree' || args.some(a => /^-[a-zA-Z]*[rR]/.test(a)))
+    if (SEARCH_CMDS.has(c) && (c === 'rg' || c === 'find' || c === 'du' || c === 'tree' || recursive)
       && !paths.some(a => /[/\\~.]/.test(a)) && touchesSensitive(dir, cwd, roots)) return '在含敏感内容的目录里搜索';
+    // 递归读内容（grep -r、rg 默认递归）：搜的目录里有 .env 这类文件也要确认。
+    // 参数里有存在的路径就看其中的目录；一个都不存在（只有搜索词）就是搜当前目录
+    if (c === 'rg' || ((c === 'grep' || c === 'egrep') && recursive)) {
+      const abs = cands.map(a => expand(a, dir)).filter(a => { try { fs.statSync(a); return true; } catch { return false; } });
+      const targets = abs.length ? abs : [expand(dir, cwd)];
+      for (const t of new Set(targets)) { const r = searchRisk(t, roots); if (r) return r; }
+    }
   }
   return null;
 }
@@ -250,7 +445,16 @@ export function peerRisk(name, input, cwd, roots, opts) {
   if (HARMLESS.has(name)) return null;
   if (READ_TOOLS.has(name)) {
     const p = input.file_path || input.notebook_path || input.path || cwd;
-    return touchesSensitive(p, cwd, roots) ? { key: 'read-sensitive', reason: '读敏感位置：' + expand(p, cwd) } : null;
+    if (touchesSensitive(p, cwd, roots)) return { key: 'read-sensitive', reason: '读敏感位置：' + expand(p, cwd) };
+    if (name === 'Grep') {
+      // glob / type 本身点名了敏感文件（.env、*.pem……），或者要搜的目录里有敏感文件（按 glob / type 过滤后）
+      const g = String(input.glob || ''), t = String(input.type || '');
+      if (g && !g.startsWith('!') && SENSITIVE_NAME.test(g.replace(/^(\*\*\/)+/, ''))) return { key: 'read-sensitive', reason: '搜敏感文件：' + g };
+      if (t && (SENSITIVE_NAME.test(t) || SENSITIVE_NAME.test('x.' + t))) return { key: 'read-sensitive', reason: '搜敏感文件类型：' + t };
+      const r = searchRisk(expand(p, cwd), roots, g, t);
+      if (r) return { key: 'read-sensitive', reason: r };
+    }
+    return null;
   }
   if (EDIT_TOOLS.has(name)) {
     const p = expand(input.file_path || input.notebook_path, cwd);

@@ -23,7 +23,8 @@ const QHOME = process.env.QODER_CONFIG_DIR || path.join(HOME, '.qoder');
 const SETTINGS = path.join(QHOME, 'settings.json');
 const store = makeStore({ root: QHOME, skip: n => /^agent-/.test(n) });
 
-export const qdBin = () => findBin('qodercli', [path.join(HOME, '.qoder', 'entry', 'qodercli')]);
+// findBin 的第二个参数是「先找的目录」（不是文件）。官方安装脚本把 qodercli 放在 ~/.qoder/bin/qodercli/ 下（~/.local/bin 已在默认目录里）
+export const qdBin = () => findBin('qodercli', [path.join(HOME, '.qoder', 'bin', 'qodercli')]);
 export const qdInstalled = () => !!qdBin() || fs.existsSync(store.PROJECTS);
 
 export function qdSessionList({ busy = () => false } = {}) {

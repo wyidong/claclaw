@@ -132,12 +132,16 @@ while (Date.now() - t0 < 30 * 60000) {
 const note = process.argv.slice(2).join(' ');
 log(`=== kickstart ${new Date().toISOString()} ${git('log', '-1', '--format=%h')}${note ? ' ' + note : ''} (${idle ? 'all idle' : 'timeout'}) ===`);
 if (WIN) { winKick(); process.exit(0); }   // 计划任务接手；这个进程马上会跟着 claclaw 一起被结束
-try { execFileSync('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/${LABEL}`]); } catch (e) { log('    kickstart failed: ' + e.message); }
+const startedOf = () => withToken('restart-wait', async h => (await getJson('/api/host', h)).claclaw?.startedAt).catch(() => null);
+const before = await startedOf();
+// 没有这个 launchd 服务（比如手动 node server.mjs 跑的）kickstart 会失败：照实记失败，不去「核实」还活着的旧进程
+try { execFileSync('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/${LABEL}`], { stdio: ['ignore', 'ignore', 'pipe'] }); } catch (e) { log('    kickstart failed（没重启）: ' + String(e.stderr || e.message).trim().split('\n')[0]); process.exit(1); }
 
 // 等服务起来（最多 60 秒），再核实
 let up = false;
 for (let i = 0; i < 30 && !up; i++) { await sleep(2000); try { up = (await fetch(BASE + '/login', { signal: AbortSignal.timeout(3000) })).ok; } catch {} }
 let res = up ? '' : '服务 60 秒没起来';
+if (up && before && (await startedOf()) === before) { res = '启动时间没变，还是原来的进程（没重启）'; up = false; }
 if (up) { try { res = await verify(); } catch (e) { res = '核实出错 ' + e.message; } }
 log(`    after restart (${git('log', '-1', '--format=%h')}): ${res} | ${up ? 'login ok' : 'login fail'}`);
 process.exit(0);

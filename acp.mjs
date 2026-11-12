@@ -123,6 +123,8 @@ export class AcpAgent {
     Object.assign(this, { name, findBin: bin, missing, command, prepare, rpcErrorOf: rpcError, hardKill });
     this.proc = null; this.ready = null; this.rid = 0; this.idleTimer = null; this.caps = {};
     this.sig = ''; this.stale = false;
+    this.gen = 0;               // 每次 start / stop 加一：stop 之后，还在等旧进程退出的那次 start 作废
+    this.exiting = null;        // stop() 之后旧进程退出前的 Promise：下次 start 先等它（最多 5 秒），免得新旧两个进程同时跑
     this.pending = new Map();
     this.owners = new Map();    // 会话 id → runner（收 session/update 和权限请求）
     // 正在关闭的会话：sid → 关闭用的 Promise。旧 runner 的关闭还没结束，同一个会话又被打开时，
@@ -136,12 +138,28 @@ export class AcpAgent {
     if (this.ready) return this.ready;
     const bin = this.findBin();
     if (!bin) return Promise.reject(new Error(this.missing));
+    const gen = ++this.gen;
+    if (!this.exiting) return this.spawnNow(bin, log);
+    // 上一个进程刚 stop()（换模型重启、空闲关闭）还没退干净：等它退了再起新的。
+    // 同时来的几次 start 共用这一个 ready；中途又 stop() 了（gen 变了）就作废
+    const ready = this.exiting.then(() => {
+      if (this.gen !== gen || this.ready !== ready) throw new Error(this.name + ' 已停止');
+      this.ready = null;
+      return this.spawnNow(bin, log);
+    });
+    this.ready = ready;
+    ready.catch(() => {});
+    return ready;
+  }
+  spawnNow(bin, log) {
     const prep = this.prepare?.(log) || {};
     this.sig = prep.sig || ''; this.stale = false;
     // binCall：Windows 上 npm 装的命令是 .cmd，spawn 不了，换成 node 跑它里面的 JS 入口（其他系统原样返回）
     const { cmd, args } = binCall(...this.command(bin));
     const p = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: HOME, env: { ...binEnv(), ...(prep.env || {}) } });
     this.proc = p;
+    // 进程退出（或起不来）时 resolve：stop() 等它，下次 start 才起新的
+    p.exited = new Promise(res => { p.once('exit', res); p.once('error', res); });
     p.stdout.setEncoding('utf8'); p.stderr.setEncoding('utf8');   // 按 UTF-8 流式解码：一个中文字被拆到两块数据里时不会变乱码
     let buf = '', errTail = '';
     const lastErr = () => errTail.trim().split('\n').pop() || '';
@@ -161,17 +179,16 @@ export class AcpAgent {
       }
     });
     p.stderr.on('data', d => { errTail = (errTail + d).slice(-2000); });
-    const dead = why => {
-      if (this.proc !== p) return;
-      this.proc = null; this.ready = null;
-      const e = new Error(why);
-      for (const q of this.pending.values()) q.rej(e);
-      this.pending.clear();
-      for (const r of this.owners.values()) r.onAcpDead(why);
-      this.owners.clear();
-    };
-    p.on('error', e => dead(this.name + ' 启动失败：' + e.message));
-    p.on('exit', code => { log?.(this.name + ' acp exited', code, lastErr()); dead(this.name + ' 进程退出了（' + code + '）'); });
+    // 管道出错（进程已经退了 / 关了 stdin 还往里写 → EPIPE）：没人监听 'error' 的话会变成未捕获异常，把整个 claclaw 带崩
+    p.stdin.on('error', e => {
+      log?.(this.name + ' acp stdin error', e.code || e.message);
+      if (this.hardKill) { try { p.kill(); } catch {} }
+      this.dead(p, this.name + ' 连接断了（' + (e.code || e.message) + '）');
+    });
+    p.stdout.on('error', e => log?.(this.name + ' acp stdout error', e.code || e.message));
+    p.stderr.on('error', () => {});
+    p.on('error', e => this.dead(p, this.name + ' 启动失败：' + e.message));
+    p.on('exit', code => { log?.(this.name + ' acp exited', code, lastErr()); this.dead(p, this.name + ' 进程退出了（' + code + '）'); });
     log?.(this.name + ' acp starting', bin);
     // initialize 最多等 45 秒（老电脑上几个会话同时启动时会超过 15 秒）。失败或挂住就杀掉子进程、
     // proc/ready 置空，下次用时自动重新拉起；不然整个后端就永久不可用了
@@ -179,29 +196,52 @@ export class AcpAgent {
     // clientCapabilities 按 ACP 的样子给全（fs 两项都 false：文件读写由 agent 自己做）；iFlow 少了 fs 这项会拒绝 initialize
     const init = this.rpc('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: 'claclaw', version: '0.1' } });
     const timeout = new Promise((_, rej) => { initTimer = setTimeout(() => rej(new Error('initialize 45 秒没有应答')), 45000); initTimer.unref?.(); });
-    this.ready = Promise.race([init, timeout])
-      .then(r => { clearTimeout(initTimer); this.caps = r?.agentCapabilities || {}; log?.(this.name + ' acp ready'); return p; })
+    const ready = Promise.race([init, timeout])
+      .then(r => {
+        clearTimeout(initTimer);
+        if (this.proc !== p) throw new Error(this.name + ' 已停止');   // 应答回来之前被 stop() 了
+        this.caps = r?.agentCapabilities || {}; log?.(this.name + ' acp ready'); return p;
+      })
       .catch(e => {
         clearTimeout(initTimer);
         const last = lastErr();
         const why = this.name + ' 初始化失败：' + (e?.message || e) + (last ? '（' + last + '）' : '');
         try { p.kill(); } catch {}
-        dead(why);
+        this.dead(p, why);
         throw new Error(why);
       });
-    this.ready.catch(() => {});
-    return this.ready;
+    this.ready = ready;
+    ready.catch(() => {});
+    return ready;
+  }
+  // 进程 p 不能用了：状态清掉（下次用时重新拉起），没回的请求全部失败，接着的会话收到通知。
+  // 不是当前进程（已经 stop 过、或换成新进程了）就不管
+  dead(p, why) {
+    if (this.proc !== p) return;
+    this.proc = null; this.ready = null;
+    clearTimeout(this.idleTimer); this.idleTimer = null;
+    const e = new Error(why);
+    const pend = [...this.pending.values()]; this.pending.clear();
+    const owners = [...this.owners.values()]; this.owners.clear();
+    for (const q of pend) q.rej(e);
+    for (const r of owners) { try { r.onAcpDead(why); } catch {} }
+  }
+  // 往进程写一行；写不了（没在跑 / stdin 已关）返回 false。真正的 EPIPE 是异步的，由 stdin 的 'error' 处理
+  send(msg) {
+    const p = this.proc;
+    if (!p || !p.stdin || p.stdin.destroyed || !p.stdin.writable) return false;
+    try { p.stdin.write(JSON.stringify(msg) + '\n'); return true; } catch { return false; }
   }
   rpc(method, params) {
     if (!this.proc) return Promise.reject(new Error(this.name + ' 没在运行'));
     return new Promise((res, rej) => {
       const id = ++this.rid;
       this.pending.set(id, { res, rej });
-      this.proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
+      if (!this.send({ jsonrpc: '2.0', id, method, params })) { this.pending.delete(id); rej(new Error(this.name + ' 没在运行')); }
     });
   }
-  notify(method, params) { this.proc?.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n'); }
-  answer(id, result, error) { this.proc?.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, ...(error ? { error } : { result }) }) + '\n'); }
+  notify(method, params) { this.send({ jsonrpc: '2.0', method, params }); }
+  answer(id, result, error) { this.send({ jsonrpc: '2.0', id, ...(error ? { error } : { result }) }); }
   onNotify(m) {
     if (m.method !== 'session/update') return;
     this.owners.get(m.params?.sessionId)?.handle(m.params.update || {});
@@ -230,7 +270,22 @@ export class AcpAgent {
   }
   // 要用了：起好进程，取消空闲关闭
   async use(log) { await this.start(log); clearTimeout(this.idleTimer); }
-  stop() { try { this.proc?.stdin.end(); if (this.hardKill) this.proc?.kill(); } catch {} }
+  // 关进程：状态马上清掉（之后 rpc 直接失败、下次 use 重新拉起），没回的请求全部失败。
+  // 返回旧进程退出的 Promise（最多等 5 秒）；下次 start 也会先等它，所以「stop 完马上 use」不会新旧两个进程同时跑
+  stop() {
+    clearTimeout(this.idleTimer); this.idleTimer = null;
+    this.gen++;
+    const p = this.proc;
+    if (!p) { this.ready = null; return this.exiting || Promise.resolve(); }   // 没在跑（可能正等着旧进程退出再起）：那次 start 作废
+    this.dead(p, this.name + ' 已停止');
+    try { p.stdin.end(); } catch {}
+    if (this.hardKill) { try { p.kill(); } catch {} }
+    let t;
+    const wait = Promise.race([p.exited, new Promise(res => { t = setTimeout(res, 5000); t.unref?.(); })])
+      .then(() => { clearTimeout(t); if (this.exiting === wait) this.exiting = null; });
+    this.exiting = wait;
+    return wait;
+  }
   // 没有会话接着时，过 10 分钟把进程关掉；模型库改过（stale）就马上关，下次用时带上新的
   idleCheck() {
     clearTimeout(this.idleTimer);

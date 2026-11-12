@@ -121,7 +121,8 @@ export class Groups {
     // 正在发给协同成员、还没等到对方回话（202 / 回复）的：`群id|编号` → { key, depth, peerId, answered }。
     // 对方可能在我们这边还等着 202 时就把回复发来了（不装 claclaw 的对方常这样），这时也要认
     this.inflight = new Map();
-    fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(logDir, { recursive: true });
+    // 群记录和附件只给自己看：目录 0700（里面的文件靠目录挡住，已有的目录也收紧）
+    for (const d of [dir, logDir]) { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); try { fs.chmodSync(d, 0o700); } catch {} }
     // 解散过的群（墓碑，留 30 天）：之后晚到的同步、消息、回复一律不收，镜像不会被「复活」
     this.goneFile = path.join(dir, 'gone.json');
     try { this.gone = JSON.parse(fs.readFileSync(this.goneFile, 'utf8')) || {}; } catch { this.gone = {}; }

@@ -26,7 +26,8 @@ const DB = path.join(MHOME, 'v2', 'sqlite', 'runtime-state.sqlite');
 
 let sqlite = null;
 try { sqlite = await import('node:sqlite'); } catch {}
-export const mmBin = () => findBin('mcode', [path.join(HOME, '.minimax-code', 'bin', 'mcode')]);
+// findBin 的第二个参数是「先找的目录」（不是文件）
+export const mmBin = () => findBin('mcode', [path.join(HOME, '.minimax-code', 'bin')]);
 export const mmInstalled = () => !!mmBin();
 export const mmSupported = () => !!sqlite;
 export const mmUnsupportedReason = () => '当前 Node 没有 node:sqlite（需要 Node 22.13 以上），读不了 MiniMax Code 的会话';
