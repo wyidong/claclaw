@@ -23,8 +23,16 @@ export function makeSkins(DATA, ROOT, { soundOk = () => true } = {}) {
   const LOCAL = path.join(DATA, 'avatars');
   const UP = path.join(LOCAL, 'up');
   let cache = null;
+  // 预设图改过名：index.json 的 moved（旧引用 → 新引用），读 skins.json 时顺手换掉并存回
+  const moved = () => { try { const m = JSON.parse(fs.readFileSync(path.join(REPO, 'index.json'), 'utf8')).moved; return m && typeof m === 'object' ? m : {}; } catch { return {}; } };
   const all = () => {
-    if (!cache) { try { cache = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { cache = {}; } if (!cache || typeof cache !== 'object' || Array.isArray(cache)) cache = {}; }
+    if (!cache) {
+      try { cache = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { cache = {}; }
+      if (!cache || typeof cache !== 'object' || Array.isArray(cache)) cache = {};
+      const mv = moved(); let n = 0;
+      for (const v of Object.values(cache)) if (v && typeof v.av === 'string' && typeof mv[v.av] === 'string') { v.av = mv[v.av]; n++; }
+      if (n) try { writeJsonAtomic(FILE, cache); } catch {}
+    }
     return cache;
   };
   // 引用 → 磁盘上的文件（不合法 / 不存在都给 null）
@@ -33,14 +41,16 @@ export function makeSkins(DATA, ROOT, { soundOk = () => true } = {}) {
     const [kind, ...rest] = ref.split('/');
     if (kind === 'l' && rest[0] === 'up') return null;   // 上传的只走 u/
     const f = kind === 'p' ? path.join(REPO, ...rest) : kind === 'l' ? path.join(LOCAL, ...rest) : path.join(UP, ...rest);
-    return fs.existsSync(f) ? f : null;
+    if (fs.existsSync(f)) return f;
+    const to = kind === 'p' ? moved()[ref] : null;   // 改过名的预设：旧网址还能取到新图
+    return typeof to === 'string' && to !== ref && REF.test(to) ? fileOf(to) : null;
   };
   const typeOf = (f) => TYPES[path.extname(f).slice(1).toLowerCase()] || 'application/octet-stream';
   // 选头像的页面要的清单：仓库预设 + 本机有的（每个子目录一组）+ 预设网名
   const index = () => {
     let base = { groups: [], names: [] };
     try { base = JSON.parse(fs.readFileSync(path.join(REPO, 'index.json'), 'utf8')); } catch {}
-    const groups = (base.groups || []).map(g => ({ id: g.id, name: g.name, base: 'p/' + g.id, items: g.items || [] }));
+    const groups = (base.groups || []).map(g => ({ id: g.id, name: g.name, base: 'p/' + g.id, items: g.items || [], ...(g.titles && typeof g.titles === 'object' ? { titles: g.titles } : {}) }));   // titles：每张图的名字（比如西游记角色），选头像时悬停 / 长按看得到
     let dirs = [];
     try { dirs = fs.readdirSync(LOCAL, { withFileTypes: true }).filter(d => d.isDirectory() && d.name !== 'up' && /^[a-z0-9-]+$/.test(d.name)).map(d => d.name).sort(); } catch {}
     const known = Object.keys(LOCAL_NAMES), rank = d => (known.includes(d) ? known.indexOf(d) : known.length);

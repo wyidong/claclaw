@@ -1261,6 +1261,9 @@ textarea.md-in:focus-visible{outline:none}
 .h-row.md-f>.md-fk::after{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
 .md-sel{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;line-height:26px;cursor:pointer}
 .h-row.md-f>.md-fk .md-sel{display:block;width:100%;min-height:38px;padding:7px 30px 7px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);line-height:22px;box-sizing:border-box}
+.h-row.md-f>.md-fk.md-fkb .md-fv{display:block;min-height:38px;padding:8px 30px 8px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font-size:14px;line-height:20px;box-sizing:border-box;pointer-events:none}   /* 接口格式：框里显示小一号的字，点开是透明盖在上面的系统选择框（16px 免得 iOS 放大） */
+.h-row.md-f>.md-fk.md-fkb .md-sel{position:absolute;inset:0;width:100%;min-height:0;padding:0;border:0;opacity:0;font-size:16px}
+.h-row.md-f>.md-fk.md-fkb:focus-within .md-fv{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
 .h-row.md-f>.md-fk .md-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
 .md-fko{position:relative;display:inline-flex;align-items:center;color:var(--muted)}   /* 小标题右边的格式：看着是小字，点开是系统选择框（透明盖在上面，16px 免得 iOS 放大） */
 .md-fko select{position:absolute;inset:0;width:100%;opacity:0;font-size:16px;cursor:pointer}
@@ -2096,7 +2099,7 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">语音</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读<small id="setTtsSub">念出正在看的会话的新回复</small></span><span class="sw" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读<small id="setTtsSub">朗读当前会话的新回复</small></span><span class="sw" aria-hidden="true"></span></button>
           <label class="set-item"><span class="lb">播报范围<small id="setTtsModeSub">只念回复</small></span>
             <select id="setTtsMode"><option value="off">关（不朗读）</option><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
@@ -2141,9 +2144,9 @@ select.pe-in{text-align-last:right}
       <div class="set-sec">
         <div class="set-h">会话</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">空闲关闭<small>没人看也没在干活，多久后关掉</small></span>
+          <label class="set-item"><span class="lb">空闲关闭<small>无人查看且空闲多久后关闭</small></span>
             <select id="setIdle"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="240">4 小时</option></select></label>
-          <label class="set-item"><span class="lb">接管等待<small>终端 / VS Code 里的会话闲置多久后可以接管</small></span>
+          <label class="set-item"><span class="lb">接管等待<small>终端 / VS Code 会话闲置多久后可接管</small></span>
             <select id="setTake"><option value="0">随时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select></label>
         </div>
       </div>
@@ -2220,12 +2223,12 @@ var ICON_SEND='<svg width="22" height="22" viewBox="0 0 22 22" fill="none" strok
 var ICON_STOP='<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true"><rect x="3.5" y="3.5" width="11" height="11" rx="2"/></svg>';
 
 var MODES=[
- {key:'default',label:'默认',note:'改文件、运行命令前会先问你（你的权限设置里已允许的除外）。'},
- {key:'acceptEdits',label:'自动改文件',note:'改文件不再询问，运行命令仍会询问。'},
- {key:'plan',label:'计划',note:'只读：不会改文件，也不会运行命令。'},
- {key:'bypassPermissions',label:'跳过确认',note:'所有操作都不再询问。'},
- {key:'dontAsk',label:'不询问',note:'没预先允许的操作直接拒绝，不询问。'},
- {key:'auto',label:'自动判断',note:'由模型判断是否放行，拿不准时再问你。'}
+ {key:'default',label:'默认',note:'改文件、运行命令前先问你（已允许的除外）。'},
+ {key:'acceptEdits',label:'自动改文件',note:'改文件不问，运行命令仍问。'},
+ {key:'plan',label:'计划',note:'只读：不改文件、不运行命令。'},
+ {key:'bypassPermissions',label:'跳过确认',note:'所有操作都不问。'},
+ {key:'dontAsk',label:'不询问',note:'未预先允许的操作直接拒绝。'},
+ {key:'auto',label:'自动判断',note:'模型判断是否放行，拿不准再问你。'}
 ];
 var sessionModes=['default','acceptEdits','plan'];
 var ICON_NEW='<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="13" height="13" rx="3"/><path d="M9 6v6M6 9h6"/></svg>';
@@ -2788,11 +2791,11 @@ function showSession(restore){
     h+='<div class="ds-sec">模型表现<small>每次请求算一次；首字、速度只算成功的</small></div><div class="ds-tw"><table class="ds-tb"><thead><tr><th>模型</th><th>请求</th><th>出错</th><th>平均首字</th><th>平均速度</th><th class="col-out">输出</th></tr></thead><tbody>'
       +s.miniModels.map(function(m){return '<tr><td>'+esc(m.model)+'</td><td>'+m.calls+'</td><td'+(m.errors?' style="color:var(--deny)"':'')+'>'+(m.errors||'')+'</td><td>'+(m.ttftMs!=null?dsSec(m.ttftMs):'--')+'</td><td>'+(m.tps!=null?m.tps+' tok/s':'--')+'</td><td class="col-out">'+dsTk(m.out)+'</td></tr>'}).join('')+'</tbody></table></div>';
   }
-  h+='<div class="ds-sec">每一轮<small>一颗球 = 一轮，面积 = 消耗；底层输入、中层缓存读、顶层输出；右上小红点 = 工具出错。点球进那一轮</small><button type="button" class="ds-tg" data-tg="beads">'+(dissBeadsOpen?'收起':'展开全部 '+ts.length+' 轮')+'</button></div><div class="ds-beads'+(dissBeadsOpen?'':' one')+'">';
+  h+='<div class="ds-sec">每一轮<small>一球一轮，大小 = 消耗；自下而上：输入、缓存读、输出；红点 = 工具出错。点球看这一轮</small><button type="button" class="ds-tg" data-tg="beads">'+(dissBeadsOpen?'收起':'展开全部 '+ts.length+' 轮')+'</button></div><div class="ds-beads'+(dissBeadsOpen?'':' one')+'">';
   var hi=ts.length-dissPage*DS_PAGE,lo=Math.max(0,hi-DS_PAGE);   // 当前页：倒序，第一页是最新的几轮；球还是按时间从左到右
   ts.forEach(function(t,k){h+=dsBead(t,max,k<lo||k>=hi)});
   h+='</div>';
-  h+='<div class="ds-sec">每轮明细<small>最新的在最上面；点一行进那一轮；橙色序号 = 这轮比本会话中位数重一倍以上，红色 = 工具出错</small></div>'+dsPager(ts.length);
+  h+='<div class="ds-sec">每轮明细<small>最新在上；橙色序号 = 消耗超中位数一倍，红色 = 工具出错</small></div>'+dsPager(ts.length);
   h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>轮</th><th>步</th><th>工具</th><th class="col-inp">输入Σ</th><th class="col-cw ds-opt" title="该轮各步缓存写之和">缓存写</th><th class="col-cr ds-opt" title="该轮末步命中缓存的输入，快照值，各轮不可相加">缓存读·末步</th><th class="col-cr" title="该轮各步缓存读之和，各轮可相加">缓存读Σ</th><th class="col-out">输出Σ</th><th title="输入Σ + 缓存写 + 缓存读Σ + 输出Σ">合计</th><th>耗时</th></tr></thead>';
   for(var k=hi-1;k>=lo;k--){   // 最新一轮在第一行
     var t=ts[k],cls=t.errors?'err':t.heavy?'heavy':'',marks=dsMarks(t);
@@ -2815,14 +2818,14 @@ function showTurn(i){
   dissEl.querySelector('.ds-n').textContent='第 '+i+' 轮 / '+j.turns.length;
   dissEl.querySelector('.ds-prev').disabled=i<=1;dissEl.querySelector('.ds-next').disabled=i>=j.turns.length;
   var marks=dsMarks(t);
-  var h='<div class="ds-hero"><div class="ds-k">第 '+i+' 轮 · 本轮消耗 Tokens · '+dsWhen(t.at,true)+'</div><div class="ds-big">'+(t.noStats?'--<small>这一轮是 Mini 开始记明细之前的对话，没记用量和耗时</small>':dsNum(t.total)+'<small>≈'+dsTk(t.total)+' · 共 '+t.nSteps+' 步 · 干活 '+dsDur(t.durMs)+'</small>')+'</div>'+dsLegend(t,s)
+  var h='<div class="ds-hero"><div class="ds-k">第 '+i+' 轮 · 本轮消耗 Tokens · '+dsWhen(t.at,true)+'</div><div class="ds-big">'+(t.noStats?'--<small>Mini 记明细之前的对话，无用量和耗时</small>':dsNum(t.total)+'<small>≈'+dsTk(t.total)+' · 共 '+t.nSteps+' 步 · 干活 '+dsDur(t.durMs)+'</small>')+'</div>'+dsLegend(t,s)
     +'<div class="ds-meta">上下文 末步 <b>'+(t.noStats||t.crLast==null&&!t.ctx?'--':dsTk(t.steps.length?t.steps[t.steps.length-1].ctx:0))+'</b> · 最大 <b>'+(t.noStats?'--':dsTk(t.ctx))+'</b>'+(t.steps.length?' · 模型 '+esc(dsModel(t.steps[t.steps.length-1].model)):'')+'</div>'
     +(marks.length?'<div class="ds-chips">'+marks.map(function(m){return '<span class="ds-chip'+(/<u>/.test(m)?' bad':/<i>/.test(m)?' warn':'')+'">'+m.replace(/<\/?[ui]>/g,'')+'</span>'}).join('')+'</div>':'')+'</div>';
   h+='<div class="ds-sec">你说的<small>'+dsN(t.chars)+' 字'+(t.queued?' · 干活中插的话':'')+'</small></div><div class="ds-q">'+(t.text?esc(t.text):'<span style="color:var(--muted)">（接着上一轮，没有新的话）</span>')+'</div>';
   h+='<div class="ds-sec">这一轮做了什么</div><div class="ds-chips"><span class="ds-chip"><b>'+t.nSteps+'</b> 步</span><span class="ds-chip"><b>'+t.nTools+'</b> 次工具</span>'+(t.reads?'<span class="ds-chip">读 <b>'+t.reads+'</b> 个文件</span>':'')+(t.writes?'<span class="ds-chip">改 <b>'+t.writes+'</b> 个文件</span>':'')+(t.cmds?'<span class="ds-chip"><b>'+t.cmds+'</b> 条命令</span>':'')+(t.subagents?'<span class="ds-chip">子代理 <b>'+t.subagents+'</b></span>':'')+(t.replyChars?'<span class="ds-chip">回复 <b>'+dsN(t.replyChars)+'</b> 字</span>':'')+'</div>'
     +(t.files&&t.files.length?'<div class="ds-files">改了：'+t.files.map(esc).join('，')+'</div>':'');
   if(t.mini)h+=dsMiniAsk(t.mini);
-  h+='<div class="ds-sec">逐步<small>一步 = 一次模型调用；点一步看它调了什么。工具调用本身不另算 token（算在这一步的输出里），所以只给次数</small></div>';
+  h+='<div class="ds-sec">逐步<small>一步 = 一次模型调用；工具调用的 token 算在该步输出里，只计次数</small></div>';
   h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>步</th><th>模型</th><th>模型耗时</th><th class="col-inp">输入</th><th class="col-cw ds-opt">缓存写</th><th class="col-cr">缓存读</th><th class="col-out">输出</th><th class="ds-opt">思考</th><th>工具</th><th>合计</th></tr></thead><tbody>';
   (t.steps||[]).forEach(function(st,k){
     var errs=st.tools.filter(function(u){return u.err}).length;
@@ -2837,7 +2840,7 @@ function showTurn(i){
     if(st.thought)d+=dsRaw('思考原文',st.thought);
     if(st.text)d+='<div class="ds-tx">'+esc(st.text)+'</div>';
     if(st.body)d+=dsRaw('服务返回的原文',st.body,true);
-    if(st.noStats)d+='<div class="ds-note">这一步没记用量和耗时（Mini 开始记明细之前的对话）</div>';
+    if(st.noStats)d+='<div class="ds-note">无用量和耗时（Mini 记明细之前）</div>';
     else d+='<div class="ds-note">这一步的上下文 '+dsTk(st.ctx)+'（输入 '+dsTk(st.inp)+(st.cr!=null?' + 缓存读 '+dsTk(st.cr):'')+(st.cw!=null?' + 缓存写 '+dsTk(st.cw):'')+'）· 输出 '+dsTk(st.out)+(st.think?'（其中思考 '+dsTk(st.think)+'，已含在输出里）':'')+(st.stop?' · 结束原因 '+esc(st.stop):'')+(st.ttftMs!==undefined?(st.ttftMs!=null?' · 首字 '+dsSec(st.ttftMs):'')+(st.tps?' · '+st.tps+' tok/s':'')+(st.retry?' · 去掉调参（temperature / 关思考）重试的':''):'')+'</div>'+(st.err?'<div class="ds-note" style="color:var(--deny)">'+esc(st.err)+'</div>':'');
     h+='<tr class="d" hidden><td colspan="10">'+(d||'这一步没有记录')+'</td></tr>';
   });
@@ -4430,7 +4433,7 @@ function renderCfg(){
       seg.appendChild(b);
     });
     var cur=EFFORTS.find(function(e){return e.key===cfg.effort});
-    $('#cfgEffortNote').textContent=cur?cur.note:'没指定：用模型自己的默认强度';
+    $('#cfgEffortNote').textContent=cur?cur.note:'未指定：用模型默认强度';
   }
   var mb=$('#cfgModes');mb.innerHTML='';
   modeList().forEach(function(k){
@@ -4640,7 +4643,7 @@ function vcSec(name,tag,hint,rows,ids){
 function renderVoices(){
   if(hostView!=='voices')return;
   var h=pgHd('data-act="vc-back"',peerFromList?'返回':'返回设置','语音管理')+'<div class="pe-err"'+(vcMsg?'':' hidden')+'>'+esc(vcMsg)+'</div>';
-  h+='<div class="vc-tip">勾上的声音出现在设置的「声音」列表和长按喇叭的列表里（默认只勾了几个常用的）；点名字可以改别名，清空就回到原名。点 ▶ 试听。</div>';
+  h+='<div class="vc-tip">勾上的声音才出现在「声音」列表里；点名字改别名（清空恢复原名），点 ▶ 试听。</div>';
   var dev=ttsVoices();
   h+=vcSec('本机','免费','这台设备（浏览器）自带的声音，不用配置',dev.map(function(v){return vcRow(v.voiceURI,ttsLabel(v))}).join('')||'<div class="h-row vc-hint">这台设备没有中文声音</div>',dev.map(function(v){return v.voiceURI}));
   if(!vcEng)h+='<div class="h-empty">加载中…</div>';
@@ -4719,7 +4722,7 @@ function renderSkills(){
         return cs.map(function(k){return '<div class="h-row sk-row"><span class="sk-ic">'+clawIcon(k)+'</span><span class="k">'+esc(CLAW_NAMES[k]||k)+'<br><small style="color:var(--muted)">'+st+'</small></span>'+btn+'</div>'}).join('');
       }).join(''):'<div class="h-row"><span class="v">这台电脑上没有用得上它的 Claw</span></div>')+
       '</div></div>';
-  }).join('')+'<div class="pe-note">技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。除 Claude Code 外的 Agent 共用一份，装一个都能用。</div>';
+  }).join('')+'<div class="pe-note">技能是给 AI 用的说明和命令，用到时自动安装；除 Claude Code 外各 Agent 共用一份。</div>';
   $('#hostBody').innerHTML=h;
 }
 // ---------- 模型管理：以 Key 为单位登记、按供应商分组，入口在 Claw 页顶部和宿主页的 Claw 区 ----------
@@ -4762,7 +4765,8 @@ function mdlFmtX(){var x=document.querySelector('#hostBody .md-fmtx'),r=x&&x.clo
 function mdlEpMain(fmt,url,auto){
   return '<div class="h-row md-f md-ep"><label class="md-lb" for="mdUrl0">接口地址<span class="md-fmtx">'+esc(url?MDL_FMT[fmt]||fmt:'格式自动判断')+'</span></label><input type="hidden" class="md-fmt" value="'+esc(fmt)+'"'+(auto?' data-auto="1"':'')+'>'+
     '<textarea id="mdUrl0" rows="1" class="md-in mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="比如 https://api.deepseek.com">'+esc(url||'')+'</textarea></div>'}
-function mdlFmtRow(fmt){return '<div class="h-row md-f"><label class="md-lb" for="mdFmt0">接口格式</label><span class="md-fk"><select id="mdFmt0" class="md-sel" aria-label="接口格式">'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></div>'}
+function mdFv0(){var f=$('#mdFmt0'),v=f&&f.parentNode.querySelector('.md-fv');if(v)v.textContent=MDL_FMT[f.value]||f.value}
+function mdlFmtRow(fmt){return '<div class="h-row md-f"><label class="md-lb" for="mdFmt0">接口格式</label><span class="md-fk md-fkb"><span class="md-fv">'+esc(MDL_FMT[fmt]||fmt)+'</span><select id="mdFmt0" class="md-sel" aria-label="接口格式">'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></div>'}
 function mdlEpRow(fmt,url,auto){
   return '<div class="h-row md-f md-ep"><span class="md-lb"><span>接口地址</span><span class="md-fk md-fko"><span class="md-fv">'+esc(MDL_FMT[fmt]||fmt)+'</span><select class="md-fmt" aria-label="接口格式"'+(auto?' data-auto="1"':'')+'>'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></span>'+
     '<textarea rows="1" class="md-in mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">'+esc(url||'')+'</textarea></div>'}
@@ -4828,9 +4832,9 @@ function renderModels(){
         return '<div class="h-row h-link" data-act="mdl-prov" data-id="'+esc(p.id)+'"><span class="k md-kk"><span class="md-key">'+esc(mdlMask(p))+'</span><span class="md-sub">'+esc((p.label?p.label+' · ':'')+hosts.join(' · '))+'</span></span>'+
           '<span class="v" style="flex:none">'+p.models.length+' 个模型</span><span class="chev" aria-hidden="true"></span></div>'}).join('')+
         '<div class="h-row h-link md-addk" data-act="mdl-prov-new" data-from="'+esc(g.items[0].id)+'"><span class="k">＋ 再加一个 '+esc(g.name)+' 的 Key</span></div>');
-    }).join('')||'<div class="pe-note">还没有添加 Key。点下面「添加 Key」：填 Key 和接口地址就行，其他的都可以不填。</div>';
+    }).join('')||'<div class="pe-note">还没有 Key。点「添加 Key」，填 Key 和接口地址即可。</div>';
     h+='<div class="md-acts2 one"><button type="button" class="md-btn2" data-act="mdl-prov-new">＋ 添加 Key</button></div>';
-    h+='<div class="pe-note">按接口地址的域名分供应商。各 Claw 的会话里选模型时，从这里加过的模型里选。Key 只存在这台电脑上（data/models.json），列表只显示最后 4 位；查看或复制完整的 Key 要再输一次 claclaw 的密码。</div>';
+    h+='<div class="pe-note">按接口域名分供应商，各 Claw 会话从这里选模型。Key 只存本机、只显示后 4 位，看完整 Key 要输密码。</div>';
   }
   $('#hostBody').innerHTML=h;mdGrow();
 }
@@ -4987,11 +4991,11 @@ $('#hostBody').addEventListener('click',function(e){
 });
 $('#hostBody').addEventListener('input',function(e){
   if(e.target.id==='pePoolQ'){peerPoolQ=e.target.value;var l=$('#pePoolList');if(l&&peerCfg)l.innerHTML=poolListHtml(peerCfg)}   // 协同会话页搜索：只重画列表
-  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden')f0.value=fs.value}mdlFmtX()}   // 模型管理：接口格式跟着地址猜
+  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden'){f0.value=fs.value;mdFv0()}}mdlFmtX()}   // 模型管理：接口格式跟着地址猜
 });
 $('#hostBody').addEventListener('change',function(e){
   if(e.target.classList.contains('md-fmt')){e.target.removeAttribute('data-auto');var fv=e.target.parentNode.querySelector('.md-fv');if(fv)fv.textContent=MDL_FMT[e.target.value]||e.target.value}
-  if(e.target.id==='mdFmt0'){var h0=document.querySelector('#hostBody .md-ep .md-fmt[type="hidden"]');if(h0){h0.value=e.target.value;h0.removeAttribute('data-auto')}mdlFmtX()}   // 「更多」里手动选了主地址的格式：不再跟着地址猜   // 手动选过格式：不再跟着地址猜
+  if(e.target.id==='mdFmt0'){mdFv0();var h0=document.querySelector('#hostBody .md-ep .md-fmt[type="hidden"]');if(h0){h0.value=e.target.value;h0.removeAttribute('data-auto')}mdlFmtX()}   // 「更多」里手动选了主地址的格式：不再跟着地址猜   // 手动选过格式：不再跟着地址猜
   // 会话池：勾 / 取消马上提交
   if(e.target.closest&&e.target.closest('#hostBody .pe-ss.pool')){var id=e.target.value,arr=(peerCfg.sessions||[]).slice();
     if(e.target.checked){if(arr.indexOf(id)<0)arr.push(id)}else arr=arr.filter(function(x){return x!==id});poolSave(arr)}
@@ -5077,7 +5081,7 @@ function peerNearHtml(c){
     return '<div class="h-row"><span class="k">'+esc(n.name)+'</span><span class="v"><span class="pe-mono">'+esc(n.host)+'</span><small>'+esc(n.ip||'IP 未知')+'</small></span>'+
       (n.paired?'<span class="pe-tag">已配对</span>':'<button type="button" class="pe-btn pri pe-mini" data-act="peer-near-pair" data-name="'+esc(n.name)+'" data-url="'+esc(n.base)+'" data-alt="'+esc(n.baseIp||'')+'">申请配对</button>')+'</div>';
   }).join('');
-  var empty=peerScanning?'<div class="pe-note" style="margin:10px 14px">正在找附近的 claclaw…</div>':peerNear&&!peerNear.length?'<div class="pe-note" style="margin:10px 14px">没找到。对方要开着协同、和这台电脑在同一个局域网；有的网络会屏蔽这种广播，那就在下面手动填地址。</div>':'';
+  var empty=peerScanning?'<div class="pe-note" style="margin:10px 14px">正在找附近的 claclaw…</div>':peerNear&&!peerNear.length?'<div class="pe-note" style="margin:10px 14px">没找到。对方需开协同、在同一局域网；网络屏蔽广播时在下面手动填地址。</div>':'';
   return '<div><div class="h-h">附近的 claclaw <button type="button" class="pe-scan" data-act="peer-scan"'+(peerScanning?' disabled':'')+'>'+(peerScanning?'查找中…':'重新查找')+'</button></div><div class="h-card">'+rows+empty+'</div></div>';
 }
 function paintPeerNear(){var el=$('#peNear');if(el&&peerCfg)el.innerHTML=peerNearHtml(peerCfg)}
@@ -5136,7 +5140,7 @@ function peerOutboxHtml(c){
     return '<div class="pe-req"><div class="pe-req-t"><b>'+(x.kind==='reply'?'回复':'消息')+' → '+esc(x.peer||'对方')+'</b><small>'+esc(x.text||'')+'</small>'+
       '<small>'+hm(x.at)+' 发出 · 重试 '+(x.tries||0)+' 次'+(x.lastError?' · '+esc(x.lastError):'')+'</small></div>'+
       '<div class="pe-req-b"><small>下次 '+hm(x.next)+'</small><button type="button" class="pe-btn del pe-mini" data-act="peer-outbox-cancel" data-id="'+esc(x.id)+'">取消</button></div></div>';
-  }).join('')+'</div><div class="pe-note">对方连不上或正忙时，消息先排在这里自动重发（最长 24 小时），送到后对方的回复会回到发起的会话。</div></div>';
+  }).join('')+'</div><div class="pe-note">对方连不上或正忙时，消息在此自动重发（最长 24 小时），回复回到原会话。</div></div>';
 }
 function peerPendingHtml(c){
   if(!c.pending||!c.pending.length)return '';
@@ -5144,7 +5148,7 @@ function peerPendingHtml(c){
     return '<div class="pe-req"><div class="pe-req-t"><b>'+esc(p.name)+'</b><small>IP '+esc(p.ip)+(p.two?' · 配对后双方都能主动找对方':' · 配对后只能对方找我们')+'</small></div>'+
       '<div class="pe-code">'+esc(p.code||'••')+'</div>'+
       '<div class="pe-req-b"><small>剩 '+fmtLeft(p.expiresAt)+'</small><button type="button" class="pe-btn del" data-act="peer-reject" data-id="'+esc(p.id)+'">拒绝</button></div></div>';
-  }).join('')+'</div><div class="pe-note">核对 IP 和名字是你认可的那台电脑，再把这个两位数配对码告诉对方（微信、口头都行）。对方填对就配对完成；不认识就点「拒绝」。</div></div>';
+  }).join('')+'</div><div class="pe-note">确认 IP 和名字是你认识的电脑，再把配对码告诉对方；不认识就点「拒绝」。</div></div>';
 }
 // 已配对的对方：固定编号 + 固定颜色（会话列表里标「最近和谁通信」用同一套）
 // 对方的颜色：按对方 id 算出一个色相（看起来随机，同一个对方永远同一个颜色）
@@ -5256,7 +5260,7 @@ function peerDetailHtml(c,p){
   var h='<div class="claw-h pe-title ptint '+peerPc(p)+'"><span class="pe-peer-name">'+peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span></div>';
   h+='<div><div class="h-card" id="peDetLive">'+peerDetailLive(c,p)+'</div></div>';
   h+='<div><div class="h-h">开放给它的会话</div><div class="h-card"><div class="h-row pe-col">'+allowHtml+'</div></div>'+
-    '<div class="pe-note">'+(c.canAssign?'它只能看到、找到勾上的会话；勾选马上生效。':'它只能看到、找到勾上的会话。开放哪些会话只能在这台电脑上用 127.0.0.1 打开网页时改。')+'</div></div>';
+    '<div class="pe-note">'+(c.canAssign?'对方只能看到勾上的会话，勾选即生效。':'对方只能看到勾上的会话；只能在本机用 127.0.0.1 打开时修改。')+'</div></div>';
   var prs=Array.isArray(p.relays)?p.relays:[];
   var relayRow=prs.length?prs.map(function(r,i){return '<span class="pe-mono">'+(prs.length>1?(i?'备 ':'主 '):'')+esc(r.replace(/#.*$/,'#…'))+'</span>'}).join('<br>'):(p.relays?p.relays+' 个':'没有');
   h+=hSec('连接',
@@ -5282,7 +5286,7 @@ function peerAddHtml(c){
     :
       '<div class="h-row md-f"><label class="md-lb" for="peUrl">对方地址</label><textarea id="peUrl" class="md-in" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="对方给的协同地址（局域网的，或带 #pin= 的中继地址）"></textarea></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-start">申请配对</button></div>')+
-    '</div><div class="pe-note">申请后对方页面上会出现一个两位数配对码，问对方要来填上就配好了，之后双方都能主动找对方。</div></div>';
+    '</div><div class="pe-note">申请后对方页面会显示两位配对码，向对方要来填上即可。</div></div>';
   return h;
 }
 // 协同会话：上面「已加入」（按 Claw 分组，一眼看出开放了哪些 Claw 的会话，点「移出」马上生效）；
@@ -5321,7 +5325,7 @@ function poolListHtml(c){
 }
 function peerPoolHtml(c){
   var h='<div><div class="h-h">已加入（'+(c.sessions||[]).length+'）</div><div class="h-card" id="pePoolJoined">'+poolJoinedHtml(c)+'</div></div>';
-  if(!c.canAssign)return h+'<div class="pe-note">开放哪些会话只能在这台电脑上用 127.0.0.1 打开网页时改，这里只能看。</div>';
+  if(!c.canAssign)return h+'<div class="pe-note">只能在本机用 127.0.0.1 打开时修改，这里只读。</div>';
   var have=CLAW_ORDER.filter(function(k){return (peerList||[]).some(function(s){return (s.claw||'claude')===k})});
   if(have.indexOf(peerPoolClaw)<0)peerPoolClaw=have[0]||'claude';
   var cnt=function(k){return (c.sessions||[]).filter(function(id){return clawOf(id)===k}).length};
@@ -5329,7 +5333,7 @@ function peerPoolHtml(c){
     '<div class="pe-seg">'+have.map(function(k){return clawSegBtn(k,cnt(k),k===peerPoolClaw)}).join('')+'</div>'+
     '<div class="h-row"><input id="pePoolQ" class="pe-in pe-q" placeholder="搜索会话名、目录" value="'+esc(peerPoolQ)+'"></div>'+
     '<div id="pePoolList">'+poolListHtml(c)+'</div>'+
-    '</div><div class="pe-note">勾上马上加入、取消马上移出。加入的会话，再到每个对方的详情里设它能看到哪些。'+(c.enabled?'':'协同还没开启：加好会话后回上一页点「开启」。')+'</div></div>';
+    '</div><div class="pe-note">勾选即加入，取消即移出；每个对方能看哪些，在对方详情里设。'+(c.enabled?'':'协同未开启：加好后回上一页点「开启」。')+'</div></div>';
   return h;
 }
 // 改会话池：马上提交，只重画受影响的几块（不整页重画，搜索框里的字和滚动位置都不动）
@@ -5353,12 +5357,12 @@ function peerNetHtml(c){
       '<div class="h-row"><span class="k">名字</span><input id="peName" class="pe-in" maxlength="40" value="'+esc(c.name||'')+'"></div>'+
       '<div class="h-row"><span class="k">端口</span><input id="pePort" class="pe-in mono" type="number" min="1024" max="65535" value="'+c.port+'"></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-save">保存</button></div>')+
-    '</div>'+(c.local?'<div class="pe-note">'+(locked?'已经有配对，名字和端口不能再改（改了对方就找不到这台电脑了）；确实要改，先撤销全部配对。':'名字会显示在对方那边。')+'</div>':'')+'</div>';
+    '</div>'+(c.local?'<div class="pe-note">'+(locked?'已有配对，名字和端口不能改；要改先撤销全部配对。':'名字会显示给对方。')+'</div>':'')+'</div>';
   if(c.base)h+='<div><div class="h-h">我们的协同地址</div><div class="h-card">'+
     (c.relay?hRow('中继',c.local?'<span class="pe-mono">'+esc(c.relay.replace(/#.*$/,'#…'))+'</span> <button type="button" class="pe-btn pe-mini" data-act="peer-copy" data-copy="'+esc(c.relay)+'">复制</button>':'已设置'):'')+
     (c.baseName?hRow('局域网','<span class="pe-mono">'+esc(c.baseName)+'</span>'):'')+
     hRow(c.baseName?'局域网 IP':'局域网','<span class="pe-mono">'+esc(c.base)+'</span>')+
-    '</div><div class="pe-note">地址里不含密码：别人拿到只能申请配对，要你把两位数配对码告诉他才能配上。同一个局域网里优先直连，连不上自动走中继。</div></div>';
+    '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。同一局域网直连，连不上自动走中继。</div></div>';
   if(c.local)h+='<div><div class="h-h">中继（跨网络）</div><div class="h-card">'+
     (c.relayList||[]).map(function(r){
       return '<div class="h-row pe-relay"><span class="k"><span class="pe-rl1"><em class="pe-route'+(r.primary?' rl':'')+'">'+(r.primary?'主':'备')+'</em><span class="pe-mono">'+esc(r.host||'')+'</span></span>'+
@@ -5368,7 +5372,7 @@ function peerNetHtml(c){
     }).join('')+
     '<div class="h-row md-f"><label class="md-lb" for="peRelayInv">'+(c.relayInvite?'再加一个邀请码':'邀请码')+'</label><textarea id="peRelayInv" class="md-in" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴中继邀请码 clarelay1.…'+(c.relayInvite?'（加进来先当备用）':'')+'"></textarea></div>'+
     '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">'+(c.relayInvite?'添加中继':'保存邀请码')+'</button></div>'+
-    '</div><div class="pe-note">不在同一个局域网时经中继互发，可以同时连几个（主 → 备）：联系对方时先局域网、再主中继、再备用中继。中继地址每次联系对方时自动告诉它（用 claclaw 的对方会自动更新），换中继、加备用都不用重新配对。</div></div>';
+    '</div><div class="pe-note">不在同一局域网时经中继互发，依次试：局域网 → 主中继 → 备用中继。中继地址自动同步给对方，换中继不用重新配对。</div></div>';
   return h;
 }
 function peerMainHtml(c){
@@ -5385,7 +5389,7 @@ function peerMainHtml(c){
     peerLink('peer-sub','net','本机与网络',c.relay||c.relayInvite?'中继'+relayStateText(c):'只走局域网')+
     '</div></div>';
   if(c.local&&c.enabled&&c.base)h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请</button></div>'+
-    '<div class="pe-note">邀请里有我们的地址和配对说明，发给对方（或对方的 AI）照着就能申请配对。</div>';
+    '<div class="pe-note">邀请含地址和配对说明，发给对方（或对方的 AI）照着申请即可。</div>';
   return h;
 }
 function paintPeerLive(){
@@ -5568,7 +5572,7 @@ function openInstall(claw){
   var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
   loginClaw=null;
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc('安装 '+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
-    +'<p class="lg-hint">在这台电脑上安装 '+esc(nm)+'，大约几分钟。装好后再填 API key 就能用了。</p>'
+    +'<p class="lg-hint">在本机安装 '+esc(nm)+'，约几分钟；装好填 API Key 即可用。</p>'
     +'<div class="lg-body"><div class="lg-st">正在开始…</div></div>'
     +'<div class="lg-ft"><button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';
   p.classList.add('on');
@@ -5947,7 +5951,7 @@ function openSkin(s){
       ix.groups.forEach(function(g){
         var h=document.createElement('div');h.className='gp-sec';h.textContent=g.name+(g.local?' · 只在这台电脑上有':'');list.appendChild(h);
         var grid=document.createElement('div');grid.className='av-grid';
-        g.items.forEach(function(f){var ref=g.base+'/'+f,bt=document.createElement('button');bt.type='button';bt.dataset.av=ref;bt.innerHTML='<img alt="" loading="lazy" src="/avatars/'+esc(ref)+'">';grid.appendChild(bt)});
+        g.items.forEach(function(f){var ref=g.base+'/'+f,bt=document.createElement('button');bt.type='button';bt.dataset.av=ref;var tt=g.titles&&g.titles[f];if(tt){bt.title=tt;bt.setAttribute('aria-label',tt)}bt.innerHTML='<img alt="" loading="lazy" src="/avatars/'+esc(ref)+'">';grid.appendChild(bt)});
         list.appendChild(grid);
       });
     }else{
@@ -6033,7 +6037,7 @@ function openGroupPick(gid){
   var p=$('#grpPane');
   if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>'+(gid?'群设置':'建群')+'</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
-    +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><div class="gp-chips"></div><div class="gp-hosthint" hidden>点成员名设为主理人（再点取消）：你发的消息没 @ 人时由它接</div><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
+    +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><div class="gp-chips"></div><div class="gp-hosthint" hidden>点成员名设为主理人（再点取消），没 @ 人的消息由它回</div><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
     +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go" disabled>'+(gid?'保存':'建群')+'</button></div></div>';
   p.classList.add('on');
   var close=function(){p.classList.remove('on')};
@@ -7920,7 +7924,7 @@ function openCtok(j){
   loginClaw='claude';
   var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>Claude 长期令牌</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
-    +'<p class="lg-hint">所有 Claude 会话共用一个长期令牌（在电脑终端运行 claude setup-token 生成，一年有效），不再各自刷新登录。</p>'
+    +'<p class="lg-hint">所有 Claude 会话共用一个长期令牌（终端运行 claude setup-token 生成，一年有效）。</p>'
     +'<div class="lg-st">'+esc(j.set?'已配置 · …'+j.last4+(j.at?' · '+new Date(j.at).toLocaleString('zh-CN',{hour12:false}):''):'未配置 · 用 claude.ai 登录')+'</div>'
     +'<div class="lg-key"><input type="password" class="lg-in" placeholder="sk-ant-oat01-…" autocomplete="off"><button type="button" class="lg-btn lg-save">'+(j.set?'换一个':'保存')+'</button></div>'
     +'<div class="lg-ft">'+(j.set?'<button type="button" class="lg-btn ghost lg-clear">清除长期令牌</button> ':'')+'<button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';

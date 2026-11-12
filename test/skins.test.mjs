@@ -64,3 +64,16 @@ test('个性提示音 / 抖一抖：只收认识的声音或 off，只有这两�
   assert.equal(s2.set('a', { snd: null, still: false }), null);
   assert.equal(s2.all().a, undefined);
 });
+
+test('预设改名：旧引用读出来换成新的并存回，旧网址也能取到新图', () => {
+  const D2 = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-skins-mv-'));
+  fs.writeFileSync(path.join(D2, 'skins.json'), JSON.stringify({ a: { av: 'p/cartoon/03-zhuque-huo.png' }, b: { av: 'p/cartoon/03-zhuque.png', name: 'x' }, c: { name: 'y' } }));
+  const s2 = makeSkins(D2, ROOT);
+  const all = s2.all();
+  assert.equal(all.a.av, 'p/cartoon/c-zhuque-huo.png');
+  assert.equal(all.b.av, 'p/cartoon/c-zhuque-huo.png');
+  assert.equal(all.c.name, 'y');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(D2, 'skins.json'), 'utf8')).a.av, 'p/cartoon/c-zhuque-huo.png');
+  assert.equal(s2.fileOf('p/cartoon/03-zhuque-huo.png'), s2.fileOf('p/cartoon/c-zhuque-huo.png'));
+  assert.ok(s2.fileOf('p/cartoon/c-zhuque-huo.png'));
+});
