@@ -501,6 +501,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 /* 会话头像和网名（「最近」里点头像打开；长按头像随机一套）：外框、标题、按钮和建群同一套（上面 :is(#grpPane,#avPane)） */
 #avPane .av-me{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 #avPane .av-pv{flex:none;position:relative;display:grid;place-items:center;width:52px;height:52px;border-radius:12px;background:var(--bg);overflow:hidden}
+#avPane .av-pv.shk{animation:avShk .4s linear 6 both}   /* 拨「抖一抖」开关时预览：上面的头像抖一遍 */
 #avPane .av-pv img{width:100%;height:100%;object-fit:cover}
 #avPane .av-pv svg,#avPane .av-pv img.claw{width:32px;height:32px;object-fit:contain}
 #avPane .av-me input.gp-in{flex:1;min-width:0;margin:0}
@@ -5928,7 +5929,8 @@ function openSkin(s){
   // 提示音默认关；打开才出现选声音的一行（选了就试听，网页里响）。会话设置里关了通知（铃铛）就不响，抖照样抖
   var snd=p.querySelector('.av-snd'),sndv=p.querySelector('.av-sndv'),son=p.querySelector('.av-son'),pick=p.querySelector('.av-pick'),shk=p.querySelector('.av-shk'),sndOk=true,dflt='',lastPick='';   // 打开时先用设置里的电脑提示音
   if(cur.snd==='off')cur.snd='';
-  shk.checked=!cur.still;shk.addEventListener('change',function(){cur.still=!shk.checked});
+  shk.checked=!cur.still;shk.addEventListener('change',function(){cur.still=!shk.checked;pv.classList.remove('shk');void pv.offsetWidth;pv.classList.add('shk')});
+  pv.addEventListener('animationend',function(){pv.classList.remove('shk')});
   function sndShow(){
     var off=!!notifOffMap[s.id];   // 会话设置里关了通知：提示音反正不响，开关和选声音都不显示（设过的声音留着，重开通知又生效）
     son.checked=!!cur.snd;son.closest('.av-o').hidden=off||!sndOk;pick.hidden=!cur.snd||off;
