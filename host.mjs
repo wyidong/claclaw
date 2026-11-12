@@ -92,6 +92,8 @@ function addrs() {
   for (const [ifn, list] of Object.entries(os.networkInterfaces())) {
     for (const a of list || []) {
       if (a.family !== 'IPv4' || a.internal) continue;
+      // 169.254.x.x 是没拿到 DHCP 时自己给的链路本地地址（比如 iPhone 插着数据线时 macOS 多出来的 USB 网卡），只有那根线上能通，不列
+      if (a.address.startsWith('169.254.')) continue;
       // 只列有用的：Tailscale（手机就是走它连过来的）和本机网卡；虚拟机网桥、其它 VPN / 代理的虚拟网卡不列
       // Tailscale 的地址是 100.64/10 里的单个 /32；别的 VPN 也可能用这一段（比如 100.96.1.86/28），按掩码分开
       if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) && a.netmask === '255.255.255.255') out.push({ ip: a.address, kind: 'Tailscale' });
