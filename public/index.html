@@ -95,6 +95,11 @@ window.__sc=(function(){
   --strip:var(--surface);--strip-line:var(--line);--rail-on:var(--bg);
   --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
 }
+/* 白色主题的会话目录、Claw 卡片：白卡片细边，选中浅绿平铺（不凸起）；别的主题这几个变量清空，用规则里的默认（浅色底、凸起） */
+:root{--dir-bg:transparent;--dir-bg-m:var(--bg);--dir-bd:1px solid var(--bg);--dir-hover:var(--bg);--dir-sel-bg:var(--user-bg);--dir-sel-sh:none;--claw-bg:var(--bg)}
+@media (min-width:1000px){:root{--claw-bg:var(--surface)}}   /* Claw 卡片跟会话目录：手机上灰卡片，电脑上白卡片 */
+:root:is([data-theme="dark"],[data-theme="ziwei"],[data-theme="shichen"]){--dir-bg:initial;--dir-bg-m:initial;--dir-bd:initial;--dir-hover:initial;--dir-sel-bg:initial;--dir-sel-sh:initial;--claw-bg:initial}
+@media (prefers-color-scheme:dark){:root:not([data-theme]){--dir-bg:initial;--dir-bg-m:initial;--dir-bd:initial;--dir-hover:initial;--dir-sel-bg:initial;--dir-sel-sh:initial;--claw-bg:initial}}
 /* ── ② 阴黑暗沉（「跟随系统」且系统是深色时也用这套） ── */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
@@ -1497,9 +1502,9 @@ select.pe-in{text-align-last:right}
 .claw-need{padding:48px 16px;text-align:center;line-height:1.8}
 .claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
 .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
-.claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底（和会话列表选中色一致） */
+.claw-card{background:var(--claw-bg,var(--user-bg))}   /* Agent 卡片：浅色底（和会话列表选中色一致）；白色主题是白卡片细边，和会话目录一样 */
 :root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 70%,transparent),transparent 50%,color-mix(in srgb,var(--accent) 10%,transparent)),var(--user-bg);box-shadow:inset 1.5px 1.5px 0 var(--gl-hi),var(--sel-sh2,0 14px 26px -10px color-mix(in srgb,var(--accent) 55%,transparent),0 4px 10px -3px color-mix(in srgb,var(--ink) 18%,transparent));transform:translateY(-1px)}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
-:root #sList .s-row:not(.wx) .s-item[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 50%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 6%,transparent)),linear-gradient(rgba(255,255,255,.03),rgba(255,255,255,.03)),var(--user-bg);box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent),var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14))}   /* 会话目录选中：凸起，但比 Claw 卡片弱（不上浮、投影小）；深色主题用 --sel-sh 黑色小投影，不起雾 */
+:root #sList .s-row:not(.wx) .s-item[aria-current="true"]{border-color:transparent;background:var(--dir-sel-bg,linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 50%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 6%,transparent)),linear-gradient(rgba(255,255,255,.03),rgba(255,255,255,.03)),var(--user-bg));box-shadow:var(--dir-sel-sh,inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent),var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14)))}   /* 会话目录选中：凸起，但比 Claw 卡片弱（不上浮、投影小）；深色主题用 --sel-sh 黑色小投影，不起雾 */
 .claw-card:disabled{opacity:.45;cursor:default}
 .claw-card.claw-down>:not(.claw-start){opacity:.45}   /* 装了没启动、能在这里启动的（OpenClaw）：灰着，「启动」按钮不灰 */
 .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
@@ -1565,6 +1570,7 @@ select.pe-in{text-align-last:right}
 #sList .s-row.wx .wx-top{display:flex;align-items:baseline;gap:8px;min-width:0}
 #sList .s-row.wx .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:16px}
 #sList .s-row.wx .when{flex:none;font-size:12px;color:var(--muted)}
+#sList .s-row.wx .wx-ck{flex:none;align-self:center;display:grid;place-items:center;width:14px;height:14px;margin-right:-4px;opacity:.85}#sList .s-row.wx .wx-ck :is(svg,img){width:14px;height:14px;background:none}   /* 换了头像的会话：时间左边的小 Claw 图标 */
 #sList .s-row.wx.working .when{color:var(--allow);font-weight:600}#sList .s-row.wx.waiting .when{color:var(--warn)}   /* 在干活 / 等确认：和 Claw 列表一样上色 */
 #sList .s-row.wx .m{display:block;margin:0;font-size:13.5px;color:var(--muted)}
 #sList .s-row.wx .cwd{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1578,15 +1584,15 @@ select.pe-in{text-align-last:right}
 @media (max-width:999px){
   /* 边框画在外层（不动）：滑动时只有里面的内容往左移，编辑 / 删除也在框里 */
   .s-row{overflow:hidden;border:.5px solid var(--line);border-radius:12px;background:var(--bg)}
-  #sList .s-row:not(.wx),#sList .s-row:not(.wx)>.s-item{background:var(--user-bg)}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底（底色和列表不同时边框自动去掉，见 nb-srow） */
+  #sList .s-row:not(.wx),#sList .s-row:not(.wx)>.s-item{background:var(--dir-bg-m,var(--user-bg))}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底（底色和列表不同时边框自动去掉，见 nb-srow） */
   .s-row.working:not(:has(> .s-item[aria-current="true"])){border-color:var(--allow)}
   .s-row.waiting:not(:has(> .s-item[aria-current="true"])){border-color:var(--warn)}
   /* 选中的会话：和电脑端一样，整张卡片浅绿底、不再画绿框 */
   .s-row:has(> .s-item[aria-current="true"]){border-color:var(--user-bg);background:var(--user-bg)}
   .s-row > .s-item[aria-current="true"]{background:var(--user-bg)}
   /* 选中：一点点凸起——亮边、渐变画在里层（滑动时跟着走），投影画在外层（里层被外层 overflow 裁掉） */
-  #sList .s-row:not(.wx):has(> .s-item[aria-current="true"]){border-color:transparent;box-shadow:var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14))}
-  :root #sList .s-row:not(.wx)>.s-item[aria-current="true"]{box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent)}
+  #sList .s-row:not(.wx):has(> .s-item[aria-current="true"]){border-color:transparent;box-shadow:var(--dir-sel-sh,var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14)))}
+  :root #sList .s-row:not(.wx)>.s-item[aria-current="true"]{box-shadow:var(--dir-sel-sh,inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent))}
   .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
   .s-row.dragging .s-item{transition:none}
   .s-row .s-item .t,.s-row.two .s-item .t,.s-row.pn .s-item .t,.s-row.three .s-item .t{padding-right:0}
@@ -1714,8 +1720,8 @@ select.pe-in{text-align-last:right}
   .s-row{margin-top:2px}
   /* 每行始终有一条最细的边框，颜色就是鼠标移上去时的背景色：移上去时边框和背景融为一体，尺寸不变、不跳动 */
   .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding-top:7px;padding-bottom:7px;padding-left:9px;border:1px solid var(--bg);border-radius:8px;background:none;cursor:pointer}
-  #sList .s-row:not(.wx) .s-item{border:.5px solid var(--line);background:var(--user-bg)}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底，底色和列表不同时边框自动去掉（nb-sitem）；带 #sList 压过各主题的卡片底 */
-  #sList .s-row:not(.wx):hover .s-item:not([aria-current="true"]){background:color-mix(in srgb,var(--user-bg),var(--accent) 10%)}
+  #sList .s-row:not(.wx) .s-item{border:var(--dir-bd,.5px solid var(--line));background:var(--dir-bg,var(--user-bg))}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底，底色和列表不同时边框自动去掉（nb-sitem）；带 #sList 压过各主题的卡片底 */
+  #sList .s-row:not(.wx):hover .s-item:not([aria-current="true"]){background:var(--dir-hover,color-mix(in srgb,var(--user-bg),var(--accent) 10%))}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
@@ -5785,7 +5791,8 @@ function drawRecent(arr){
       b.innerHTML='<span class="wx-av"></span><span class="wx-b"><span class="wx-top"><span class="t"></span><span class="when"></span></span><span class="m"><span class="cwd"></span></span></span>';
       var k=s.claw||clawOf(s.id),sk=s.skin||{},shown=sk.name||s.title,av=b.querySelector('.wx-av');
       // 换过头像：头像是选的图，右下角小标记是哪个 Claw；换过网名：标题显示网名（原名在悬停提示里，搜索也认原名）
-      av.innerHTML=(sk.av?'<img class="sk" alt="" src="/avatars/'+esc(sk.av)+'"><span class="wx-cl">'+clawIcon(k)+'</span>':clawIcon(k))+'<span class="wx-bd"></span>';av.dataset.claw=k;
+      av.innerHTML=(sk.av?'<img class="sk" alt="" src="/avatars/'+esc(sk.av)+'">'+(k==='group'?'<span class="wx-cl">'+clawIcon(k)+'</span>':''):clawIcon(k))+'<span class="wx-bd"></span>';av.dataset.claw=k;
+      if(sk.av&&k!=='group'){var ck=document.createElement('span');ck.className='wx-ck';ck.innerHTML=clawIcon(k);b.querySelector('.wx-top').insertBefore(ck,b.querySelector('.when'))}   // 换了头像：头像上不放水印，时间左边放个小 Claw 图标标出是哪个（群聊照旧用水印）
       if(sk.name)row.dataset.ot=s.title;
       skinAv(av,s);
       b.querySelector('.t').textContent=shown;
