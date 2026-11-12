@@ -1916,7 +1916,7 @@ select.pe-in{text-align-last:right}
     <form class="dlg" id="newForm" role="dialog" aria-label="新建会话">
       <h3>新建会话</h3>
       <p class="newIn">在 <input id="newDir" class="plainIn" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="目录"> 新建</p>
-      <div class="newNmRow"><label for="newName">名字（可以留空）</label><label class="newSkin"><input type="checkbox" id="newSkin" checked>随机头像和网名</label></div>
+      <div class="newNmRow"><label for="newName">名字（可以留空）</label><label class="newSkin"><input type="checkbox" id="newSkin">随机头像和网名</label></div>
       <input id="newName" autocomplete="off">
       <div id="newPick" hidden>
         <label>模型</label><div class="chips" id="newModels" role="radiogroup" aria-label="模型"></div>
@@ -8024,7 +8024,7 @@ function newSibling(s){
   $('#newForm .newIn').hidden=oc;$('#newForm h3').textContent=oc?'新建 OpenClaw 会话':'新建'+(cn?' '+cn+' ':'')+'会话';
   var d=$('#newDir');d.value=(s.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
   d.style.width=Math.max(8,d.value.length+1)+'ch';
-  $('#newName').value='';$('#newErr').textContent='';$('#newSkin').checked=true;   // 随机头像和网名：每次默认勾上
+  $('#newName').value='';$('#newErr').textContent='';$('#newSkin').checked=false;   // 随机头像和网名：每次默认不勾
   // Claude 会话：可以选模型 / 推理强度 / 权限；默认「沿用」= 用参照会话的
   var isClaude=!NOT_CLAUDE.test(s.id||'')&&(!s.claw||s.claw==='claude');
   var ms=isClaude?(cfg.models&&cfg.models.length&&!cfg.lib?cfg.models:lastModels):null;   // 当前是模型库会话时 cfg.models 是那个 Key 的模型，不能当 Claude 的列
