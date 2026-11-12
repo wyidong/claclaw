@@ -111,7 +111,8 @@ class Group {
   toJSON() { const { name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, id, host } = this; return { id, name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, host: host || undefined, status: this.mirror ? this.status : undefined }; }
 }
 // viewer：给哪台电脑看（undefined = 本机）；collab = 对看的人来说是不是别的电脑上的会话
-const memberView = (m, viewer) => ({ name: m.name, claw: m.claw || '', collab: viewer === undefined ? !!m.peerId : m.peerId !== viewer, peer: m.peerName || undefined });
+// sid：本机成员的会话 id，只给本机网页（按它取成员会话自己设的朗读声音）；不发给协同对方
+const memberView = (m, viewer) => ({ name: m.name, claw: m.claw || '', collab: viewer === undefined ? !!m.peerId : m.peerId !== viewer, peer: m.peerName || undefined, sid: viewer === undefined && !m.peerId && m.id ? m.id : undefined });
 
 export class Groups {
   // logDir：群记录文件（给成员会话读的纯文本）放这里；不要放在数据目录里，那里对协同那一轮算敏感位置

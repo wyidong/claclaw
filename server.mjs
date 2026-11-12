@@ -1392,6 +1392,8 @@ function groupOnItem(g, it) {
   if (it.kind === 'user' && !it.via) return;
   if (g.watched()) return;
   const badge = markUnread(g.id);
+  // 成员回复：电脑响提示音（电脑网页开着「电脑提示音」时自己不响，等电脑响）；镜像那台也响，它的网页同样指望自己的电脑
+  if (it.kind === 'gm' && !notifOff(g.id)) localSound(false, g.id);
   if (g.mirror || it.kind === 'user') return;
   const v = g.view(it);
   alertOut(g.id, 'reply', g.title, { title: g.title, body: (v.who?.name ? v.who.name + '：' : '') + snippet(v.text, '有新消息'), tag: 'grp-' + g.id, url: '/?s=' + encodeURIComponent(g.id), badge });

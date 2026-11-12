@@ -394,3 +394,17 @@ test('成员回复带附件：本机回复直接带 att；协同成员 202 后�
   assert.equal(r2.text, ''); assert.equal(r2.att[0].name, 'r.txt');
   assert.equal(fs.readFileSync(host.attFile(g.id, a.aid), 'utf8'), 'report');
 });
+
+test('成员的会话 id（朗读用成员自己的声音）：只给本机网页、只给本机成员；发给协同对方的快照里没有', async () => {
+  const host = setup(async () => ({ ok: true, reply: '收到' }));
+  const g = host.groups.create({ members: [M('s1', '后端'), M('abc12345', '需求', { peerId: 'P15' })] });
+  assert.deepEqual(g.membersView().map(m => m.sid), ['s1', undefined]);
+  host.groups.post(g.id, '@后端 hi');
+  await flush(); await flush();
+  const gm = g.history().items.find(x => x.kind === 'gm');
+  assert.equal(gm.who.sid, 's1');
+  await flush();
+  const snap = host.ops.filter(o => o.body.op === 'sync').at(-1).body.group;
+  assert.ok(snap.members.every(m => !('sid' in m) || m.sid === undefined));
+  assert.ok(snap.items.every(x => !x.who || x.who.sid === undefined));
+});

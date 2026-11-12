@@ -3073,15 +3073,16 @@ function addGm(it){
   if(it.text){var b=document.createElement('div');b.className='body md';b.innerHTML=md(it.text);e.appendChild(b);
     // 每条结尾一个播放键：只念这一条（离开回来挑着听）；在念时变方块，点了停
     var ft=document.createElement('div');ft.className='gm-foot';var pb=document.createElement('button');pb.type='button';pb.className='gm-play';pb.setAttribute('aria-label','朗读这条');pb.title='朗读这条';pb.innerHTML=GM_PLAY.say;
-    pb.addEventListener('click',function(){if(ttsLongFired(pb))return;gmSay(pb,w.name,it.text)});
-    ttsLongPress(pb,function(){ttsPickFrom((w.name?w.name+' 说：':'')+it.text,function(i){gmSay(pb,w.name,it.text,i)})});   // 长按 / 右键：选从哪句开始
+    pb.addEventListener('click',function(){if(ttsLongFired(pb))return;gmSay(pb,w,it.text)});
+    ttsLongPress(pb,function(){ttsPickFrom((w.name?w.name+' 说：':'')+it.text,function(i){gmSay(pb,w,it.text,i)})});   // 长按 / 右键：选从哪句开始
     ft.appendChild(pb);e.appendChild(ft)}
   if(it.att&&it.att.length)e.insertBefore(gAttBox(it.att),e.querySelector('.gm-foot'));   // 成员发的图片 / 文件
   feed.appendChild(e);gStatTail();scrollDown();
   return e;
 }
 var GM_PLAY={say:'<svg viewBox="0 0 24 24"><path d="M8.5 6v12l9.5-6z" fill="currentColor"/></svg>',stop:'<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>'},gmPlaying=null;
-function gmSay(btn,name,text,from){
+function gmSay(btn,w,text,from){return ttsWith(w.sid,function(){gmSay0(btn,w.name,text,from)})}   // 用成员自己会话的声音念
+function gmSay0(btn,name,text,from){
   var again=gmPlaying===btn&&ttsSpeaking()&&from==null;
   ttsStop();ttsHush=false;if(again)return;
   tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
@@ -3846,7 +3847,7 @@ function onEvent(m){
       if(outbox&&gi.text===outbox.text&&outbox.el&&outbox.el.isConnected){var ob=outbox;ob.el.classList.remove('pending');if(ob.video&&ob.el.vbadge)ob.el.vbadge.textContent=(ob.video.kind==='file'?'':'视频 ')+fmtSize(ob.video.size||0);stamp(ob.el,Date.now());outboxDone()}
       else{if(outbox&&gi.text===outbox.text)outboxDone();stamp(addGu(gi),gi.at)}
       setBusy(false);
-    }else if(gi.kind==='gm'){stamp(addGm(gi),gi.at);if(gi.text&&ttsModeAllows(3))ttsSay(((gi.who&&gi.who.name)?gi.who.name+' 说：':'')+gi.text)}   // 开着自动朗读：成员回复来一条念一条，开头报名字
+    }else if(gi.kind==='gm'){stamp(addGm(gi),gi.at);if(gi.text&&ttsModeAllows(3))ttsWith(gi.who&&gi.who.sid,function(){ttsSay(((gi.who&&gi.who.name)?gi.who.name+' 说：':'')+gi.text)})}   // 开着自动朗读（全局 + 群自己的喇叭）：成员回复来一条念一条，开头报名字；声音用成员会话自己设的（成员会话关了播报也照念）
     else{addSys(gi.text);gStatTail();if(gi.fail&&outbox){outboxRestore();setBusy(false)}}
     refreshList();
     break;
@@ -6832,10 +6833,12 @@ function ttsModeAllows(pri){
 // 单个会话不播报：全局朗读开着时，标题栏的喇叭可以关掉这个会话的自动播报（只影响自动念；点浮动的播放键照样能念）
 // 会话单独的声音：{ 会话 id: 声音 id }（和「声音」下拉框的值一样）；没设的会话用设置里的默认声音
 var ttsSessV={};try{ttsSessV=JSON.parse(localStorage.getItem('claclaw.ttsSessVoice')||'{}')||{}}catch(_){}
-function ttsW(){var o=session&&ttsSessV[session.id];return o||tts.want}
+// ttsAs：替谁念（群里成员的回复用成员自己会话设的声音、语速；没设的用全局）。只在 ttsWith 里临时设
+var ttsAs='';function ttsWith(sid,fn){var o=ttsAs;ttsAs=sid||'';try{return fn()}finally{ttsAs=o}}
+function ttsW(){var id=ttsAs||(session&&session.id),o=id&&ttsSessV[id];return o||tts.want}
 // 会话单独的语速：{ 会话 id: 倍数 }；没设的用设置里的语速
 var ttsSessR={};try{ttsSessR=JSON.parse(localStorage.getItem('claclaw.ttsSessRate')||'{}')||{}}catch(_){}
-function ttsR(sid){var r=+ttsSessR[sid||(session&&session.id)];return r>0?r:tts.rate}
+function ttsR(sid){var r=+ttsSessR[sid||ttsAs||(session&&session.id)];return r>0?r:tts.rate}
 function ttsSessCustom(sid){return !!(ttsSessV[sid]||ttsSessR[sid])}
 function ttsDevVoice(){var w=ttsW();return ttsVoices().find(function(v){return v.voiceURI===w})||tts.voice}
 var ttsMuted={};
@@ -7142,13 +7145,13 @@ function ttsSay(src,force,from){
   // 太长的切成几段排队念（有些浏览器一段太长会念到一半停）
   var parts=ttsParts(src).slice(from||0);if(!parts.length)return;
   // 要用电脑合成、声音列表还没拉过（自动朗读关着时不预先拉）：先拉再念，不要落到浏览器自带的
-  if(ttsWantSrv()&&!tts.srv&&!tts.srvTried){tts.srvTried=true;ttsLoadSrv().then(function(){ttsSay(src,force,from)});return}
+  if(ttsWantSrv()&&!tts.srv&&!tts.srvTried){tts.srvTried=true;var as=ttsAs;ttsLoadSrv().then(function(){ttsWith(as,function(){ttsSay(src,force,from)})});return}
   // 手动点的朗读记进度：念到第几句；中途停了，再点同一条就从停下的那句接着念
   var prog=null,base=from||0;
   if(force&&ttsManual){prog=ttsProg={src:src,n:base+parts.length,at:base,done:false}}
   var sv=ttsSrvVoice();if(sv){srvSay(parts,sv,base,prog);return}
   if(force)ttsDbg('say via device: '+(tts.voice?tts.voice.name:'(默认)')+' want='+(tts.want||'-')+' srv='+(tts.srv?tts.srv.length:'-'));
-  parts.forEach(function(p,k){devQ.push({text:p,pi:base+k,prog:prog})});devPump();
+  var dr=ttsR(),dv=ttsDevVoice();parts.forEach(function(p,k){devQ.push({text:p,pi:base+k,prog:prog,r:dr,v:dv})});devPump();   // 声音、语速排队时就定下（替成员念的，轮到时 ttsAs 已经还原）
   ttsShowStop();
 }
 // 浏览器自带的朗读：自己排队，一段念完再交下一段。一次全塞给浏览器的话，Edge 的在线声音（Online (Natural)）
@@ -7159,7 +7162,7 @@ function devPump(){
   if(!devQ.length){setTimeout(ttsShowStop,50);return}
   devBusy=true;
   var gen=devGen,started=false,dq=devQ.shift(),u=new SpeechSynthesisUtterance(dq.text),again=devAgain;devAgain=false;
-  u.lang='zh-CN';u.rate=ttsR();var dv=ttsDevVoice();if(dv)u.voice=dv;
+  u.lang='zh-CN';u.rate=dq.r||ttsR();var dv='v' in dq?dq.v:ttsDevVoice();if(dv)u.voice=dv;
   var done=function(){if(gen!==devGen)return;if(started)ttsProgEnd(dq);devBusy=false;devPump()};
   u.onstart=function(){started=true;ttsProgAt(dq);ttsClaim();ttsShowStop()};
   u.onend=done;u.onerror=function(e){
