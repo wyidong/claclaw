@@ -152,10 +152,6 @@ window.__sc=(function(){
 :root:is([data-theme="ziwei"],[data-theme="shichen"]) #setTop button,
 :root:is([data-theme="ziwei"],[data-theme="shichen"]) #backBtn{color:var(--accent)}
 @media (min-width:1000px){:root:is([data-theme="ziwei"],[data-theme="shichen"]) #sList .s-row:not(.wx){border:0;background:none}}   /* 电脑：卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
-@media (min-width:1000px){   /* 电脑按目录的会话卡片：通用样式是「白底列表 + --bg 色细边」，这两套列表底本身就是 --bg，边框看不见——改成卡片铺 --surface 底来区分（图片背景的另有半透明底） */
-  :root:is([data-theme="ziwei"],[data-theme="shichen"]):not(.sc-img) #sList .s-row:not(.wx) .s-item:not([aria-current="true"]){background:var(--surface);border-color:transparent}
-  :root:is([data-theme="ziwei"],[data-theme="shichen"]):not(.sc-img) #sList .s-row:not(.wx):hover .s-item:not([aria-current="true"]){background:color-mix(in srgb,var(--user-bg) 55%,var(--surface))}
-}
 /* ── ③ 流变时辰 · 12 套共用 ── */
 /* 流变时辰：6 阳（腑：子胆 卯大肠 辰胃 未小肠 申膀胱 亥三焦）照九紫离火的配色（淡底白卡片），6 阴（脏：丑肝 寅肺 巳脾 午心 酉肾 戌心包）照深色主题（深底深卡片浅字，<html> 带 .sc-dark）。
    window.__sc 只按当前时辰给 <html> 设 data-sc="0~11"（地支序号）和 .sc-dark，颜色全在下面 ④ 各时辰的变量块里——要调哪个时辰的颜色直接改那一块。
@@ -235,7 +231,7 @@ window.__sc=(function(){
    哪些块按这个规矩来，在脚本的 BDR 表里（bdSync）；它换主题、换时辰、换图、电脑 / 手机切换时实际比一次两边的底色，
    底色不同就在 <html> 上加 nb-xxx，下面这些规则把边框去掉。等确认的提醒边框不算在内，照常显示。 */
 :root.nb-tool #feed .tool:not([data-k="wait"]),:root.nb-tgh #feed .tgroup:not([data-k="wait"]) .tg-h,:root.nb-uvid #feed .uvid,
-:root.nb-srow #sList .s-row,:root.nb-sitem #sList .s-item:not([aria-current="true"]),:root.nb-set #setPane .set-card,:root.nb-hcard #hostPane .h-card,:root.nb-claw #clawPane :is(.claw-card:not([aria-current="true"]),.claw-tool){border-color:transparent!important}
+:root.nb-srow #sList .s-row:not(.working):not(.waiting),:root.nb-sitem #sList .s-row:not(.working):not(.waiting) .s-item:not([aria-current="true"]),:root.nb-set #setPane .set-card,:root.nb-hcard #hostPane .h-card,:root.nb-claw #clawPane :is(.claw-card:not([aria-current="true"]),.claw-tool){border-color:transparent!important}
 :root.nb-dock #app #dock{border-top-color:transparent!important}
 :root.nb-hd #app header{border-bottom-color:transparent!important}
 :root.nb-stop #app #sTop,:root.nb-settop #app #setTop{border-bottom-color:transparent!important}
@@ -882,10 +878,10 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #sList .s-item .m .when{flex:none;width:7.2em;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden}
 /* 正在干活的会话：绿色边框，状态文字绿色、前面一个闪动的点；等确认的用橙色 */
 .s-row.opening .s-item{background:var(--user-bg)!important}
-.s-row.working .s-item{border-color:var(--allow)!important}
+.s-row.working .s-item:not([aria-current="true"]){border-color:var(--allow)!important}   /* 选中的已经凸起，不再叠一层状态边框（状态看右下的圆点和文字） */
 .s-row.working .s-item .when{color:var(--allow);font-weight:600}
 .s-row.working .s-item .when::before{content:'';display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:currentColor;vertical-align:middle;animation:pulse 1.2s infinite}
-.s-row.waiting .s-item{border-color:var(--warn)!important}
+.s-row.waiting .s-item:not([aria-current="true"]){border-color:var(--warn)!important}
 .s-row.waiting .s-item .when{color:var(--warn)}
 /* ════ 公共 · 设置页 ════ */
 /* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
@@ -1503,6 +1499,7 @@ select.pe-in{text-align-last:right}
 .claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:.5px solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
 .claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底（和会话列表选中色一致） */
 :root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 70%,transparent),transparent 50%,color-mix(in srgb,var(--accent) 10%,transparent)),var(--user-bg);box-shadow:inset 1.5px 1.5px 0 var(--gl-hi),var(--sel-sh2,0 14px 26px -10px color-mix(in srgb,var(--accent) 55%,transparent),0 4px 10px -3px color-mix(in srgb,var(--ink) 18%,transparent));transform:translateY(-1px)}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
+:root #sList .s-row:not(.wx) .s-item[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 50%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 6%,transparent)),linear-gradient(rgba(255,255,255,.03),rgba(255,255,255,.03)),var(--user-bg);box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent),var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14))}   /* 会话目录选中：凸起，但比 Claw 卡片弱（不上浮、投影小）；深色主题用 --sel-sh 黑色小投影，不起雾 */
 .claw-card:disabled{opacity:.45;cursor:default}
 .claw-card.claw-down>:not(.claw-start){opacity:.45}   /* 装了没启动、能在这里启动的（OpenClaw）：灰着，「启动」按钮不灰 */
 .claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
@@ -1581,11 +1578,15 @@ select.pe-in{text-align-last:right}
 @media (max-width:999px){
   /* 边框画在外层（不动）：滑动时只有里面的内容往左移，编辑 / 删除也在框里 */
   .s-row{overflow:hidden;border:.5px solid var(--line);border-radius:12px;background:var(--bg)}
-  .s-row.working{border-color:var(--allow)}
-  .s-row.waiting{border-color:var(--warn)}
+  #sList .s-row:not(.wx),#sList .s-row:not(.wx)>.s-item{background:var(--user-bg)}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底（底色和列表不同时边框自动去掉，见 nb-srow） */
+  .s-row.working:not(:has(> .s-item[aria-current="true"])){border-color:var(--allow)}
+  .s-row.waiting:not(:has(> .s-item[aria-current="true"])){border-color:var(--warn)}
   /* 选中的会话：和电脑端一样，整张卡片浅绿底、不再画绿框 */
   .s-row:has(> .s-item[aria-current="true"]){border-color:var(--user-bg);background:var(--user-bg)}
   .s-row > .s-item[aria-current="true"]{background:var(--user-bg)}
+  /* 选中：一点点凸起——亮边、渐变画在里层（滑动时跟着走），投影画在外层（里层被外层 overflow 裁掉） */
+  #sList .s-row:not(.wx):has(> .s-item[aria-current="true"]){border-color:transparent;box-shadow:var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14))}
+  :root #sList .s-row:not(.wx)>.s-item[aria-current="true"]{box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent)}
   .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
   .s-row.dragging .s-item{transition:none}
   .s-row .s-item .t,.s-row.two .s-item .t,.s-row.pn .s-item .t,.s-row.three .s-item .t{padding-right:0}
@@ -1713,8 +1714,8 @@ select.pe-in{text-align-last:right}
   .s-row{margin-top:2px}
   /* 每行始终有一条最细的边框，颜色就是鼠标移上去时的背景色：移上去时边框和背景融为一体，尺寸不变、不跳动 */
   .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding-top:7px;padding-bottom:7px;padding-left:9px;border:1px solid var(--bg);border-radius:8px;background:none;cursor:pointer}
-  .s-row:hover .s-item{background:var(--bg)}
-  .s-item[aria-current="true"]{background:var(--user-bg)!important;border-color:var(--user-bg)!important}
+  #sList .s-row:not(.wx) .s-item{border:.5px solid var(--line);background:var(--user-bg)}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底，底色和列表不同时边框自动去掉（nb-sitem）；带 #sList 压过各主题的卡片底 */
+  #sList .s-row:not(.wx):hover .s-item:not([aria-current="true"]){background:color-mix(in srgb,var(--user-bg),var(--accent) 10%)}
   .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
   .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
   .s-item .bz{font-size:11.5px}
