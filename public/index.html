@@ -2962,6 +2962,9 @@ feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classLi
 // 复制：http 访问（Tailscale IP）不是安全上下文，navigator.clipboard 不可用，退回 execCommand
 // 会话 ID（列表里、顶部标题后）：只显示前 8 位。
 // 电脑：单击复制完整 ID。手机：长按 0.5 秒才复制（上下滑列表时手指扫过 ID 不会误复制），短按和点这一行别处一样
+// 苹果手机不记浏览器历史：记了的话系统侧滑返回会放截图动画、页面弹一下；返回只靠返回键和下面自己做的右滑。安卓照旧记（返回键 / 系统返回要用）
+var IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+function navPush(st){if(!IOS)history.pushState(st,'')}
 var TOUCH=window.matchMedia('(pointer:coarse)').matches,lpTimer=null,lpStart=null,lpFiredAt=0;
 document.addEventListener('click',function(e){
   if(Date.now()-lpFiredAt<700){e.preventDefault();e.stopPropagation();return}   // 长按复制后松手产生的 click：吞掉，不打开会话
@@ -5623,7 +5626,7 @@ $('#railCur').addEventListener('click',function(){pickClaw(curClaw()||'claude')}
 $('#railClaw').addEventListener('click',function(){mTab('claw')});
 document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){
   var t=b.dataset.tab;
-  if(t==='set'&&!$('#app').classList.contains('set-on'))history.pushState({set:1},'');   // 安卓返回键 / 侧滑也能回到列表
+  if(t==='set'&&!$('#app').classList.contains('set-on'))navPush({set:1});   // 安卓返回键 / 侧滑也能回到列表
   mTab(t);
   if(t==='chats'&&(!clawSel||!$('#sList .s-row')))openSheet();
   if(t==='recent'&&grpOnly)setGrpOnly(false);   // 群列表里再点「最近」：回到最近
@@ -6483,7 +6486,7 @@ $('#sList').addEventListener('click',function(e){
 },true);
 document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest('#sList'))swClose(swOpen)},{passive:true});
 // ---------- 手机：左右滑 ----------
-// 右滑：有返回键的页面（会话、设置、宿主子页……）就返回；到了第一层（有底部菜单）就按菜单顺序切：右滑 = 前一个，左滑 = 后一个。
+// 只有右滑（从左往右）：有返回键的页面（会话、设置、宿主子页……）等于点一下返回键；没有返回键的页面不响应，左滑不做页面切换。
 // 嵌在 clarelay 外壳里也启用（外壳自己没有滑动手势，不冲突）。
 // 让路：输入框、能横向滚动的内容（代码块、表格）、看图 / 弹窗、会话行左滑（编辑 / 删除）
 (function(){
@@ -6516,12 +6519,8 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
     if(Math.abs(s0.dy||0)>Math.abs(dx)*0.6)return;
     if(s0.row&&(dx<0||s0.rowOpen))return;   // 会话行：左滑是露出编辑 / 删除，已打开的右滑是收起
     if(swOpen)return;
-    var b=backBtn();
-    if(b){if(dx>0)b.click();return}
-    if(!mList)return;
-    var tabs=[].slice.call(document.querySelectorAll('#mtabs button')).filter(shown);
-    var cur=tabs.findIndex(function(x){return x.classList.contains('on')});if(cur<0)return;
-    var nx=tabs[cur+(dx<0?1:-1)];if(nx)nx.click();
+    if(dx<=0)return;   // 只认从左往右
+    var b=backBtn();if(b)b.click();   // 只在有返回键的页面，等于点一下返回键；第一层（底部菜单）不再左右滑切换
   },{passive:true,capture:true});
   document.addEventListener('touchcancel',function(){g=null},{passive:true,capture:true});
 })();
@@ -6554,7 +6553,7 @@ function goList(toClaw){
   try{sessionStorage.setItem('claclaw.view','list')}catch(_){}
   // 回到列表：直接显示在聊天页时后台排好的列表，不取数据、不重建，点哪个都立刻进去
   if((toClaw||(!clawSel&&listMode!=='recent'))&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on'))mTab('claw');   // 首次使用：先选 Claw（正在设置页就留在设置页）
-  if(reloadToSet){reloadToSet=false;history.pushState({set:1},'');mTab('set')}   // 在设置页刷新：刷新后回到设置页
+  if(reloadToSet){reloadToSet=false;navPush({set:1});mTab('set')}   // 在设置页刷新：刷新后回到设置页
   if(toClaw){syncPushBtn();return}   // 停在 Claw 页：会话列表等选了 Claw 再加载
   if(!$('#sList .s-row'))openSheet();else{syncPushBtn();tickTimes()}
   renderUnread();renderActivity();postViewing();
@@ -6572,7 +6571,7 @@ function tickTimes(){
 function goChat(){
   if(DESKTOP.matches)return;
   closeSheet();   // 旧的弹出面板一定收起，免得带着遮罩盖在聊天页上
-  if(mList){mList=false;$('#app').classList.remove('m-list');history.pushState({chat:1},'')}
+  if(mList){mList=false;$('#app').classList.remove('m-list');navPush({chat:1})}
   try{sessionStorage.setItem('claclaw.view','chat')}catch(_){}
 }
 $('#backBtn').addEventListener('click',function(){if(history.state&&history.state.chat)history.back();else goList()});
@@ -8266,8 +8265,8 @@ syncSend();
 // 手机：不等连上就先切到该去的页面（列表 / Claw 页），免得先闪一下空的聊天页再跳
 if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
   var view0='';try{view0=sessionStorage.getItem('claclaw.view')||''}catch(_){}
-  if(reloadToSet){reloadToSet=false;startOnClaw=false;mList=true;$('#app').classList.add('m-list');history.pushState({set:1},'');mTab('set')}   // 在设置页刷新：直接回设置页，不经过别的页
-  else if(reloadTo==='host'){mList=true;$('#app').classList.add('m-list');history.pushState({set:1},'');mTab('host')}
+  if(reloadToSet){reloadToSet=false;startOnClaw=false;mList=true;$('#app').classList.add('m-list');navPush({set:1});mTab('set')}   // 在设置页刷新：直接回设置页，不经过别的页
+  else if(reloadTo==='host'){mList=true;$('#app').classList.add('m-list');navPush({set:1});mTab('host')}
   else if(reloadTo==='claw'||(reloadTo==='chats'&&!clawSel)){mList=true;$('#app').classList.add('m-list');mTab('claw')}
   else if(reloadTo==='recent'||reloadTo==='chats'){mList=true;$('#app').classList.add('m-list');mTab(reloadTo);openSheet()}
   else if(reloadTo==='chat'){}   // 在聊天页刷新：连上后照常打开上次的会话（claclaw.view 还是 chat）
