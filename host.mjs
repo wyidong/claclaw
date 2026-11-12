@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { request as httpsRequest } from 'node:https';
 import { kmBin } from './kimi.mjs';
 import { qwBin } from './qwen.mjs';
@@ -92,15 +92,38 @@ function addrs() {
   for (const [ifn, list] of Object.entries(os.networkInterfaces())) {
     for (const a of list || []) {
       if (a.family !== 'IPv4' || a.internal) continue;
-      // 169.254.x.x 是没拿到 DHCP 时自己给的链路本地地址（比如 iPhone 插着数据线时 macOS 多出来的 USB 网卡），只有那根线上能通，不列
-      if (a.address.startsWith('169.254.')) continue;
       // 只列有用的：Tailscale（手机就是走它连过来的）和本机网卡；虚拟机网桥、其它 VPN / 代理的虚拟网卡不列
       // Tailscale 的地址是 100.64/10 里的单个 /32；别的 VPN 也可能用这一段（比如 100.96.1.86/28），按掩码分开
       if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) && a.netmask === '255.255.255.255') out.push({ ip: a.address, kind: 'Tailscale' });
+      else if (/^en\d/.test(ifn) && a.address.startsWith('169.254.')) out.push({ ip: a.address, kind: '数据线直连', note: linkPeer(ifn) });
       else if (/^en\d/.test(ifn)) out.push({ ip: a.address, kind: '局域网' });
     }
   }
   return out;
+}
+
+// 169.254.x.x：线那头没人分配地址时自己给的链路本地地址，只在这根线上通（iPhone 插数据线时 macOS 会多出 USB 网卡，
+// 一台 iPhone 有两条：一条走同步 / 配对（lockdown），一条走开发者服务）。这里的 IP 是电脑自己这头的；
+// 线那头的设备用 IPv6 链路本地地址（fe80::…%enX）说话，查出来写在小字里，以后能通过它访问那台设备
+function linkPeer(ifn) {
+  if (process.platform !== 'darwin') return '';
+  let dev = '', peer = '';
+  try {
+    // 网卡 → 挂在哪个 USB 设备下（ioreg 按设备列子树，碰到 BSD Name 就归到最近的设备）
+    let cur = '';
+    for (const l of execFileSync('ioreg', ['-r', '-c', 'IOUSBHostDevice', '-l', '-w0'], { encoding: 'utf8', timeout: 2000, maxBuffer: 8 << 20 }).split('\n')) {
+      const d = /^\+-o ([^@<]+)/.exec(l); if (d) { cur = d[1].trim(); continue; }
+      const b = /"BSD Name" = "([^"]+)"/.exec(l); if (b && b[1] === ifn) { dev = cur; break; }
+    }
+  } catch {}
+  try {
+    // 线那头的 IPv6 链路本地地址：邻居表里这块网卡上、不是自己的那条
+    for (const l of execFileSync('ndp', ['-an'], { encoding: 'utf8', timeout: 2000 }).split('\n')) {
+      const w = l.trim().split(/\s+/);
+      if (w[2] === ifn && /^fe80:/i.test(w[0]) && w[3] !== 'permanent') { peer = w[0]; break; }
+    }
+  } catch {}
+  return [dev, peer && '对端 ' + peer].filter(Boolean).join(' · ');
 }
 
 // clarelay 设备网：只转发 https、没有虚拟 IP。本机网址由客户端状态文件里的 label + domain (+ port) 拼成
