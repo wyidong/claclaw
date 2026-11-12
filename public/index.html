@@ -718,6 +718,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .fv-b pre{margin:0;padding:12px;white-space:pre-wrap;word-break:break-word;font-size:14px}
 .fv-b img{display:block;max-width:100%;margin:0 auto}
 .fv-b iframe{width:100%;height:100%;border:0}
+.fv-md{padding:14px 16px 28px;font-size:15px;line-height:1.65;word-break:break-word}   /* .md 文件：按回复里的 Markdown 样式排版 */
 .fv-empty{padding:40px 16px;text-align:center;color:var(--muted)}
 /* ════ 公共 · 会话解剖页 ════ */
 /* 会话解剖页：标题栏点会话名打开。三层：会话（总消耗、四桶、每轮一颗球、每轮明细表）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） */
@@ -1928,7 +1929,7 @@ select.pe-in{text-align-last:right}
   </nav>
 
   <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""></div>
-  <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-n"></span><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
+  <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-n"></span><button type="button" class="fv-share fv-mdt" hidden>源码</button><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
   <div id="diss" role="dialog" aria-label="会话解剖"><div class="fv-h"><button type="button" class="ds-back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="fv-n ds-n">解剖</span><span class="ds-nav"><button type="button" class="fv-share ds-prev">‹ 上一轮</button><button type="button" class="fv-share ds-next">下一轮 ›</button></span><button type="button" class="fv-share ds-re">刷新</button></div><div class="ds-b"></div></div>
   <div id="vplayer" role="dialog" aria-label="播放视频"><video controls playsinline></video><button type="button" aria-label="关闭">×</button></div>
 
@@ -2882,12 +2883,12 @@ $('#sessBtn').addEventListener('click',function(){if(!session)return;if(session.
   dissEl.addEventListener('touchstart',function(e){if(e.touches.length!==1){g=null;return}var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),tw:!!e.target.closest('.ds-tw')}},{passive:true});
   dissEl.addEventListener('touchend',function(e){if(!g)return;var p=e.changedTouches[0],dx=p.clientX-g.x,dy=p.clientY-g.y,dt=Date.now()-g.t,tw=g.tw;g=null;if(tw)return;if(dx>70&&Math.abs(dy)<dx*0.6&&dt<600)dsBack()},{passive:true});
 })();
-$('#fview .fv-share').textContent=FV_ACT;
+$('#fview .fv-share:not(.fv-mdt)').textContent=FV_ACT;
 function showFile(blob,name,msg,src){
   var v=$('#fview'),b=v.querySelector('.fv-b');
   if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}
-  fvBlob=blob;fvName=name||'文件';v.querySelector('.fv-n').textContent=fvName;v.querySelector('.fv-share').hidden=!blob;
-  b.innerHTML='';v.classList.add('on');
+  fvBlob=blob;fvName=name||'文件';v.querySelector('.fv-n').textContent=fvName;v.querySelector('.fv-share:not(.fv-mdt)').hidden=!blob;
+  b.innerHTML='';v.classList.add('on');v.querySelector('.fv-mdt').hidden=true;
   if(!blob){var e0=document.createElement('div');e0.className='fv-empty';e0.textContent=msg||'';b.appendChild(e0);return}
   var ext=(/\.([a-z0-9]+)$/i.exec(fvName)||[])[1]||'',t=(blob.type||'').toLowerCase();
   if(/^svg$/i.test(ext)||t==='image/svg+xml'){   // 矢量图：当图片显示（img 里脚本不执行）
@@ -2895,7 +2896,14 @@ function showFile(blob,name,msg,src){
   }
   if(/^text\/|json|xml|javascript/.test(t)||/^(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env)$/i.test(ext)){
     if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「'+FV_ACT+'」'+(fvTouch?'用别的 App 打开':'下载到电脑');b.appendChild(e1);return}
-    blob.text().then(function(tx){var pre=document.createElement('pre');pre.textContent=tx;b.appendChild(pre)});
+    blob.text().then(function(tx){
+      var pre=document.createElement('pre');pre.textContent=tx;
+      if(!/^(md|markdown)$/i.test(ext)){b.appendChild(pre);return}
+      // Markdown：默认排版后显示（和回复里一样），右上「源码 / 预览」切换
+      var dv=document.createElement('div');dv.className='md fv-md';dv.innerHTML=md(tx);pre.hidden=true;b.appendChild(dv);b.appendChild(pre);
+      var tg=v.querySelector('.fv-mdt');tg.hidden=false;tg.textContent='源码';
+      tg.onclick=function(){var src=dv.hidden;dv.hidden=!src;pre.hidden=src;tg.textContent=src?'源码':'预览';b.scrollTop=0};
+    });
   }else if(/^image\//.test(t)||/^(png|jpe?g|gif|webp|heic)$/i.test(ext)){
     fvUrl=URL.createObjectURL(blob);var im=document.createElement('img');im.src=fvUrl;b.appendChild(im);
     if(src)im.addEventListener('error',function(){if(im.src!==location.origin+src&&im.getAttribute('src')!==src)im.src=src},{once:true});   // 本机缓存那份坏了：直接从电脑取
@@ -2904,7 +2912,14 @@ function showFile(blob,name,msg,src){
   }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「'+FV_ACT+'」'+(fvTouch?'存到「文件」或用别的 App 打开':'下载到电脑');b.appendChild(e2)}
 }
 $('#fview .fv-x').addEventListener('click',function(){$('#fview').classList.remove('on');$('#fview .fv-b').innerHTML='';if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}fvBlob=null});
-$('#fview .fv-share').addEventListener('click',function(){if(fvBlob)saveBlob(fvBlob,fvName)});
+$('#fview .fv-share:not(.fv-mdt)').addEventListener('click',function(){if(fvBlob)saveBlob(fvBlob,fvName)});
+// 排版后的 .md 文件里：复制按钮、点代码块复制（和消息里一样）
+$('#fview .fv-b').addEventListener('click',function(e){
+  var t=e.target,btn=t.closest&&t.closest('.fv-md button');
+  if(btn&&btn.classList.contains('ic')){var prev=btn.previousElementSibling;if(prev)copyText(prev.tagName==='A'?prev.getAttribute('href'):prev.textContent);return}
+  if(btn&&btn.classList.contains('cp')){var box=btn.parentNode,pre=box.querySelector('pre');if(pre&&box.classList.contains('cb'))copyText(pre.textContent);else{var c=box.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}return}
+  var pb=t.closest&&t.closest('.fv-md .cb pre');if(pb&&!String(getSelection()||'').trim())copyText(pb.textContent);
+});
 // 发过的图片：原图也存在本机（按发出去的压缩图算个指纹对应），聊天记录里点开看原图
 function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的

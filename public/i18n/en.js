@@ -714,6 +714,8 @@ var I18N={dict:{
 "自动压缩上下文":"Auto-compact context",
 "回复完超过就自动压缩":"Compact after a reply once over this",
 "Claude 用量":"Claude usage",
+"源码":"Source",
+"预览":"Preview",
 "周日":"Sun",
 "周一":"Mon",
 "周二":"Tue",
