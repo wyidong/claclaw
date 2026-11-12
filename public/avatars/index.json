@@ -356,7 +356,6 @@
    "license": "CC BY 4.0",
    "author": "vijay verma",
    "items": [
-    "01.svg",
     "02.svg",
     "03.svg",
     "04.svg",
@@ -364,7 +363,6 @@
     "06.svg",
     "07.svg",
     "08.svg",
-    "09.svg",
     "10.svg",
     "11.svg",
     "12.svg"
@@ -528,6 +526,8 @@
   "自由飞翔"
  ],
  "moved": {
+  "p/croodles/01.svg": "p/croodles/12.svg",
+  "p/croodles/09.svg": "p/croodles/04.svg",
   "p/cartoon/01-qinglong-mu.png": "p/cartoon/c-qinglong-mu.png",
   "p/cartoon/01-qinglong.png": "p/cartoon/c-qinglong-mu.png",
   "p/cartoon/qinglong-mu.png": "p/cartoon/c-qinglong-mu.png",

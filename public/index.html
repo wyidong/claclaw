@@ -299,7 +299,8 @@ html.solo.has-skin #hdCard{grid-template-columns:44px minmax(78px,1fr) auto}   /
 html.solo.has-skin #sessBtn .dot{grid-row:1/3;position:relative;width:44px;height:44px}
 html.solo.has-skin #sessBtn .dot img.sk{width:44px;height:44px;border-radius:10px;object-fit:cover}
 html.solo.has-skin #sessBtn .dot .wx-cl{position:absolute;right:1px;bottom:1px;display:grid;place-items:center;width:16px;height:16px;pointer-events:none;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25))}
-html.solo.has-skin #sessBtn .dot .wx-cl :is(svg,img){width:14px;height:14px;background:none}   /* 弹出窗口只放这一个会话，没有列表可回 */
+html.solo.has-skin #sessBtn .dot .wx-cl :is(svg,img){width:14px;height:14px;background:none}
+#hdCk{flex:none;align-self:flex-end;display:grid;place-items:center;width:14px;height:14px;margin:0 -2px 4px 0;opacity:.85}#hdCk[hidden]{display:none}#hdCk :is(svg,img){width:14px;height:14px;background:none}   /* 弹出窗口换了头像：第二行模型名左边的小 Claw 图标 */   /* 弹出窗口只放这一个会话，没有列表可回 */
 @media (min-width:1000px){html.solo #app{grid-template-columns:0 0 minmax(0,1fr);padding:0}html.solo :is(#rail,#sheet){display:none!important}html.solo #app::after{display:none}}   /* 弹出窗口再宽也只放聊天区：不要左边栏和会话列表 */
 .hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .hd-ic:active{opacity:.5}
@@ -1862,6 +1863,7 @@ select.pe-in{text-align-last:right}
     </div>
     <!-- 第二行：左边 模型 · 推理强度 · 权限、会话 ID（点 ID 复制），右边圆球（弹出窗口、上下文、通知、播报）和 ›；只有 › 打开会话设置 -->
     <div id="hdAct">
+      <span id="hdCk" hidden></span>
       <div id="cfgBtn" data-m="default"><span class="c1" id="cfgModel"></span><span class="c2" id="cfgMode">默认</span></div>
       <span class="sid" id="sid"></span>
       <span class="hd-fill"></span>
@@ -4070,12 +4072,14 @@ function setHeader(){
   if(typeof notifBall==='function'){notifBall();if(session&&!notifLoaded)notifLoad()}   // 通知圆球：第一次打开会话时取一次各会话的开关
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
-  // 弹出窗口：换过头像 / 网名的会话，左上角用头像（Claw 是右下角水印）+ 网名，和「最近」列表一样
+  // 弹出窗口：换过头像 / 网名的会话，左上角用头像 + 网名；头像上不放水印，第二行模型名左边放个小 Claw 图标
   var sk=SOLO&&soloSkin&&soloSkin.id===session.id?soloSkin.skin:null;
   document.documentElement.classList.toggle('has-skin',!!(sk&&sk.av));
-  if(sk&&sk.av)$('#sessBtn .dot').innerHTML='<img class="sk" alt="" src="/avatars/'+esc(sk.av)+'"><span class="wx-cl">'+clawIcon(clawOf(session.id))+'</span>';
+  var skK=clawOf(session.id);
+  if(sk&&sk.av)$('#sessBtn .dot').innerHTML='<img class="sk" alt="" src="/avatars/'+esc(sk.av)+'">'+(skK==='group'?'<span class="wx-cl">'+clawIcon(skK)+'</span>':'');   // 群聊照旧用水印
   if(sk&&sk.name)t=sk.name;
   $('#nm').textContent=t||dir||'会话';
+  var hck=$('#hdCk'),wck=!!(sk&&sk.av&&skK!=='group');hck.hidden=!wck;hck.innerHTML=wck?clawIcon(skK):'';   // 第二行模型名左边的小 Claw 图标
   if(SOLO){document.title=(t||dir||'会话')+' · claclaw';try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'title',text:document.title},'*')}catch(_){}}   // 弹出窗口在外壳里：窗口标题由外壳设
   var sid=$('#sid');sid.textContent='';
   var full=/^[0-9a-f]{8}-/i.test(session.id);   // Claude 的 UUID：放完整 ID、只露出前 8 位；其它的直接放短 ID
