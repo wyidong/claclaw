@@ -1133,6 +1133,8 @@ body:has(#ttsStop:not([hidden])) #workUse{margin-right:46px}   /* 右下角浮�
 #hdAct .hd-fill{flex:1 1 0;min-width:4px;align-self:stretch}
 html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像占两行，第二行从头像右边开始 */
 #cfgBtn .c1{font-size:13px;line-height:22px}
+#cfgBtn{flex:0 1 auto}#cfgBtn .c1{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#cfgBtn .c2{flex:none}
+#sid{flex-shrink:6;min-width:calc(8ch + 12px)}#sid .hid{flex:none}#hdAct .hd-balls{flex-shrink:100000}   /* 一行放不下：先让圆球让位（浮到字上），再截费用，最后截模型名；ID 8 位和最右边的 ›（会话设置入口）始终在 */
 #cfgBtn .c2{font-size:13px;line-height:22px}
 #cfgBtn .c1:not(:empty)+.c2{margin-left:5px}   /* 模型 · 权限 · ID 之间都只隔一个小空格（约 5px） */
 #cfgBtn>span{flex:0 1 auto;min-width:0}
@@ -5913,7 +5915,7 @@ function openSkin(s){
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>头像和网名</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
     +'<div class="av-me"><span class="av-pv"></span><input class="gp-in av-nm" maxlength="40" placeholder="网名（不填用会话原名）"><button type="button" class="av-dice" title="头像和网名一起随机" aria-label="头像和网名一起随机">🎲</button></div>'
     +'<div class="av-opts"><label class="av-o" title="来消息时头像抖几下"><span class="k">抖一抖</span><input type="checkbox" class="md-sw av-shk"></label><label class="av-o"><span class="k">提示音</span><input type="checkbox" class="md-sw av-son"></label>'
-    +'<label class="av-pick" hidden><span class="av-sndw"><span class="av-sndv"></span><select class="av-snd" aria-label="选声音"></select></span><span class="av-nh"></span></label></div>'
+    +'<label class="av-pick" hidden><span class="av-sndw"><span class="av-sndv"></span><select class="av-snd" aria-label="选声音"></select></span></label></div>'
     +'<div class="av-tabs"><button type="button" data-t="av">头像</button><button type="button" data-t="nm">网名</button></div>'
     +'<div class="gp-list av-list"><div class="gp-sec">加载中…</div></div>'
     +'<div class="gp-ft"><button type="button" class="gp-cancel av-clr" title="头像和网名都不设置（保存后生效）">清除</button><span class="av-sp"></span><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go">保存</button></div></div>';
@@ -5924,13 +5926,13 @@ function openSkin(s){
   nm.value=cur.name;nm.title='原名：'+s.title;
   // 个性提示音 / 抖一抖：选了就试听（网页里响，不在电脑上响）；会话设置里关了通知（铃铛）就不响，抖照样抖
   // 提示音默认关；打开才出现选声音的一行（选了就试听，网页里响）。会话设置里关了通知（铃铛）就不响，抖照样抖
-  var snd=p.querySelector('.av-snd'),sndv=p.querySelector('.av-sndv'),son=p.querySelector('.av-son'),pick=p.querySelector('.av-pick'),shk=p.querySelector('.av-shk'),nh=p.querySelector('.av-nh'),dflt='',lastPick='';   // 打开时先用设置里的电脑提示音
+  var snd=p.querySelector('.av-snd'),sndv=p.querySelector('.av-sndv'),son=p.querySelector('.av-son'),pick=p.querySelector('.av-pick'),shk=p.querySelector('.av-shk'),sndOk=true,dflt='',lastPick='';   // 打开时先用设置里的电脑提示音
   if(cur.snd==='off')cur.snd='';
   shk.checked=!cur.still;shk.addEventListener('change',function(){cur.still=!shk.checked});
   function sndShow(){
-    son.checked=!!cur.snd;pick.hidden=!cur.snd;
+    var off=!!notifOffMap[s.id];   // 会话设置里关了通知：提示音反正不响，开关和选声音都不显示（设过的声音留着，重开通知又生效）
+    son.checked=!!cur.snd;son.closest('.av-o').hidden=off||!sndOk;pick.hidden=!cur.snd||off;
     var o=snd.options[snd.selectedIndex];sndv.textContent=o?o.textContent:'';
-    nh.textContent=notifOffMap[s.id]?'已关通知':'';nh.title=notifOffMap[s.id]?'这个会话关了通知，不会响':'';
   }
   sndShow();
   if(!notifLoaded)notifLoad().then(sndShow);
@@ -5940,7 +5942,7 @@ function openSkin(s){
     if(cur.snd&&(j.sounds||[]).indexOf(cur.snd)<0){var o=document.createElement('option');o.value=cur.snd;o.textContent=short(cur.snd)+'（已不在）';snd.appendChild(o)}
     dflt=j.name||(j.sounds||[])[0]||'';
     if(cur.snd)snd.value=cur.snd;sndShow();
-    if(!j.supported)son.closest('.av-o').hidden=true;   // 电脑上没有提示音可选（Linux）
+    if(!j.supported){sndOk=false;sndShow()}   // 电脑上没有提示音可选（Linux）
   });
   son.addEventListener('change',function(){
     if(son.checked){cur.snd=lastPick||dflt||snd.value;snd.value=cur.snd;if(cur.snd)sessSoundPlay(cur.snd,true)}else cur.snd='';
