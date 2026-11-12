@@ -152,6 +152,10 @@ window.__sc=(function(){
 :root:is([data-theme="ziwei"],[data-theme="shichen"]) #setTop button,
 :root:is([data-theme="ziwei"],[data-theme="shichen"]) #backBtn{color:var(--accent)}
 @media (min-width:1000px){:root:is([data-theme="ziwei"],[data-theme="shichen"]) #sList .s-row:not(.wx){border:0;background:none}}   /* 电脑：卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
+@media (min-width:1000px){   /* 电脑按目录的会话卡片：通用样式是「白底列表 + --bg 色细边」，这两套列表底本身就是 --bg，边框看不见——改成卡片铺 --surface 底来区分（图片背景的另有半透明底） */
+  :root:is([data-theme="ziwei"],[data-theme="shichen"]):not(.sc-img) #sList .s-row:not(.wx) .s-item:not([aria-current="true"]){background:var(--surface);border-color:transparent}
+  :root:is([data-theme="ziwei"],[data-theme="shichen"]):not(.sc-img) #sList .s-row:not(.wx):hover .s-item:not([aria-current="true"]){background:color-mix(in srgb,var(--user-bg) 55%,var(--surface))}
+}
 /* ── ③ 流变时辰 · 12 套共用 ── */
 /* 流变时辰：6 阳（腑：子胆 卯大肠 辰胃 未小肠 申膀胱 亥三焦）照九紫离火的配色（淡底白卡片），6 阴（脏：丑肝 寅肺 巳脾 午心 酉肾 戌心包）照深色主题（深底深卡片浅字，<html> 带 .sc-dark）。
    window.__sc 只按当前时辰给 <html> 设 data-sc="0~11"（地支序号）和 .sc-dark，颜色全在下面 ④ 各时辰的变量块里——要调哪个时辰的颜色直接改那一块。
@@ -183,8 +187,9 @@ window.__sc=(function(){
   :root[data-theme="shichen"].sc-img :is(#sTop>button,#sTop .th-tg,header .hd-ic,header #cfgBtn,header #sid,#rail button:not(.on)){color:var(--ink);filter:drop-shadow(0 0 1.5px color-mix(in srgb,var(--surface) 75%,transparent))}
   :root[data-theme="shichen"].sc-img #sheet::after{background:var(--sc-veil)}   /* 列表和聊天之间的竖线：不用灰线，用同样很浅的白，和浅底一样的色差 */
   :root[data-theme="shichen"].sc-img :is(#app #sTop,#app #setTop,#hostPane .pg-hd){background:linear-gradient(var(--sc-veil),var(--sc-veil)),var(--sc-in)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}   /* 钉在顶上的标题条：内容会从它下面滚过——铺上和内圈同一张图（都按窗口定位，接缝看不出），看着和聊天标题栏一样透明，又挡住下面滚过的内容 */
-  /* 电脑：列表 + 聊天这一大块不再用边框圈出来，改成和外圈（左栏、四周留边）轻微不同的底色区分：外圈 --sc-out 比里面的 --bg 深一点（阴时辰更暗一点） */
-  :root[data-theme="shichen"] #app::after{border-color:transparent;box-shadow:0 0 0 6px var(--sc-out)}
+  /* 电脑：外圈（左栏、四周留边）用 --sc-out，和里面的 --bg 轻微不同；聊天区没有自己的底（透出 #app 的 --sc-out），和外圈分不开，所以纯色时辰照样画一圈细边框；图片背景的内圈是整张图，靠图区分，不画 */
+  :root[data-theme="shichen"] #app::after{box-shadow:0 0 0 6px var(--sc-out)}
+  :root[data-theme="shichen"].sc-img #app::after{border-color:transparent}
   :root[data-theme="shichen"]:not(.sc-img) :is(#app,#rail){background:var(--sc-out)}
   /* 图片背景：图只铺在内圈（列表 + 聊天这一块，圆角），外圈（左栏、四周留边）是纯色 --sc-out；图原样显示，不压淡底 */
   :root[data-theme="shichen"].sc-img #app{background:var(--sc-out)!important;isolation:isolate;--sc-veil:color-mix(in srgb,var(--surface) 30%,transparent);--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
