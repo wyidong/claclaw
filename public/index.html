@@ -8373,7 +8373,8 @@ $('#delForm').addEventListener('submit',function(e){
 $('#bannerX').addEventListener('click',function(){$('#banner').hidden=true});
 $('#bannerT').addEventListener('click',function(){if(updateReady)$('#railReload').click()});
 $('#logout').addEventListener('click',function(){
-  fetch('/api/logout',{method:'POST'}).finally(function(){localStorage.removeItem(hk('session'));location.replace('/login')});
+  // 在 clarelay 外壳里：同时让外壳回到它的主页（宿主列表），下次再点这台宿主看到的是登录页
+  fetch('/api/logout',{method:'POST'}).finally(function(){localStorage.removeItem(hk('session'));try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'logout'},'*')}catch(_){}location.replace('/login')});
 });
 
 // 手机上点进输入框（键盘要弹出）：body 加 kbf，收起底部菜单；再把正在填的框滚到看得见的中间（iOS 自己滚的常被底部菜单挡住）。
