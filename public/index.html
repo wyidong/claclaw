@@ -434,6 +434,10 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #sVoice[hidden],#sTheme[hidden],#sAcct[hidden]{display:none}
 #sVoice,#sTheme,#sAcct{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover,#sTheme:hover,#sAcct:hover{color:var(--accent)}
 #sAcct{position:relative}
+.ac-mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;min-height:min(70vh,560px)}   /* 设置用户名和密码：上下居中 */
+.ac-mid .pe-err{margin:0}
+.ac-pw{display:flex;align-items:center;gap:6px}.ac-pw .md-in{flex:1}
+.ac-eye{flex:none;width:32px;height:28px;margin:-2px -6px -2px 0;padding:0;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}.ac-eye svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 #sAcct.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 还没设登录账号 */
 #setAcctGo.dot .lb>span::after{content:'';display:inline-block;width:8px;height:8px;margin-left:6px;border-radius:50%;background:#F23C3C;vertical-align:2px}
 #rClear:disabled{opacity:.35;cursor:default}#rClear:disabled:hover{color:var(--muted);background:none}
@@ -7832,21 +7836,22 @@ var acSt=null,acMsg={};
 function acLoad(){return fetch('/api/acct',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(j){acSt=j;acDot()}renderAcct()}).catch(function(){})}
 function acDot(){var no=!!acSt&&!acSt.setUp;$('#sAcct').classList.toggle('dot',no);$('#setAcctGo').classList.toggle('dot',no);$('#sAcct').hidden=$('#setAcctGo').hidden=!no;$('#setAcctSub').textContent=!acSt?'手机、其他电脑登录用的用户名和密码':no?'还没设置：只有这台电脑和第一次打开的设备能用':'已设置';$('#logout').hidden=no}
 function openAcct(){mTab('host');hostView='acct';acMsg={};renderAcct();acLoad()}
-function acField(id,label,type,ph){return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+label+'</label><input id="'+id+'" class="md-in" type="'+type+'" autocomplete="'+(type==='password'?'new-password':'off')+'" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="'+esc(ph||'')+'"></div>'}
+var AC_EYE='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    AC_EYE_X='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7c2 0 3.8.7 5.2 1.6M22 12s-3.6 7-10 7c-2 0-3.8-.7-5.2-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>';
+// 密码框右边一只眼睛：点了看明文，再点收回
+function acField(id,label,type,ph){var pw=type==='password';return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+label+'</label>'+(pw?'<div class="ac-pw">':'')+'<input id="'+id+'" class="md-in" type="'+type+'" autocomplete="'+(pw?'new-password':'off')+'" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="'+esc(ph||'')+'">'+(pw?'<button type="button" class="ac-eye" data-act="ac-eye" data-for="'+id+'" aria-label="显示密码">'+AC_EYE+'</button></div>':'')+'</div>'}
+// 没设：只有三个框和保存，上下居中；只在输错时提示。设了（一般看不到入口）：输对现在的密码才能改
 function renderAcct(){
   if(hostView!=='acct')return;
   var h=pgHd('data-act="ac-back"',peerFromList?'返回':'返回设置',acSt&&!acSt.setUp?'设置用户名和密码':'登录账号');
-  h+='<div class="pe-err"'+(acMsg.err?'':' hidden')+'>'+esc(acMsg.err||'')+'</div><div class="pe-ok"'+(acMsg.ok?'':' hidden')+'>'+esc(acMsg.ok||'')+'</div>';
+  var err='<div class="pe-err" id="acErr"'+(acMsg.err?'':' hidden')+'>'+esc(acMsg.err||'')+'</div>';
   if(!acSt){h+='<div class="h-empty">加载中…</div>'}
   else if(!acSt.setUp){
-    h+='<div class="vc-tip">还没设登录账号：现在只有这台电脑（127.0.0.1）和第一次打开 claclaw 的设备能用，删除会话这类要密码的功能也用不了。设好以后，其他手机、电脑用这组用户名、密码登录。用户名和密码至少填一个。</div>';
-    h+='<div><div class="h-h">设置登录账号</div><div class="h-card">'+acField('acU','用户名','text','不要可以留空')+acField('acP','密码','password','')+acField('acP2','再输一次密码','password','')+'</div></div>';
-    h+='<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="ac-set">保存</button></div>';
+    h+='<div class="ac-mid"><div class="h-card">'+acField('acU','用户名','text','')+acField('acP','密码','password','')+acField('acP2','再输一次密码','password','')+'</div>'+err+'<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="ac-set">保存</button></div></div>';
   }else{
     var sm=acSt.summary||{};
     h+='<div><div class="h-h">现在的账号</div><div class="h-card"><div class="h-row"><span class="k">初始账号</span><span class="v">'+esc(sm.master||'')+'</span></div>'+(sm.lastSet?'<div class="h-row"><span class="k">另设的一组</span><span class="v">'+esc(sm.lastSet)+'</span></div>':'')+'</div></div>';
-    h+='<div class="vc-tip">改的是「另设的一组」，初始账号一直有效。要先输对现在的密码。</div>';
-    h+='<div><div class="h-h">修改</div><div class="h-card">'+(acSt.needUser?acField('acCU','现在的用户名','text',''):'')+acField('acC','现在的密码','password','')+acField('acU','新用户名','text','不要可以留空')+acField('acP','新密码','password','')+acField('acP2','再输一次新密码','password','')+'</div></div>';
+    h+='<div><div class="h-h">修改</div><div class="h-card">'+(acSt.needUser?acField('acCU','现在的用户名','text',''):'')+acField('acC','现在的密码','password','')+acField('acU','新用户名','text','')+acField('acP','新密码','password','')+acField('acP2','再输一次新密码','password','')+'</div></div>'+err;
     h+='<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="ac-chg">保存</button></div>';
   }
   $('#hostBody').innerHTML=h;
@@ -7854,16 +7859,18 @@ function renderAcct(){
 function acAct(act,a){
   if(act==='ac-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
   if(act==='ac-back'){hostView='';mTab('set');return}
+  if(act==='ac-eye'){var el=$('#'+a.dataset.for);if(!el)return;var show=el.type==='password';el.type=show?'text':'password';a.innerHTML=show?AC_EYE_X:AC_EYE;a.setAttribute('aria-label',show?'隐藏密码':'显示密码');return}
   var v=function(id){var e=$('#'+id);return e?e.value:''};
+  var bad=function(m){var e=$('#acErr');if(e){e.textContent=m;e.hidden=false}};   // 只换提示，填好的不清掉
   var u=v('acU').trim(),p=v('acP');
-  if(!u&&!p){acMsg={err:'用户名和密码至少填一个'};renderAcct();return}
-  if(p!==v('acP2')){acMsg={err:'两次输入的密码不一样'};renderAcct();$('#acU').value=u;return}
+  if(!u&&!p)return bad('用户名和密码不能都为空');
+  if(p!==v('acP2'))return bad('两次输入的密码不一致');
   var set=act==='ac-set',body=set?{username:u,password:p}:{cur:v('acC'),curUser:v('acCU'),username:u,password:p};
-  a.disabled=true;
+  a.disabled=true;$('#acErr').hidden=true;
   fetch(set?'/api/setup':'/api/acct',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
-    acMsg=x.ok?{ok:set?'设好了：手机和其他电脑现在可以用它登录':'改好了：下次登录生效，初始账号仍然可用'}:{err:x.j.error||'没保存成功'};
-    acLoad();
-  }).catch(function(){acMsg={err:'网络不通，没保存'};a.disabled=false;renderAcct()});
+    if(!x.ok){a.disabled=false;return bad(x.j.error||'没保存成功')}
+    toast(set?'已设置':'已修改');acMsg={};acLoad();acAct('ac-back');   // 设好了：入口跟着消失，回到原来的页面
+  }).catch(function(){a.disabled=false;bad('网络不通，没保存')});
 }
 $('#setAcctGo').addEventListener('click',function(){peerFromList='';openAcct()});
 $('#sAcct').addEventListener('click',function(){peerFromList=listTab();openAcct()});
