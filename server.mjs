@@ -2880,8 +2880,8 @@ const handler = async (req, res) => {
     };
     const go = (to) => { res.writeHead(302, { location: to, 'cache-control': 'no-store' }); res.end(); };
     const setUp = isSetUp();
-    // 还没设账号：第一次用浏览器打开的设备记下来（发一个设备 cookie），它和本机直连以后都不用登录；账号以后在「登录账号」页设
-    if (!setUp && !readFirst().dev && !devCookieVal(req) && isBrowserOpen(req) && /^\/(index\.html|login|setup)?$/.test(url.pathname)) {
+    // 还没设账号：第一次用浏览器打开的设备（本机直连 127.0.0.1 不算，它本来就免登录）记下来，发一个设备 cookie，以后不用登录；账号以后在「登录账号」页设
+    if (!setUp && !isLocalReq(req) && !readFirst().dev && !devCookieVal(req) && isBrowserOpen(req) && /^\/(index\.html|login|setup)?$/.test(url.pathname)) {
       const v = crypto.randomBytes(32).toString('base64url');
       writeFirst({ dev: sha256(v), devAt: Date.now() });
       log('first device', realIp(req));
