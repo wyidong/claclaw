@@ -8,6 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export const HOPS = 5, INLINE = 400, CUR_MAX = 1500, KEEP = 500, SNAP = 200, LOG_MAX = 4e6, ATT_MAX = 12 * 1024 * 1024, ATT_CHUNK = 512 * 1024;
+export const isSharedAv = av => typeof av === 'string' && av.length <= 120 && /^p\/[a-z0-9-]+\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp|gif|svg)$/.test(av);   // 仓库自带的预设头像：每台电脑都有
 export const isGroupId = id => /^gp:[0-9a-f]{8}$/.test(String(id || ''));
 export const toWire = id => 'gp-' + String(id).slice(3);   // 对方会把 from_session 里 [\w-] 以外的字符去掉
 export const fromWire = s => /^gp-[0-9a-f]{8}$/.test(String(s || '')) ? 'gp:' + String(s).slice(3) : null;
@@ -108,7 +109,7 @@ class Group {
     return '';
   }
   peers() { return [...new Set(this.members.map(m => m.peerId).filter(Boolean))]; }
-  toJSON() { const { name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, id, host } = this; return { id, name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, host: host || undefined, status: this.mirror ? this.status : undefined }; }
+  toJSON() { const { name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, id, host, av, avAt } = this; return { id, name, created, members, items, seen, pending, seqMax, mirror, mirrorTitle, host: host || undefined, av: av || undefined, avAt: avAt || undefined, status: this.mirror ? this.status : undefined }; }
 }
 // viewer：给哪台电脑看（undefined = 本机）；collab = 对看的人来说是不是别的电脑上的会话
 // sid：本机成员的会话 id，只给本机网页（按它取成员会话自己设的朗读声音）；不发给协同对方
@@ -116,8 +117,8 @@ const memberView = (m, viewer) => ({ name: m.name, claw: m.claw || '', collab: v
 
 export class Groups {
   // logDir：群记录文件（给成员会话读的纯文本）放这里；不要放在数据目录里，那里对协同那一轮算敏感位置
-  constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, permReply = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
-    Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, permReply, retryMs, retryFor, syncDelay });
+  constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, onAv = () => {}, permReply = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
+    Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, onAv, permReply, retryMs, retryFor, syncDelay });
     this.map = new Map(); this.syncT = new Map();
     // 正在发给协同成员、还没等到对方回话（202 / 回复）的：`群id|编号` → { key, depth, peerId, answered }。
     // 对方可能在我们这边还等着 202 时就把回复发来了（不装 claclaw 的对方常这样），这时也要认
@@ -432,7 +433,24 @@ export class Groups {
   // 镜像：给某个对方看的快照（collab 按对方的视角）
   snapshotFor(id, peerId) {
     const g = this.get(id);
-    return g && { id: toWire(id), name: g.name, title: g.title, created: g.created, members: g.membersView(peerId), items: g.items.slice(-SNAP).map(it => { const v = g.view(it, peerId); return v.text && v.text.length > 8000 ? { ...v, text: v.text.slice(0, 8000) + '…' } : v; }), status: Object.entries(g.status).map(([k, text]) => ({ name: g.members.find(m => m.key === k)?.name || '', text })) };
+    return g && { id: toWire(id), name: g.name, title: g.title, created: g.created, av: g.av || undefined, avAt: g.avAt || undefined, members: g.membersView(peerId), items: g.items.slice(-SNAP).map(it => { const v = g.view(it, peerId); return v.text && v.text.length > 8000 ? { ...v, text: v.text.slice(0, 8000) + '…' } : v; }), status: Object.entries(g.status).map(([k, text]) => ({ name: g.members.find(m => m.key === k)?.name || '', text })) };
+  }
+  // 群头像（共用的那张）：只有仓库自带的预设图（p/…）各台电脑都有，选了它就同步给群里所有电脑；本机图 / 上传的只在本机，不走这里。
+  // 主群记下 g.av 随快照发出去；镜像里换的先转给主群，由主群发给大家。收到别人换的：onAv 写进本机的头像设置
+  setAv(id, av) {
+    const g = this.get(id);
+    if (!g || !isSharedAv(av)) return false;   // 选的和上次同步的是同一张也照样发（别的电脑可能后来换成了自己的本机图）
+    if (g.mirror) { this.peerOp(g.mirror.peerId, { op: 'av', id: toWire(id), av }).catch(e => this.log('group av fwd', e.message)); return true; }
+    g.av = av; g.avAt = Date.now(); this.save(g); this.syncOut(g);
+    return true;
+  }
+  peerAv(id, peerId, av) {
+    const g = this.get(id);
+    if (!g || g.mirror || !g.peers().includes(peerId) || !isSharedAv(av)) return false;
+    g.av = av; g.avAt = Date.now(); this.save(g);
+    try { this.onAv(g, av); } catch (e) { this.log('group av', e.message); }
+    this.syncOut(g);
+    return true;
   }
   syncOut(g) {
     if (g.mirror || !g.peers().length) return;
@@ -460,9 +478,12 @@ export class Groups {
     if (!g) { g = new Group(this, { id, mirror: { peerId }, created: Number.isFinite(snap.created) ? snap.created : Date.now() }); this.map.set(id, g); this.log('group mirror', id, 'from', peerId); }
     const fresh = snap.items.filter(x => x.seq > g.seqMax);
     Object.assign(g, { name: str(snap.name, 40), mirrorTitle: str(snap.title, 60), members: snap.members, items: snap.items, status: snap.status });
+    const avNew = isSharedAv(snap.av) && Number.isFinite(snap.avAt) && snap.avAt !== g.avAt;   // 有人新换了共用头像（没换就不动：本机自己换的本机图 / 上传图留着）
+    if (avNew) Object.assign(g, { av: snap.av, avAt: snap.avAt });
     g.seqMax = snap.items.reduce((a, x) => Math.max(a, x.seq || 0), g.seqMax);
     this.save(g);
     if (isNew) this.writeLog(g); else this.appendLog(g, fresh);
+    if (avNew) try { this.onAv(g, g.av); } catch (e) { this.log('group av', e.message); }
     for (const it of fresh) { g.emit({ t: 'group.msg', id, item: it }); if (!isNew) try { this.onItem(g, it); } catch {} }
     if (isNew && fresh.length) try { this.onItem(g, fresh[fresh.length - 1]); } catch {}   // 第一次同步：未读只记一条
     g.emit({ t: 'group.status', id, status: g.statusView() });

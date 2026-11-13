@@ -408,3 +408,33 @@ test('成员的会话 id（朗读用成员自己的声音）：只给本机网�
   assert.ok(snap.members.every(m => !('sid' in m) || m.sid === undefined));
   assert.ok(snap.items.every(x => !x.who || x.who.sid === undefined));
 });
+
+test('群头像：仓库预设图同步给群里所有电脑（哪边换都行）；本机图 / 上传图不同步；没换的同步不盖掉本机自己的', async () => {
+  const avs = { host: [], mir: [] };
+  let host, mir;
+  host = new Groups({ dir: tmp(), syncDelay: 0, deliver: async () => ({ ok: true, reply: 'r' }), onAv: (g, av) => avs.host.push(av),
+    peerOp: async (pid, b) => { if (b.op === 'sync') { mir.applyMirror('HOST', b.group); return { ok: true }; } return { ok: true }; } });
+  mir = new Groups({ dir: tmp(), syncDelay: 0, deliver: async () => ({ ok: true }), onAv: (g, av) => avs.mir.push(av),
+    peerOp: async (pid, b) => { if (b.op === 'av') return { ok: host.peerAv(fromWire(b.id), 'P15', b.av) }; return { ok: true }; } });
+  const g = host.create({ members: [M('s1', '后端'), M('abcd1234', '前端', { peerId: 'P15', peerName: '15' })] });
+  await flush(); await flush();
+  assert.ok(mir.get(g.id));
+  // 主群换预设图：镜像收到
+  assert.equal(host.setAv(g.id, 'p/xiyou/x-a.png'), true);
+  await flush(); await flush();
+  assert.deepEqual(avs.mir, ['p/xiyou/x-a.png']);
+  // 本机图 / 上传图：不同步
+  assert.equal(host.setAv(g.id, 'l/qq/1.png'), false);
+  assert.equal(mir.setAv(g.id, 'u/0123456789abcdef.png'), false);
+  // 之后普通的同步（发消息）不再盖一遍
+  await host.post(g.id, '@后端 hi'); await flush(); await flush();
+  assert.deepEqual(avs.mir, ['p/xiyou/x-a.png']);
+  // 镜像这边换预设图：转给主群，主群写进本机、再发回给大家
+  assert.equal(mir.setAv(g.id, 'p/cartoon/c-b.png'), true);
+  await flush(); await flush();
+  assert.deepEqual(avs.host, ['p/cartoon/c-b.png']);
+  assert.equal(host.get(g.id).av, 'p/cartoon/c-b.png');
+  assert.equal(mir.get(g.id).av, 'p/cartoon/c-b.png');
+  // 不在群里的对方不能改
+  assert.equal(host.peerAv(g.id, 'POTHER', 'p/x/y.png'), false);
+});

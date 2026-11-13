@@ -4016,6 +4016,11 @@ function onEvent(m){
   case 'history.page':
     prependHistory(m);
     break;
+  case 'skin':   // 头像 / 网名在别处换了（这台电脑的别的网页，或群里别的电脑换了共用的群头像）
+    if(lastList&&m.id){var skHit=false;lastList.forEach(function(x){if(x.id===m.id){skHit=true;if(m.skin)x.skin=m.skin;else delete x.skin}});if(skHit){listSave('recent',lastList);if(listMode==='recent')drawRecent(lastList)}}
+    if(SOLO&&soloSkin&&soloSkin.id===m.id)soloSkin.skin=m.skin||{};
+    if(session&&session.id===m.id)setHeader();
+    break;
   case 'unread':
     var unNew=m.unread||{},unIds=Object.keys(unNew).filter(function(id){return (unNew[id]||0)>(unread[id]||0)}),unUp=unIds.length>0;
     if(unreadBase)unIds.forEach(msgArrive);unreadBase=true;   // 连上后的第一份只是现状，不算「来消息」

@@ -1398,7 +1398,10 @@ function groupOnItem(g, it) {
   const v = g.view(it);
   alertOut(g.id, 'reply', g.title, { title: g.title, body: (v.who?.name ? v.who.name + '：' : '') + snippet(v.text, '有新消息'), tag: 'grp-' + g.id, url: '/?s=' + encodeURIComponent(g.id), badge });
 }
-const groups = new Groups({ dir: path.join(DATA, 'groups'), logDir: GROUP_LOGS, log, deliver: groupDeliver, peerOp: groupPeerOp, onItem: groupOnItem, permReply: (sid, rid, decision, answers) => runnerOf(sid)?.replyPermission(rid, decision, answers) });
+// 群里有人换了共用头像（仓库预设图）：写进本机的头像设置，告诉开着的网页
+function groupOnAv(g, av) { try { skinBroadcast(g.id, skins.set(g.id, { av })); log('group av', g.id, av); } catch (e) { log('group av', g.id, e.message); } }
+function skinBroadcast(id, skin) { const msg = JSON.stringify({ t: 'skin', id, skin: skin || null }); for (const c of wss.clients) if (c.readyState === 1) c.send(msg); }
+const groups = new Groups({ dir: path.join(DATA, 'groups'), logDir: GROUP_LOGS, log, deliver: groupDeliver, peerOp: groupPeerOp, onItem: groupOnItem, onAv: groupOnAv, permReply: (sid, rid, decision, answers) => runnerOf(sid)?.replyPermission(rid, decision, answers) });
 // 本机会话还在不在（不列全部会话，快）
 function localMemberOk(id) {
   if (runnerOf(id)) return true;
@@ -1583,6 +1586,7 @@ async function peerHandler(req, res) {
       const gid = fromWire(b.id);
       if (!gid) return out(400, { ok: false, error: '缺群编号' });
       if (b.op === 'post') { let ok = false, error; try { ok = await groups.peerPost(gid, peer.id, String(b.text || '').slice(0, 8000), peer.name, b.att); } catch (e) { error = '附件没传过来：' + e.message; } log('group post in', peer.name, gid, ok ? 'ok' : 'rejected', error || ''); return out(ok ? 200 : 404, { ok, error }); }
+      if (b.op === 'av') { const ok = groups.peerAv(gid, peer.id, String(b.av || '')); log('group av in', peer.name, gid, ok ? b.av : 'rejected'); return out(ok ? 200 : 404, { ok }); }
       if (b.op === 'attget') return out(200, groups.attChunk(gid, peer.id, String(b.aid || ''), b.off));
       if (b.op === 'permstat') { const ok = groups.peerPermStatus(gid, peer.id, peer.name, String(b.sid || '').slice(0, 80), !!b.on); return out(ok ? 200 : 404, { ok }); }
       if (b.op === 'dissolve') { const ok = groups.dissolve(gid, { fromPeer: peer.id }); if (ok) clearUnread(gid); return out(200, { ok }); }
@@ -3203,7 +3207,12 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/skin' && req.method === 'POST') {
       const b = await jsonBody(req, 8 * 1024, null);
       if (!b || typeof b !== 'object') return sendJson(res, 400, { error: 'bad request' });
-      try { return sendJson(res, 200, { ok: true, skin: skins.set(b.id, { av: b.av, name: b.name, snd: b.snd, still: b.still }) }); } catch (e) { return sendJson(res, e.code || 500, { error: e.message }); }
+      try {
+        const before = (skins.all()[b.id] || {}).av, skin = skins.set(b.id, { av: b.av, name: b.name, snd: b.snd, still: b.still });
+        if (isGroupId(b.id) && typeof b.av === 'string' && b.av && b.av !== before) groups.setAv(b.id, b.av);   // 群头像选了仓库预设图：群里的电脑都换；本机图 / 上传的只换本机（setAv 自己挑）
+        skinBroadcast(b.id, skin);   // 这台电脑上开着的别的网页也跟着换
+        return sendJson(res, 200, { ok: true, skin });
+      } catch (e) { return sendJson(res, e.code || 500, { error: e.message }); }
     }
     if (url.pathname === '/api/skin/upload' && req.method === 'POST') {
       const b = await jsonBody(req, 2200 * 1024, null);
