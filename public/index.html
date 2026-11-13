@@ -475,6 +475,7 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #grpPane .gp-chip{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:3px 4px 3px 8px;border-radius:999px;background:var(--bg);font-size:13px}
 #grpPane .gp-chip i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:9em}
 #grpPane .gp-chip i{cursor:pointer}
+#grpPane .gp-chips.ro .gp-chip{padding-right:8px}#grpPane .gp-chips.ro .gp-chip i{cursor:default;max-width:14em}#grpPane .gp-name[readonly]{color:var(--muted)}   /* 对方建的群：只看不改 */
 .gm .gm-att{display:flex;flex-direction:column;gap:6px;margin:6px 0 2px}
 .gm .gm-att .uimgs img{max-width:220px;max-height:220px;border-radius:10px;cursor:zoom-in}
 #grpPane .gp-chip.host{background:color-mix(in srgb,var(--accent) 16%,var(--bg))}
@@ -1642,6 +1643,7 @@ select.pe-in{text-align-last:right}
   #feed::-webkit-scrollbar{width:8px}
   #feed::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:4px}
   #feed::-webkit-scrollbar-track{background:transparent}
+  :root[data-theme="shichen"]:not(.sc-img) #feed::-webkit-scrollbar-track{background:linear-gradient(var(--strip),var(--surface))}   /* 时辰（纯色）：聊天区是彩色底，滚动条那条和外面分不开——放出底色，上接标题栏、下接输入区渐变 */
   /* 会话列表照微信：每行铺满到两边，滚动条浮在行上面、不占位置。系统滚动条在有的 WebView 里是常驻的粗条（占一条白底），
      所以把它藏掉，换成脚本画的细条 .ovs：滚动、鼠标移进列表时出现，停一会儿淡出；可以拖 */
   .sheet-p{scrollbar-width:none}
@@ -2877,7 +2879,7 @@ dissEl.querySelector('.ds-b').addEventListener('click',function(e){
   var sr=e.target.closest('tr.s');if(sr){var d=sr.nextElementSibling;if(d&&d.classList.contains('d'))d.hidden=!d.hidden;return}
   var tr=e.target.closest('tr[data-i],.ds-st[data-i]');if(tr){showTurn(+tr.dataset.i)}
 });
-$('#sessBtn').addEventListener('click',function(){if(!session)return;if(session.group){if(session.group.mirror)toast('群名和成员只能在建群的电脑上改');else openGroupPick(session.id);return}openDissect()});
+$('#sessBtn').addEventListener('click',function(){if(!session)return;if(session.group){if(session.group.mirror)openGroupView();else openGroupPick(session.id);return}openDissect()});
 (function(){   // 手机：右滑 = 返回
   var g=null;
   dissEl.addEventListener('touchstart',function(e){if(e.touches.length!==1){g=null;return}var p=e.touches[0];g={x:p.clientX,y:p.clientY,t:Date.now(),tw:!!e.target.closest('.ds-tw')}},{passive:true});
@@ -6078,6 +6080,21 @@ $('#sNew').addEventListener('click',function(){
   newInClaw(clawSel||'claude');
 });
 // 建群 / 群设置：按 Claw → 会话目录 → 会话逐层展开着选（只列有会话的 Claw）；协同的对方点开才去取它开放的会话。至少 2 个
+function openGroupView(){   // 对方建的群（镜像）：只能看群名和成员，改要去建群的电脑
+  var p=$('#grpPane');
+  if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
+  var ms=(session&&session.group&&session.group.members)||[];
+  p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>群信息</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
+    +'<input class="gp-in gp-name" readonly><div class="gp-chips ro"></div><div class="gp-hosthint">群名和成员只能在建群的电脑上改</div>'
+    +'<div class="gp-ft"><button type="button" class="gp-cancel">关闭</button></div></div>';
+  p.classList.add('on');
+  var close=function(){p.classList.remove('on')};
+  p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel').addEventListener('click',close);
+  var nm=p.querySelector('.gp-name');nm.value=session&&session.title||'';nm.placeholder='（没起群名，用成员名）';
+  var chips=p.querySelector('.gp-chips');
+  ms.forEach(function(m){var c=document.createElement('span');c.className='gp-chip'+(m.host?' host':'');c.innerHTML=gmAv({claw:m.claw,collab:!!m.collab})+'<i></i>'+(m.host?'<em>主理人</em>':'');c.querySelector('i').textContent=(m.name||'')+(m.peer?' · '+m.peer:'');chips.appendChild(c)});
+  if(!ms.length)chips.innerHTML='<div class="gp-sec">还没收到成员名单</div>';
+}
 function openGroupPick(gid){
   var p=$('#grpPane');
   if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
