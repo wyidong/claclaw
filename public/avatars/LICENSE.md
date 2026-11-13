@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | animal/ | 动物（Animal Pack Remastered） | Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://kenney.nl/assets/animal-pack-redux |
 | cartoon/ | 动物卡通（四象、12 生肖按五行配色；128px） | claclaw 自制；33 树懒为 Microsoft Fluent Emoji 3D | 随 claclaw 分发；树懒 [MIT](cartoon/LICENSE-MIT.txt) | 树懒：https://github.com/microsoft/fluentui-emoji |
-| xiyou/ | 西游记（54 个角色的动物本相；128px） | claclaw 自制 | 随 claclaw 分发 | — |
+| xiyou/ | 西游记（148 个角色的动物本相；128px） | claclaw 自制 | 随 claclaw 分发 | — |
 | adventurer/ | 冒险少年（Adventurer） | Lisa Wischofsky | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/1184595184137881796 |
 | big-smile/ | 大笑脸（Custom Avatar） | Ashley Seo | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/881358461963645496 |
 | toon-head/ | 卡通头（ToonHead） | Johan Melin | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | https://www.figma.com/community/file/1589627891082866389 |
