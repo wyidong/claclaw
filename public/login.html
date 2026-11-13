@@ -78,10 +78,6 @@ button:disabled{opacity:.5}
   <input id="u" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
   <label for="pw">密码</label>
   <input id="pw" name="password" type="password" autocomplete="current-password">
-  <div id="again" hidden>
-    <label for="pw2">再输一次密码</label>
-    <input id="pw2" type="password" autocomplete="new-password">
-  </div>
   <button type="submit" id="go">登录</button>
   <div id="err" role="alert"></div>
 </form>
@@ -89,38 +85,16 @@ button:disabled{opacity:.5}
 <script>
 (function(){
 var f=document.getElementById('f'),err=document.getElementById('err'),go=document.getElementById('go');
-var u=document.getElementById('u'),pw=document.getElementById('pw'),pw2=document.getElementById('pw2');
-var setup=location.pathname==='/setup';
-if(setup){
-  document.title='首次设置 · claclaw';
-  document.querySelector('h1').textContent='设置登录账号';
-  document.getElementById('hint').hidden=true;
-  document.getElementById('again').hidden=false;
-  pw.setAttribute('autocomplete','new-password');
-  go.textContent='设置并进入';
-  // 首次设置只能用 127.0.0.1 打开：别的地址打开就说明怎么做，不给填
-  if(!/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname)){
-    var port=location.port||'8787';
-    f.innerHTML='<p style="line-height:1.7;font-size:15px">还没设置登录账号。为了不被别人抢先设置，首次设置只能用 <b>http://127.0.0.1:'+port+'</b> 打开：</p>'+
-      '<p style="line-height:1.7;font-size:14px">· 在运行 claclaw 的电脑上，用浏览器打开上面这个地址；<br>· 那台电脑没有显示器时，在你自己的电脑上运行<br><code style="user-select:all;word-break:break-all">ssh -L '+port+':127.0.0.1:'+port+' 用户名@那台电脑</code><br>再在自己的电脑上打开 http://127.0.0.1:'+port+'。</p>';
-    return;
-  }
-}
+var u=document.getElementById('u'),pw=document.getElementById('pw');
+// 只有登录。还没设账号时这里怎么输都登录不上：账号在本机或第一台设备的「登录账号」页里设（原来的 /setup 设置页不用了）
 f.addEventListener('submit',function(e){
   e.preventDefault();err.textContent='';
-  if(setup){
-    if(!u.value.trim()&&!pw.value){err.textContent='用户名和密码至少要设一个';return}
-    if(/\s/.test(u.value.trim())){err.textContent='用户名不能含空格';return}
-    if(pw.value&&!pw.value.trim()){err.textContent='密码不能全是空格';return}
-    if(pw.value!==pw2.value){err.textContent='两次输入的密码不一样';return}
-  }
   go.disabled=true;
-  fetch(setup?'/api/setup':'/api/login',{method:'POST',headers:{'content-type':'application/json'},
+  fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},
     body:JSON.stringify({username:u.value,password:pw.value})})
   .then(function(r){return r.json().then(function(j){return {ok:r.ok,status:r.status,j:j}})})
   .then(function(x){
     if(x.ok)location.replace('/');
-    else if(setup&&x.status===409)location.replace('/login');
     else{err.textContent=x.j.error||'失败';go.disabled=false}
   })
   .catch(function(){err.textContent='连不上服务';go.disabled=false});

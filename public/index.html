@@ -7835,7 +7835,7 @@ function openAcct(){mTab('host');hostView='acct';acMsg={};renderAcct();acLoad()}
 function acField(id,label,type,ph){return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+label+'</label><input id="'+id+'" class="md-in" type="'+type+'" autocomplete="'+(type==='password'?'new-password':'off')+'" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="'+esc(ph||'')+'"></div>'}
 function renderAcct(){
   if(hostView!=='acct')return;
-  var h=pgHd('data-act="ac-back"',peerFromList?'返回':'返回设置','登录账号');
+  var h=pgHd('data-act="ac-back"',peerFromList?'返回':'返回设置',acSt&&!acSt.setUp?'设置用户名和密码':'登录账号');
   h+='<div class="pe-err"'+(acMsg.err?'':' hidden')+'>'+esc(acMsg.err||'')+'</div><div class="pe-ok"'+(acMsg.ok?'':' hidden')+'>'+esc(acMsg.ok||'')+'</div>';
   if(!acSt){h+='<div class="h-empty">加载中…</div>'}
   else if(!acSt.setUp){
@@ -8322,7 +8322,7 @@ function renameSess(s){
 
 var delDlg=$('#delDlg'),delTarget=null;
 // 要密码的功能（删除会话、看完整 Key）：还没设登录账号时直接去「登录账号」页先设
-function needAcct(back){if(!acSt||acSt.setUp)return false;toast('要先设置登录账号');peerFromList=back||'';openAcct();return true}
+function needAcct(back){if(!acSt||acSt.setUp)return false;toast('要先设置用户名和密码');peerFromList=back||'';openAcct();return true}
 function openDel(s){
   if(needAcct(listTab()))return;
   delTarget=s;
