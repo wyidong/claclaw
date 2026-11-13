@@ -67,11 +67,11 @@ window.__sc=(function(){
 (function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
 (function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply()}}catch(e){}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
-(function(){if(!window.matchMedia('(min-width:1000px)').matches){var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},5000)}})();
-// 雾感：打开 / 刷新后页面先蒙一层雾，连上服务器就变清楚（最多 3 秒），代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
-(function(){var h=document.documentElement,emb=window.parent!==window;if(emb){h.classList.add('emb');window.__clq=[];window.addEventListener('message',function(e){if(window.__clq&&e.source===window.parent&&e.data&&e.data.clarelay===1)window.__clq.push(e)})}if(!emb){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},10000)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
+(function(){if(window.matchMedia('(min-width:1000px)').matches)return;var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},1500)})();   // 和轻雾同一档（不再有重雾），最多 1.5 秒；电脑宽屏不上雾
+// 雾感（只在手机）：点刷新从清楚渐变到轻雾 → 页面加载、连服务器期间保持轻雾 → 连上变清楚；从打开算最多 1.5 秒，到时没连上就清掉雾、刷新图标变黄转圈；代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
+(function(){var h=document.documentElement,emb=window.parent!==window;if(emb){h.classList.add('emb');window.__clq=[];window.addEventListener('message',function(e){if(window.__clq&&e.source===window.parent&&e.data&&e.data.clarelay===1)window.__clq.push(e)})}if(!emb&&!window.matchMedia('(min-width:1000px)').matches){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},1500)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
 </script>
-<style>html.boot #app{filter:blur(8px);opacity:.45}</style>
+<style>html.boot #app{filter:blur(1.2px);opacity:.88}</style>
 <style>
 @font-face{font-family:"Nunito";font-style:normal;font-weight:400 800;font-display:swap;src:url(/fonts/nunito-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}   /* 圆润的英文 / 数字：苹果设备用系统自带的圆体（ui-rounded），别的浏览器用这个（开源，授权见 public/fonts/OFL-Nunito.txt）；中文仍是系统字体 */
 /* ════════ 主题：一共 15 套 ════════
@@ -162,7 +162,6 @@ window.__sc=(function(){
    window.__sc 只按当前时辰给 <html> 设 data-sc="0~11"（地支序号）和 .sc-dark，颜色全在下面 ④ 各时辰的变量块里——要调哪个时辰的颜色直接改那一块。
    变量：--sc-b 本时辰的代表色（铺图时图片没加载出来先垫的底色） / --title 标题字色（卡片风格共用的变量） / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
 :root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface);--allow:var(--accent);--on-allow:var(--accent-ink)}
-:root[data-theme="shichen"] #setPane #setScImgRow{display:flex}   /* 设置里的「时辰背景」只在这套主题下出现 */
 :root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底，选中的靠强调色边框区分 */
 /* 时辰背景选「图片」：图铺在整页最底下；列表 / 设置 / 宿主页的底变透明露出图，顶栏 / 底栏 / 左栏是半透明的淡底毛玻璃，卡片仍是白底 */
 :root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
@@ -252,9 +251,10 @@ html{background:var(--surface)}
 body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
 /* 雾感：加载中 / 刷新前蒙一层轻雾，最雾时也能勉强看清下面的内容（原来和 clarelay 外壳同一套 .45 / 8px，调轻了） */
-body.leaving #app{opacity:.72;filter:blur(2.5px);pointer-events:none}
-html.fog #app{filter:blur(2.5px);opacity:.72;pointer-events:none}
-#app{transition:filter .35s,opacity .35s}
+body.leaving #app{opacity:.88;filter:blur(1.2px);pointer-events:none;transition-duration:.12s}   /* 点刷新：清楚 → 轻雾，0.12 秒雾到位就刷新 */
+@media (min-width:1000px){body.leaving #app{opacity:1;filter:none}}   /* 电脑宽屏不做雾化 */
+html.fog #app{filter:blur(1.2px);opacity:.88;pointer-events:none}
+#app{transition:filter .2s,opacity .2s}
 button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -431,15 +431,18 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #railReload{position:relative}
 #sReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
 #sReload.reconn,#railReload.reconn{color:#E0A100!important}#sReload.reconn svg,#railReload.reconn svg{animation:rlspin 1s linear infinite}   /* 正在重连：刷新图标变黄、一直转（代替黄条） */
-#sVoice[hidden]{display:none}
-#sVoice{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover{color:var(--accent)}
+#sVoice[hidden],#sTheme[hidden],#sAcct[hidden]{display:none}
+#sVoice,#sTheme,#sAcct{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover,#sTheme:hover,#sAcct:hover{color:var(--accent)}
+#sAcct{position:relative}
+#sAcct.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 还没设登录账号 */
+#setAcctGo.dot .lb>span::after{content:'';display:inline-block;width:8px;height:8px;margin-left:6px;border-radius:50%;background:#F23C3C;vertical-align:2px}
 #rClear:disabled{opacity:.35;cursor:default}#rClear:disabled:hover{color:var(--muted);background:none}
 @media (min-width:1000px){   /* 电脑：新建、群、语音管理挨着排在左边，清空最近在最右；左边栏不再放协同 */
-  #gNew,#rClear,#sVoice{width:34px;height:32px;margin:0;border-radius:8px}
-  #gNew:hover,#rClear:hover,#sVoice:hover{background:var(--bg)}
+  #gNew,#rClear,#sVoice,#sTheme,#sAcct{width:34px;height:32px;margin:0;border-radius:8px}
+  #gNew:hover,#rClear:hover,#sVoice:hover,#sTheme:hover,#sAcct:hover{background:var(--bg)}
   /* 图标之间的空白 = 第一个图标离列表左边的距离（12px）：按钮 = 图标宽 + 两边各 6px，再用负边距抵掉 8px 的 gap */
-  #gNew{width:36px}#sVoice{width:33px}
-  #gNew,#sVoice{margin-left:-8px}
+  #gNew{width:36px}#sVoice,#sTheme,#sAcct{width:33px}
+  #gNew,#sVoice,#sTheme,#sAcct{margin-left:-8px}
   #railPeer{display:none!important}
   /* 刷新：从左栏挪到这里，放在语音管理右边，和手机同一个图标；左栏那个按钮只留着给脚本点（不显示） */
   #sReload{flex:none;position:relative;display:grid;place-items:center;width:32px;height:32px;margin:0 0 0 -8px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
@@ -541,6 +544,9 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 @keyframes rlspin{to{transform:rotate(360deg)}}
 #bgReload{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-22px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 不仔细看看不出来 */
 #bgReload:active{opacity:.4}
+#bgTheme{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-74px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 主题快捷入口：在「更新客户端」圈左边，一样淡 */
+#bgTheme[hidden]{display:none}
+#bgTheme:active{opacity:.4}
 #bgReload.new{color:var(--accent);opacity:.35}   /* 服务器有新版本：显眼一点 */
 #bgReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
@@ -821,10 +827,10 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 @media (min-width:1000px){#diss,#fview{top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
 /* 电脑：模型管理、语音管理整页（像会话解剖）——中间栏铺满右边，聊天区让开；内容居中限宽 */
 @media (min-width:1000px){
-  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #sheet{grid-column:2 / -1;z-index:6}
-  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
-  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #sheet::after{display:none}
-  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"])) #hostBody{max-width:880px;margin:0 auto}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #sheet{grid-column:2 / -1;z-index:6}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #sheet::after{display:none}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #hostBody{max-width:880px;margin:0 auto}
 }
 @media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb{font-size:12.5px}.ds-tb th,.ds-tb td{padding:6px 8px}}
 /* ════ 公共 · 聊天里的图片、文件 ════ */
@@ -900,7 +906,6 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #setPane .set-card{background:var(--bg);border-radius:12px;overflow:hidden}
 #setPane .set-card:not(:has(> :not([hidden]))){display:none}
 #setPane .set-sec:not(:has(.set-card > :not([hidden]))):not(:has(.set-note:not([hidden]))){display:none}
-#setPane #setScImgRow{display:none}   /* 「时辰背景」只在流变时辰主题下出现（主题段里打开） */
 #setPane .set-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:54px;margin:0;padding:11px 14px;border:0;background:none;text-align:left;font:inherit;font-size:15px;color:var(--ink);cursor:pointer;box-sizing:border-box}
 #setPane .set-item:not([hidden]) ~ .set-item:not([hidden])::before{content:'';position:absolute;top:0;left:14px;right:0;border-top:1px solid var(--line)}
 #setPane .set-item:active{background:var(--surface)}
@@ -1163,8 +1168,8 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #app.m-list #sReload{flex:none;position:relative;display:grid;place-items:center;width:42px;height:38px;margin-left:-6px;border:0;border-radius:10px;background:none;color:var(--muted);cursor:pointer}
   #app.m-list #sNew{width:45px;margin-left:-4px}   /* 图标离左边 18px */
   /* 图标之间空 20px：按钮 = 图标宽 + 两边各 10px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
-  #app.m-list #gNew{width:46px}#app.m-list #sVoice{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
-  #app.m-list #gNew,#app.m-list #sVoice{margin-left:-6px}
+  #app.m-list #gNew{width:46px}#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
+  #app.m-list #gNew,#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct{margin-left:-6px}
   #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
@@ -1215,6 +1220,37 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 /* 宿主页的分组卡片（手机和电脑共用） */
 .h-link{cursor:pointer}
 .h-link:active{background:var(--surface)}
+.claw-grid .claw-card.th-card{position:relative;flex-direction:column;align-items:stretch;gap:8px;height:auto;padding:8px 8px 10px}
+.th-pv{position:relative;display:block;height:118px;border-radius:10px;overflow:hidden;background:var(--pb);box-shadow:0 0 0 .5px var(--pl)}
+.th-pv i{display:block;font-style:normal}
+.th-hd{position:absolute;left:0;right:0;top:0;height:20px;background:var(--ph);border-bottom:.5px solid var(--pl)}
+.th-hd i{position:absolute;left:50%;top:7px;width:34px;height:6px;margin-left:-17px;border-radius:3px;background:var(--pi);opacity:.75}
+.th-b{position:absolute;border-radius:8px;padding:6px 7px;display:flex!important;flex-direction:column;gap:4px}
+.th-b i{height:4px;border-radius:2px;background:var(--pm);opacity:.6}
+.th-b.l{left:8px;top:28px;width:56%;background:var(--ps);border-top-left-radius:3px}
+.th-b.l i:last-child{width:60%}
+.th-b.r{right:8px;top:58px;width:42%;background:var(--pu);border-top-right-radius:3px}
+.th-b.r i{background:var(--pi);opacity:.45}
+.th-b.l.s{top:80px;width:38%}
+.th-dk{position:absolute;left:0;right:0;bottom:0;height:20px;background:var(--ps);border-top:.5px solid var(--pl)}
+.th-dk>i:first-child{position:absolute;left:8px;right:28px;top:5px;height:10px;border-radius:5px;background:var(--pb)}
+.th-snd{position:absolute;right:7px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--pa)}
+.th-12{position:absolute!important;inset:5px;display:grid!important;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(2,1fr);gap:4px}
+.th-z{position:relative;border-radius:5px;overflow:hidden;background:var(--pb);box-shadow:0 0 0 .5px var(--pl)}
+.th-z.on{box-shadow:0 0 0 2px var(--accent)}
+.th-zh{position:absolute;left:0;right:0;top:0;height:7px;background:var(--ph)}
+.th-zb{position:absolute;height:6px;border-radius:2px}
+.th-zb.l{left:3px;top:12px;width:60%;background:var(--ps)}
+.th-zb.r{right:3px;top:22px;width:50%;background:var(--pu)}
+.th-zd{position:absolute;left:0;right:0;bottom:0;height:8px;background:var(--ps)}
+.th-zd::after{content:'';position:absolute;right:3px;top:2px;width:4px;height:4px;border-radius:50%;background:var(--pa)}
+.th-half{position:absolute!important;inset:0;clip-path:polygon(100% 0,100% 100%,0 100%);background:var(--pb)}
+.th-nm{display:flex;flex-direction:column;gap:2px;padding:0 4px;min-width:0}
+.th-nm b{font-size:14px;font-weight:600;line-height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.th-nm small{font-size:11.5px;color:var(--muted);line-height:15px}
+.th-ok{position:absolute;right:12px;bottom:14px;width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.th-ok::after{content:'';position:absolute;left:6px;top:5px;width:7px;height:4px;border-left:2px solid var(--accent-ink,#fff);border-bottom:2px solid var(--accent-ink,#fff);transform:rotate(-45deg)}
+.claw-grid .claw-card.th-img{padding:14px}
 .h-link .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-left:2px}
 /* 所有子页面的返回：和会话页、设置页同一个样式（左边一个箭头，标题居中） */
 .ovs{display:none}
@@ -1922,6 +1958,7 @@ select.pe-in{text-align-last:right}
 
   <!-- 手机底部菜单（只在列表页显示，进入聊天隐藏，像微信） -->
   <!-- 手机：Claw 页背景里的「更新客户端」圈，和 clarelay 顶上的房子上下对称；被列表内容盖住时隐藏 -->
+  <button type="button" id="bgTheme" aria-label="主题" title="主题" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg></button>
   <button type="button" id="bgReload" aria-label="更新客户端" title="更新客户端" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button>
   <nav id="mtabs" aria-label="底部菜单">
     <button type="button" data-tab="recent"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle class="f" cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg><span>最近</span></button>
@@ -2011,7 +2048,7 @@ select.pe-in{text-align-last:right}
       <!-- 线条图标的规格（列表顶栏、左栏）：24×24 网格、线宽 1.8、页面上同一个尺寸（电脑 22px，手机 26px），不再逐个调大小。
            图形按看起来一样大来画（实际画出来的最长边，网格单位）：圆形 ≈18.8（加号、会话气泡）、宽形 ≈19（群、语音、显示器）、
            方块 ≈17.5（Claw 四格）、协同 ≈17.7、刷新 ≈16.4（两段弧带箭头，撑满一圈显大）、齿轮 ≈20（齿之间是空的）；新加图标照这个画 -->
-      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.4"/><path d="M12 7.82v8.36M7.82 12h8.36"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.87" cy="7.93" r="3.34"/><path d="M2.6 19.42c0-3.45 2.82-5.74 6.27-5.74s6.27 2.3 6.27 5.74"/><path d="M15.66 4.69a3.34 3.34 0 0 1 0 6.48"/><path d="M17.74 13.98c2.09 0.73 3.66 2.72 3.66 5.43"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.64 15.18H4.27a1.82 1.82 0 0 1-1.82-1.82V6.09a1.82 1.82 0 0 1 1.82-1.82h10.91a1.82 1.82 0 0 1 1.82 1.82v3.18"/><path d="M6.09 7.91h0.01M9.73 7.91h0.01M13.36 7.91h0.01M6.09 11.55h4.55"/><path d="M13.82 14.27v2.73M16.55 11.55v8.19M19.28 13.36v4.55M21.55 15v1.27"/></svg></button><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 12a8.2 8.2 0 0 1 8.2-8.2a8.88 8.88 0 0 1 6.14 2.5L20.2 8.36"/><path d="M20.2 3.8v4.56h-4.56"/><path d="M20.2 12a8.2 8.2 0 0 1-8.2 8.2a8.88 8.88 0 0 1-6.14-2.5L3.8 15.64"/><path d="M8.36 15.64H3.8v4.56"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)" stroke-width="1.89"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.4"/><path d="M12 7.82v8.36M7.82 12h8.36"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.87" cy="7.93" r="3.34"/><path d="M2.6 19.42c0-3.45 2.82-5.74 6.27-5.74s6.27 2.3 6.27 5.74"/><path d="M15.66 4.69a3.34 3.34 0 0 1 0 6.48"/><path d="M17.74 13.98c2.09 0.73 3.66 2.72 3.66 5.43"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.64 15.18H4.27a1.82 1.82 0 0 1-1.82-1.82V6.09a1.82 1.82 0 0 1 1.82-1.82h10.91a1.82 1.82 0 0 1 1.82 1.82v3.18"/><path d="M6.09 7.91h0.01M9.73 7.91h0.01M13.36 7.91h0.01M6.09 11.55h4.55"/><path d="M13.82 14.27v2.73M16.55 11.55v8.19M19.28 13.36v4.55M21.55 15v1.27"/></svg></button><button type="button" id="sAcct" aria-label="登录账号" title="登录账号（用户名和密码）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4.2"/><path d="M11 12l9-9M16.5 6.5l2.5 2.5M14 9l2 2"/></svg></button><button type="button" id="sTheme" aria-label="主题" title="主题"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg></button><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 12a8.2 8.2 0 0 1 8.2-8.2a8.88 8.88 0 0 1 6.14 2.5L20.2 8.36"/><path d="M20.2 3.8v4.56h-4.56"/><path d="M20.2 12a8.2 8.2 0 0 1-8.2 8.2a8.88 8.88 0 0 1-6.14-2.5L3.8 15.64"/><path d="M8.36 15.64H3.8v4.56"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)" stroke-width="1.89"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -2114,6 +2151,7 @@ select.pe-in{text-align-last:right}
         <div class="set-h">宿主</div>
         <div class="set-card">
           <button type="button" class="set-item" id="setHost"><span class="lb"><span id="setHostName">宿主</span><small>电脑状态、版本、Claw、协同</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setAcctGo"><span class="lb"><span>登录账号</span><small id="setAcctSub">手机、其他电脑登录用的用户名和密码</small></span><span class="chev" aria-hidden="true"></span></button>
         </div>
       </div>
       <div class="set-sec">
@@ -2144,10 +2182,9 @@ select.pe-in{text-align-last:right}
         <div class="set-card">
           <label class="set-item"><span class="lb">语言 / Language<small>切换后页面会刷新</small></span>
             <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
-          <label class="set-item"><span class="lb">主题</span>
-            <select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">子午流注</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option></optgroup></select></label>
-          <label class="set-item" id="setScImgRow"><span class="lb">时辰背景</span>
-            <select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></label>
+          <button type="button" class="set-item" id="setThemeGo"><span class="lb">主题<small id="setThemeSub"></small></span><span class="chev" aria-hidden="true"></span></button>
+          <div hidden><select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">子午流注</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option></optgroup></select></div>
+          <div hidden><select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></div>
         </div>
       </div>
       <div class="set-sec">
@@ -3211,8 +3248,9 @@ function tickWork(){
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
 var connectedOnce=false,updateReady=false,bootAt=Date.now();
 // 打开 / 刷新后先不提示「正在连接」：多数时候一两秒就连上了，提示条一闪反而像出了问题；3 秒还没连上才提示
-setTimeout(function(){if(!connectedOnce)connState(true)},10000);   // 连接中由雾表示；10 秒还没连上，刷新图标变黄转圈（不出黄条）
-function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<10000)return;connState(true)}
+var CONN_WAIT=window.matchMedia('(min-width:1000px)').matches?10000:1500;   // 电脑照旧 10 秒
+setTimeout(function(){if(!connectedOnce)connState(true)},CONN_WAIT);   // 连接中由雾表示；3 秒还没连上，雾清掉、刷新图标变黄转圈（不出黄条）
+function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<CONN_WAIT)return;connState(true)}
 // 重连中：不出黄条，刷新图标（手机顶栏 / 电脑左栏）变黄、一直转；连上就恢复
 function connState(on){['#sReload','#railReload'].forEach(function(q){var b=$(q);if(b)b.classList.toggle('reconn',!!on)})}
 var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[1])||'';
@@ -4142,7 +4180,7 @@ function connect(){
     if(!wsOpenAt)wsOpenAt=Math.round(performance.now());
     setTimeout(function(){var q=clogQ;clogQ=[];q.forEach(function(t){wsSend({t:'clog',text:t})})},0);
     retry=0;banner(null);connState(false);
-    if(!connectedOnce){document.documentElement.classList.remove('fog');try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'connected'},'*')}catch(_){}}   // 只在首次连上时
+    if(!connectedOnce){(function(){var rm=function(){document.documentElement.classList.remove('fog')},w=120-(performance.now()-(window.__bootOff||0));if(w>0)setTimeout(rm,w);else rm()})();try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'connected'},'*')}catch(_){}}   // 只在首次连上时
     if(connectedOnce)checkVersion();connectedOnce=true;
     wsSend({t:'visible',on:pageVisible()});
     if(wantPeer){wantPeer=false;history.replaceState(null,'','/');if(!DESKTOP.matches){goList();openPeerView();return}openPeerView()}
@@ -4964,6 +5002,7 @@ $('#clawModels').addEventListener('click',function(){openModels('claw')});
 // 查看 / 复制完整 Key：再输一次 claclaw 用户名和密码
 var keyDlg=$('#keyDlg'),keyFor=null;   // {id,mode:'show'|'copy'}
 function keyAsk(id,mode){
+  if(needAcct())return;
   var p=id==='tts:volc'?{name:'豆包语音'}:mdlProv(id);if(!p)return;
   keyFor={id:id,mode:mode};
   $('#keyTitle').textContent=(mode==='copy'?'复制':'查看')+' '+p.name+(p.label?' · '+p.label:'')+' 的 Key';
@@ -5010,6 +5049,8 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='models'){openModels('host');return}
   if(/^mdl-/.test(act)){mdlAct(act,a);return}
   if(/^vc-/.test(act)){vcAct(act,a);return}
+  if(/^th-/.test(act)){thAct(act,a);return}
+  if(/^ac-/.test(act)){acAct(act,a);return}
   if(act==='skill-install'||act==='skill-remove'){skillPost(act==='skill-install'?'install':'uninstall',a.dataset.name,a.dataset.target);return}
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
   if(act==='peer-on'){if(!(peerCfg.sessions||[]).length){peerGo('pool');peerMsg={err:peerCfg.canAssign?'先勾选要加入协同的会话，再开启':'还没有加入协同的会话：要先在这台电脑上用 127.0.0.1 打开网页加'};paintPeerMsg();return}peerPost('',peerForm(true),'协同已开启')}
@@ -5673,7 +5714,7 @@ $('#rClear').addEventListener('click',recentClear);   // 「最近」顶上群�
     q=0;var app=$('#app');
     var on=!DESKTOP.matches&&app.classList.contains('m-list')&&app.classList.contains('claw-on')&&!app.classList.contains('set-on')&&!app.classList.contains('host-on');   // 最近 / 会话页的刷新挪到了顶栏
     if(on){btn.hidden=false;var top=btn.getBoundingClientRect().top;on=lastBottom($('#clawPane'))<top-6}
-    btn.hidden=!on;
+    btn.hidden=!on;$('#bgTheme').hidden=!on;
   }
   function later(){if(!q)q=requestAnimationFrame(upd)}
   sp.addEventListener('scroll',later,{capture:true,passive:true});window.addEventListener('resize',later);DESKTOP.addEventListener('change',later);
@@ -5690,7 +5731,7 @@ $('#railReload').addEventListener('click',function(){
   if(!DESKTOP.matches)try{var a=$('#app').classList;sessionStorage.setItem('claclaw.reloadTo',!mList?'chat':a.contains('set-on')?'set':a.contains('host-on')?'host':a.contains('claw-on')?'claw':listMode==='recent'?'recent':'chats')}catch(_){}   // 手机：刷新后回到同一页
   // 各会话没发的字都存起来（图片存不了）
   try{var all={};for(var k in drafts)if(drafts[k].text)all[k]=drafts[k].text;if(ta.value)all[draftOwner||'']=ta.value;if(Object.keys(all).length)sessionStorage.setItem('claclaw.drafts',JSON.stringify(all))}catch(_){}
-  document.body.classList.add('leaving');try{if(session&&!mList)sessionStorage.setItem('claclaw.scroll',JSON.stringify({id:session.id,top:feed.scrollTop,stick:stick}))}catch(_){}setTimeout(function(){location.reload()},350);   // 先起雾再刷新；记下正在看的位置   // 先淡出再刷新，不生硬
+  document.body.classList.add('leaving');try{if(session&&!mList)sessionStorage.setItem('claclaw.scroll',JSON.stringify({id:session.id,top:feed.scrollTop,stick:stick}))}catch(_){}setTimeout(function(){location.reload()},120);   // 先上重雾再刷新；记下正在看的位置
 });
 try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionStorage.removeItem('claclaw.drafts');
   if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
@@ -7786,6 +7827,102 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
     if(window.__sc&&document.documentElement.getAttribute('data-theme')==='shichen')window.__sc.apply();   // 单选某个时辰（sel.value 是 shichen@N）也要立刻换
   });
 })();
+// 登录账号页：还没设时（只能在这台电脑上打开）在这里设；设了以后输对当前密码可以改。没设之前快捷入口和设置里一直亮红点
+var acSt=null,acMsg={};
+function acLoad(){return fetch('/api/acct',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(j){acSt=j;acDot()}renderAcct()}).catch(function(){})}
+function acDot(){var no=!!acSt&&!acSt.setUp;$('#sAcct').classList.toggle('dot',no);$('#setAcctGo').classList.toggle('dot',no);$('#setAcctSub').textContent=!acSt?'手机、其他电脑登录用的用户名和密码':no?'还没设置：只有这台电脑和第一次打开的设备能用':'已设置';$('#logout').hidden=no}
+function openAcct(){mTab('host');hostView='acct';acMsg={};renderAcct();acLoad()}
+function acField(id,label,type,ph){return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+label+'</label><input id="'+id+'" class="md-in" type="'+type+'" autocomplete="'+(type==='password'?'new-password':'off')+'" autocapitalize="off" spellcheck="false" maxlength="200" placeholder="'+esc(ph||'')+'"></div>'}
+function renderAcct(){
+  if(hostView!=='acct')return;
+  var h=pgHd('data-act="ac-back"',peerFromList?'返回':'返回设置','登录账号');
+  h+='<div class="pe-err"'+(acMsg.err?'':' hidden')+'>'+esc(acMsg.err||'')+'</div><div class="pe-ok"'+(acMsg.ok?'':' hidden')+'>'+esc(acMsg.ok||'')+'</div>';
+  if(!acSt){h+='<div class="h-empty">加载中…</div>'}
+  else if(!acSt.setUp){
+    h+='<div class="vc-tip">还没设登录账号：现在只有这台电脑（127.0.0.1）和第一次打开 claclaw 的设备能用，删除会话这类要密码的功能也用不了。设好以后，其他手机、电脑用这组用户名、密码登录。用户名和密码至少填一个。</div>';
+    h+='<div><div class="h-h">设置登录账号</div><div class="h-card">'+acField('acU','用户名','text','不要可以留空')+acField('acP','密码','password','')+acField('acP2','再输一次密码','password','')+'</div></div>';
+    h+='<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="ac-set">保存</button></div>';
+  }else{
+    var sm=acSt.summary||{};
+    h+='<div><div class="h-h">现在的账号</div><div class="h-card"><div class="h-row"><span class="k">初始账号</span><span class="v">'+esc(sm.master||'')+'</span></div>'+(sm.lastSet?'<div class="h-row"><span class="k">另设的一组</span><span class="v">'+esc(sm.lastSet)+'</span></div>':'')+'</div></div>';
+    h+='<div class="vc-tip">改的是「另设的一组」，初始账号一直有效。要先输对现在的密码。</div>';
+    h+='<div><div class="h-h">修改</div><div class="h-card">'+(acSt.needUser?acField('acCU','现在的用户名','text',''):'')+acField('acC','现在的密码','password','')+acField('acU','新用户名','text','不要可以留空')+acField('acP','新密码','password','')+acField('acP2','再输一次新密码','password','')+'</div></div>';
+    h+='<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="ac-chg">保存</button></div>';
+  }
+  $('#hostBody').innerHTML=h;
+}
+function acAct(act,a){
+  if(act==='ac-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
+  if(act==='ac-back'){hostView='';mTab('set');return}
+  var v=function(id){var e=$('#'+id);return e?e.value:''};
+  var u=v('acU').trim(),p=v('acP');
+  if(!u&&!p){acMsg={err:'用户名和密码至少填一个'};renderAcct();return}
+  if(p!==v('acP2')){acMsg={err:'两次输入的密码不一样'};renderAcct();$('#acU').value=u;return}
+  var set=act==='ac-set',body=set?{username:u,password:p}:{cur:v('acC'),curUser:v('acCU'),username:u,password:p};
+  a.disabled=true;
+  fetch(set?'/api/setup':'/api/acct',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+    acMsg=x.ok?{ok:set?'设好了：手机和其他电脑现在可以用它登录':'改好了：下次登录生效，初始账号仍然可用'}:{err:x.j.error||'没保存成功'};
+    acLoad();
+  }).catch(function(){acMsg={err:'网络不通，没保存'};a.disabled=false;renderAcct()});
+}
+$('#setAcctGo').addEventListener('click',function(){peerFromList='';openAcct()});
+$('#sAcct').addEventListener('click',function(){peerFromList=listTab();openAcct()});
+acLoad();
+// 主题子页：设置里「主题 ›」、列表顶栏的调色板、Claw 页背景里「更新客户端」左边的圈都进这里；选了立刻换，背后还是原来那个下拉框（#setTheme / #setScImg）
+var TH_C={'':'linear-gradient(135deg,#fff 50%,#161B21 50%)',light:'#FFFFFF',dark:'#161B21',ziwei:'#5B21B6'};
+(function(){var ZC=['6AAE65','3F7A3B','5E6C79','B8C4CF','D9B44A','8A6D1E','8E2A20','E06A5A','4A78B5','1F3F6E','8E4519','E8894A'];
+  TH_C.shichen='conic-gradient('+ZC.map(function(c){return '#'+c}).join(',')+',#'+ZC[0]+')';ZC.forEach(function(c,i){TH_C['shichen@'+i]='#'+c})})();
+function thSub(){var sel=$('#setTheme'),o=sel.options[sel.selectedIndex],el=$('#setThemeSub');if(el)el.textContent=o?o.textContent:''}
+function openTheme(){mTab('host');hostView='theme';renderTheme()}
+var thPalC={};
+// 取某个主题的配色：临时把根元素切到那个主题读 CSS 变量，读完马上换回（同一帧里，不会闪）；结果缓存
+function thPal(v){
+  if(thPalC[v])return thPalC[v];
+  var r=document.documentElement,old={t:r.getAttribute('data-theme'),sc:r.getAttribute('data-sc'),dk:r.classList.contains('sc-dark'),im:r.classList.contains('sc-img')};
+  var m=/^shichen@(\d+)$/.exec(v),z=m?+m[1]:v==='shichen'?window.__sc.now().z:null,t=m?'shichen':v;
+  if(t)r.setAttribute('data-theme',t);else r.removeAttribute('data-theme');
+  if(z!=null){r.setAttribute('data-sc',String(z));r.classList.toggle('sc-dark',[0,1,1,0,0,1,1,0,0,1,1,0][z]===1)}else{r.removeAttribute('data-sc');r.classList.remove('sc-dark')}
+  r.classList.remove('sc-img');
+  var cs=getComputedStyle(r),g=function(k){return cs.getPropertyValue(k).trim()},o={bg:g('--bg'),sf:g('--surface'),ink:g('--ink'),mu:g('--muted'),ac:g('--accent'),us:g('--user-bg'),ln:g('--line'),st:g('--strip')};
+  if(old.t)r.setAttribute('data-theme',old.t);else r.removeAttribute('data-theme');
+  if(old.sc!=null)r.setAttribute('data-sc',old.sc);else r.removeAttribute('data-sc');
+  r.classList.toggle('sc-dark',old.dk);r.classList.toggle('sc-img',old.im);
+  return thPalC[v]=o;
+}
+var TH_DS={'':'手机浅色 / 深色自动跟','shichen':'按十二时辰自动换色',light:'浅色',dark:'深色',ziwei:'深紫'};
+function thCard(v,name,cur){
+  var c=thPal(v===''?'light':v),pv='--pb:'+c.bg+';--ps:'+c.sf+';--pi:'+c.ink+';--pm:'+c.mu+';--pa:'+c.ac+';--pu:'+c.us+';--pl:'+c.ln+';--ph:'+(c.st&&c.st!=='transparent'?c.st:c.sf);
+  var mk='<i class="th-hd"><i></i></i><i class="th-b l"><i></i><i></i></i><i class="th-b r"><i></i></i><i class="th-b l s"><i></i></i><i class="th-dk"><i></i><i class="th-snd"></i></i>';
+  if(v==='shichen'){var zn=window.__sc.now().z,t12='';for(var k=0;k<12;k++){var i=(k+2)%12,q=thPal('shichen@'+i);t12+='<i class="th-z'+(i===zn?' on':'')+'" style="'+esc('--pb:'+q.bg+';--ps:'+q.sf+';--pu:'+q.us+';--pa:'+q.ac+';--pl:'+q.ln+';--ph:'+(q.st&&q.st!=='transparent'?q.st:q.sf))+'"><i class="th-zh"></i><i class="th-zb l"></i><i class="th-zb r"></i><i class="th-zd"></i></i>'}mk='<i class="th-12">'+t12+'</i>'}   // 子午流注：12 个时辰的小预览排成 6×2（从寅 · 太阴肺开始，经络流注的起点），当前时辰描边
+  var sw='';if(v===''){var d=thPal('dark');sw='<i class="th-half" style="'+esc('--pb:'+d.bg+';--ps:'+d.sf+';--pi:'+d.ink+';--pm:'+d.mu+';--pa:'+d.ac+';--pu:'+d.us+';--pl:'+d.ln+';--ph:'+d.sf)+'">'+mk+'</i>'}   // 跟随系统：右下半边画深色
+  return '<button type="button" class="claw-card th-card" data-act="th-pick" data-v="'+esc(v)+'"'+(v===cur?' aria-current="true"':'')+'>'+
+    '<span class="th-pv" style="'+esc(pv)+'">'+mk+sw+'</span>'+
+    '<span class="th-nm"><b>'+esc(name)+'</b>'+(TH_DS[v]?'<small>'+TH_DS[v]+'</small>':'')+'</span>'+(v===cur?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>';
+}
+function renderTheme(){
+  if(hostView!=='theme')return;
+  var sel=$('#setTheme'),cur=sel.value,h=pgHd('data-act="th-back"',peerFromList?'返回':'返回设置','主题');
+  [].forEach.call(sel.children,function(g){
+    var os=g.tagName==='OPTGROUP'?[].slice.call(g.children):[g];
+    h+='<div class="claw-g"><div class="claw-h">'+esc(g.label||'')+'</div><div class="claw-grid">'+os.map(function(o){return thCard(o.value,o.textContent,cur)}).join('')+'</div></div>';
+  });
+  if(document.documentElement.getAttribute('data-theme')==='shichen'){
+    var im=$('#setScImg').value;
+    h+='<div class="claw-g"><div class="claw-h">时辰背景</div><div class="claw-grid">'+[['','纯色','只用颜色'],['1','图片','阳时辰铺一张壁纸']].map(function(x){
+      return '<button type="button" class="claw-card th-card th-img" data-act="th-img" data-v="'+x[0]+'"'+(x[0]===im?' aria-current="true"':'')+'><span class="th-nm"><b>'+x[1]+'</b><small>'+x[2]+'</small></span>'+(x[0]===im?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>'}).join('')+'</div></div>';
+  }
+  $('#hostBody').innerHTML=h;
+}
+function thAct(act,a){
+  if(act==='th-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
+  if(act==='th-back'){hostView='';mTab('set');return}
+  var el=act==='th-pick'?$('#setTheme'):act==='th-img'?$('#setScImg'):null;if(!el)return;
+  el.value=a.dataset.v;el.dispatchEvent(new Event('change'));thSub();renderTheme();
+}
+$('#setThemeGo').addEventListener('click',function(){peerFromList='';openTheme()});
+[$('#sTheme'),$('#bgTheme')].forEach(function(b){b.addEventListener('click',function(){peerFromList=listTab();openTheme()})});
+new MutationObserver(function(){thSub();renderTheme()}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+thSub();
 // 手机端：标题栏的玻璃圆球（上下文用量、朗读开关）可以左右拖，拖到标题上看玻璃浮在字上的效果；
 // 第一次拖完顺带请求「运动与方向」授权（iOS 必须由手指操作触发），授权后手机左右一歪它就滚过去，两个球互相碰
 (function(){
@@ -8184,7 +8321,10 @@ function renameSess(s){
 // ---------- 删除会话 ----------
 
 var delDlg=$('#delDlg'),delTarget=null;
+// 要密码的功能（删除会话、看完整 Key）：还没设登录账号时直接去「登录账号」页先设
+function needAcct(back){if(!acSt||acSt.setUp)return false;toast('要先设置登录账号');peerFromList=back||'';openAcct();return true}
 function openDel(s){
+  if(needAcct(listTab()))return;
   delTarget=s;
   $('#delTitle').textContent='删除「'+s.title+'」？';
   // 各 Claw 删掉之后去了哪：多数是文件移到 claclaw 的回收站；MiniMax、OpenClaw 是在它们自己那里归档；Codex 由 codex-acp 自己删
@@ -8309,7 +8449,7 @@ if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
   else if(reloadTo==='chat'){}   // 在聊天页刷新：连上后照常打开上次的会话（claclaw.view 还是 chat）
   else if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||(!clawSel&&listMode!=='recent'))mTab('claw');else if(listMode==='recent'){mTab('recent');openSheet()}else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
 }
-document.documentElement.classList.remove('boot');
+(function(){var h=document.documentElement,off=function(){h.classList.remove('boot');window.__bootOff=performance.now()},w=120-performance.now();if(w>0)setTimeout(off,w);else off()})();   // 加载雾至少 120ms，连上后再至少 120ms 才变清楚，不一闪而过
 takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});
 })();
 </script>

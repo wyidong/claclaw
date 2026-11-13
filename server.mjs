@@ -45,7 +45,7 @@ setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启�
 setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
 setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
 import { makeClaudeUsage } from './claudeusage.mjs';
-import { DATA, verify, verifyMaster, verifyMasterPassword, verifyPassword, anyNoPassword, setLastSet, setupMaster, isSetUp, describeCredential, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
+import { DATA, verify, verifyMaster, verifyMasterPassword, verifyPassword, anyNoPassword, setLastSet, setupMaster, isSetUp, describeCredential, authSummary, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
 import { makeSkins } from './skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
@@ -2640,7 +2640,24 @@ async function claudeInfo(id, alt) {
   if (alt) return alt;
   return (await listSessions({ includeProgrammatic: true, limit: 100000 })).find(s => s.sessionId === id) || null;
 }
-const authed = req => checkToken(cookieToken(req));
+// 还没设登录账号时：这台电脑上直接打开（127.0.0.1、没经过任何转发）和「第一次打开的那台设备」不用登录；
+// 别的设备进登录页，没有账号所以怎么输都登录不上。设好账号以后第一台设备的这个身份作废（设的时候已经发了正常的登录 cookie）
+const FIRST_FILE = path.join(DATA, 'firstrun.json');
+const DEV_COOKIE = 'claclaw_dev';
+const sha256 = t => crypto.createHash('sha256').update(String(t)).digest('hex');
+const readFirst = () => readJson(FIRST_FILE) || {};
+const writeFirst = o => writeJsonAtomic(FIRST_FILE, { ...readFirst(), ...o });
+function devCookieVal(req) {
+  const m = (req.headers.cookie || '').match(/(?:^|;\s*)claclaw_dev=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+const isFirstDev = req => { const h = readFirst().dev, v = devCookieVal(req); return !!h && !!v && sha256(v) === h; };
+// cookie 每次打开页面都续一年（浏览器最长也就保留 400 天）
+const devCookie = (v, req) => `${DEV_COOKIE}=${v}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${365 * 86400}` + (isHttps(req) ? '; Secure' : '');
+// 浏览器打开页面（不是脚本、探测）才算「第一次打开」，免得局域网里扫端口的先占了
+const isBrowserOpen = req => req.method === 'GET' && /text\/html/.test(req.headers.accept || '') && /Mozilla/.test(req.headers['user-agent'] || '')
+  && !/^(cors|no-cors|same-origin|websocket)$/.test(req.headers['sec-fetch-mode'] || '');
+const authed = req => checkToken(cookieToken(req)) || (!isSetUp() && (isLocalReq(req) || isFirstDev(req)));
 
 function sendJson(res, code, obj, headers = {}) {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
@@ -2685,9 +2702,8 @@ const globalLockMsg = () => '登录失败太多，暂停 ' + Math.max(1, Math.ce
 // 首次设置初始账号：只在还没设置过时可用，设好直接登录
 async function handleSetup(req, res) {
   if (isSetUp()) return sendJson(res, 409, { error: '初始账号已经设置过了，请直接登录' });
-  // 首次设置只认 127.0.0.1 直连（本机浏览器，或 SSH 隧道 ssh -L 8787:127.0.0.1:8787）：
-  // 不然谁先打开网页谁就能设置初始账号
-  if (!isLocalReq(req)) { log('setup refused from', realIp(req)); return sendJson(res, 403, { error: '首次设置只能用 http://127.0.0.1:' + PORT + ' 打开（本机浏览器，或 SSH 隧道）' }); }
+  // 首次设置只认本机直连（127.0.0.1）和第一次打开的那台设备
+  if (!isLocalReq(req) && !isFirstDev(req)) { log('setup refused from', realIp(req)); return sendJson(res, 403, { error: '不允许' }); }
   let body = await jsonBody(req);
   try {
     setupMaster(body.username, body.password);
@@ -2695,6 +2711,7 @@ async function handleSetup(req, res) {
     return sendJson(res, 400, { error: e.message });
   }
   const ip = realIp(req);
+  writeFirst({ dev: null });   // 第一台设备的免登录身份作废；以后删掉账号重来，又是谁先打开算谁
   log('initial login set up from', ip);
   sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(issueToken('master', ip), req) });
 }
@@ -2716,6 +2733,46 @@ async function handleLogin(req, res) {
   const token = issueToken(via, ip);
   log('login ok from', ip, 'via', via);
   sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie(token, req) });
+}
+
+// ---------- 登录账号页：查看有没有设、设了之后修改 ----------
+// 没设：页面用 /api/setup 设（只认本机直连）；设了：输对当前密码（没密码的账号要带用户名）才能改，改的是「最后设置的一组」，初始账号仍有效
+async function handleAcct(req, res) {
+  if (req.method === 'GET') return sendJson(res, 200, { setUp: isSetUp(), local: isLocalReq(req), summary: authSummary(), needUser: anyNoPassword() });
+  const ip = realIp(req);
+  if (!isSetUp()) return sendJson(res, 409, { error: '还没设置过，请先设置' });
+  if (globalLocked(req)) return sendJson(res, 429, { error: globalLockMsg() });
+  const f = lockedFor(ip);
+  if (f) return sendJson(res, 429, { error: tooManyTries(f) });
+  const b = await jsonBody(req);
+  if (!verifyPassword(b.cur, b.curUser)) {
+    const { n } = noteFail(ip); noteGlobalFail(req);
+    log('acct change: wrong password from', ip, 'fails=' + n);
+    return sendJson(res, 401, { error: n >= MAX_FAILS ? tooManyTries(lockedFor(ip)) : '当前密码不对' });
+  }
+  clearFails(ip);
+  try { const r = setLastSet(b.username, b.password); log('web login changed from', ip); return sendJson(res, 200, { ok: true, summary: authSummary(), desc: describeCredential(r) }); }
+  catch (e) { return sendJson(res, 400, { error: e.message }); }
+}
+
+// 首次打开（还没设账号）：同一个 Claw 超过 2 个会话的，随机挑一个换上西游记里的随机头像（只换头像、不改网名）；只做一次
+function firstAvatars(arr) {
+  try {
+    if (readFirst().avDone) return;
+    const by = {};
+    for (const x of arr) if (x.claw && x.claw !== 'group' && x.id) (by[x.claw] = by[x.claw] || []).push(x.id);
+    if (!Object.keys(by).length) return;   // 还没列出任何会话（Claw 还没准备好）：下次再试
+    const g = (skins.index().groups || []).find(g => g.id === 'xiyou');
+    const pool = (g?.items || []).map(f => 'p/xiyou/' + f), sk = skins.all();
+    const pick = a => a.splice(Math.floor(Math.random() * a.length), 1)[0];
+    for (const ids of Object.values(by)) {
+      if (ids.length <= 2 || !pool.length) continue;
+      const free = ids.filter(id => !sk[id]?.av);
+      if (!free.length) continue;
+      try { skins.set(pick(free), { av: pick(pool) }); } catch (e) { log('first avatars', e.message); }
+    }
+    writeFirst({ avDone: Date.now() });
+  } catch (e) { log('first avatars', e.message); }
 }
 
 // ---------- 删除会话：要求再次输入初始账号；文件挪进 data/trash/，不直接删 ----------
@@ -2823,8 +2880,16 @@ const handler = async (req, res) => {
     };
     const go = (to) => { res.writeHead(302, { location: to, 'cache-control': 'no-store' }); res.end(); };
     const setUp = isSetUp();
-    if (url.pathname === '/setup') return setUp ? go('/login') : page('login.html');
-    if (url.pathname === '/login') return setUp ? page('login.html') : go('/setup');
+    // 还没设账号：第一次用浏览器打开的设备记下来（发一个设备 cookie），它和本机直连以后都不用登录；账号以后在「登录账号」页设
+    if (!setUp && !readFirst().dev && !devCookieVal(req) && isBrowserOpen(req) && /^\/(index\.html|login|setup)?$/.test(url.pathname)) {
+      const v = crypto.randomBytes(32).toString('base64url');
+      writeFirst({ dev: sha256(v), devAt: Date.now() });
+      log('first device', realIp(req));
+      res.writeHead(302, { location: '/', 'cache-control': 'no-store', 'set-cookie': devCookie(v, req) });
+      return res.end();
+    }
+    if (url.pathname === '/setup') return go(setUp || !authed(req) ? '/login' : '/');   // 设置页不再单独打开：没设账号的在「登录账号」页设
+    if (url.pathname === '/login') return !setUp && authed(req) ? go('/') : page('login.html');   // 别的设备：登录页（没有账号，怎么输都不对）
     // /_clarelay/*（直连脚本 rtc.js 等）由电脑端 clarelay 在转发前接住；直接访问 claclaw 时没有，回 404，页面就用原生 fetch / WebSocket
     if (url.pathname.startsWith('/_clarelay/')) { res.writeHead(404, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); return res.end(); }
     // 主屏幕图标：iOS 添加到主屏幕时不带 cookie 去取，必须免登录；只放行 icons/ 下已知的 png
@@ -2880,10 +2945,11 @@ const handler = async (req, res) => {
     }
     if (!authed(req)) {
       if (url.pathname.startsWith('/api/')) return sendJson(res, 401, { error: 'login required' });
-      return go(setUp ? '/login' : '/setup');
+      return go('/login');
     }
     // 改东西的请求一律要同源（同站别的端口上的页面也会带 cookie，SameSite 挡不住）
     if (req.method !== 'GET' && req.method !== 'HEAD' && !sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });
+    if (url.pathname === '/api/acct' && (req.method === 'GET' || req.method === 'POST')) return handleAcct(req, res);
     if (url.pathname === '/' || url.pathname === '/index.html') {
       // 页面版本 = 文件内容的短哈希 + 修改时间，改了页面自动变，用来确认手机拿到的是不是新页面
       const file = path.join(ROOT, 'public', 'index.html');
@@ -2892,6 +2958,7 @@ const handler = async (req, res) => {
       const pad = n => String(n).padStart(2, '0');
       const ver = crypto.createHash('sha1').update(html).digest('hex').slice(0, 7) +
         ' · ' + pad(mt.getMonth() + 1) + '-' + pad(mt.getDate()) + ' ' + pad(mt.getHours()) + ':' + pad(mt.getMinutes());
+      if (!setUp && isFirstDev(req)) res.setHeader('set-cookie', devCookie(devCookieVal(req), req));   // 第一台设备：每次打开续期
       const prefs = JSON.stringify(clientPrefs()).replace(/</g, '\\u003c').replace(/\u2028|\u2029/g, c => '\\u' + c.charCodeAt(0).toString(16));
       return sendPage(req, res, html.replace('__PAGE_VERSION__', ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
     }
@@ -3190,7 +3257,9 @@ const handler = async (req, res) => {
       } catch (e) { log('dissect error', id.slice(0, 8), e && e.message); return sendJson(res, 500, { error: '解剖失败：' + String((e && e.message) || e) }); }
     }
     if (url.pathname === '/api/recent' && req.method === 'GET') {
-      const arr = await recentList(), sk = skins.all();
+      const arr = await recentList();
+      if (!isSetUp()) firstAvatars(arr);   // 首次打开：几个会话随机换上西游记头像
+      const sk = skins.all();
       for (const x of arr) if (sk[x.id]) x.skin = sk[x.id];   // 换过的头像 / 网名
       return sendJson(res, 200, arr);
     }
