@@ -322,10 +322,10 @@ export async function startDevice(o = {}) {
         const ping = setInterval(() => sendCtrl?.({ t: 'ping' }), 30e3);
         await new Promise(r => { sock.on('close', r); sock.on('error', () => {}); });
         clearInterval(ping); ctrl = null; sendCtrl = null;
-        if (online) { online = false; emitStatus(); log('和中继断开，重连中'); }
+        if (online) { online = false; emitStatus({ error: '和中继断开，重连中' }); log('和中继断开，重连中'); }
       } catch (e) {
         if (e.status === 401) { status = 'revoked'; st.revoked = true; saveState(); emitStatus({ error: e.message }); log(e.message); return; }
-        if (online) { online = false; emitStatus({ error: e.message }); }
+        online = false; emitStatus({ error: e.message, retryIn: backoff });   // 每次连不上都报（从没连上过也报），界面直接显示原因
         log('连不上中继：' + e.message + '，' + backoff / 1000 + ' 秒后重试');
       }
       if (stopped) return;

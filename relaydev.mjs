@@ -93,13 +93,8 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
       const ext = await stopExternal();
       try {
         const { startDevice } = await (o.load ? o.load() : import('./clarelay/agent.mjs'));
-        const devLog = (...a) => {   // 连不上、证书失败的原因留给宿主页显示（电脑端只在「在线 → 断」时才报状态）
-          const m = a.join(' ');
-          if (/^(连不上中继|证书申请失败)/.test(m)) lastErr = m.replace(/，\d+ 秒后重试$/, ''); else if (/^已连上中继/.test(m)) lastErr = '';
-          log(...a);
-        };
-        const d = await startDevice({ invite: invite || undefined, state: STATE, name: os.hostname(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log: devLog,
-          onStatus: s => { lastErr = s.error || (s.online ? '' : lastErr); } });
+        const d = await startDevice({ invite: invite || undefined, state: STATE, name: os.hostname(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log,
+          onStatus: s => { if (s.error) lastErr = s.error; else if (s.online) lastErr = ''; } });   // 每次连不上都带原因；连上（hello）不带 error，清掉
         dev = d; o.onDevice(d); ext.commit();
         log('内置电脑端已启动：' + d.url);
       } catch (e) { lastErr = e.message; ext.restore(); throw e; }
