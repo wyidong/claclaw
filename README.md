@@ -122,7 +122,7 @@ Qoder、CodeBuddy 这类要先登录账号才能用；Kimi、Codex、MiniMax Cod
 
 claclaw 内置了 clarelay 的电脑端（`clarelay/` 目录，从 clarelay 仓库同步：`node tools/sync-clarelay.mjs`，这里不要直接改）。不用就什么都不启动。
 
-- **加入**：「设置 → 宿主 → 网络 → clarelay」点「粘贴邀请码」，贴入 clarelay 管理页生成的设备邀请码（`clarelay-device1.` 开头）。之后 claclaw 每次启动自动连上。
+- **加入**：「设置 → 宿主 → 网络 → clarelay」点「粘贴邀请码」，贴入从 clarelay 管理页复制的设备邀请码（JSON，带换行也行；旧的 `clarelay-device1.` 一行也认）。之后 claclaw 每次启动自动连上。
 - **断开 / 连接**：只停 / 恢复连接，身份保留；**移除**：删掉本机身份文件，再加入要新的邀请码（中继那边要在管理页撤销这台）。
 - 身份文件是 `~/.clarelay-device.json`（权限 600），和单独安装的电脑端同一个：以前单独装过的电脑不用重新邀请。内置的启动前会停掉单独安装的那份（macOS 的 `com.clarelay.device`、Windows「启动」里的 `clarelay-device.vbs`），连上后去掉它的开机自启；没连上就恢复原样。
 - 推送、未读角标直接交给内置的电脑端，不再经它的本机接口（8792）。

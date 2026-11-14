@@ -131,9 +131,12 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
       start().catch(e => log('内置电脑端没起来：', e.message));
     },
     async join(invite) {
-      if (!/clarelay-device1\./.test(String(invite || ''))) throw new Error('这不是 clarelay 设备邀请码（应以 clarelay-device1. 开头）');
+      // 邀请码：clarelay 复制出来的 JSON（可带换行），或旧的一行 clarelay-device1.…；格式由 clarelay/common.mjs 的 parseDeviceInvite 认
+      const v = String(invite || '').trim();
+      if (v.startsWith('{')) { try { JSON.parse(v); } catch { throw new Error('邀请码不是完整的 JSON：从 clarelay 复制时要整段复制'); } }
+      else if (!/clarelay-device1\./.test(v)) throw new Error('这不是 clarelay 设备邀请码');
       o.setOff(false);
-      return start(String(invite).trim());
+      return start(v);
     },
     async connect() { if (!readState()?.id) throw new Error('还没加入：先粘贴设备邀请码'); o.setOff(false); return start(); },
     async disconnect() { o.setOff(true); await stop(); return info(); },

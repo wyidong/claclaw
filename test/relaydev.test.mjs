@@ -38,6 +38,7 @@ test('加入、断开、连接、移除', async () => {
   h.rd.autoStart(); await new Promise(r => setTimeout(r, 20));
   assert.equal(h.calls.length, 0, '没加入：启动时不连');
   await assert.rejects(h.rd.join('abc'), /不是 clarelay 设备邀请码/);
+  await assert.rejects(h.rd.join('{"domain":'), /不是完整的 JSON/);
 
   const i1 = await h.rd.join(' clarelay-device1.xyz ');
   assert.equal(h.calls[0].invite, 'clarelay-device1.xyz');

@@ -18,8 +18,17 @@ export function makeDeviceInvite({ domain, code, port }) {
   const j = { d: domain, c: code }; if (port && port !== 443) j.p = port;
   return INVITE_PREFIX + b64u(JSON.stringify(j));
 }
+// 可读格式（外壳「复制」给的就是这种，粘到 claclaw「网络 › clarelay」）：
+// { "clarelay": "device-invite", "relay": "域名", "port": 443（可省）, "code": "一次性码", "note": …, "expires": … }
 export function parseDeviceInvite(s) {
-  s = String(s || '').trim().replace(/\s+/g, '');
+  s = String(s || '').trim();
+  if (s.startsWith('{')) {
+    let j; try { j = JSON.parse(s); } catch { throw new Error('邀请码 JSON 不完整（要从 { 复制到 }）'); }
+    if (j?.clarelay !== 'device-invite') throw new Error('不是 clarelay 设备邀请码');
+    if (!/^[a-z0-9.-]+$/i.test(j.relay || '') || !j.code) throw new Error('设备邀请码内容不对');
+    return { domain: j.relay.toLowerCase(), code: String(j.code), port: Number(j.port) || 443 };
+  }
+  s = s.replace(/\s+/g, '');
   const i = s.indexOf(INVITE_PREFIX);
   if (i < 0) throw new Error('不是 clarelay 设备邀请码（应以 ' + INVITE_PREFIX + ' 开头）');
   let j; try { j = JSON.parse(unb64u(s.slice(i + INVITE_PREFIX.length).match(/^[A-Za-z0-9_-]+/)[0]).toString('utf8')); } catch { throw new Error('设备邀请码不完整或损坏'); }

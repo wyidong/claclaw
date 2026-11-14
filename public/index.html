@@ -1005,8 +1005,9 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 .ctxm button.danger{color:#E5484D}
 .s-del{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 .s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
-#delDlg,#keyDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
-#delDlg.on,#keyDlg.on{display:flex}
+#delDlg,#keyDlg,#crDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
+#delDlg.on,#keyDlg.on,#crDlg.on{display:flex}
+#crIn{width:100%;box-sizing:border-box;min-height:180px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);resize:vertical}
 #newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #newDlg.on{display:flex}
 #newDlg .newIn{margin:4px 0 8px;font-size:14px;color:var(--muted);line-height:1.6}
@@ -1681,7 +1682,7 @@ select.pe-in{text-align-last:right}
      圆角外面那一小块用同色的外阴影盖住（只扩 6px，盖不到图标栏的按钮） */
   #app{position:relative;box-sizing:border-box;padding:4px 4px 4px 0;background:var(--strip)}   /* 内圈四周都留 4px */
   #app::after{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border:1px solid var(--line);border-radius:12px;box-shadow:0 0 0 6px var(--strip);pointer-events:none;z-index:20}
-  #newDlg,#delDlg,#keyDlg,#cfgDlg,#lightbox,#vplayer,#fview,#diss{z-index:21}   /* 弹框 / 全屏查看盖在这圈边框上面：整屏一起变暗，不留一圈亮边 */
+  #newDlg,#delDlg,#keyDlg,#crDlg,#cfgDlg,#lightbox,#vplayer,#fview,#diss{z-index:21}   /* 弹框 / 全屏查看盖在这圈边框上面：整屏一起变暗，不留一圈亮边 */
   /* 聊天区滚动条：位置始终留着（内容不跟着跳），没有底色 */
   #feed{scrollbar-gutter:stable}
   #feed::-webkit-scrollbar{width:8px}
@@ -2030,6 +2031,19 @@ select.pe-in{text-align-last:right}
         <button type="submit" class="btn del" id="delGo">删除</button>
       </div>
       <div class="err" id="delErr" role="alert"></div>
+    </form>
+  </div>
+
+  <div id="crDlg" aria-hidden="true">
+    <form class="dlg" id="crForm" role="dialog" aria-label="加入 clarelay">
+      <h3>加入 clarelay</h3>
+      <p>在 clarelay「管理」里生成设备邀请码，点复制，整段粘贴到下面（JSON，带换行也行）。</p>
+      <textarea id="crIn" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{&#10;  …&#10;}"></textarea>
+      <div class="row">
+        <button type="button" class="btn cancel" id="crNo">取消</button>
+        <button type="submit" class="btn" id="crGo">加入</button>
+      </div>
+      <div class="err" id="crErr" role="alert"></div>
     </form>
   </div>
 
@@ -4654,15 +4668,28 @@ function crRow(){
   return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">'+esc(r.name||'')+' · '+st+'<small>'+esc(String(r.url||'').replace(/^https:\/\//,''))+'</small>'+(r.revoked||!r.online?err:'')+'</span><span class="cr-btns">'+btns+'</span></div>';
 }
 function crPaint(){var el=$('#hostBody .cr-row');if(el)el.outerHTML=crRow()}
+// 邀请码弹窗：clarelay 复制出来的 JSON（带换行）；旧的 clarelay-device1. 一行也认
+function crSubmit(e){
+  e&&e.preventDefault();var v=$('#crIn').value.trim();
+  if(!v){$('#crErr').textContent='先粘贴邀请码';return}
+  if(v.charAt(0)==='{'){try{JSON.parse(v)}catch(_){$('#crErr').textContent='不是完整的 JSON：从 clarelay 复制时要整段复制';return}}
+  else if(!/clarelay-device1\./.test(v)){$('#crErr').textContent='这不是 clarelay 设备邀请码';return}
+  $('#crErr').textContent='';crOp('join',v);
+}
+$('#crForm').addEventListener('submit',crSubmit);
+$('#crNo').addEventListener('click',function(){showDlg($('#crDlg'),false)});
+$('#crDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)showDlg($('#crDlg'),false)});
 function crLoad(){return fetch('/api/clarelay').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){relaySt=j;crPaint()}}).catch(function(){})}
-function crOp(op){
+function crOp(op,inv){
   if(relayBusy)return;var body={op:op};
-  if(op==='join'){var v=prompt('粘贴 clarelay 设备邀请码（clarelay-device1. 开头）');if(!v||!v.trim())return;body.invite=v.trim()}
+  if(op==='join'&&!inv){$('#crIn').value='';$('#crErr').textContent='';showDlg($('#crDlg'),true);setTimeout(function(){$('#crIn').focus()},50);return}
+  if(op==='join')body.invite=inv;
   if(op==='remove'&&!confirm('移除后这台电脑退出 clarelay：本机身份文件删掉，再加入要新的邀请码；中继那边会一直显示离线，要在管理页手动撤销。确定移除？'))return;
   if(op==='disconnect'&&!confirm('断开后手机经 clarelay 打不开这台电脑的 claclaw（局域网照常）。确定断开？'))return;
   relayBusy=op;crPaint();
   postJson('/api/clarelay',body).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     relayBusy='';if(x.j&&'joined' in x.j)relaySt=x.j;crPaint();
+    if(op==='join'){if(!x.ok){$('#crErr').textContent=x.j&&x.j.error||'出错了';showDlg($('#crDlg'),true);return}showDlg($('#crDlg'),false)}
     toast(x.ok?({join:'已加入，等管理员批准或马上就连上',connect:'正在连接',disconnect:'已断开',remove:'已移除'})[op]:'没成：'+(x.j&&x.j.error||'出错了'));
     setTimeout(crLoad,2500);
   }).catch(function(e){relayBusy='';crPaint();toast('没成：'+e.message)});
@@ -6606,7 +6633,7 @@ document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest(
   var g=null;
   function hScroll(el){for(;el&&el!==document.body;el=el.parentElement){if(el.scrollWidth>el.clientWidth+2){var o=getComputedStyle(el).overflowX;if(o==='auto'||o==='scroll')return true}}return false}
   function shown(el){if(!el||!el.offsetParent)return false;var r=el.getBoundingClientRect();return r.width>0&&r.height>0}
-  function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#diss.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#keyDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
+  function overlayOn(){return !!document.querySelector('#lightbox.on,#fview.on,#diss.on,#vplayer.on,#cfgDlg.on,#delDlg.on,#keyDlg.on,#crDlg.on,#newDlg.on,.perm-s.on')||(!mList&&sheet.classList.contains('on'))}
   function backBtn(){
     if(!mList)return $('#backBtn');
     var c=[].slice.call(document.querySelectorAll('#setBack,.pe-back')).filter(function(x){return shown(x)});
@@ -8079,6 +8106,7 @@ document.addEventListener('keydown',function(e){
   else if($('#vplayer').classList.contains('on'))closeVideo();
   else if($('#fview').classList.contains('on'))$('#fview .fv-x').click();
   else if(keyDlg.classList.contains('on'))closeKey();
+  else if($('#crDlg').classList.contains('on'))showDlg($('#crDlg'),false);
   else if(delDlg.classList.contains('on'))closeDel();
   else if(dissEl.classList.contains('on'))dsBack();
   else if($('#cfgDlg').classList.contains('on'))closeCfg();
