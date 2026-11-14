@@ -1,0 +1,32 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>clarelay 直连测试</title>
+<style>body{font:15px -apple-system,system-ui,sans-serif;margin:0;padding:16px;background:#F2F0F8;color:#333}h1{font-size:20px;color:#7C3AED;margin:0 0 12px}
+.card{background:#fff;border-radius:12px;padding:12px 14px;margin:0 0 12px}b.ok{color:#12864A}b.bad{color:#D93636}pre{white-space:pre-wrap;word-break:break-all;font:12px ui-monospace,monospace;margin:0}
+button{font:inherit;font-size:16px;border:0;border-radius:10px;background:#7C3AED;color:#fff;padding:10px 16px;margin:0 8px 8px 0}</style></head>
+<body><h1>clarelay 直连测试</h1>
+<div class="card">路线：<b id="route">…</b><pre id="info"></pre></div>
+<div class="card"><button id="run">测一次</button><button id="re">重新打洞</button><pre id="out"></pre></div>
+<script src="/_clarelay/rtc.js"></script>
+<script>
+const $ = id => document.getElementById(id), out = s => { $('out').textContent += s + '\n'; };
+async function show() {
+  const r = clarelay.route; $('route').textContent = r === 'direct' ? '直连' : '中转'; $('route').className = r === 'direct' ? 'ok' : 'bad';
+  $('info').textContent = JSON.stringify(await clarelay.info(), null, 1);
+}
+clarelay.addEventListener('route', show); show(); setInterval(show, 3000);
+const ms = async f => { const t = performance.now(); const v = await f(); return [Math.round(performance.now() - t), v]; };
+$('run').onclick = async () => {
+  $('out').textContent = '';
+  out('路线：' + clarelay.route);
+  if (clarelay.route === 'direct') { const t = []; for (let i = 0; i < 5; i++) t.push((await ms(() => clarelay.ping(3000)))[0]); out('直连往返（ms）：' + t.join(' ')); }
+  { const t = []; for (let i = 0; i < 3; i++) t.push((await ms(() => fetch('/_clarelay/rtc.js', { cache: 'no-store' }).then(r => r.text())))[0]); out('中继取一个小文件（ms）：' + t.join(' ')); }
+  try { const t = []; let st = 0, len = 0; for (let i = 0; i < 3; i++) { const [m, r] = await ms(() => clarelay.fetch('/', { cache: 'no-store' }).then(async r => [r.status, (await r.text()).length])); t.push(m); [st, len] = r; } out('经 clarelay.fetch 取首页（ms）：' + t.join(' ') + '  状态 ' + st + '  ' + len + ' 字节'); } catch (e) { out('clarelay.fetch 出错：' + e.message); }
+  try {
+    const ws = new clarelay.WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    const t0 = performance.now();
+    await new Promise((ok, bad) => { ws.onmessage = e => { out('WebSocket 首条消息（' + Math.round(performance.now() - t0) + 'ms，' + String(e.data).length + ' 字）：' + (ws instanceof WebSocket ? '原生' : '直连')); ok(); }; ws.onclose = e => bad(new Error('close ' + e.code)); setTimeout(() => bad(new Error('5 秒没收到消息')), 5000); });
+    ws.close();
+  } catch (e) { out('WebSocket：' + e.message); }
+};
+$('re').onclick = () => clarelay.reconnect().then(show);
+</script></body></html>

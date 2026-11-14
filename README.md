@@ -118,6 +118,15 @@ Qoder、CodeBuddy 这类要先登录账号才能用；Kimi、Codex、MiniMax Cod
 - 登没登录按各家留在磁盘上的凭据判断（Qoder 问 `qodercli status`；CodeBuddy 判断不了，只在用的时候报错）；一个 Claw 同一时间只跑一个登录，最多等 15 分钟；推到手机的文字里 `sk-` 开头的串会打码
 - Claude Code 不在这里登录：用 claude.ai 登录或「长期令牌」（见上）
 
+## clarelay：经中继从外网访问（可选）
+
+claclaw 内置了 clarelay 的电脑端（`clarelay/` 目录，从 clarelay 仓库同步：`node tools/sync-clarelay.mjs`，这里不要直接改）。不用就什么都不启动。
+
+- **加入**：「设置 → 宿主 → 网络 → clarelay」点「粘贴邀请码」，贴入 clarelay 管理页生成的设备邀请码（`clarelay-device1.` 开头）。之后 claclaw 每次启动自动连上。
+- **断开 / 连接**：只停 / 恢复连接，身份保留；**移除**：删掉本机身份文件，再加入要新的邀请码（中继那边要在管理页撤销这台）。
+- 身份文件是 `~/.clarelay-device.json`（权限 600），和单独安装的电脑端同一个：以前单独装过的电脑不用重新邀请。内置的启动前会停掉单独安装的那份（macOS 的 `com.clarelay.device`、Windows「启动」里的 `clarelay-device.vbs`），连上后去掉它的开机自启；没连上就恢复原样。
+- 推送、未读角标直接交给内置的电脑端，不再经它的本机接口（8792）。
+
 ## 会话占用与接管
 
 下面说的是 Claude Code。OpenCode 按目录推断终端占用（见「目前的限制」）；DeepSeek 不检测占用，别在终端和网页里同时开同一个会话；OpenClaw 的会话都由它的网关管理，claclaw 只是网关的一个客户端。
@@ -271,6 +280,7 @@ minimax.mjs       MiniMax Code 会话（mcode acp；历史靠 session/load 重�
 codebuddy.mjs     CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebuddy/projects；模型库写进 ~/.codebuddy/models.json）
 qoder.mjs         Qoder CLI 会话（qodercli --acp；列表读 ~/.qoder/projects；模型库写进 ~/.qoder/settings.json 的 customModels）
 copilot.mjs       GitHub Copilot CLI 会话（copilot --acp；列表读 ~/.copilot/session-state；模型库走 BYOK 环境变量）
+relaydev.mjs      内置的 clarelay 电脑端：加入 / 断开 / 移除、启动时自动连、停掉单独安装的那份（电脑端代码在 clarelay/）
 cclike.mjs        Claude Code 式会话记录（projects/<目录>/<id>.jsonl）的通用读取：CodeBuddy、Qoder 共用
 acp.mjs           ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面几个都继承它，只写各自的差异
 login.mjs         在手机上登录各 Claw：电脑上套伪终端起登录命令，网址 / 一次性代码推到手机（tools/ptywrap.py 是伪终端包装）

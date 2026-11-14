@@ -16,7 +16,8 @@ import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionInfo, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import * as push from './push.mjs';
-import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured } from './devnotify.mjs';
+import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured, useDevice } from './devnotify.mjs';
+import { makeRelayDev } from './relaydev.mjs';
 import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './kimi.mjs';
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './qwen.mjs';
 import { isCx, CxRunner, cxRunners, cxSessionList, cxNewSession, cxShutdown, cxAcpRunning, cxInfo, cxExists, cxDelete, cxInstalled, cxSupported, cxUnsupportedReason, cxRename, cxModelsChanged } from './codex.mjs';
@@ -2450,6 +2451,8 @@ startDevNotify({ log, onOnline: async () => {
   log('clarelay sync', items.length, j?.ok ? 'ok' : 'fail');
   return j;
 } });
+// 内置的 clarelay 电脑端（宿主页「网络 › clarelay」）；主端口占到后才自动连（见下面 listen）
+const relayDev = makeRelayDev({ port: PORT, DATA, log, getOff: () => !!settings().clarelayOff, setOff: v => saveSettings({ clarelayOff: !!v }), onDevice: useDevice });
 
 // ---------- 在 claclaw 里的最近活动 ----------
 // 网页里打开、发消息、一轮结束都算「在 claclaw 活跃」；会话列表的「最近活跃」只看这个（不看终端 / VS Code）
@@ -3123,6 +3126,16 @@ const handler = async (req, res) => {
       return sendJson(res, 200, modelsPublic(loadStore(MODELS_FILE)));
     }
     if (url.pathname === '/api/claude-usage' && req.method === 'GET') return sendJson(res, 200, { usage: claudeUsage.get() });
+    if (url.pathname === '/api/clarelay') {   // 内置 clarelay 电脑端：GET 状态；POST {op: join(invite) | connect | disconnect | remove}
+      if (req.method === 'GET') return sendJson(res, 200, relayDev.info());
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method' });
+      if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
+      const body = await jsonBody(req, 8192);
+      const op = { join: () => relayDev.join(body.invite), connect: () => relayDev.connect(), disconnect: () => relayDev.disconnect(), remove: () => relayDev.remove() }[body.op];
+      if (!op) return sendJson(res, 400, { error: 'op' });
+      log('clarelay op', body.op);
+      try { return sendJson(res, 200, await op()); } catch (e) { return sendJson(res, 400, { error: e.message, ...relayDev.info() }); }
+    }
     if (url.pathname === '/api/settings/session') {
       if (req.method === 'POST') {
         if (!/application\/json/.test(req.headers['content-type'] || '')) return sendJson(res, 415, { error: 'bad request' });
@@ -4072,7 +4085,7 @@ for (const host of HOSTS) {
     if (host === HOSTS[0]) { log('已有 claclaw 在跑（端口 ' + PORT + ' 被占），这个进程退出'); process.exit(1); }
     if (++tries <= 10) setTimeout(() => srv.listen(PORT, host), 3000);
   });
-  srv.listen(PORT, host, () => log(`claclaw listening on http://${host}:${PORT}`));
+  srv.listen(PORT, host, () => { log(`claclaw listening on http://${host}:${PORT}`); if (host === HOSTS[0]) relayDev.autoStart(); });
 }
 
 function shutdown() {
@@ -4080,6 +4093,7 @@ function shutdown() {
   for (const r of [...runners.values()]) r.dispose();
   for (const c of CLAWS) for (const r of [...c.runners.values()]) { try { r.dispose(); } catch {} }
   for (const c of CLAWS) if (c.shutdown) setTimeout(c.shutdown, 300);
+  relayDev.stop().catch(() => {});
   setTimeout(() => process.exit(0), 500);
 }
 process.on('SIGINT', shutdown);

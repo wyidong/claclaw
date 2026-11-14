@@ -10,8 +10,19 @@ let conf = null, confAt = 0;
 let status = { online: false, ok: false };   // ok = 本机接口通；online = 设备连着中继
 let log = () => {};
 let onOnline = () => {};
+// 内置的电脑端（relaydev.mjs）：同一进程里直接调它，不走 8792 本机接口
+let dev = null;
+const devPoll = () => poll();
+export function useDevice(d) {
+  if (dev === d) return;
+  dev?.off?.('status', devPoll);
+  dev = d || null;
+  dev?.on?.('status', devPoll);
+  poll();
+}
 
 function loadConf() {
+  if (dev) return { builtin: true };
   try {
     const m = fs.statSync(FILE).mtimeMs;
     if (conf && m === confAt) return conf;
@@ -22,6 +33,11 @@ function loadConf() {
 }
 
 async function call(method, route, body) {
+  if (dev) {
+    if (route === '/status') return { online: dev.online, push: dev.push, status: dev.status, url: dev.url, shellUrl: dev.shellUrl, name: dev.name, id: dev.id };
+    dev[route.slice(1)](body || {});
+    return { ok: true, online: dev.online };
+  }
   const c = loadConf();
   if (!c) return null;
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 3000);
@@ -39,7 +55,7 @@ async function poll() {
   const was = status.online;
   try {
     const j = await call('GET', '/status');
-    status = j ? { ok: true, online: !!j.online, push: typeof j.push === 'boolean' ? j.push : null, status: j.status, name: j.name || '', shellUrl: j.shellUrl || '', url: j.url || '' } : { ok: false, online: false };
+    status = j ? { ok: true, builtin: !!dev, online: !!j.online, push: typeof j.push === 'boolean' ? j.push : null, status: j.status, name: j.name || '', shellUrl: j.shellUrl || '', url: j.url || '' } : { ok: false, online: false };
   } catch (e) { status = { ok: false, online: false, error: e.message }; }
   if (status.online && !was) { log('clarelay 推送接口在线', status.name || ''); try { await onOnline(); } catch (e) { log('clarelay sync failed', e.message); } }
   else if (was && !status.online) log('clarelay 推送接口离线');

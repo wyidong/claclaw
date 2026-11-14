@@ -1295,6 +1295,10 @@ textarea.md-in:focus-visible{outline:none}
 .md-kv .md-key{flex:1;min-width:0;font-family:inherit;font-size:15px;letter-spacing:.5px}
 .md-pill{height:28px;padding:0 13px;border:0;border-radius:14px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);font:inherit;font-size:13px;font-weight:500;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .md-pill:active{opacity:.6}
+.h-row.cr-row{flex-wrap:wrap;row-gap:8px}
+.cr-row .cr-btns{flex-basis:100%;display:flex;justify-content:flex-end;gap:8px}
+.cr-row .md-pill.del{color:var(--deny);background:color-mix(in srgb,var(--deny) 10%,transparent)}
+.cr-row .md-pill:disabled{opacity:.5}
 .md-acts{margin:0}
 .md-save{display:block;width:100%;height:46px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink,#fff);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
 .md-save:active{opacity:.8}
@@ -4638,10 +4642,35 @@ function hRow(k,v,sub,bar,low){   // bar：0~1 的占用条；low：越低越要
     (bar!=null?'<span class="h-bar'+((low?bar<=0.2:bar>=0.85)?' hi':'')+'"><i style="width:'+Math.round(bar*100)+'%"></i></span>':'')+'</span></div>';
 }
 function hSec(h,rows){return rows?'<div><div class="h-h">'+esc(h)+'</div><div class="h-card">'+rows+'</div></div>':''}
-var hostView='',peerSt=null;   // hostView='peer'：宿主页里打开了「claclaw 协同」子页面，暂停自动刷新
+var hostView='',peerSt=null,relaySt=null,relayBusy='';
+// 网络 › clarelay：claclaw 内置的 clarelay 电脑端（粘贴设备邀请码加入；断开 = 只停连接，移除 = 删掉本机身份）
+function crRow(){
+  var r=relaySt;if(!r)return '';
+  var pill=function(op,t,cls){return '<button type="button" class="md-pill'+(cls?' '+cls:'')+'" data-act="cr-op" data-op="'+op+'"'+(relayBusy?' disabled':'')+'>'+(relayBusy===op?'…':t)+'</button>'};
+  var err=r.error?'<small>'+esc(r.error)+'</small>':'';
+  if(!r.joined)return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">未加入<small>在 clarelay「管理」里生成设备邀请码，粘贴进来</small>'+err+'</span><span class="cr-btns">'+pill('join','粘贴邀请码')+'</span></div>';
+  var st=r.starting?'连接中…':r.revoked?'已撤销':!r.running?(r.off?'已断开':'未连接'):r.status!=='active'?'等管理员批准':r.online?'在线':'离线';
+  var btns=r.revoked?pill('join','新邀请码重新加入')+pill('remove','移除','del'):(r.running||r.starting?pill('disconnect','断开'):pill('connect','连接'))+pill('remove','移除','del');
+  return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">'+esc(r.name||'')+' · '+st+'<small>'+esc(String(r.url||'').replace(/^https:\/\//,''))+'</small>'+(r.revoked||!r.online?err:'')+'</span><span class="cr-btns">'+btns+'</span></div>';
+}
+function crPaint(){var el=$('#hostBody .cr-row');if(el)el.outerHTML=crRow()}
+function crLoad(){return fetch('/api/clarelay').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){relaySt=j;crPaint()}}).catch(function(){})}
+function crOp(op){
+  if(relayBusy)return;var body={op:op};
+  if(op==='join'){var v=prompt('粘贴 clarelay 设备邀请码（clarelay-device1. 开头）');if(!v||!v.trim())return;body.invite=v.trim()}
+  if(op==='remove'&&!confirm('移除后这台电脑退出 clarelay：本机身份文件删掉，再加入要新的邀请码；中继那边会一直显示离线，要在管理页手动撤销。确定移除？'))return;
+  if(op==='disconnect'&&!confirm('断开后手机经 clarelay 打不开这台电脑的 claclaw（局域网照常）。确定断开？'))return;
+  relayBusy=op;crPaint();
+  postJson('/api/clarelay',body).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+    relayBusy='';if(x.j&&'joined' in x.j)relaySt=x.j;crPaint();
+    toast(x.ok?({join:'已加入，等管理员批准或马上就连上',connect:'正在连接',disconnect:'已断开',remove:'已移除'})[op]:'没成：'+(x.j&&x.j.error||'出错了'));
+    setTimeout(crLoad,2500);
+  }).catch(function(e){relayBusy='';crPaint();toast('没成：'+e.message)});
+}   // hostView='peer'：宿主页里打开了「claclaw 协同」子页面，暂停自动刷新
 function loadHost(){
   if(hostView)return;
   fetch('/api/peer').then(function(r){return r.json()}).then(function(j){peerSt=j}).catch(function(){});
+  crLoad();
   loadSkills();
   mdlPeek();
   fetch('/api/host').then(function(r){needLogin(r);return r.json()}).then(function(x){
@@ -4655,7 +4684,7 @@ function loadHost(){
       (dk?hRow('磁盘',fmtBytes(dk.total-dk.free)+' / '+fmtBytes(dk.total),'剩余 '+fmtBytes(dk.free),(dk.total-dk.free)/dk.total):'')+
       (b?hRow('电池',b.percent+'%',(b.ac?'接着电源':'用电池')+(b.state&&b.state!=='AC attached'?' · '+({charging:'充电中',discharging:'放电中',charged:'已充满','finishing charge':'即将充满'}[b.state]||b.state):''),b.percent/100,true):''));
     var cr=x.net.clarelay;
-    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+(cr?hRow('clarelay',esc(cr.url.replace(/^https:\/\//,'')),cr.status==='revoked'?'已撤销':cr.status!=='active'?'等管理员批准':cr.online?'在线':'离线'+(cr.error?'：'+cr.error:'')):'')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip),a.note||'')}).join('')+(CR?'<div class="h-row"><span class="k">当前连接</span><span class="v" id="crRoute">'+crRouteText()+'</span></div>':'')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、'))
+    h+=hSec('网络',(x.net.https?hRow('https 地址',esc(x.net.https.replace(/^https:\/\//,''))):'')+(relaySt?crRow():cr?hRow('clarelay',esc(cr.url.replace(/^https:\/\//,'')),cr.status==='revoked'?'已撤销':cr.status!=='active'?'等管理员批准':cr.online?'在线':'离线'+(cr.error?'：'+cr.error:'')).replace('class="h-row"','class="h-row cr-row"'):'<div class="h-row cr-row" hidden></div>')+x.net.addrs.map(function(a){return hRow(a.kind,esc(a.ip),a.note||'')}).join('')+(CR?'<div class="h-row"><span class="k">当前连接</span><span class="v" id="crRoute">'+crRouteText()+'</span></div>':'')+hRow('claclaw 端口',String(x.net.port),'监听 '+x.net.listen.join('、'))
       +'<div class="h-row h-link" data-act="peer"><span class="k">claclaw 协同</span><span class="v">'+(peerSt?(peerSt.enabled?(peerSt.listening?'已开启 · '+peerSt.sessions.length+' 个会话'+(peerSt.peers&&peerSt.peers.length?' · 已配对 '+peerSt.peers.length:'')+(peerSt.pending&&peerSt.pending.length?' · 有配对申请':''):'已开启 · 未在监听'):'未开启'):'')+'</span><span class="chev" aria-hidden="true"></span></div>');
     var k=x.claclaw;
     var sessSum=function(f){return Object.keys(k.sessions).reduce(function(n,c){var v=k.sessions[c];return n+(v&&typeof v==='object'?v[f]||0:0)},0)};   // 各 Claw 加起来（push 是数字，不算）
@@ -5045,6 +5074,7 @@ $('#hostBody').addEventListener('click',function(e){
   var act=a.dataset.act;
   if(act==='peer'){hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();return}
   if(act==='peer-sub'){peerGo(a.dataset.sub);return}
+  if(act==='cr-op'){crOp(a.dataset.op);return}
   if(act==='pool-claw'){peerPoolClaw=a.dataset.claw;poolPaint();document.querySelectorAll('.pe-seg button').forEach(function(b){b.classList.toggle('on',b.dataset.claw===peerPoolClaw)});return}
   if(act==='pool-del'){poolSave((peerCfg.sessions||[]).filter(function(x){return x!==a.dataset.id}));return}
   if(act==='peer-back'&&peerFromList){var fl=peerFromList;peerFromList='';hostView='';peerWatch(false);$('#railPeer').classList.remove('on');mTab(fl);openSheet(true);return}
