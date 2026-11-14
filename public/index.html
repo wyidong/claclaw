@@ -679,6 +679,9 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #send{right:2px;color:var(--accent)}
 #send:disabled,#send.sugfill{color:var(--muted);opacity:.45;cursor:default}
 #send.sugfill{cursor:pointer}
+/* 清空输入框：手机上字有三行以上才出现，在左下角（左上角是「+」）；电脑上有字就出现，在「+」右边 */
+#taClr{position:absolute;bottom:4px;left:-6px;width:36px;height:36px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--muted);opacity:.7}
+#taClr[hidden]{display:none}
 #stopBtn{position:absolute;top:2px;right:42px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--deny)}
 #composer.busy #ta{padding-right:88px}
 #composer.nosend #send{display:none}
@@ -1818,6 +1821,8 @@ select.pe-in{text-align-last:right}
   body.row-drag{cursor:row-resize;user-select:none}
   #attachBtn{top:auto;bottom:5px;left:12px;width:34px;height:34px;border-radius:8px}
   #attachBtn:hover{background:var(--bg);color:var(--ink)}
+  #taClr{bottom:5px;left:50px;width:34px;height:34px;border-radius:8px}
+  #taClr:hover{background:var(--bg);color:var(--ink);opacity:1}
   #send{top:auto;bottom:6px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
   #send:disabled,#send.sugfill{background:var(--code-bg);color:var(--muted);opacity:1}
   #stopBtn{top:auto;bottom:6px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
@@ -1840,6 +1845,8 @@ select.pe-in{text-align-last:right}
   html.solo #dockGrip:hover::after,html.solo #dockGrip.drag::after{opacity:.55}
   html.solo #attachBtn{top:auto;bottom:5px;left:12px;width:34px;height:34px;border-radius:8px}
   html.solo #attachBtn:hover{background:var(--bg);color:var(--ink)}
+  html.solo #taClr{bottom:5px;left:50px;width:34px;height:34px;border-radius:8px}
+  html.solo #taClr:hover{background:var(--bg);color:var(--ink);opacity:1}
   html.solo #send{top:auto;bottom:6px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
   html.solo #send:disabled,html.solo #send.sugfill{background:var(--code-bg);color:var(--muted);opacity:1}
   html.solo #stopBtn{top:auto;bottom:6px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
@@ -1959,6 +1966,7 @@ select.pe-in{text-align-last:right}
       <div id="taWrap">
         <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
       </div>
+      <button type="button" id="taClr" aria-label="清空输入框" title="清空输入框" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></button>
       <button type="button" id="stopBtn" aria-label="停止" title="停止 Claude 当前的工作" hidden></button>
       <button type="button" id="atBtn" hidden aria-label="@ 成员" title="@ 成员">@</button>
       <button type="button" id="send" aria-label="发送" disabled></button>
@@ -3685,6 +3693,7 @@ function syncSend(){
   // 输入框空着、有建议（灰字）时：发送键保持灰色样子，但能点，点了把建议填进输入框（不直接发）
   var sugOn=sendBtn.disabled&&!!suggestion&&!ta.value&&!at.length&&!!session;
   sendBtn.classList.toggle('sugfill',sugOn);if(sugOn){sendBtn.disabled=false;sendBtn.setAttribute('aria-label','填入建议')}
+  $('#taClr').hidden=!ta.value||!(d||ta.scrollHeight>=80);   // 手机上三行以上才出现
   var sb=$('#stopBtn');sb.hidden=!busy;sb.innerHTML=d?'停止':ICON_STOP;
   $('#composer').classList.toggle('busy',busy);
   // 手机上回车键就是发送：键盘开着（输入框有焦点）时不要发送键；键盘收起时只在有东西可发（建议回复、双击回写）时出现
@@ -4314,6 +4323,12 @@ $('#atBtn').addEventListener('mousedown',function(e){e.preventDefault()});   // 
 $('#atBtn').addEventListener('click',function(){atInsert('')});
 sendBtn.addEventListener('click',function(){if(sendBtn.classList.contains('sugfill')){acceptSuggestion(true);return}run(ta.value)});
 $('#stopBtn').addEventListener('click',stop);
+// 清空输入框：输入框有焦点时走「删除」编辑命令，能撤销（Cmd+Z / 摇一摇）；键盘收着时直接清，不弹键盘
+$('#taClr').addEventListener('mousedown',function(e){e.preventDefault()});
+$('#taClr').addEventListener('click',function(){
+  if(document.activeElement===ta){ta.select();try{if(document.execCommand('delete')&&!ta.value)return}catch(_){}}
+  ta.value='';ta.dispatchEvent(new Event('input'));
+});
 ta.addEventListener('input',function(){
   ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden';syncSend();
   if(ta.value)suggestion=null; // 开始自己打字就作废

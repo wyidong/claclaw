@@ -669,6 +669,7 @@ var I18N={dict:{
 "添加中继":"Add relay",
 "添加会话":"Add sessions",
 "添加图片":"Add image",
+"清空输入框":"Clear input",
 "添加对方":"Add peer",
 "清空「最近」列表？\n只清空列表，不会删除任何会话。":"Clear the \"Recent\" list?\nOnly the list is cleared; no sessions are deleted.",
 "清空失败":"Clear failed",
