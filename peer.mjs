@@ -371,10 +371,12 @@ export const RELAYS_HEADER = 'x-claclaw-relays';
 const relayHost = u => { try { return new URL(u).host; } catch { return ''; } };
 export const preferRelay = (list, host) => host ? [...list.filter(u => relayHost(u) === host), ...list.filter(u => relayHost(u) !== host)] : list;
 export const relaysHeaderValue = (c, p) => preferRelay(ourRelays(c), p?.relayFirst).join(' ') || 'none';
+// 中继地址：自签证书的带 #pin=证书指纹（&key=…）；域名 + 正式证书的只带 #key=…（clarelay 9d35b61 起）
+export const RELAY_ADDR = /^https:\/\/\S+#(?:pin=sha256\/\/|key=)\S+$/;
 export const parseRelaysHeader = v => {
   const s = String(v ?? '').trim();
   if (s.toLowerCase() === 'none') return [];
-  const list = s.split(/\s+/).filter(u => /^https:\/\/\S+#pin=sha256\/\/\S+$/.test(u)).slice(0, 5);
+  const list = s.split(/\s+/).filter(u => RELAY_ADDR.test(u)).slice(0, 5);
   return list.length ? list : null;   // null = 忽略
 };
 // 单独试一次每个中继（局域网通着时也试）：协同页显示「离开局域网后能不能续上」。同一个地址 60 秒内只真试一次

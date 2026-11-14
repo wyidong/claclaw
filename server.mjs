@@ -33,7 +33,7 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcKey, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
 import { ADDRS_HEADER, parseAddrsHeader, setOurExtra, ourAddrs, addrKind } from './peer.mjs';
-import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
+import { RELAY_ADDR, markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
 import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAddr, RTC_ICE } from './peerrtc.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { AUTO_COMPACT, AUTO_COMPACT_CHOICES, autoCompactDue, autoCompactRun } from './autocompact.mjs';
@@ -3420,7 +3420,7 @@ const handler = async (req, res) => {
         if (!p) return sendJson(res, 404, { error: '没有这个对方' });
         const raw = Array.isArray(b.relays) ? b.relays.join(' ') : String(b.relay || '');
         const list = raw.split(/\s+/).filter(Boolean);
-        if (list.some(r => !/^https:\/\/\S+#pin=sha256\/\/\S+$/.test(r))) return sendJson(res, 400, { error: '中继地址要是 https://…#pin=…（&key=…）整段，多个用换行分开（第一个是主）' });
+        if (list.some(r => !RELAY_ADDR.test(r))) return sendJson(res, 400, { error: '中继地址要是 https://…#pin=…&key=… 或 https://…#key=… 整段，多个用换行分开（第一个是主）' });
         p.relays = list.slice(0, 5).map(r => r.slice(0, 2000)); delete p.relay; savePeer(c);
         log('peer relay', p.name, p.relays.length);
         return sendJson(res, 200, pub(c));
@@ -3528,7 +3528,7 @@ const handler = async (req, res) => {
       if (typeof b.relay === 'string') {
         const r = b.relay.trim();
         if (r && !/^https?:\/\/\S+$/.test(r)) return sendJson(res, 400, { error: '中继地址要以 http:// 或 https:// 开头' });
-        if (/^https:/.test(r) && !/#pin=sha256\/\/[A-Za-z0-9+/=]+(&key=\S+)?$/.test(r)) return sendJson(res, 400, { error: 'https 中继地址末尾要带证书指纹：#pin=sha256//…' });
+        if (/^https:/.test(r) && !/#(pin=sha256\/\/[A-Za-z0-9+/=]+(&key=\S+)?|key=\S+)$/.test(r)) return sendJson(res, 400, { error: 'https 中继地址末尾要带 #pin=sha256//…（自签证书）或 #key=…（正式证书）' });
         c.relay = r.slice(0, 500);
       }
       if (Array.isArray(b.sessions)) c.sessions = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);

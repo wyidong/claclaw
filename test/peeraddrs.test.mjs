@@ -53,3 +53,10 @@ test('按顺序试：局域网不通换 Tailscale；请求带上我们的地址�
   assert.equal(peerRoute.get('p1').via, 'lan');
   s.close();
 });
+
+test('中继地址：带 #pin= 的和只带 #key= 的（域名 + 正式证书）都认，别的不认', async () => {
+  const { parseRelaysHeader, RELAY_ADDR } = await import('../peer.mjs');
+  const a = 'https://1.2.3.4:8790/t/x/claclaw-peer#pin=sha256//abc=&key=k1', b = 'https://relay.example/t/y/claclaw-peer#key=k2';
+  assert.deepEqual(parseRelaysHeader(a + ' ' + b + ' https://relay.example/t/z/claclaw-peer http://1.2.3.4/t/x#key=k'), [a, b]);
+  assert.ok(RELAY_ADDR.test(b) && !RELAY_ADDR.test('https://relay.example/x#foo=1'));
+});
