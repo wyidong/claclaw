@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-pair-'));
-const { notePairFail, pairHoldState, clearPairFails, addPending, PAIR_WAITS } = await import('../peer.mjs');
+const { notePairFail, pairHoldState, clearPairFails, addPending, approvePending, getPending, dropPending, PAIR_WAITS, PAIR_TTL } = await import('../peer.mjs');
 
 test('输错冷却逐级变长，冷却中只有输错的一方显示配对中，结束后告诉它失败', () => {
   clearPairFails();
@@ -29,4 +29,15 @@ test('配对码两位数；冷却中不收新申请', () => {
   notePairFail(p.id);
   assert.throws(() => addPending('y', '10.0.0.2', ''), /正在配对中/);
   clearPairFails();
+});
+
+test('配对申请要我们这边点「同意」：同意前 approved=false，同意后从现在起再给 5 分钟', () => {
+  clearPairFails();
+  const p = addPending('z', '10.0.0.3', '');
+  assert.equal(getPending(p.id).approved, false);
+  const t = Date.now() + 1000;
+  assert.equal(approvePending(p.id, t).approved, true);
+  assert.equal(getPending(p.id).expiresAt, t + PAIR_TTL);
+  assert.equal(approvePending('nope'), null);
+  dropPending(p.id);
 });

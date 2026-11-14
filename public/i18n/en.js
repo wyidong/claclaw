@@ -2,6 +2,11 @@
 // dict：界面上一段文字（去掉首尾空白后）整段对应的英文；pat：带变量的句子，按顺序试正则，$1 原样、$T1 再翻译一次。
 // 新加界面文字后在这里补上，没补的会保持中文。
 var I18N={dict:{
+"同意":"Approve",
+"已同意：把配对码告诉对方":"Approved: tell the other side the pairing code",
+"等对方点「同意」…（对方同意后会自动核对你填的配对码）":"Waiting for the other side to approve… (your code is checked automatically once they do)",
+"确认 IP 和名字是你认识的电脑再点「同意」，会显示配对码，把码告诉对方；不认识就点「拒绝」。没点同意，对方猜对码也配不上。":"Make sure the IP and name are a computer you know, then tap Approve to see the pairing code and tell it to them; otherwise tap Reject. Without approval, even a correct code won't pair.",
+"已向对方申请：对方点「同意」后会看到两位数配对码，问对方要来填在下面":"Request sent: once they approve, they'll see a two-digit code; ask them for it and enter it below",
 "其他中继（别人提供的）":"Other relays (provided by others)",
 "添加新的中继协同地址":"Add a relay collaboration address",
 "本机连着的 clarelay 已经自动算在上面的协同地址里，不用在这里填。用别人提供的中继服务时才在这里加；加了的地址会自动同步给对方，换中继不用重新配对。":"The clarelay this computer is connected to is already included in the addresses above, so you don't need to add it here. Add a relay here only when using one provided by someone else; added addresses sync to peers automatically, so switching relays doesn't need re-pairing.",

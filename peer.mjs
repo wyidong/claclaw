@@ -2,8 +2,8 @@
 //
 // 对外只有一个固定地址：http://<局域网 IP>:<端口>/claclaw-peer（地址里不含密码）。
 // 配对（像蓝牙）：
-//   1. 对方 POST /claclaw-peer/pair {name, inbox?}           → {requestId}；我们这边页面上出现申请（对方 IP、名字、两位数配对码）
-//   2. 我们的人核对后，把两位数配对码告诉对方（微信 / 口头）
+//   1. 对方 POST /claclaw-peer/pair {name, inbox?}           → {requestId}；我们这边页面上出现申请（对方 IP、名字）
+//   2. 我们的人核对后点「同意」，页面才显示两位数配对码，把码告诉对方（微信 / 口头）；没同意前对方 confirm 一律回「等同意」，不核对码
 //   3. 对方 POST /claclaw-peer/pair/confirm {requestId, code, token?} → {token, name, inbox}
 //      token：以后对方找我们用的钥匙；对方带上的 token：以后我们找对方用的钥匙（双向一次配好）
 //   配对码只对这一次申请有效，5 分钟过期。输错不马上说错：返回 {pairing:true, retryIn}，对方隔 retryIn 秒再用同一个 requestId 来问，
@@ -165,11 +165,18 @@ export function addPending(name, ip, inbox) {
   pairLimit.set(ip, now);
   pairGlobal.push(now);
   const code = String(10 + crypto.randomInt(90));
-  const p = { id: newId(), name, ip, inbox, code, expiresAt: now + PAIR_TTL, tries: 0 };
+  const p = { id: newId(), name, ip, inbox, code, expiresAt: now + PAIR_TTL, tries: 0, approved: false };
   pending.set(p.id, p);
   return p;
 }
 export const getPending = id => (pendingList(), pending.get(id) || null);
+// 我们这边的人点了「同意」：之后对方填的配对码才会核对（没同意前猜对也配不上）；从同意起再给 5 分钟
+export function approvePending(id, now = Date.now()) {
+  const p = getPending(id);
+  if (!p) return null;
+  p.approved = true; p.expiresAt = now + PAIR_TTL;
+  return p;
+}
 export const dropPending = id => pending.delete(id);
 // 输错：开始冷却，返回冷却毫秒数
 export function notePairFail(requestId, now = Date.now()) {
@@ -193,7 +200,7 @@ export function clearPairFails() { pairFail = { n: 0, last: 0 }; pairHold = null
 let srv = null, srvKey = '', srvErr = '';
 export function peerStatus() { return { listening: !!srv && srv.listening, error: srvErr }; }
 // 监听所有网卡（::，系统不支持 IPv6 时退回 0.0.0.0）：局域网、Tailscale、公网直连、本机（clarelay 子域名转进来的）都是这一个口。
-// 这个端口只有协同接口：配对要两位数码 + 输错冷却，其余都要钥匙；网页（8787）不在这里
+// 这个端口只有协同接口：配对要我们这边点「同意」+ 两位数码 + 输错冷却，其余都要钥匙；网页（8787）不在这里
 export function applyListener(c, handler, log) {
   const key = c.enabled ? '*:' + c.port : '';
   if (key === srvKey && (srv || !key)) return;

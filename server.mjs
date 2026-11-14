@@ -33,7 +33,7 @@ import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGateway
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcKey, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
 import { ADDRS_HEADER, parseAddrsHeader, setOurExtra, ourAddrs, addrKind } from './peer.mjs';
-import { RELAY_ADDR, markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
+import { approvePending, RELAY_ADDR, markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
 import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAddr, RTC_ICE } from './peerrtc.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { AUTO_COMPACT, AUTO_COMPACT_CHOICES, autoCompactDue, autoCompactRun } from './autocompact.mjs';
@@ -1509,7 +1509,7 @@ async function peerHandler(req, res) {
   const ip = fwd && /^[\d.:a-f]+$/i.test(fwd) && (sockIp === '127.0.0.1' || sockIp === '::1' || sockIp === lanIp()) ? cleanIp(fwd) : sockIp;
   const readJson = () => jsonBody(req, 64 * 1024, null);
   try {
-    // 1. 配对申请：谁都可以申请，但要我们这边的人把两位数配对码告诉对方才能完成
+    // 1. 配对申请：谁都可以申请，但要我们这边的人点「同意」、再把两位数配对码告诉对方才能完成（协同端口外网也能到：没同意前不核对码，猜不了）
     if (route === '/pair') {
       if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
       const b = await readJson() || {};
@@ -1519,11 +1519,11 @@ async function peerHandler(req, res) {
       let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; p.relays = (Array.isArray(b.relays) ? b.relays : [b.relay]).map(okUrl).filter(Boolean).slice(0, 5); p.addrs = parseAddrsHeader((Array.isArray(b.addrs) ? b.addrs : []).join(' ')) || []; } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }   // relay：对方的中继地址（跨网络时用）
       log('peer pair request from', ip, name);
       // 开着的网页也提醒一下（App 在前台时 iPhone 不弹推送横幅）
-      { const msg = JSON.stringify({ t: 'peer.pair', name, ip, code: p.code }); for (const w of wss.clients) if (w.readyState === 1) w.send(msg); }
+      { const msg = JSON.stringify({ t: 'peer.pair', name, ip }); for (const w of wss.clients) if (w.readyState === 1) w.send(msg); }   // 不带配对码：点了「同意」页面上才显示
       localSound();
-      alertOut('view:peer', 'ask', 'claclaw 协同', { title: 'claclaw 协同', body: name + '（' + ip + '）申请配对，配对码 ' + p.code, tag: 'peer-pair', url: '/?view=peer' }, '有人申请配对');
+      alertOut('view:peer', 'ask', 'claclaw 协同', { title: 'claclaw 协同', body: name + '（' + ip + '）申请配对：是你认识的电脑就点开协同页「同意」', tag: 'peer-pair', url: '/?view=peer' }, '有人申请配对');
       setTimeout(() => devRead('view:peer'), PAIR_TTL).unref?.();   // 配对码过期后外壳那条提醒也撤掉
-      return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：请向对方要两位数配对码，然后调用 pair/confirm' });
+      return out(200, { ok: true, requestId: p.id, expiresIn: Math.round(PAIR_TTL / 1000), message: '已提交配对申请：等对方点「同意」后向对方要两位数配对码，然后调用 pair/confirm（对方没同意前 confirm 回 202 {pairing:true, waiting:true}）' });
     }
     if (route === '/pair/confirm') {
       if (req.method !== 'POST') return out(405, { ok: false, error: '用 POST' });
@@ -1535,6 +1535,7 @@ async function peerHandler(req, res) {
       if (hold) return hold.mine ? out(202, { ok: false, pairing: true, retryIn: Math.ceil(hold.left / 1000) }) : out(429, { ok: false, error: '正在配对中，稍后再试' });
       const p = getPending(rid);
       if (!p) return out(404, { ok: false, error: '配对申请不存在或已过期，请重新申请' });
+      if (!p.approved) return out(202, { ok: false, pairing: true, waiting: true, retryIn: 5, message: '等对方点「同意」' });   // 不核对码：同意前猜对也没用
       if (String(b.code || '').trim() !== p.code) {
         dropPending(p.id);
         const wait = notePairFail(p.id);
@@ -1673,7 +1674,7 @@ function peerPublic(c, local) {
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
     addrs: ourAddrs(c).map(u => ({ url: u, kind: addrKind(u) })),
     wan: local ? wanInfo : undefined, stun: local ? !!relayDev.device()?.stun : undefined,   // 我们的全部协同地址（邀请里列的就是这些）
-    pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
+    pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, approved: !!p.approved, code: local && p.approved ? p.code : undefined })),
     peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relayFirst: p.relayFirst, relay: local ? relayOfPeer(p) : !!relayOfPeer(p), relays: local ? peerRelays(p) : peerRelays(p).length, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outbox: outboxPublic(),
     outPair: outPair && outPair.expiresAt > Date.now() ? { base: outPair.base, expiresAt: outPair.expiresAt, pairing: !!outPair.pairing } : null,
@@ -3407,6 +3408,7 @@ const handler = async (req, res) => {
       const act = url.pathname.slice('/api/peer'.length);
       // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
       // 手机、经中继打开的网页也能做全部操作，包括「开放哪些会话」（协同池、给某个对方开放哪些）
+      if (act === '/approve') { const p = approvePending(String(b.id || '')); if (!p) return sendJson(res, 404, { error: '配对申请不存在或已过期' }); log('peer pair approved', p.ip, p.name); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
       if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
       if (act === '/outbox-cancel') {   // 取消一条排队中的消息（不再重发）
         const id = String(b.id || ''), x = peerOutbox.get(id);
@@ -3479,8 +3481,10 @@ const handler = async (req, res) => {
       if (act === '/pair-finish') {
         if (!outPair || outPair.expiresAt < Date.now()) return sendJson(res, 400, { error: '配对申请已过期，请重新发起' });
         try {
-          const j = await callPeer(outPair.base, '/pair/confirm', { body: { requestId: outPair.requestId, code: String(b.code || '').trim(), token: outPair.token }, ms: 8000 });
-          if (j.pairing) { outPair.pairing = true; outPair.expiresAt = Math.max(outPair.expiresAt, Date.now() + (Number(j.retryIn) || 30) * 1000 + 5 * 60e3); return sendJson(res, 200, { ...pub(c), retryIn: Number(j.retryIn) || 30 }); }
+          const code = String(b.code || '').trim() || outPair.code || '';   // 等对方同意时页面每隔几秒再问一次（不带码）：用上次填的
+          if (code) outPair.code = code;
+          const j = await callPeer(outPair.base, '/pair/confirm', { body: { requestId: outPair.requestId, code, token: outPair.token }, ms: 8000 });
+          if (j.pairing) { outPair.pairing = true; outPair.expiresAt = Math.max(outPair.expiresAt, Date.now() + (Number(j.retryIn) || 30) * 1000 + 5 * 60e3); return sendJson(res, 200, { ...pub(c), retryIn: Number(j.retryIn) || 30, waiting: !!j.waiting }); }
           if (!j.ok || !j.token) { if (j.failed || /作废|过期|不存在|失败/.test(j.error || '')) outPair = null; return sendJson(res, 200, { error: j.error || '配对失败' }); }
           const c2 = loadPeer();
           const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
