@@ -32,8 +32,9 @@ import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpA
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate, ocStartGateway } from './openclaw.mjs';
 import { hostInfo, slowInfo } from './host.mjs';
 import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcKey, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './tts.mjs';
+import { ADDRS_HEADER, parseAddrsHeader, setOurExtra, ourAddrs, addrKind } from './peer.mjs';
 import { markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan } from './peer.mjs';
-import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAddr } from './peerrtc.mjs';
+import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, classifyAddr, RTC_ICE } from './peerrtc.mjs';
 import { AcpRunner, cfgKindName } from './acp.mjs';
 import { AUTO_COMPACT, AUTO_COMPACT_CHOICES, autoCompactDue, autoCompactRun } from './autocompact.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
@@ -1515,7 +1516,7 @@ async function peerHandler(req, res) {
       const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 40) || ip;
       const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
       const inbox = okUrl(b.inbox), inboxAlt = okUrl(b.inboxAlt);   // 对方的名字地址（.local）和 IP 地址
-      let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; p.relays = (Array.isArray(b.relays) ? b.relays : [b.relay]).map(okUrl).filter(Boolean).slice(0, 5); } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }   // relay：对方的中继地址（跨网络时用）
+      let p; try { p = addPending(name, ip, inbox); p.inboxAlt = inboxAlt; p.relays = (Array.isArray(b.relays) ? b.relays : [b.relay]).map(okUrl).filter(Boolean).slice(0, 5); p.addrs = parseAddrsHeader((Array.isArray(b.addrs) ? b.addrs : []).join(' ')) || []; } catch (e) { return out(e.code || 400, { ok: false, error: e.message }); }   // relay：对方的中继地址（跨网络时用）
       log('peer pair request from', ip, name);
       // 开着的网页也提醒一下（App 在前台时 iPhone 不弹推送横幅）
       { const msg = JSON.stringify({ t: 'peer.pair', name, ip, code: p.code }); for (const w of wss.clients) if (w.readyState === 1) w.send(msg); }
@@ -1546,7 +1547,7 @@ async function peerHandler(req, res) {
       const theirToken = typeof b.token === 'string' && b.token.length >= 16 ? b.token.slice(0, 200) : '';
       const c2 = loadPeer();
       c2.peers = c2.peers.filter(x => !(p.inbox && (x.inbox === p.inbox || x.inboxAlt === p.inbox)));   // 同一个对方重新配对：替换旧的
-      c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', relays: p.relays || [], tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
+      c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: p.name, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt || '', relays: p.relays || [], addrs: p.addrs || [], tokenHash: hashToken(token), theirToken, pairedAt: Date.now(), lastSeen: Date.now() });
       savePeer(c2);
       log('peer paired', p.ip, p.name, theirToken ? 'two-way' : 'one-way');
       return out(200, { ok: true, token, name: myName(c2), ...ourInbox(c2) });
@@ -1560,6 +1561,11 @@ async function peerHandler(req, res) {
     if (RELAYS_HEADER in req.headers) {
       const rs = parseRelaysHeader(req.headers[RELAYS_HEADER]);
       if (rs && JSON.stringify(rs) !== JSON.stringify(peerRelays({ relays: peer.relays, relay: peer.relay }))) { peer.relays = rs; delete peer.relay; dirty = true; log('peer relays updated', peer.name, rs.length); }
+    }
+    // 对方带来了它当前的全部地址（局域网 / Tailscale / 外网 / 中继子域名）：变了就更新
+    if (ADDRS_HEADER in req.headers) {
+      const as = parseAddrsHeader(req.headers[ADDRS_HEADER]);
+      if (as && JSON.stringify(as) !== JSON.stringify(peer.addrs || [])) { peer.addrs = as; dirty = true; log('peer addrs updated', peer.name, as.map(addrKind).join(',')); }
     }
     // 只记局域网地址：经中继 / 直连从外网进来的是公网 IP，拿它拼「局域网地址」只会白等 3 秒
     const ipLan = classifyAddr(ip) === 'lan' && ip !== lanIp();
@@ -1665,6 +1671,7 @@ function peerPublic(c, local) {
     // 「复制邀请」里给对方的：让我们也能主动找他（含注册口令，只在本机打开时给）
     relayTunnelCmd: local && relayInvitesOf(c)[0] && clarelay ? clarelay.tunnelCommand(relayInvitesOf(c)[0], '<你本机收消息的服务地址>') : '',
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
+    addrs: ourAddrs(c).map(u => ({ url: u, kind: addrKind(u) })),   // 我们的全部协同地址（邀请里列的就是这些）
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
     peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relayFirst: p.relayFirst, relay: local ? relayOfPeer(p) : !!relayOfPeer(p), relays: local ? peerRelays(p) : peerRelays(p).length, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outbox: outboxPublic(),
@@ -2452,7 +2459,29 @@ startDevNotify({ log, onOnline: async () => {
   return j;
 } });
 // 内置的 clarelay 电脑端（宿主页「网络 › clarelay」）；主端口占到后才自动连（见下面 listen）
-const relayDev = makeRelayDev({ port: PORT, DATA, log, getOff: () => !!settings().clarelayOff, setOff: v => saveSettings({ clarelayOff: !!v }), onDevice: useDevice });
+const peerOpen = () => { const c = loadPeer(); return c.enabled ? { [PEER_BASE]: 'http://127.0.0.1:' + c.port } : {}; };   // clarelay 门卫对协同路径放行，转给本机协同端口
+const relayDev = makeRelayDev({ port: PORT, DATA, log, getOff: () => !!settings().clarelayOff, setOff: v => saveSettings({ clarelayOff: !!v }), onDevice: d => { useDevice(d); setTimeout(refreshOurExtra, 3000); }, getOpen: peerOpen });
+// 协同地址里 clarelay 能补的几样（每分钟看一次）：子域名地址（https://<label>.<域名>/claclaw-peer）、
+// 外网直连地址（请中继回连「公网 IP:协同端口」，通了才算；10 分钟探一次）、打洞用的 STUN（中继的排第一，第三方的留作备用）
+let wanAddrs = [], wanAt = 0, wanKey = '';
+async function refreshOurExtra() {
+  const c = loadPeer(), dev = relayDev.device(), info = relayDev.info();
+  const up = !!(c.enabled && dev && info.online && info.status === 'active');
+  relayDev.setOpen(peerOpen());
+  const key = up ? info.url + ' ' + c.port : '';
+  if (!up) wanAddrs = [];
+  else if (key !== wanKey || Date.now() - wanAt > 10 * 60e3) {
+    wanAt = Date.now(); wanKey = key;
+    try {
+      const r = await dev.probe({ ports: [c.port], path: PEER_BASE + '/ping', tls: false });
+      wanAddrs = Object.entries(r?.reach || {}).filter(([, ok]) => ok).map(([hp]) => 'http://' + hp + PEER_BASE);
+      log('peer wan probe', r?.ip4 || '?', wanAddrs.length ? '通' : '不通', JSON.stringify(r?.status || {}).slice(0, 80));
+    } catch (e) { log('peer wan probe failed', e.message); }
+  }
+  setOurExtra({ relay: up ? [info.url + PEER_BASE] : [], wan: wanAddrs });
+  rtcConfig({ ice: dev?.stun ? [dev.stun, ...RTC_ICE.filter(x => x !== dev.stun)] : RTC_ICE });
+}
+setInterval(() => refreshOurExtra().catch(e => log('refreshOurExtra', e.message)), 60e3).unref?.();
 
 // ---------- 在 claclaw 里的最近活动 ----------
 // 网页里打开、发消息、一轮结束都算「在 claclaw 活跃」；会话列表的「最近活跃」只看这个（不看终端 / VS Code）
@@ -3455,7 +3484,7 @@ const handler = async (req, res) => {
           const okUrl = u => /^https?:\/\/\S+$/i.test(String(u || '')) ? String(u).slice(0, 2000) : '';
           const inbox = okUrl(j.inbox) || outPair.base, inboxAlt = okUrl(j.inboxAlt) || (inbox !== outPair.base ? outPair.base : outPair.baseAlt || '');
           c2.peers = c2.peers.filter(p => ![inbox, inboxAlt, outPair.base].includes(p.inbox));
-          c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, relays: (Array.isArray(j.relays) ? j.relays : [j.relay]).map(okUrl).filter(Boolean).slice(0, 5), tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
+          c2.peers.push({ id: newId(), no: nextPeerNo(c2), name: String(j.name || '').slice(0, 40) || new URL(outPair.base).hostname, ip: new URL(outPair.base).hostname, inbox, inboxAlt, relays: (Array.isArray(j.relays) ? j.relays : [j.relay]).map(okUrl).filter(Boolean).slice(0, 5), addrs: parseAddrsHeader((Array.isArray(j.addrs) ? j.addrs : []).join(' ')) || [], tokenHash: hashToken(outPair.token), theirToken: j.token, pairedAt: Date.now(), lastSeen: Date.now() });
           savePeer(c2); outPair = null;
           log('peer paired (we asked)', c2.peers.at(-1).name);
           return sendJson(res, 200, { ...pub(c2), paired: c2.peers.at(-1).name });
@@ -3504,7 +3533,7 @@ const handler = async (req, res) => {
       if (typeof b.enabled === 'boolean') c.enabled = b.enabled;
       if (c.enabled && !c.sessions.length) return sendJson(res, 400, { error: '先选至少一个会话加入协同' });
       savePeer(c);
-      applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c).catch(() => {});
+      applyListener(c, peerHandler, log); applyAdvert(c, log); applyRelay(c).catch(() => {}); refreshOurExtra().catch(() => {});
       await new Promise(ok => setTimeout(ok, 300));   // 等监听结果（端口被占用会马上报错）
       log('peer config saved', c.enabled ? 'on' : 'off', c.sessions.length, 'sessions');
       return sendJson(res, 200, pub(c));

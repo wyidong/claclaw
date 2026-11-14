@@ -99,7 +99,7 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
       const ext = await stopExternal();
       try {
         const { startDevice } = await (o.load ? o.load() : import('./clarelay/agent.mjs'));
-        const d = await startDevice({ invite: invite || undefined, state: STATE, name: deviceName(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log,
+        const d = await startDevice({ invite: invite || undefined, state: STATE, name: deviceName(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log, open: o.getOpen?.() || {},
           onStatus: s => { if (s.error) lastErr = s.error; else if (s.online) lastErr = ''; } });   // 每次连不上都带原因；连上（hello）不带 error，清掉
         dev = d; o.onDevice(d); ext.commit();
         log('内置电脑端已启动：' + d.url);
@@ -130,6 +130,9 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
 
   return {
     info,
+    device: () => dev,
+    // 不过门卫的路径（协同 /claclaw-peer → 本机协同端口）：协同开关、端口变了时调
+    setOpen(m) { try { dev?.setOpen?.(m || {}); } catch {} },
     // claclaw 启动、主端口占到之后调：有身份、没撤销、没断开就直接连
     autoStart() {
       const st = readState();

@@ -1,1 +1,1 @@
-clarelay b5a669d 设备邀请码可读 JSON 格式：外壳显示 / 复制 JSON，parseDeviceInvite 两种格式都认
+clarelay 09431c6 电脑端：开放路径（不过门卫，按 IP 限速）、公网地址探测 dev.probe、dev.stun；中继：/_device/probe 回连探测、内置 STUN（udp 3478）

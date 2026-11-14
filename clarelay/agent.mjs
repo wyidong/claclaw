@@ -15,7 +15,7 @@ import tls from 'node:tls';
 import zlib from 'node:zlib';
 import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { DEVICE_VERSION, prefixed, serveTls, realIp, parseDeviceInvite, verifyTicket, lineChannel, rand, b64u } from './common.mjs';
+import { DEVICE_VERSION, prefixed, serveTls, realIp, parseDeviceInvite, verifyTicket, lineChannel, limiter, rand, b64u } from './common.mjs';
 import { newKey, keyPem, loadKey, certificate, csr, expiresIn } from './x509.mjs';
 import { acmeIssue, LETSENCRYPT, LETSENCRYPT_STAGING } from './acme.mjs';
 import { rtcHost, rtcLib } from './rtc.mjs';
@@ -34,6 +34,8 @@ const GATE = '__Host-clarelay-gate';
  * @param {'letsencrypt'|'staging'|'devca'} [o.acme]  证书来源（默认 letsencrypt；devca 只用于测试）
  * @param {string} [o.ca]       额外信任的 CA（PEM，测试用）
  * @param {{host:string,port:number}} [o.connect]  连中继时实际连的地址（测试用；默认就是圈子域名）
+ * @param {Record<string,string>} [o.open]  不过门卫的路径前缀 → 本机地址，例如 { '/claclaw-peer': 'http://127.0.0.1:8788' }（协同：钥匙由应用自己验；按来源 IP 限速）
+ * @param {number} [o.openRate]  开放路径每个来源 IP 每分钟最多几个请求（默认 60）
  * @param {(s:object)=>void} [o.onStatus]
  * @param {(...a)=>void} [o.log]
  */
@@ -87,7 +89,7 @@ export async function startDevice(o = {}) {
   // 放行条件（任一）：本网址的门卫 cookie（由一次性通行票换来，绑定圈子登录 sid）。
   // 没有门卫 cookie：若带着中继签发的「已授权设备」凭证（Domain=圈子域名 的 cookie）→ 送去外壳换通行票；否则一律 404。
   // 独立主屏幕 App（iOS 的 cookie 和 Safari 分开）：页面里的 manifest 链接改写成带一次性凭证的地址，start_url 指向 /_clarelay/start 换门卫 cookie。
-  let sids = new Set(), enrolls = new Set(), snippetChars = 20, push = null;   // push：中继推送总开关（null = 老中继没说）
+  let sids = new Set(), enrolls = new Set(), snippetChars = 20, push = null, stun = null;   // stun：中继给的 STUN 地址（stun:域名:端口），老中继没有 = null   // push：中继推送总开关（null = 老中继没说）
   const usedTickets = new Map();
   st.usedStarts ||= {};
   const hmac = s => crypto.createHmac('sha256', st.gateSecret).update(s).digest('base64url');
@@ -154,8 +156,28 @@ export async function startDevice(o = {}) {
   let gateLogs = [];   // 门卫拦下的请求：每分钟最多记 5 条，排查「Not Found」用
   const gateLog = m => { const now = Date.now(); gateLogs = gateLogs.filter(x => now - x < 60e3); if (gateLogs.length >= 5) return; gateLogs.push(now); log('门卫：' + m); };
   const sendJson = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...frameHeaders }); res.end(JSON.stringify(obj)); };
+  // ---------- 开放路径（不过门卫）----------
+  // 只认整段前缀（/claclaw-peer 或 /claclaw-peer/…）；路径先按 URL 规范化（.. 和 %2e%2e 都折掉）再匹配、再转发，绕不到别的路径
+  let OPEN = [];
+  const setOpen = m => { OPEN = Object.entries(m || {}).filter(([p, t]) => /^\/[A-Za-z0-9._~-]+$/.test(p) && /^https?:\/\/[^/]+\/?$/.test(String(t))).map(([p, t]) => [p, String(t)]); };
+  setOpen(o.open);
+  const openLimit = limiter(Number(o.openRate) || 60, 60e3);
+  const openRoute = u => { for (const [p, t] of OPEN) if (u.pathname === p || u.pathname.startsWith(p + '/')) return t; return null; };
+  function proxyOpen(req, res, to, u) {
+    if (openLimit(clientIp(req))) { res.writeHead(429, { 'content-type': 'text/plain; charset=utf-8', 'retry-after': '60' }); return res.end('Too Many Requests'); }
+    const t = new URL(to), mod = t.protocol === 'https:' ? https : http;
+    const h = fwdHeaders(req); delete h.cookie;   // 本网址的 cookie（门卫、应用登录）一概不给开放路径
+    const up = mod.request({ host: t.hostname, port: t.port, method: req.method, path: u.pathname + u.search, headers: h, setHost: false, timeout: 60e3 }, r => {
+      const rh = { ...r.headers }; delete rh['set-cookie']; for (const k of Object.keys(rh)) if (HOP.has(k)) delete rh[k];
+      res.writeHead(r.statusCode, rh); r.pipe(res);
+    });
+    up.on('timeout', () => up.destroy(new Error('timeout')));
+    up.on('error', e => { if (!res.headersSent) { res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' }); res.end('本机服务连不上：' + e.message); } else res.destroy(); });
+    req.pipe(up);
+  }
   function onRequest(req, res) {
     const u = new URL(req.url, URL_SELF);
+    const openTo = openRoute(u); if (openTo) return proxyOpen(req, res, openTo, u);
     if (u.pathname === '/_clarelay/auth') {
       const t = verifyTicket(st.gatePub, u.searchParams.get('ticket'));
       const bad = !t ? '验签失败' : t.aud !== st.label ? '不是给本机的' : t.exp < relayNow() ? '过期 ' + Math.round((Date.now() - t.exp) / 1000) + ' 秒（看两边时钟）' : usedTickets.has(t.n) ? '用过了' : !sids.has(t.sid) ? '登录会话不在名单（共 ' + sids.size + ' 个）' : '';
@@ -338,6 +360,7 @@ export async function startDevice(o = {}) {
       if (m.name && m.name !== st.name) st.name = m.name;
       if (typeof m.now === 'number') { skew = m.now - Date.now(); if (Math.abs(skew) > 30e3) log('本机时钟和中继差 ' + Math.round(-skew / 1000) + ' 秒（正数 = 本机快），已自动按中继时间核对通行票；建议开启系统自动校时'); }
       if (m.gatePub && m.gatePub !== st.gatePub) st.gatePub = m.gatePub;
+      stun = typeof m.stun === 'string' ? m.stun : null;
       st.status = status; saveState();
       online = true; emitStatus(); log('已连上中继（' + (status === 'active' ? '已生效' : '等管理员批准') + '）：' + URL_SELF);
       if (status === 'active') { ensureCert(); fillPool(); }
@@ -389,9 +412,17 @@ export async function startDevice(o = {}) {
   }
   Object.defineProperties(ev, {
     url: { get: () => URL_SELF }, shellUrl: { get: () => SHELL }, online: { get: () => online }, push: { get: () => push }, status: { get: () => status }, cert: { get: () => certState },
-    id: { get: () => st.id }, name: { get: () => st.name }, rtcPeers: { get: () => rtc.count },
+    id: { get: () => st.id }, name: { get: () => st.name }, rtcPeers: { get: () => rtc.count }, stun: { get: () => stun },
   });
   return Object.assign(ev, {
+    setOpen,   // 运行中改开放路径（比如协同端口改了）
+    // 问中继：我的公网 IP 是多少；再请中继回连「公网 IP:端口 + path」，只报通不通（中继只回连本设备自己的公网 IP）
+    // probe({ port | ports:[…], path: '/claclaw-peer/ping', tls: false }) → { ip4, ip6, reach: { 'ip:端口': true/false }, status: { 'ip:端口': HTTP 状态码 | 错误 } }
+    async probe(q = {}) {
+      const r = await req(st.domain, st.port, 'POST', '/_device/probe', { ports: q.ports || (q.port ? [q.port] : []), path: q.path || '/', tls: !!q.tls }, authHeaders());
+      if (r.status !== 200) throw new Error('探测失败：' + (r.j?.error || 'HTTP ' + r.status));
+      return r.j;
+    },
     notify(e) {
       const snippet = clip(e.snippet);   // 只把前 N 个字交给中继，被截断的补「……」
       sendEvent({ t: 'notify', app: String(e.app), target: String(e.target), kind: e.kind || '', title: String(e.title || ''), snippet, unread: Number(e.unread) || 0 });

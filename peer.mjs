@@ -21,6 +21,7 @@ import tls from 'node:tls';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DATA, writeJsonAtomic } from './auth.mjs';
+import { classifyAddr } from './peerrtc.mjs';
 
 const FILE = path.join(DATA, 'peer.json');
 export const PEER_BASE = '/claclaw-peer';
@@ -88,8 +89,43 @@ export function lanIp() {
   return found.length ? found[0].ip : null;
 }
 // 我们告诉对方的收件地址：设了中继地址（跨网络）就以它为主、局域网地址备用；没设就是局域网的名字地址 + IP 地址
-export const ourInbox = c => { const rs = ourRelays(c); return { inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c), ...(rs.length ? { relay: rs[0], relays: rs } : {}) }; };   // 局域网地址 + 中继地址（有的话），对方局域网优先
+export const ourInbox = c => { const rs = ourRelays(c); return { inbox: ourBaseName(c) || ourBase(c), inboxAlt: ourBase(c), ...(rs.length ? { relay: rs[0], relays: rs } : {}), addrs: ourAddrs(c) }; };   // 局域网地址 + 中继地址（有的话），对方局域网优先
 export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + ':' + c.port + PEER_BASE : ''; };
+
+// ---------- 我们的全部协同地址 ----------
+// 同一个路径 /claclaw-peer 拼在不同网络的地址上：局域网（名字、IP）、Tailscale、外网直连（clarelay 回连探测通了的公网 IP）、
+// clarelay 子域名（https，门卫对 /claclaw-peer 放行）、旧的中继隧道。邀请、配对、每次请求（x-claclaw-addrs）都带上，对方按 局域网 → Tailscale → 打洞直连 → 外网直连 → 中继 试
+export function tailscaleIps() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (a.family === 'IPv4' && !a.internal && classifyAddr(a.address) === 'tailscale') out.push(a.address);
+  return [...new Set(out)];
+}
+let extra = { wan: [], relay: [] };   // server.mjs 填：wan = 探测通了的外网地址，relay = clarelay 子域名地址
+export function setOurExtra(o) { extra = { ...extra, ...o }; }
+export const ourAddrs = c => {
+  if (!c.enabled) return [];
+  const u = h => 'http://' + h + ':' + c.port + PEER_BASE;
+  return [...new Set([ourBaseName(c), ourBase(c), ...tailscaleIps().map(u), ...extra.wan, ...extra.relay, ...ourRelays(c)].filter(Boolean))].slice(0, 10);
+};
+// 地址属于哪种网络：relay（中继隧道 / clarelay 子域名，https）、tailscale、lan（内网 IP、.local）、wan（公网 IP）
+export function addrKind(url) {
+  if (url === DIRECT) return 'direct';
+  let h; try { h = new URL(url).hostname.replace(/^\[|\]$/g, ''); } catch { return ''; }
+  if (/^https:/.test(url) || /#.*\bkey=/.test(url)) return 'relay';
+  if (/\.local$/i.test(h)) return 'lan';
+  if (/\.ts\.net$/i.test(h)) return 'tailscale';
+  const k = classifyAddr(h);
+  return k || 'lan';
+}
+export const ADDRS_HEADER = 'x-claclaw-addrs';
+export const addrsHeaderValue = c => ourAddrs(c).join(' ') || 'none';
+// 收到的地址表：只认 http(s)://…/claclaw-peer（可带 #pin… 的旧中继），最多 10 个；none = 清空；不合格的整份忽略（null）
+export const parseAddrsHeader = v => {
+  const s = String(v ?? '').trim();
+  if (s.toLowerCase() === 'none') return [];
+  const list = s.split(/\s+/).filter(u => /^https?:\/\/[^\s/]+\/claclaw-peer(#\S*)?$/.test(u)).slice(0, 10);
+  return list.length ? list : null;
+};
 
 // ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
 export const PAIR_TTL = 5 * 60 * 1000;
@@ -156,16 +192,22 @@ export function clearPairFails() { pairFail = { n: 0, last: 0 }; pairHold = null
 // ---------- 收件服务 ----------
 let srv = null, srvKey = '', srvErr = '';
 export function peerStatus() { return { listening: !!srv && srv.listening, error: srvErr }; }
+// 监听所有网卡（::，系统不支持 IPv6 时退回 0.0.0.0）：局域网、Tailscale、公网直连、本机（clarelay 子域名转进来的）都是这一个口。
+// 这个端口只有协同接口：配对要两位数码 + 输错冷却，其余都要钥匙；网页（8787）不在这里
 export function applyListener(c, handler, log) {
-  const ip = lanIp();
-  const key = c.enabled && ip ? ip + ':' + c.port : '';
+  const key = c.enabled ? '*:' + c.port : '';
   if (key === srvKey && (srv || !key)) return;
   if (srv) { try { srv.close(); } catch {} srv = null; log?.('peer listener stopped'); }
   srvKey = key; srvErr = '';
-  if (!key) { if (c.enabled && !ip) srvErr = '没找到局域网 IP（连上 Wi-Fi 或网线后再试）'; return; }
-  srv = http.createServer(handler);
-  srv.on('error', e => { srvErr = e.code === 'EADDRINUSE' ? '端口 ' + c.port + ' 已被占用，换一个' : e.message; log?.('peer listener error', e.message); srv = null; srvKey = ''; });
-  srv.listen(c.port, ip, () => log?.('peer listener on', key));
+  if (!key) return;
+  const s = srv = http.createServer(handler);
+  let v4 = false;
+  s.on('error', e => {
+    if (!v4 && /EAFNOSUPPORT|EADDRNOTAVAIL/.test(e.code || '')) { v4 = true; s.listen(c.port, '0.0.0.0'); return; }
+    srvErr = e.code === 'EADDRINUSE' ? '端口 ' + c.port + ' 已被占用，换一个' : e.message; log?.('peer listener error', e.message); if (srv === s) { srv = null; srvKey = ''; }
+  });
+  s.listen(c.port, '::', () => log?.('peer listener on', key));
+  s.on('listening', () => { if (v4) log?.('peer listener on 0.0.0.0:' + c.port); });
 }
 
 // ---------- 请求对方 ----------
@@ -317,7 +359,7 @@ export async function discover(c) {
 export const isRelayAddr = u => /^https:|#.*\bkey=/.test(String(u || ''));
 export const peerRoute = new Map();   // 对方 id → { via: 'lan' | 'direct' | 'relay', rel: 'main' | 'backup'（有主备中继时走的是哪台）, at, ms }：最近一次实际走的路（协同页标「局域网 / 直连 / 中继」）
 // 对方的中继地址（主 → 备）：relays 数组；兼容旧的单个 relay 字段、以及配对时 inbox 本身就是中继地址的
-export const peerRelays = p => [...new Set([...(Array.isArray(p.relays) ? p.relays : []), p.relay, p.inbox, p.inboxAlt].filter(u => u && isRelayAddr(u)))];
+export const peerRelays = p => [...new Set([...(Array.isArray(p.relays) ? p.relays : []), p.relay, p.inbox, p.inboxAlt, ...(Array.isArray(p.addrs) ? p.addrs : [])].filter(u => u && isRelayAddr(u)))];
 export const relayOf = p => peerRelays(p)[0] || '';
 // 我们的中继地址（主 → 备）
 export const ourRelays = c => (Array.isArray(c.relays) && c.relays.length ? c.relays : [c.relay]).filter(Boolean);
@@ -362,7 +404,7 @@ export async function probeRelay(p) {   // 返回每个中继的结果（主 →
 export const DIRECT = 'direct:';
 const chanStats = new Map();   // 对方 id → Map(路 → { ok, ms, at, fails })
 const hostOfUrl = u => { try { return new URL(u).host; } catch { return '?'; } };
-export const chanKey = url => url === DIRECT ? 'direct' : (isRelayAddr(url) ? 'relay ' : 'lan ') + hostOfUrl(url);
+export const chanKey = url => url === DIRECT ? 'direct' : addrKind(url) + ' ' + hostOfUrl(url);
 export function noteChan(pid, url, ok, ms) {
   let m = chanStats.get(pid); if (!m) chanStats.set(pid, m = new Map());
   const k = chanKey(url), o = m.get(k) || { ok: false, ms: 0, at: 0, fails: 0 };
@@ -378,7 +420,8 @@ function chanScore(pid, url, i, directMs) {
   if (fresh && !o.ok) return 1e6 + i;
   if (url === DIRECT && directMs) return directMs;
   if (o?.ok && o.ms) return o.ms;
-  return url === DIRECT ? 60 : isRelayAddr(url) ? 2000 + i : 30 + i;
+  const k = addrKind(url);
+  return url === DIRECT ? 60 : k === 'relay' ? 2000 + i : k === 'wan' ? 80 + i : k === 'tailscale' ? 45 + i : 30 + i;
 }
 let directApi = null;   // server.mjs 注入：{ open(pid) → conn | null }
 export function setDirect(api) { directApi = api; }
@@ -392,22 +435,23 @@ export async function peerCall(c, p, sub, opts = {}) {
   const cheap = sub === '/sessions' || sub === '/ping';   // 这类请求的耗时可以当来回时间记
   let err;
   const trail = [];   // 这次依次试了哪几条路、各自结果（写进日志排查走了哪条）
-  const label = u => u === DIRECT ? '直连' : (isRelayAddr(u) ? '中继 ' : '局域网 ') + hostOfUrl(u);
+  const KN = { lan: '局域网 ', tailscale: 'Tailscale ', wan: '外网直连 ', relay: '中继 ' };
+  const label = u => u === DIRECT ? '直连' : (KN[addrKind(u)] || '') + hostOfUrl(u);
   for (const url of tries) {
     const viaRelay = isRelayAddr(url), t0 = Date.now();
     try {
       let j;
       if (url === DIRECT) {
-        const h = { [RELAYS_HEADER]: relaysHeaderValue(c, p) }; if (p.theirToken) h.authorization = 'Bearer ' + p.theirToken;
+        const h = { [RELAYS_HEADER]: relaysHeaderValue(c, p), [ADDRS_HEADER]: addrsHeaderValue(c) }; if (p.theirToken) h.authorization = 'Bearer ' + p.theirToken;
         j = await conn.call(PEER_BASE + sub, { headers: h, body: opts.body, ms: opts.ms });
-      } else j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p) }, connectMs: viaRelay ? 0 : 3000 });
+      } else j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p), [ADDRS_HEADER]: addrsHeaderValue(c) }, connectMs: viaRelay ? 0 : 3000 });
       // 中继自己回的「对方隧道没连着这台中继」（502，请求根本没转给对方）：和连不上一样，换下一条路再试
       if (viaRelay && j?.status === 502 && /隧道没连着中继/.test(String(j.error || ''))) throw Object.assign(new Error('对方没连着这台中继'), { connect: true, code: 'TUNNEL_OFFLINE' });
       const ms = Date.now() - t0;
       noteChan(p.id, url, true, cheap ? ms : null);
       trail.push(label(url) + ' ok ' + ms + 'ms');
-      peerRoute.set(p.id, { via: url === DIRECT ? 'direct' : viaRelay ? 'relay' : 'lan', rel: viaRelay && relays.length > 1 ? (url === relays[0] ? 'main' : 'backup') : undefined, at: Date.now(), ms, trail: trail.join(' → ') });
-      if (!viaRelay && url !== DIRECT && url !== lan[0] && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; const f = loadPeer(), q = f.peers.find(x => x.id === p.id); if (q) { q.inbox = url; q.inboxAlt = old; savePeer(f); } }   // 局域网里换了能用的那个当首选；重新读一遍再改（等回复期间配置可能被改过，不能整份用旧的覆盖）
+      peerRoute.set(p.id, { via: url === DIRECT ? 'direct' : viaRelay ? 'relay' : addrKind(url) === 'tailscale' ? 'tailscale' : addrKind(url) === 'wan' ? 'wan' : 'lan', rel: viaRelay && relays.length > 1 ? (url === relays[0] ? 'main' : 'backup') : undefined, at: Date.now(), ms, trail: trail.join(' → ') });
+      if (!viaRelay && url !== DIRECT && addrKind(url) === 'lan' && url !== lan[0] && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; const f = loadPeer(), q = f.peers.find(x => x.id === p.id); if (q) { q.inbox = url; q.inboxAlt = old; savePeer(f); } }   // 局域网里换了能用的那个当首选；重新读一遍再改（等回复期间配置可能被改过，不能整份用旧的覆盖）
       return j;
     } catch (e) {
       trail.push(label(url) + ' 失败(' + (e.code || e.message || '').toString().slice(0, 40) + ') ' + (Date.now() - t0) + 'ms'); err = e;
@@ -422,13 +466,13 @@ export async function peerCall(c, p, sub, opts = {}) {
 export async function probeChan(c, p, url, ms = 8000) {
   const t0 = Date.now();
   try {
-    const j = await callPeer(url, '/ping', { token: p.theirToken, ms, connectMs: isRelayAddr(url) ? 0 : 3000, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p) } });
+    const j = await callPeer(url, '/ping', { token: p.theirToken, ms, connectMs: isRelayAddr(url) ? 0 : 3000, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p), [ADDRS_HEADER]: addrsHeaderValue(c) } });
     if (isRelayAddr(url) && j?.status === 502) throw new Error(j.error || '中继 502');
     noteChan(p.id, url, true, Date.now() - t0); return { ok: true, ms: Date.now() - t0 };
   } catch (e) { noteChan(p.id, url, false); return { ok: false, error: e.message }; }
 }
 export const peerLanUrls = p => {
-  const lan = [p.inbox, p.inboxAlt].filter(u => u && !isRelayAddr(u));
+  const lan = [p.inbox, p.inboxAlt, ...(Array.isArray(p.addrs) ? p.addrs : [])].filter(u => u && !isRelayAddr(u));
   if (p.ip && lan[0]) { try { const u = new URL(lan[0]); if (u.hostname !== p.ip) { u.hostname = p.ip; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
   return [...new Set(lan)];
 };

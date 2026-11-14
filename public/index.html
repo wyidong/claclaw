@@ -5263,11 +5263,17 @@ function peerInviteBack(c){
     '1. 在你的电脑上运行（把 <你本机收消息的服务地址> 换成你接收消息的服务，例如 http://127.0.0.1:端口）：\n'+c.relayTunnelCmd+'\n'+
     '2. 它会打印一个公开地址和证书指纹。配对申请时把「公开地址#pin=证书指纹」填在 inbox 里，我们就能主动给你发消息了（请求格式和你收到的一样）。';
 }
+var ADDR_KIND={lan:'局域网',tailscale:'Tailscale',wan:'公网直连',relay:'中继'};
+function peerAddrLines(c){   // 我们的全部协同地址：对方按顺序试，哪个通用哪个
+  var as=(c.addrs||[]).filter(function(a){return !/#/.test(a.url)});
+  return as.length>1?'\n全部地址（按顺序试，哪个能通用哪个；claclaw 配对时会自动记下全部）：\n'+as.map(function(a){return '- '+(ADDR_KIND[a.kind]||a.kind)+'：'+a.url}).join('\n'):'';
+}
 function peerInvite(c){
-  // 设了中继：地址是中继上的公开地址，# 后面是中继证书指纹（请求时不带 #…，用来核对证书）
-  var rl=c.relay||'',pin=(rl.match(/#pin=(\S+)$/)||[])[1]||'',b=rl?rl.replace(/#.*$/,''):(c.baseName||c.base);
-  return 'claclaw 协同邀请（'+(rl?'经中继，跨网络':'局域网')+'）\n协同地址：'+b+
-    (rl?(pin?'\n中继证书指纹：'+pin+'（自签证书，只认这个指纹；curl 用 -k --pinnedpubkey \''+pin+'\'；claclaw 里填地址时带上 #pin='+pin+'）':'')+'\n（同一个局域网里也可以直接用：'+(c.baseName||c.base)+'）':(c.baseName?'\n（电脑名找不到时用 IP：'+c.base+'）':''))+'\n\n'+
+  // 有 clarelay 子域名（https，正式证书）就用它当主地址；否则旧的中继隧道（# 后面是证书指纹）；都没有用局域网
+  var sub=((c.addrs||[]).find(function(a){return a.kind==='relay'&&!/#/.test(a.url)})||{}).url||'';
+  var rl=sub?'':c.relay||'',pin=(rl.match(/#pin=(\S+)$/)||[])[1]||'',b=sub||(rl?rl.replace(/#.*$/,''):(c.baseName||c.base));
+  return 'claclaw 协同邀请（'+(sub||rl?'经中继，跨网络':'局域网')+'）\n协同地址：'+b+peerAddrLines(c)+
+    (rl?(pin?'\n中继证书指纹：'+pin+'（自签证书，只认这个指纹；curl 用 -k --pinnedpubkey \''+pin+'\'；claclaw 里填地址时带上 #pin='+pin+'）':'')+'\n（同一个局域网里也可以直接用：'+(c.baseName||c.base)+'）':(c.baseName&&!sub?'\n（电脑名找不到时用 IP：'+c.base+'）':''))+'\n\n'+
     '配对（一次）：\n'+
     '1. 申请：POST '+b+'/pair  {"name":"你的名字","inbox":"你的收件地址（可选；填了我们也能主动找你）","inboxAlt":"备用地址（可选，例如 IP 版）"}\n'+
     '   → {"requestId":"…"}；这时我们页面上会出现你的申请和一个两位数配对码，我们会把码告诉你（5 分钟内有效；输错会先回 {"pairing":true,"retryIn":秒}，隔这么久再用同一个 requestId 调 confirm 才知道结果）\n'+
@@ -5323,7 +5329,7 @@ var peerSub='';
 function peerGo(sub){peerSub=sub||'';peerMsg={};renderPeer();var sp=$('.sheet-p');if(sp)sp.scrollTop=0}
 function fmtMs(ms){return ms<1000?ms+' 毫秒':(ms/1000).toFixed(1)+' 秒'}
 function peerDot(p){var o=peerOnline[p.id];return p.canCall?'<i class="h-dot'+(!o?' wait':o.online?' on':'')+'" title="'+(!o?'检查中':o.online?'在线':'离线')+'"></i>':''}
-function routeName(r,o){if(r==='direct'){var v=o&&o.direct&&o.direct.open&&o.direct.via;return v==='lan'?'直连 · 局域网':v==='wan'?'直连 · 外网':v==='tailscale'?'直连 · Tailscale':'直连'}return r==='relay'?(o&&o.routeRel==='main'?'中继 · 主':o&&o.routeRel==='backup'?'中继 · 备':'中继'):'局域网'}   // 直连 = 打洞的 WebRTC 通道，按实际选中的对端地址标局域网 / 外网
+function routeName(r,o){if(r==='direct'){var v=o&&o.direct&&o.direct.open&&o.direct.via;return v==='lan'?'直连 · 局域网':v==='wan'?'直连 · 外网':v==='tailscale'?'直连 · Tailscale':'直连'}if(r==='tailscale')return 'Tailscale';if(r==='wan')return '直连 · 公网';return r==='relay'?(o&&o.routeRel==='main'?'中继 · 主':o&&o.routeRel==='backup'?'中继 · 备':'中继'):'局域网'}   // 直连 = 打洞的 WebRTC 通道，按实际选中的对端地址标局域网 / 外网
 function peerRouteTag(p){var o=peerOnline[p.id];return o&&o.online&&o.route?'<em class="pe-route'+(o.route==='relay'?' rl':'')+'">'+routeName(o.route,o)+'</em>':''}
 var RELAY_ST={online:'已连上',connecting:'连接中…',offline:'断开了，正在重连',error:'连不上',off:'没开'};
 function relayStateText(c){   // 主中继的状态（有备用的话带上个数）
@@ -5507,9 +5513,8 @@ function peerNetHtml(c){
     '</div>'+(c.local?'<div class="pe-note">'+(locked?'已有配对，名字和端口不能改；要改先撤销全部配对。':'名字会显示给对方。')+'</div>':'')+'</div>';
   if(c.base)h+='<div><div class="h-h">我们的协同地址</div><div class="h-card">'+
     (c.relay?hRow('中继',c.local?'<span class="pe-mono">'+esc(c.relay.replace(/#.*$/,'#…'))+'</span> <button type="button" class="pe-btn pe-mini" data-act="peer-copy" data-copy="'+esc(c.relay)+'">复制</button>':'已设置'):'')+
-    (c.baseName?hRow('局域网','<span class="pe-mono">'+esc(c.baseName)+'</span>'):'')+
-    hRow(c.baseName?'局域网 IP':'局域网','<span class="pe-mono">'+esc(c.base)+'</span>')+
-    '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。同一局域网直连，连不上自动走中继。</div></div>';
+    (c.addrs||[]).filter(function(a){return !/#/.test(a.url)}).map(function(a){return hRow(ADDR_KIND[a.kind]||a.kind,'<span class="pe-mono">'+esc(a.url)+'</span>')}).join('')+
+    '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 公网直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。公网直连要 clarelay 回连探测通了才列出。</div></div>';
   if(c.local)h+='<div><div class="h-h">中继（跨网络）</div><div class="h-card">'+
     (c.relayList||[]).map(function(r){
       return '<div class="h-row pe-relay"><span class="k"><span class="pe-rl1"><em class="pe-route'+(r.primary?' rl':'')+'">'+(r.primary?'主':'备')+'</em><span class="pe-mono">'+esc(r.host||'')+'</span></span>'+
