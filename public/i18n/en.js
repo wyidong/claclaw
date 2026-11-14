@@ -2,6 +2,13 @@
 // dict：界面上一段文字（去掉首尾空白后）整段对应的英文；pat：带变量的句子，按顺序试正则，$1 原样、$T1 再翻译一次。
 // 新加界面文字后在这里补上，没补的会保持中文。
 var I18N={dict:{
+"其他中继（别人提供的）":"Other relays (provided by others)",
+"添加新的中继协同地址":"Add a relay collaboration address",
+"本机连着的 clarelay 已经自动算在上面的协同地址里，不用在这里填。用别人提供的中继服务时才在这里加；加了的地址会自动同步给对方，换中继不用重新配对。":"The clarelay this computer is connected to is already included in the addresses above, so you don't need to add it here. Add a relay here only when using one provided by someone else; added addresses sync to peers automatically, so switching relays doesn't need re-pairing.",
+"打洞直连":"Hole-punched direct",
+"不用地址：配对后两边自动打洞（STUN 用 clarelay 的，第三方备用）":"No address needed: both sides punch through automatically after pairing (STUN via clarelay, third-party as fallback)",
+"不用地址：配对后两边自动打洞（STUN 用第三方的）":"No address needed: both sides punch through automatically after pairing (third-party STUN)",
+"没列出：要先在「网络 › clarelay」连上中继，才能探测":"Not listed: connect to the relay in Network › clarelay first so it can be probed",
 "群设置":"Group settings",
 "群名和成员只能在建群的电脑上改":"The group name and members can only be changed on the computer that created the group",
 "本机没有会话":"No sessions on this computer",
@@ -718,7 +725,7 @@ var I18N={dict:{
 "源码":"Source",
 "公网直连":"Public direct",
 "直连 · 公网":"Direct · Public IP",
-"地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 公网直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。公网直连要 clarelay 回连探测通了才列出。":"Addresses contain no secrets; pairing still needs your code. The other side tries LAN → Tailscale → hole-punched direct → public direct → relay, using whichever works; address changes are sent along automatically. Public direct is listed only after clarelay confirms it's reachable.",
+"地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 公网直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。公网直连要 clarelay 从外面回连本机协同端口通了才列出。":"Addresses contain no secrets; pairing still needs your code. The other side tries LAN → Tailscale → hole-punched direct → public direct → relay, using whichever works; address changes are sent along automatically. Public direct is listed only after clarelay confirms it's reachable.",
 "加入 clarelay":"Join clarelay",
 "在 clarelay「管理」里生成设备邀请码，点复制，整段粘贴到下面（JSON，带换行也行）。":"Generate a device invite in clarelay › Manage, copy it, and paste the whole thing below (JSON; line breaks are fine).",
 "加入":"Join",
@@ -1136,6 +1143,8 @@ var I18N={dict:{
 "没拿到 Key":"Couldn't get the key",
 },
 pat:[
+["^没列出：clarelay 从外面回连 (\\S+) 不通(?:（(.+)）)?。一般是在路由器后面、没做端口转发；不影响打洞直连和中继$","Not listed: clarelay could not reach $1 from outside ($2). Usually the computer is behind a router without port forwarding; hole-punched direct and relay still work"],
+["^没列出：探测出错(?:（(.+)）)?$","Not listed: probe failed ($1)"],
 ["^建群（(\\d+)）$","Create group ($1)"],
 ["^(\\d+) 个成员：(.*)$","$1 members: $2"],
 ["^在 (.+) 上发的$","Sent on $1"],

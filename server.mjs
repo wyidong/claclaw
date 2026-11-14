@@ -1671,7 +1671,8 @@ function peerPublic(c, local) {
     // 「复制邀请」里给对方的：让我们也能主动找他（含注册口令，只在本机打开时给）
     relayTunnelCmd: local && relayInvitesOf(c)[0] && clarelay ? clarelay.tunnelCommand(relayInvitesOf(c)[0], '<你本机收消息的服务地址>') : '',
     ip: lanIp(), base: ourBase(c), baseName: ourBaseName(c), ...peerStatus(),
-    addrs: ourAddrs(c).map(u => ({ url: u, kind: addrKind(u) })),   // 我们的全部协同地址（邀请里列的就是这些）
+    addrs: ourAddrs(c).map(u => ({ url: u, kind: addrKind(u) })),
+    wan: local ? wanInfo : undefined, stun: local ? !!relayDev.device()?.stun : undefined,   // 我们的全部协同地址（邀请里列的就是这些）
     pending: pendingList().map(p => ({ id: p.id, name: p.name, ip: p.ip, two: !!p.inbox, expiresAt: p.expiresAt, code: local ? p.code : undefined })),
     peers: c.peers.map(p => ({ id: p.id, no: p.no, color: p.color, name: p.name, relayFirst: p.relayFirst, relay: local ? relayOfPeer(p) : !!relayOfPeer(p), relays: local ? peerRelays(p) : peerRelays(p).length, allow: Array.isArray(p.allow) ? p.allow : null, ip: p.ip, inbox: p.inbox, inboxAlt: p.inboxAlt, canCall: !!(p.inbox && p.theirToken), pairedAt: p.pairedAt, lastSeen: p.lastSeen })),
     outbox: outboxPublic(),
@@ -2463,20 +2464,21 @@ const peerOpen = () => { const c = loadPeer(); return c.enabled ? { [PEER_BASE]:
 const relayDev = makeRelayDev({ port: PORT, DATA, log, getOff: () => !!settings().clarelayOff, setOff: v => saveSettings({ clarelayOff: !!v }), onDevice: d => { useDevice(d); setTimeout(refreshOurExtra, 3000); }, getOpen: peerOpen });
 // 协同地址里 clarelay 能补的几样（每分钟看一次）：子域名地址（https://<label>.<域名>/claclaw-peer）、
 // 外网直连地址（请中继回连「公网 IP:协同端口」，通了才算；10 分钟探一次）、打洞用的 STUN（中继的排第一，第三方的留作备用）
-let wanAddrs = [], wanAt = 0, wanKey = '';
+let wanAddrs = [], wanAt = 0, wanKey = '', wanInfo = { state: 'off' };   // wanInfo 给「本机与网络」页看：off 没连 clarelay / ok 通 / no 不通 / err 探测出错
 async function refreshOurExtra() {
   const c = loadPeer(), dev = relayDev.device(), info = relayDev.info();
   const up = !!(c.enabled && dev && info.online && info.status === 'active');
   relayDev.setOpen(peerOpen());
   const key = up ? info.url + ' ' + c.port : '';
-  if (!up) wanAddrs = [];
+  if (!up) { wanAddrs = []; wanInfo = { state: 'off' }; }
   else if (key !== wanKey || Date.now() - wanAt > 10 * 60e3) {
     wanAt = Date.now(); wanKey = key;
     try {
       const r = await dev.probe({ ports: [c.port], path: PEER_BASE + '/ping', tls: false });
       wanAddrs = Object.entries(r?.reach || {}).filter(([, ok]) => ok).map(([hp]) => 'http://' + hp + PEER_BASE);
+      wanInfo = { state: wanAddrs.length ? 'ok' : 'no', ip: r?.ip4 || '', port: c.port, why: wanAddrs.length ? '' : String(Object.values(r?.status || {})[0] || '').slice(0, 40), at: wanAt };
       log('peer wan probe', r?.ip4 || '?', wanAddrs.length ? '通' : '不通', JSON.stringify(r?.status || {}).slice(0, 80));
-    } catch (e) { log('peer wan probe failed', e.message); }
+    } catch (e) { wanInfo = { state: 'err', why: String(e.message).slice(0, 80), at: wanAt }; log('peer wan probe failed', e.message); }
   }
   setOurExtra({ relay: up ? [info.url + PEER_BASE] : [], wan: wanAddrs });
   rtcConfig({ ice: dev?.stun ? [dev.stun, ...RTC_ICE.filter(x => x !== dev.stun)] : RTC_ICE });

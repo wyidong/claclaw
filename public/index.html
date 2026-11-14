@@ -5517,6 +5517,12 @@ function poolPaint(){
   var l=$('#pePoolList');if(l)l.innerHTML=poolListHtml(peerCfg);
   document.querySelectorAll('.pe-seg button').forEach(function(b){var k=b.dataset.claw,n=(peerCfg.sessions||[]).filter(function(id){return clawOf(id)===k}).length;b.outerHTML=clawSegBtn(k,n,k===peerPoolClaw)});
 }
+// 公网直连为什么没列出
+function peerWanText(w){
+  if(w.state==='off')return '没列出：要先在「网络 › clarelay」连上中继，才能探测';
+  if(w.state==='err')return '没列出：探测出错'+(w.why?'（'+esc(w.why)+'）':'');
+  return '没列出：clarelay 从外面回连 '+esc((w.ip||'公网 IP')+':'+(w.port||''))+' 不通'+(w.why?'（'+esc(w.why==='timeout'?'超时':w.why)+'）':'')+'。一般是在路由器后面、没做端口转发；不影响打洞直连和中继';
+}
 // 本机与网络：名字、端口、我们的地址、中继
 function peerNetHtml(c){
   var locked=c.peers&&c.peers.length;
@@ -5529,17 +5535,19 @@ function peerNetHtml(c){
   if(c.base)h+='<div><div class="h-h">我们的协同地址</div><div class="h-card">'+
     (c.relay?hRow('中继',c.local?'<span class="pe-mono">'+esc(c.relay.replace(/#.*$/,'#…'))+'</span> <button type="button" class="pe-btn pe-mini" data-act="peer-copy" data-copy="'+esc(c.relay)+'">复制</button>':'已设置'):'')+
     (c.addrs||[]).filter(function(a){return !/#/.test(a.url)}).map(function(a){return hRow(ADDR_KIND[a.kind]||a.kind,'<span class="pe-mono">'+esc(a.url)+'</span>')}).join('')+
-    '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 公网直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。公网直连要 clarelay 回连探测通了才列出。</div></div>';
-  if(c.local)h+='<div><div class="h-h">中继（跨网络）</div><div class="h-card">'+
+    (c.local?hRow('打洞直连','<small>不用地址：配对后两边自动打洞'+(c.stun?'（STUN 用 clarelay 的，第三方备用）':'（STUN 用第三方的）')+'</small>'):'')+
+    (c.local&&c.wan&&c.wan.state!=='ok'?hRow('公网直连','<small>'+peerWanText(c.wan)+'</small>'):'')+
+    '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 公网直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。公网直连要 clarelay 从外面回连本机协同端口通了才列出。</div></div>';
+  if(c.local)h+='<div><div class="h-h">其他中继（别人提供的）</div><div class="h-card">'+
     (c.relayList||[]).map(function(r){
       return '<div class="h-row pe-relay"><span class="k"><span class="pe-rl1"><em class="pe-route'+(r.primary?' rl':'')+'">'+(r.primary?'主':'备')+'</em><span class="pe-mono">'+esc(r.host||'')+'</span></span>'+
         '<small>'+(RELAY_ST[r.status]||r.status)+(r.error?'：'+esc(r.error):'')+'</small></span>'+
         (r.primary?'':'<button type="button" class="pe-btn pe-mini" data-act="relay-primary" data-i="'+r.i+'">设为主</button>')+
         '<button type="button" class="pe-btn del pe-mini" data-act="relay-remove" data-i="'+r.i+'" data-host="'+esc(r.host||'')+'">删除</button></div>';
     }).join('')+
-    '<div class="h-row md-f"><label class="md-lb" for="peRelayInv">'+(c.relayInvite?'再加一个邀请码':'邀请码')+'</label><textarea id="peRelayInv" class="md-in" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴中继邀请码 clarelay1.…'+(c.relayInvite?'（加进来先当备用）':'')+'"></textarea></div>'+
-    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">'+(c.relayInvite?'添加中继':'保存邀请码')+'</button></div>'+
-    '</div><div class="pe-note">不在同一局域网时经中继互发，依次试：局域网 → 主中继 → 备用中继。中继地址自动同步给对方，换中继不用重新配对。</div></div>';
+    '<div class="h-row md-f"><label class="md-lb" for="peRelayInv">添加新的中继协同地址</label><textarea id="peRelayInv" class="md-in" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴别人给的中继邀请码 clarelay1.…'+(c.relayInvite?'（加进来先当备用）':'')+'"></textarea></div>'+
+    '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">添加</button></div>'+
+    '</div><div class="pe-note">本机连着的 clarelay 已经自动算在上面的协同地址里，不用在这里填。用别人提供的中继服务时才在这里加；加了的地址会自动同步给对方，换中继不用重新配对。</div></div>';
   return h;
 }
 function peerMainHtml(c){
