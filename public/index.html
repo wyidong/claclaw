@@ -431,9 +431,10 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #railReload{position:relative}
 #sReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
 #sReload.reconn,#railReload.reconn{color:#E0A100!important}#sReload.reconn svg,#railReload.reconn svg{animation:rlspin 1s linear infinite}   /* 正在重连：刷新图标变黄、一直转（代替黄条） */
-#sVoice[hidden],#sTheme[hidden],#sAcct[hidden]{display:none}
-#sVoice,#sTheme,#sAcct{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover,#sTheme:hover,#sAcct:hover{color:var(--accent)}
-#sAcct{position:relative}
+#sVoice[hidden],#sTheme[hidden],#sAcct[hidden],#sPeer[hidden]{display:none}
+#sVoice,#sTheme,#sAcct,#sPeer{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover,#sTheme:hover,#sAcct:hover,#sPeer:hover{color:var(--accent)}
+#sAcct,#sPeer{position:relative}
+#sPeer.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 有配对申请 */
 .ac-mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;min-height:min(70vh,560px)}   /* 设置用户名和密码：上下居中 */
 .ac-mid .pe-err{margin:0}
 .ac-pw{display:flex;align-items:center;gap:6px}.ac-pw .md-in{flex:1}
@@ -442,11 +443,11 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #setAcctGo.dot .lb>span::after{content:'';display:inline-block;width:8px;height:8px;margin-left:6px;border-radius:50%;background:#F23C3C;vertical-align:2px}
 #rClear:disabled{opacity:.35;cursor:default}#rClear:disabled:hover{color:var(--muted);background:none}
 @media (min-width:1000px){   /* 电脑：新建、群、语音管理挨着排在左边，清空最近在最右；左边栏不再放协同 */
-  #gNew,#rClear,#sVoice,#sTheme,#sAcct{width:34px;height:32px;margin:0;border-radius:8px}
-  #gNew:hover,#rClear:hover,#sVoice:hover,#sTheme:hover,#sAcct:hover{background:var(--bg)}
+  #gNew,#rClear,#sVoice,#sTheme,#sAcct,#sPeer{width:34px;height:32px;margin:0;border-radius:8px}
+  #gNew:hover,#rClear:hover,#sVoice:hover,#sTheme:hover,#sAcct:hover,#sPeer:hover{background:var(--bg)}
   /* 图标之间的空白 = 第一个图标离列表左边的距离（12px）：按钮 = 图标宽 + 两边各 6px，再用负边距抵掉 8px 的 gap */
-  #gNew{width:36px}#sVoice,#sTheme,#sAcct{width:33px}
-  #gNew,#sVoice,#sTheme,#sAcct{margin-left:-8px}
+  #gNew{width:36px}#sVoice,#sTheme,#sAcct{width:33px}#sPeer{width:34px}
+  #gNew,#sVoice,#sTheme,#sAcct,#sPeer{margin-left:-8px}
   #railPeer{display:none!important}
   /* 刷新：从左栏挪到这里，放在语音管理右边，和手机同一个图标；左栏那个按钮只留着给脚本点（不显示） */
   #sReload{flex:none;position:relative;display:grid;place-items:center;width:32px;height:32px;margin:0 0 0 -8px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
@@ -1176,8 +1177,8 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #app.m-list #sReload{flex:none;position:relative;display:grid;place-items:center;width:42px;height:38px;margin-left:-6px;border:0;border-radius:10px;background:none;color:var(--muted);cursor:pointer}
   #app.m-list #sNew{width:45px;margin-left:-4px}   /* 图标离左边 18px */
   /* 图标之间空 20px：按钮 = 图标宽 + 两边各 10px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
-  #app.m-list #gNew{width:46px}#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
-  #app.m-list #gNew,#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct{margin-left:-6px}
+  #app.m-list #gNew{width:46px}#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct,#app.m-list #sPeer{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
+  #app.m-list #gNew,#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct,#app.m-list #sPeer{margin-left:-6px}
   #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
   #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:1px solid var(--line);
@@ -1381,8 +1382,8 @@ textarea.md-in:focus-visible{outline:none}
 .pe-route{flex:none;margin-left:6px;padding:0 6px;border:1px solid var(--line);border-radius:6px;font-style:normal;font-size:11.5px;line-height:18px;color:var(--muted)}
 .pe-route.rl{color:var(--accent);border-color:var(--accent)}
 .h-row.pe-relay .k{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.h-row.pe-relay .pe-rl1{display:flex;align-items:center;gap:6px;min-width:0}
-.h-row.pe-relay .pe-rl1 .pe-mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-row.pe-relay .pe-rl1{display:flex;align-items:flex-start;gap:6px;min-width:0}
+.h-row.pe-relay .pe-rl1 .pe-mono{min-width:0;font-size:13.5px;line-height:20px;overflow-wrap:anywhere}   /* 地址不省略，放不下就折行 */
 .h-row.pe-relay .k .pe-route{margin-left:0}
 .h-row.pe-relay small{font-size:12px;color:var(--muted)}
 .h-row.pe-col{flex-direction:column;align-items:stretch;gap:6px}
@@ -1390,6 +1391,46 @@ textarea.md-in:focus-visible{outline:none}
 .pe-left{text-align:left!important}
 .pe-btns.pe-end{margin:14px 6px 4px}
 .claw-h.pe-title{background:none}
+/* 协同里的地址：等宽字放在浅底圆角框里（长地址在 / 处断行），右边一个复制图标；整块可长按选中 */
+.pe-url{display:flex;align-items:flex-start;gap:6px;padding:6px 6px 6px 10px;border-radius:8px;background:var(--bg);min-width:0}
+.pe-url+.pe-url{margin-top:6px}
+.pe-url-t{flex:1;min-width:0;padding-top:3px;font-family:var(--mono);font-size:12.5px;line-height:18px;color:var(--ink);overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.pe-url-t .pe-route{margin:0 6px 0 0;vertical-align:1px}
+.pe-cp{flex:none;width:28px;height:24px;margin:0;padding:0;border:0;border-radius:6px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pe-cp:hover,.pe-cp:active{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.pe-cp svg{width:15px;height:15px}
+.h-row.pe-col>.k.pe-kx{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.h-row.pe-col>.v,.h-row.pe-col>small{text-align:left}
+.h-row.pe-col>small{font-size:12.5px;line-height:1.5;color:var(--muted)}
+/* 对方详情 · 各条路：一条一行，左边路线标签 + 地址，右边快慢 */
+.pe-chs{display:flex;flex-direction:column;gap:6px}
+.pe-ch{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:20px}
+.pe-ch .pe-route{margin:1px 0 0}
+.pe-ch-a{flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.pe-ch{flex-wrap:wrap}
+.pe-ch-p{flex:1 0 100%;padding:2px 8px;border-left:2px solid var(--line);font-family:var(--mono);font-size:11px;line-height:16px;color:var(--muted);overflow-wrap:anywhere}   /* 打洞打通的那一对地址（IPv6 很长）：另起一行占满宽 */
+.pe-btn.pe-soft{background:var(--bg)}   /* 卡片里的小按钮：白卡片上用浅底，看得出是按钮 */
+.pe-ch-ms{flex:none;font-variant-numeric:tabular-nums;color:var(--ink)}
+.pe-ch-ms.bad{color:var(--deny)}
+.pe-ch-ms.wait{color:var(--muted)}
+/* 对方开放的会话：名字 + 可复制的 ID */
+.pe-ss-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pe-ss-list li{display:flex;align-items:center;gap:8px;min-height:30px;font-size:14px}
+.pe-ss-list li+li{border-top:.5px solid var(--line)}
+.pe-ss-list .pe-sn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-ss-list em{flex:none;font-style:normal;font-size:11.5px;color:var(--accent)}
+.pe-id{flex:none;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 6px 0 8px;border:0;border-radius:6px;background:var(--bg);color:var(--muted);font-family:var(--mono);font-size:12px;cursor:pointer}
+.pe-id svg{width:12px;height:12px}
+.pe-id:hover,.pe-id:active{color:var(--accent)}
+/* 整行宽的按钮（复制邀请、撤销配对）：和卡片一样宽、一样圆角 */
+.pe-wide{display:block;width:100%;height:46px;margin:0;border:0;border-radius:var(--card-r,14px);font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.pe-wide.pri{background:var(--accent);color:var(--accent-ink)}
+.pe-wide.del{background:var(--surface);color:var(--deny)}
+.pe-wide-w{display:flex;flex-direction:column;gap:8px}
+.pe-wide-w .pe-note{margin-top:0}
+/* 附近的 claclaw：名字在上、电脑名 · IP 在下 */
+.pe-near .k{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pe-near .k small{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .h-row.pe-peer{flex-direction:row;align-items:center;flex-wrap:nowrap}
 .h-row.pe-peer .pe-peer-name{flex:1;min-width:0;display:flex;align-items:center}
 .h-row.pe-peer>.v{flex:none}
@@ -1404,7 +1445,6 @@ textarea.md-in:focus-visible{outline:none}
   .pe-peer .pe-ren:hover{color:var(--ink);background:color-mix(in srgb,var(--muted) 12%,transparent)}
 }
 .pe-peer .pnm-in{min-width:0;flex:0 1 220px;padding:2px 8px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px;outline:none}
-.pe-ss-list{margin:0;padding-left:1.2em}
 .pe-allow label{display:flex;align-items:center;gap:8px;padding:2px 0;cursor:pointer}
 .pe-allow label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pe-allow-dir{margin:6px 0 2px;font-family:var(--mono);font-size:12px;color:var(--muted)}
@@ -2078,7 +2118,7 @@ select.pe-in{text-align-last:right}
       <!-- 线条图标的规格（列表顶栏、左栏）：24×24 网格、线宽 1.8、页面上同一个尺寸（电脑 22px，手机 26px），不再逐个调大小。
            图形按看起来一样大来画（实际画出来的最长边，网格单位）：圆形 ≈18.8（加号、会话气泡）、宽形 ≈19（群、语音、显示器）、
            方块 ≈17.5（Claw 四格）、协同 ≈17.7、刷新 ≈16.4（两段弧带箭头，撑满一圈显大）、齿轮 ≈20（齿之间是空的）；新加图标照这个画 -->
-      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.4"/><path d="M12 7.82v8.36M7.82 12h8.36"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.87" cy="7.93" r="3.34"/><path d="M2.6 19.42c0-3.45 2.82-5.74 6.27-5.74s6.27 2.3 6.27 5.74"/><path d="M15.66 4.69a3.34 3.34 0 0 1 0 6.48"/><path d="M17.74 13.98c2.09 0.73 3.66 2.72 3.66 5.43"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.64 15.18H4.27a1.82 1.82 0 0 1-1.82-1.82V6.09a1.82 1.82 0 0 1 1.82-1.82h10.91a1.82 1.82 0 0 1 1.82 1.82v3.18"/><path d="M6.09 7.91h0.01M9.73 7.91h0.01M13.36 7.91h0.01M6.09 11.55h4.55"/><path d="M13.82 14.27v2.73M16.55 11.55v8.19M19.28 13.36v4.55M21.55 15v1.27"/></svg></button><button type="button" id="sAcct" hidden aria-label="登录账号" title="登录账号（用户名和密码）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4.2"/><path d="M11 12l9-9M16.5 6.5l2.5 2.5M14 9l2 2"/></svg></button><button type="button" id="sTheme" aria-label="主题" title="主题"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg></button><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 12a8.2 8.2 0 0 1 8.2-8.2a8.88 8.88 0 0 1 6.14 2.5L20.2 8.36"/><path d="M20.2 3.8v4.56h-4.56"/><path d="M20.2 12a8.2 8.2 0 0 1-8.2 8.2a8.88 8.88 0 0 1-6.14-2.5L3.8 15.64"/><path d="M8.36 15.64H3.8v4.56"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)" stroke-width="1.89"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
+      <div id="sTop"><div id="tmpTh"></div><button type="button" id="sNew" aria-label="在当前会话的目录新建会话" title="在当前会话的目录新建会话"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.4"/><path d="M12 7.82v8.36M7.82 12h8.36"/></svg></button><button type="button" id="gNew" aria-label="群列表" title="群列表（只看群；再点回到最近）" aria-pressed="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8.87" cy="7.93" r="3.34"/><path d="M2.6 19.42c0-3.45 2.82-5.74 6.27-5.74s6.27 2.3 6.27 5.74"/><path d="M15.66 4.69a3.34 3.34 0 0 1 0 6.48"/><path d="M17.74 13.98c2.09 0.73 3.66 2.72 3.66 5.43"/></svg></button><button type="button" id="sPeer" aria-label="claclaw 协同" title="claclaw 协同"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.99" cy="6.54" r="2.84"/><circle cx="18.01" cy="17.46" r="2.84"/><path d="M8.29 8.5l7.43 6.99"/><path d="M14.19 3.81h6.01V9.81"/><path d="M9.81 20.19H3.81V14.19"/></svg></button><button type="button" id="sVoice" aria-label="语音管理" title="语音管理"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.64 15.18H4.27a1.82 1.82 0 0 1-1.82-1.82V6.09a1.82 1.82 0 0 1 1.82-1.82h10.91a1.82 1.82 0 0 1 1.82 1.82v3.18"/><path d="M6.09 7.91h0.01M9.73 7.91h0.01M13.36 7.91h0.01M6.09 11.55h4.55"/><path d="M13.82 14.27v2.73M16.55 11.55v8.19M19.28 13.36v4.55M21.55 15v1.27"/></svg></button><button type="button" id="sAcct" hidden aria-label="登录账号" title="登录账号（用户名和密码）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4.2"/><path d="M11 12l9-9M16.5 6.5l2.5 2.5M14 9l2 2"/></svg></button><button type="button" id="sTheme" aria-label="主题" title="主题"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg></button><button type="button" id="sReload" aria-label="刷新页面" title="刷新页面（加载最新版本）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.8 12a8.2 8.2 0 0 1 8.2-8.2a8.88 8.88 0 0 1 6.14 2.5L20.2 8.36"/><path d="M20.2 3.8v4.56h-4.56"/><path d="M20.2 12a8.2 8.2 0 0 1-8.2 8.2a8.88 8.88 0 0 1-6.14-2.5L3.8 15.64"/><path d="M8.36 15.64H3.8v4.56"/></svg></button><input id="sSearch" type="search" placeholder="搜索会话、ID、目录" autocomplete="off" spellcheck="false" hidden><span class="s-gap"></span><button type="button" id="rClear" aria-label="清空最近" title="清空最近（只清列表，不删会话、不解散群）" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(40 12 12) translate(.6 .6) scale(.95)" stroke-width="1.89"><path d="M12 1.5V9"/><rect x="8.8" y="9" width="6.4" height="2.8" rx=".8"/><path d="M8.8 11.8 6.3 21.5h11.4l-2.5-9.7"/><path d="M10.4 15.5l-.6 6M13.6 15.5l.6 6"/></g></svg></button></div>
       <div id="sList"></div>
       <!-- Claw：选择接管哪一种 AI 助手的会话。OpenClaw、DeepSeek 的 logo 不放仓库，直接用官网公开的图标地址，
            Service Worker 第一次取到后缓存在手机上（见 sw.js）；Claude Code、OpenCode 是内嵌 SVG -->
@@ -5209,7 +5249,7 @@ function peerCheckNow(){
 // 页面开着时来了配对申请：顶部横幅（App 在前台时系统通知往往不弹），15 秒后自动收起
 var pairBannerT=null;
 function pairBanner(m){
-  if(!($('#app').classList.contains('host-on')&&hostView==='peer')){$('#railPeer').classList.add('dot')}   // 左边栏「协同」也标红点
+  if(!($('#app').classList.contains('host-on')&&hostView==='peer')){$('#railPeer').classList.add('dot');$('#sPeer').classList.add('dot')}   // 左边栏「协同」也标红点
   var el=$('#pairBanner');
   if(!el){el=document.createElement('button');el.type='button';el.id='pairBanner';document.body.appendChild(el);
     el.addEventListener('click',function(){el.classList.remove('on');openPeerView()})}
@@ -5224,8 +5264,9 @@ function openPeerView(){
   mTab('host');hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();
 }
 // 左边栏的「协同」快捷入口：在协同页时亮起（这时「设置」不亮）；有配对申请时带红点
-function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#railSet').classList.remove('on')}}
+function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#sPeer').classList.remove('dot');$('#railSet').classList.remove('on')}}
 $('#railPeer').addEventListener('click',function(){peerFromList='';openPeerView()});
+$('#sPeer').addEventListener('click',function(){peerFromList=listTab();openPeerView()});   // 列表顶栏的「协同」快捷入口：返回时回到列表
 // 手机列表顶上的「语音管理」：从列表进的，返回时回到列表（不是设置 / 宿主页）
 var peerFromList='';
 var listTab=function(){return listMode==='recent'?'recent':'chats'};
@@ -5241,7 +5282,7 @@ function peerScan(){
 function peerNearHtml(c){
   if(!c.local||!c.enabled)return '';
   var rows=(peerNear||[]).map(function(n){
-    return '<div class="h-row"><span class="k">'+esc(n.name)+'</span><span class="v"><span class="pe-mono">'+esc(n.host)+'</span><small>'+esc(n.ip||'IP 未知')+'</small></span>'+
+    return '<div class="h-row pe-near"><span class="k"><span>'+esc(n.name)+'</span><small>'+esc(n.host)+(n.ip&&n.ip!==n.host?' · '+esc(n.ip):'')+'</small></span>'+
       (n.paired?'<span class="pe-tag">已配对</span>':'<button type="button" class="pe-btn pri pe-mini" data-act="peer-near-pair" data-name="'+esc(n.name)+'" data-url="'+esc(n.base)+'" data-alt="'+esc(n.baseIp||'')+'">申请配对</button>')+'</div>';
   }).join('');
   var empty=peerScanning?'<div class="pe-note" style="margin:10px 14px">正在找附近的 claclaw…</div>':peerNear&&!peerNear.length?'<div class="pe-note" style="margin:10px 14px">没找到。对方需开协同、在同一局域网；网络屏蔽广播时在下面手动填地址。</div>':'';
@@ -5280,6 +5321,12 @@ function peerInviteBack(c){
     '2. 它会打印一个公开地址和证书指纹。配对申请时把「公开地址#pin=证书指纹」填在 inbox 里，我们就能主动给你发消息了（请求格式和你收到的一样）。';
 }
 var ADDR_KIND={lan:'局域网',tailscale:'Tailscale',wan:'公网直连',relay:'中继'};
+// 一条可复制的地址：一律显示完整（不省略），复制的也是完整的；tag：前面的小标签（主 / 备）
+function peUrl(url,show,tag){return '<div class="pe-url"><span class="pe-url-t">'+(tag?'<em class="pe-route">'+esc(tag)+'</em>':'')+esc(show||url)+'</span><button type="button" class="pe-cp" data-act="peer-copy" data-copy="'+esc(url)+'" aria-label="复制" title="复制">'+COPY_ICON+'</button></div>'}
+// 小标题在上、内容在下的一行；kx：小标题右边的按钮
+function peColRow(k,body,kx){return '<div class="h-row pe-col"><span class="k'+(kx?' pe-kx':'')+'"><span>'+esc(k)+'</span>'+(kx||'')+'</span>'+body+'</div>'}
+function peIdBtn(id){return '<button type="button" class="pe-id" data-act="peer-copy" data-copy="'+esc(id)+'" title="复制会话 ID">'+esc(shortId(id))+COPY_ICON+'</button>'}
+function peMainAddr(c){return ((c.addrs||[]).find(function(a){return a.kind==='relay'&&!/#/.test(a.url)})||{}).url||(c.relay?c.relay.replace(/#.*$/,''):'')||c.baseName||c.base||''}
 function peerAddrLines(c){   // 我们的全部协同地址：对方按顺序试，哪个通用哪个
   var as=(c.addrs||[]).filter(function(a){return !/#/.test(a.url)});
   return as.length>1?'\n全部地址（按顺序试，哪个能通用哪个；claclaw 配对时会自动记下全部）：\n'+as.map(function(a){return '- '+(ADDR_KIND[a.kind]||a.kind)+'：'+a.url}).join('\n'):'';
@@ -5308,7 +5355,7 @@ function peerOutboxHtml(c){
   return '<div><div class="h-h">排队中的消息</div><div class="h-card">'+c.outbox.map(function(x){
     return '<div class="pe-req"><div class="pe-req-t"><b>'+(x.kind==='reply'?'回复':'消息')+' → '+esc(x.peer||'对方')+'</b><small>'+esc(x.text||'')+'</small>'+
       '<small>'+hm(x.at)+' 发出 · 重试 '+(x.tries||0)+' 次'+(x.lastError?' · '+esc(x.lastError):'')+'</small></div>'+
-      '<div class="pe-req-b"><small>下次 '+hm(x.next)+'</small><button type="button" class="pe-btn del pe-mini" data-act="peer-outbox-cancel" data-id="'+esc(x.id)+'">取消</button></div></div>';
+      '<div class="pe-req-b"><small>下次 '+hm(x.next)+'</small><button type="button" class="pe-btn del pe-mini pe-soft" data-act="peer-outbox-cancel" data-id="'+esc(x.id)+'">取消</button></div></div>';
   }).join('')+'</div><div class="pe-note">对方连不上或正忙时，消息在此自动重发（最长 24 小时），回复回到原会话。</div></div>';
 }
 function peerPendingHtml(c){
@@ -5410,12 +5457,14 @@ function peerDetailLive(c,p){
   var ch=o&&Array.isArray(o.chans)?o.chans.slice():[];
   if(o&&o.direct&&!o.direct.open&&!ch.some(function(x){return x.key==='direct'}))ch.push({key:'direct',ok:false,none:1});
   ch.sort(function(a,b){return (a.ok?a.ms||9e5:1e9)-(b.ok?b.ms||9e5:1e9)});
-  var chName=function(k){return k==='direct'?'直连'+(o.direct&&o.direct.open&&o.direct.via?' · '+(VIA[o.direct.via]||o.direct.via):''):k.replace(/^lan /,'局域网 ').replace(/^tailscale /,'Tailscale ').replace(/^wan /,'公网直连 ').replace(/^relay /,'中继 ')};
-  // 打洞直连没有固定地址：列出打通的那一对（本机 ↔ 对方，ip:端口，每次打洞可能不同）
-  var dAddr=function(x){var d=o.direct;return x.key==='direct'&&d&&d.open&&(d.local||d.remote)?'<br><small class="pe-mono">本机 '+esc(d.local||'?')+' ↔ 对方 '+esc(d.remote||'?')+(d.pair?'（'+esc(d.pair)+'）':'')+'</small>':''};
-  var chs=ch.length?ch.map(function(x){return '<span class="pe-mono">'+esc(chName(x.key))+'</span>：'+(x.ok?(x.ms?fmtMs(x.ms):'通'):x.none?'还没打通':'不通')+dAddr(x)}).join('<br>'):'';
-  return hRow('状态',st)+(chs?hRow('各条路',chs):'')+hRow('中继',rl)+
-    (o&&o.online?'<div class="h-row pe-col"><span class="k">对方开放的会话</span>'+(ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'<span class="v pe-left">没有</span>')+'</div>':'');
+  var KIND={lan:'局域网',tailscale:'Tailscale',wan:'公网直连',relay:'中继'};
+  var chs=ch.length?'<div class="pe-chs">'+ch.map(function(x){
+    var m=/^(\w+) (.*)$/.exec(x.key)||[],kind=x.key==='direct'?'直连'+(o.direct&&o.direct.open&&o.direct.via?' · '+(VIA[o.direct.via]||o.direct.via):''):(KIND[m[1]]||m[1]||x.key),addr=m[2]||'';
+    var d=o.direct,pair=x.key==='direct'&&d&&d.open&&(d.local||d.remote)?'<span class="pe-ch-p">本机 '+esc(d.local||'?')+'<br>对方 '+esc(d.remote||'?')+(d.pair?'（'+esc(d.pair)+'）':'')+'</span>':'';
+    return '<div class="pe-ch"><em class="pe-route'+(m[1]==='relay'?' rl':'')+'">'+esc(kind)+'</em><span class="pe-ch-a">'+esc(addr)+'</span><span class="pe-ch-ms'+(x.ok?'':x.none?' wait':' bad')+'">'+(x.ok?(x.ms?fmtMs(x.ms):'通'):x.none?'还没打通':'不通')+'</span>'+pair+'</div>';
+  }).join('')+'</div>':'';
+  return hRow('状态',st)+(chs?peColRow('各条路',chs):'')+hRow('中继',rl)+
+    (o&&o.online?peColRow('对方开放的会话（'+ss.length+'）',ss.length?'<ul class="pe-ss-list">'+ss.map(function(x){return '<li><span class="pe-sn">'+esc(x.title||'(无标题)')+'</span>'+(x.busy?'<em>工作中</em>':'')+peIdBtn(x.id)+'</li>'}).join('')+'</ul>':'<span class="v">没有</span>'):'');
 }
 function peerDetailHtml(c,p){
   // 先按 Claw（图标 + 名字）、再按目录分组
@@ -5428,18 +5477,18 @@ function peerDetailHtml(c,p){
         return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+(c.canAssign?'':' disabled')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
     }).join('');
   }).join('')+'</div>':'<span class="v pe-left">协同会话池是空的，先到「协同会话」里加</span>';
-  var h='<div class="claw-h pe-title ptint '+peerPc(p)+'"><span class="pe-peer-name">'+peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span></div>';
-  h+='<div><div class="h-card" id="peDetLive">'+peerDetailLive(c,p)+'</div></div>';
+  var h='<div><div class="h-card" id="peDetLive">'+peerDetailLive(c,p)+'</div></div>';
   h+='<div><div class="h-h">开放给它的会话</div><div class="h-card"><div class="h-row pe-col">'+allowHtml+'</div></div>'+
     '<div class="pe-note">'+(c.canAssign?'对方只能看到勾上的会话，勾选即生效。':'对方只能看到勾上的会话；只能在本机用 127.0.0.1 打开时修改。')+'</div></div>';
   var prs=Array.isArray(p.relays)?p.relays:[];
-  var relayRow=prs.length?prs.map(function(r,i){return '<span class="pe-mono">'+(prs.length>1?(i?'备 ':'主 '):'')+esc(r.replace(/#.*$/,'#…'))+'</span>'}).join('<br>'):(p.relays?p.relays+' 个':'没有');
+  var relayRow=prs.length?prs.map(function(r,i){return peUrl(r,'',prs.length>1?(i?'备':'主'):'')}).join(''):'<span class="v">'+(p.relays?p.relays+' 个':'没有')+'</span>';
+  var lan=[p.inbox,p.inboxAlt].filter(Boolean);
   h+=hSec('连接',
     hRow('方向',p.canCall?'双向：两边都能主动找对方':'单向：只能对方找我们')+
-    hRow('局域网地址','<span class="pe-mono">'+esc(p.inbox||'')+'</span>'+(p.inboxAlt?'<br><span class="pe-mono">'+esc(p.inboxAlt)+'</span>':''))+
-    hRow('中继地址',relayRow+(c.local&&p.canCall?' <button type="button" class="pe-btn pe-mini" data-act="peer-relay-of" data-id="'+esc(p.id)+'">'+(p.relay?'改':'填')+'</button>':''))+
+    (lan.length?peColRow('局域网地址',lan.map(function(u){return peUrl(u)}).join('')):'')+
+    peColRow('中继地址',relayRow,c.local&&p.canCall?'<button type="button" class="pe-btn pe-mini pe-soft" data-act="peer-relay-of" data-id="'+esc(p.id)+'">'+(p.relay?'修改':'填写')+'</button>':'')+
     hRow('配对','IP '+esc(p.ip||'')+' · '+fmtWhen(p.pairedAt)));
-  if(c.local)h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn del" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销配对</button></div>';
+  if(c.local)h+='<div class="pe-wide-w"><button type="button" class="pe-wide del" data-act="peer-revoke" data-id="'+esc(p.id)+'" data-name="'+esc(p.name)+'">撤销配对</button></div>';
   return h;
 }
 // 添加对方：附近的 claclaw + 手动填地址申请
@@ -5448,7 +5497,7 @@ function peerAddHtml(c){
   h+='<div id="peNear">'+peerNearHtml(c)+'</div>';
   h+='<div><div class="h-h">填对方地址申请</div><div class="h-card">'+
     (c.outPair?
-      '<div class="h-row"><span class="k">对方</span><span class="v pe-mono">'+esc(c.outPair.base.replace(/#.*$/,'#…'))+'</span></div>'+
+      peColRow('对方',peUrl(c.outPair.base))+
       (c.outPair.pairing?(pePairT||pePairPoll(10),
       '<div class="h-row"><span class="k">状态</span><span class="v">配对中…</span></div>'+
       '<div class="pe-btns"><button type="button" class="pe-btn" data-act="peer-cancel">取消</button></div>'):
@@ -5480,7 +5529,7 @@ function poolJoinedHtml(c){
     return '<div class="pe-claw-h"><b><span class="pe-claw-ic">'+clawIcon(k)+'</span>'+CLAW_NAMES[k]+'</b><span>'+by[k].length+' 个</span></div>'+by[k].map(function(id){
       var s=poolInfo(id),d=s?peDirLabel(peDirKey(s)).replace(/^[^·]*· /,''):'';
       return '<div class="h-row pe-pool-row"><span class="k"><span class="pe-pt">'+esc(s?(s.title||'(无标题)'):shortId(id))+'</span>'+(d&&k!=='openclaw'?'<small>'+esc(d)+'</small>':'')+'</span>'+
-        (c.canAssign?'<button type="button" class="pe-btn del pe-mini" data-act="pool-del" data-id="'+esc(id)+'">移出</button>':'')+'</div>';
+        (c.canAssign?'<button type="button" class="pe-btn del pe-mini pe-soft" data-act="pool-del" data-id="'+esc(id)+'">移出</button>':'')+'</div>';
     }).join('');
   }).join('');
 }
@@ -5536,17 +5585,20 @@ function peerNetHtml(c){
       '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-save">保存</button></div>')+
     '</div>'+(c.local?'<div class="pe-note">'+(locked?'已有配对，名字和端口不能改；要改先撤销全部配对。':'名字会显示给对方。')+'</div>':'')+'</div>';
   if(c.base)h+='<div><div class="h-h">我们的协同地址</div><div class="h-card">'+
-    (c.relay?hRow('中继',c.local?'<span class="pe-mono">'+esc(c.relay.replace(/#.*$/,'#…'))+'</span> <button type="button" class="pe-btn pe-mini" data-act="peer-copy" data-copy="'+esc(c.relay)+'">复制</button>':'已设置'):'')+
-    (c.addrs||[]).filter(function(a){return !/#/.test(a.url)}).map(function(a){return hRow(ADDR_KIND[a.kind]||a.kind,'<span class="pe-mono">'+esc(a.url)+'</span>')}).join('')+
-    (c.local?hRow('打洞直连','<small>不用地址：配对后两边自动打洞'+(c.stun?'（STUN 用 clarelay 的，第三方备用）':'（STUN 用第三方的）')+'</small>'):'')+
-    (c.local&&c.wan&&c.wan.state!=='ok'?hRow('公网直连','<small>'+peerWanText(c.wan)+'</small>'):'')+
+    (c.relay?peColRow('中继隧道',c.local?peUrl(c.relay):'<span class="v">已设置</span>'):'')+
+    (function(){   // 同一类的地址放在一行里（局域网常有电脑名、IP 两条）
+      var by={},order=[];(c.addrs||[]).filter(function(a){return !/#/.test(a.url)}).forEach(function(a){var k=ADDR_KIND[a.kind]||a.kind;if(!by[k]){by[k]=[];order.push(k)}by[k].push(a.url)});
+      return order.map(function(k){return peColRow(k,by[k].map(function(u){return peUrl(u)}).join(''))}).join('');
+    })()+
+    (c.local?peColRow('打洞直连','<small>不用地址：配对后两边自动打洞'+(c.stun?'（STUN 用 clarelay 的，第三方备用）':'（STUN 用第三方的）')+'</small>'):'')+
+    (c.local&&c.wan&&c.wan.state!=='ok'?peColRow('公网直连','<small>'+peerWanText(c.wan)+'</small>'):'')+
     '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 公网直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。公网直连要 clarelay 从外面回连本机协同端口通了才列出。</div></div>';
   if(c.local)h+='<div><div class="h-h">其他中继（别人提供的）</div><div class="h-card">'+
     (c.relayList||[]).map(function(r){
       return '<div class="h-row pe-relay"><span class="k"><span class="pe-rl1"><em class="pe-route'+(r.primary?' rl':'')+'">'+(r.primary?'主':'备')+'</em><span class="pe-mono">'+esc(r.host||'')+'</span></span>'+
         '<small>'+(RELAY_ST[r.status]||r.status)+(r.error?'：'+esc(r.error):'')+'</small></span>'+
-        (r.primary?'':'<button type="button" class="pe-btn pe-mini" data-act="relay-primary" data-i="'+r.i+'">设为主</button>')+
-        '<button type="button" class="pe-btn del pe-mini" data-act="relay-remove" data-i="'+r.i+'" data-host="'+esc(r.host||'')+'">删除</button></div>';
+        (r.primary?'':'<button type="button" class="pe-btn pe-mini pe-soft" data-act="relay-primary" data-i="'+r.i+'">设为主</button>')+
+        '<button type="button" class="pe-btn del pe-mini pe-soft" data-act="relay-remove" data-i="'+r.i+'" data-host="'+esc(r.host||'')+'">删除</button></div>';
     }).join('')+
     '<div class="h-row md-f"><label class="md-lb" for="peRelayInv">添加新的中继协同地址</label><textarea id="peRelayInv" class="md-in" rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴别人给的中继邀请码 clarelay1.…'+(c.relayInvite?'（加进来先当备用）':'')+'"></textarea></div>'+
     '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="peer-relay-save">添加</button></div>'+
@@ -5556,8 +5608,9 @@ function peerNetHtml(c){
 function peerMainHtml(c){
   var on=c.enabled?(c.listening?'已开启':'已开启，但没在监听'):'未开启';
   var h='<div><div class="h-card">'+
-    '<div class="h-row"><span class="k">协同</span><span class="v">'+on+'</span>'+(c.local?(c.enabled?'<button type="button" class="pe-btn del pe-mini" data-act="peer-off">关闭</button>':'<button type="button" class="pe-btn pri pe-mini" data-act="peer-on">开启</button>'):'')+'</div>'+
+    '<div class="h-row"><span class="k">协同</span><span class="v">'+on+'</span>'+(c.local?(c.enabled?'<button type="button" class="pe-btn del pe-mini pe-soft" data-act="peer-off">关闭</button>':'<button type="button" class="pe-btn pri pe-mini" data-act="peer-on">开启</button>'):'')+'</div>'+
     hRow('名字',esc(c.name||''))+
+    (c.enabled&&peMainAddr(c)?peColRow('协同地址',peUrl(peMainAddr(c))):'')+
     hRow('网络','局域网'+(c.relay||c.relayInvite?' + 中继（'+relayStateText(c)+'）':''))+
     '</div></div>';
   h+='<div id="pePending">'+peerPendingHtml(c)+'</div><div id="peOutbox">'+peerOutboxHtml(c)+'</div><div id="pePeers">'+peerPeersHtml(c)+'</div>';
@@ -5566,8 +5619,8 @@ function peerMainHtml(c){
     peerLink('peer-sub','pool','协同会话',(c.sessions||[]).length+' 个')+
     peerLink('peer-sub','net','本机与网络',c.relay||c.relayInvite?'中继'+relayStateText(c):'只走局域网')+
     '</div></div>';
-  if(c.local&&c.enabled&&c.base)h+='<div class="pe-btns pe-end"><button type="button" class="pe-btn pri" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请</button></div>'+
-    '<div class="pe-note">邀请含地址和配对说明，发给对方（或对方的 AI）照着申请即可。</div>';
+  if(c.local&&c.enabled&&c.base)h+='<div class="pe-wide-w"><button type="button" class="pe-wide pri" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请</button>'+
+    '<div class="pe-note">邀请含全部地址和配对说明，发给对方（或对方的 AI）照着申请即可。</div></div>';
   return h;
 }
 function paintPeerLive(){
