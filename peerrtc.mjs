@@ -84,7 +84,7 @@ class Conn {
   onOpen() {
     if (this.up || this.closed) return;
     this.up = Date.now(); clearTimeout(this.openTimer);
-    try { const p = this.pc.getSelectedCandidatePair(); this.remote = p?.remote?.address || ''; this.via = classifyAddr(this.remote); this.pair = p ? p.local.type + '↔' + p.remote.type : ''; } catch {}
+    try { const p = this.pc.getSelectedCandidatePair(); this.remote = p?.remote?.address || ''; this.via = classifyAddr(this.remote); this.pair = p ? p.local.type + '↔' + p.remote.type : ''; const hp = x => x?.address ? (x.address.includes(':') ? '[' + x.address + ']' : x.address) + ':' + x.port : ''; this.lAddr = hp(p?.local); this.rAddr = hp(p?.remote); } catch {}
     cfg.log('peer direct up', this.peerId, this.role, this.pair || '', this.remote || '', this.via || '');
     this.lastPong = Date.now(); this.ping();
     this.pinger = setInterval(() => { if (Date.now() - this.lastPong > DEAD_MS) return this.close('心跳超时'); this.ping(); }, PING_MS);
@@ -243,7 +243,7 @@ export function rtcOpen(peerId) {
 }
 export function rtcState(peerId) {
   const c = rtcOpen(peerId);
-  return c ? { open: true, rtt: c.rtt, via: c.via, pair: c.pair, since: c.up } : { open: false };
+  return c ? { open: true, rtt: c.rtt, via: c.via, pair: c.pair, since: c.up, local: c.lAddr || '', remote: c.rAddr || '' } : { open: false };   // local / remote：打通的那一对地址（本机 ↔ 对方，ip:端口）
 }
 export function rtcClose(peerId) { for (const c of [...(conns.get(peerId) || [])]) c.close('关闭'); }
 export function rtcCloseAll() { for (const id of [...conns.keys()]) rtcClose(id); }

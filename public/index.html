@@ -5409,8 +5409,10 @@ function peerDetailLive(c,p){
   var ch=o&&Array.isArray(o.chans)?o.chans.slice():[];
   if(o&&o.direct&&!o.direct.open&&!ch.some(function(x){return x.key==='direct'}))ch.push({key:'direct',ok:false,none:1});
   ch.sort(function(a,b){return (a.ok?a.ms||9e5:1e9)-(b.ok?b.ms||9e5:1e9)});
-  var chName=function(k){return k==='direct'?'直连'+(o.direct&&o.direct.open&&o.direct.via?' · '+(VIA[o.direct.via]||o.direct.via):''):k.replace(/^lan /,'局域网 ').replace(/^relay /,'中继 ')};
-  var chs=ch.length?ch.map(function(x){return '<span class="pe-mono">'+esc(chName(x.key))+'</span>：'+(x.ok?(x.ms?fmtMs(x.ms):'通'):x.none?'还没打通':'不通')}).join('<br>'):'';
+  var chName=function(k){return k==='direct'?'直连'+(o.direct&&o.direct.open&&o.direct.via?' · '+(VIA[o.direct.via]||o.direct.via):''):k.replace(/^lan /,'局域网 ').replace(/^tailscale /,'Tailscale ').replace(/^wan /,'公网直连 ').replace(/^relay /,'中继 ')};
+  // 打洞直连没有固定地址：列出打通的那一对（本机 ↔ 对方，ip:端口，每次打洞可能不同）
+  var dAddr=function(x){var d=o.direct;return x.key==='direct'&&d&&d.open&&(d.local||d.remote)?'<br><small class="pe-mono">本机 '+esc(d.local||'?')+' ↔ 对方 '+esc(d.remote||'?')+(d.pair?'（'+esc(d.pair)+'）':'')+'</small>':''};
+  var chs=ch.length?ch.map(function(x){return '<span class="pe-mono">'+esc(chName(x.key))+'</span>：'+(x.ok?(x.ms?fmtMs(x.ms):'通'):x.none?'还没打通':'不通')+dAddr(x)}).join('<br>'):'';
   return hRow('状态',st)+(chs?hRow('各条路',chs):'')+hRow('中继',rl)+
     (o&&o.online?'<div class="h-row pe-col"><span class="k">对方开放的会话</span>'+(ss.length?'<ol class="pe-ss-list">'+ss.map(function(x){return '<li>'+esc(x.title||'(无标题)')+' <span class="pe-mono">'+esc(x.id)+'</span>'+(x.busy?' <em>工作中</em>':'')+'</li>'}).join('')+'</ol>':'<span class="v pe-left">没有</span>')+'</div>':'');
 }
