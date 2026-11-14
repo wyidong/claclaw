@@ -15,6 +15,11 @@ const IS_WIN = process.platform === 'win32', IS_MAC = process.platform === 'darw
 const PLIST = () => path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.clarelay.device.plist');
 const STARTUP_VBS = () => path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'clarelay-device.vbs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// 设备列表里显示的名字：macOS 用「电脑名称」（os.hostname() 常常是 192.168.x.x 这种 DHCP 名），别的系统用主机名
+function deviceName() {
+  if (IS_MAC) { try { const n = execFileSync('scutil', ['--get', 'ComputerName'], { encoding: 'utf8', timeout: 3000 }).trim(); if (n) return n; } catch {} }
+  return os.hostname();
+}
 
 export function relayStatePath(DATA) {
   if (process.env.CLACLAW_CLARELAY_STATE) return process.env.CLACLAW_CLARELAY_STATE;
@@ -93,7 +98,7 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
       const ext = await stopExternal();
       try {
         const { startDevice } = await (o.load ? o.load() : import('./clarelay/agent.mjs'));
-        const d = await startDevice({ invite: invite || undefined, state: STATE, name: os.hostname(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log,
+        const d = await startDevice({ invite: invite || undefined, state: STATE, name: deviceName(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log,
           onStatus: s => { if (s.error) lastErr = s.error; else if (s.online) lastErr = ''; } });   // 每次连不上都带原因；连上（hello）不带 error，清掉
         dev = d; o.onDevice(d); ext.commit();
         log('内置电脑端已启动：' + d.url);
