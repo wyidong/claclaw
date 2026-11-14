@@ -18,6 +18,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // 设备列表里显示的名字：macOS 用「电脑名称」（os.hostname() 常常是 192.168.x.x 这种 DHCP 名），别的系统用主机名
 function deviceName() {
   if (IS_MAC) { try { const n = execFileSync('scutil', ['--get', 'ComputerName'], { encoding: 'utf8', timeout: 3000 }).trim(); if (n) return n; } catch {} }
+  if (IS_WIN && process.env.COMPUTERNAME) return process.env.COMPUTERNAME;
   return os.hostname();
 }
 
