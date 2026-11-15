@@ -1409,7 +1409,10 @@ textarea.md-in:focus-visible{outline:none}
 .pe-ch-a{flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .pe-ch{flex-wrap:wrap}
 .pe-ch-p{flex:1 0 100%;padding:2px 8px;border-left:2px solid var(--line);font-family:var(--mono);font-size:11px;line-height:16px;color:var(--muted);overflow-wrap:anywhere}   /* 打洞打通的那一对地址（IPv6 很长）：另起一行占满宽 */
-.pe-btn.pe-soft{background:var(--bg)}   /* 卡片里的小按钮：白卡片上用浅底，看得出是按钮 */
+.pe-btn.pe-soft{background:var(--bg)}
+.pe-ferr{flex:1 0 100%;margin-top:4px;font-size:12.5px;line-height:1.45;color:var(--deny)}   /* 输入框下面的错误 */
+#hostBody :is(.pe-in,textarea.md-in).bad{border-color:var(--deny)}
+#hostBody :is(.pe-in,textarea.md-in).bad:focus{border-color:var(--deny);box-shadow:0 0 0 3px color-mix(in srgb,var(--deny) 16%,transparent)}   /* 卡片里的小按钮：白卡片上用浅底，看得出是按钮 */
 .pe-ch-ms{flex:none;font-variant-numeric:tabular-nums;color:var(--ink)}
 .pe-ch-ms.bad{color:var(--deny)}
 .pe-ch-ms.wait{color:var(--muted)}
@@ -5170,8 +5173,8 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='skill-install'||act==='skill-remove'){skillPost(act==='skill-install'?'install':'uninstall',a.dataset.name,a.dataset.target);return}
   if(act==='peer-copy'){copyText(a.dataset.copy);return}
   if(act==='peer-on'){if(!(peerCfg.sessions||[]).length){peerGo('pool');peerMsg={err:peerCfg.canAssign?'先勾选要加入协同的会话，再开启':'还没有加入协同的会话：要先在这台电脑上用 127.0.0.1 打开网页加'};paintPeerMsg();return}peerPost('',peerForm(true),'协同已开启')}
-  if(act==='peer-save')peerPost('',peerForm(peerCfg&&peerCfg.enabled),'已保存');
-  if(act==='peer-relay-save'){var v=(($('#peRelayInv')||{}).value||'').trim();if(!v){peerMsg={err:'先粘贴中继邀请码'};paintPeerMsg();return}peerPost('',{relayAdd:v},'已添加，正在连中继…');setTimeout(function(){if(hostView==='peer')loadPeerPage()},4000)}
+  if(act==='peer-save')peerPost('',peerForm(peerCfg&&peerCfg.enabled),'已保存',{field:function(m){return /端口/.test(m)?'pePort':'peName'}});
+  if(act==='peer-relay-save'){var v=(($('#peRelayInv')||{}).value||'').trim();if(!v){peFieldErr('peRelayInv','先粘贴中继邀请码');return}peerPost('',{relayAdd:v},'已添加，正在连中继…',{field:'peRelayInv',ok:function(){setTimeout(function(){if(hostView==='peer')loadPeerPage()},4000)}})}
   if(act==='relay-primary'){peerPost('',{relayPrimary:+a.dataset.i},'已设为主中继');return}
   if(act==='relay-remove'){if(confirm('删除中继 '+a.dataset.host+'？删了以后不再经它联系对方'))peerPost('',{relayRemove:+a.dataset.i},'已删除');return}
   if(act==='peer-relay-of'){   // 给已配对的对方补 / 改中继地址（对方给的整段 https://…#pin=…&key=…；清空 = 不走中继）
@@ -5186,13 +5189,14 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer-approve')peerPost('/approve',{id:a.dataset.id},'已同意：把配对码告诉对方');
   if(act==='peer-outbox-cancel'){if(confirm('取消这条排队中的消息？取消后不会再发'))peerPost('/outbox-cancel',{id:a.dataset.id},'已取消');return}
   if(act==='peer-revoke'){if(confirm('撤销和「'+a.dataset.name+'」的配对？撤销后对方要重新申请才能联系我们'))peerPost('/revoke',{id:a.dataset.id},'已撤销')}
-  if(act==='peer-start'){peerMsg={ok:'正在向对方申请…'};paintPeerMsg();peerPost('/pair-start',{url:$('#peUrl').value.replace(/\s+/g,'')},'已向对方申请：对方点「同意」后会看到两位数配对码，问对方要来填在下面')}
+  if(act==='peer-start'){var u=$('#peUrl').value.replace(/\s+/g,'');if(!u){peFieldErr('peUrl','先填对方的协同地址');return}peFieldErr('peUrl','');peerMsg={ok:'正在向对方申请…'};paintPeerMsg();peerPost('/pair-start',{url:u},'已向对方申请：对方点「同意」后会看到两位数配对码，问对方要来填在下面',{field:'peUrl'})}
   if(act==='peer-near-pair'){peerMsg={ok:'正在向「'+a.dataset.name+'」申请…'};paintPeerMsg();peerPost('/pair-start',{url:a.dataset.url,urlAlt:a.dataset.alt||''},'已向「'+a.dataset.name+'」申请：对方页面上会出现两位数配对码，问对方要来填在下面')}
   if(act==='peer-scan')peerScan();
   if(act==='peer-finish')peerPost('/pair-finish',{code:$('#peCode').value.trim()},'');
   if(act==='peer-cancel'){clearTimeout(pePairT);pePairT=null;peerPost('/pair-cancel',{},'')}
 });
 $('#hostBody').addEventListener('input',function(e){
+  if(e.target.classList.contains('bad')&&e.target.id)peFieldErr(e.target.id,'');   // 一改就去掉框下面的错误
   if(e.target.id==='pePoolQ'){peerPoolQ=e.target.value;var l=$('#pePoolList');if(l&&peerCfg)l.innerHTML=poolListHtml(peerCfg)}   // 协同会话页搜索：只重画列表
   if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden'){f0.value=fs.value;mdFv0()}}mdlFmtX()}   // 模型管理：接口格式跟着地址猜
 });
@@ -5217,15 +5221,27 @@ function peerForm(enabled){
 // 输错配对码后对方让我们等（显示「配对中」）：到点再问一次，最长 30 秒问一次
 var pePairT=null;
 function pePairPoll(sec){clearTimeout(pePairT);pePairT=setTimeout(function(){pePairT=null;peerPost('/pair-finish',{code:''},'')},Math.min(Math.max(sec||5,3),30)*1000)}
-function peerPost(path,body,okText){
+// 输入框的错误：显示在那个框下面（框变红），一改内容就消失；msg 为空 = 清掉
+function peFieldErr(id,msg){
+  var el=$('#'+id);if(!el)return false;
+  var row=el.closest('.h-row')||el.parentNode,old=row.querySelector('.pe-ferr');if(old)old.remove();
+  el.classList.toggle('bad',!!msg);
+  if(msg){var d=document.createElement('div');d.className='pe-ferr';d.textContent=msg;row.appendChild(d);el.focus()}
+  return true;
+}
+// opts.field：出错时把错误放在这个输入框下面（可以是按错误内容选框的函数）；opts.ok：成功后再做的事
+function peerPost(path,body,okText,opts){
+  opts=opts||{};
   postJson('/api/peer'+path,body).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
-    if(!x.ok||(x.j.error&&!x.j.local)){clearTimeout(pePairT);pePairT=null;peerMsg={err:x.j.error||'操作失败'};if(path==='/pair-finish'&&peerCfg){peerCfg.outPair=null;renderPeer()}else paintPeerMsg();return}
+    if(!x.ok||(x.j.error&&!x.j.local)){clearTimeout(pePairT);pePairT=null;var em=x.j.error||'操作失败',fd=typeof opts.field==='function'?opts.field(em):opts.field;
+      if(fd&&peFieldErr(fd,em)){if(peerMsg.ok){peerMsg={};paintPeerMsg()}return}
+      peerMsg={err:em};if(path==='/pair-finish'&&peerCfg){peerCfg.outPair=null;renderPeer()}else paintPeerMsg();return}
     var keepPI=peerCfg&&peerCfg.poolInfo;peerCfg=peNormCfg(x.j);if(!peerCfg.poolInfo)peerCfg.poolInfo=keepPI;peerSt=x.j;
     if(x.j.retryIn)pePairPoll(x.j.retryIn+1);
     if(x.j.paired)peerSub='';   // 配对成功：回主页看「已配对」
     peerMsg=x.j.error?{err:x.j.error}:x.j.paired?{ok:'和「'+x.j.paired+'」配对成功'}:x.j.retryIn?{ok:x.j.waiting?'等对方点「同意」…（对方同意后会自动核对你填的配对码）':'配对中…'}:okText?{ok:okText}:{};
-    renderPeer();if(x.j.paired)peerCheckNow();
-  }).catch(function(e){peerMsg={err:e.message};paintPeerMsg()});
+    renderPeer();if(x.j.paired)peerCheckNow();if(opts.ok)opts.ok(x.j);
+  }).catch(function(e){var fd=typeof opts.field==='function'?opts.field(e.message):opts.field;if(fd&&peFieldErr(fd,e.message))return;peerMsg={err:e.message};paintPeerMsg()});
 }
 // 页面开着时：每 3 秒看有没有新的配对申请；每 10 秒检查已配对的对方在不在线（只更新那几块，不动正在填的输入框）
 function peerWatch(on){
