@@ -1257,6 +1257,7 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .th-mer{position:absolute!important;right:0;top:0;bottom:0;width:58%;display:flex!important;align-items:center;justify-content:center;overflow:hidden}
 .th-mer b{font:600 13px/1.25 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.1em;color:var(--pi);opacity:.55;writing-mode:vertical-rl}
 .th-mer:has(img) b{visibility:hidden}
+.th-mer:has(img){background:repeating-conic-gradient(#d9d9d9 0 25%,#fff 0 50%) 0 0/8px 8px}   /* 透明图垫棋盘格（像素底） */
 .th-mer img{position:absolute;inset:3px 2px;width:calc(100% - 4px);height:calc(100% - 6px);object-fit:contain}
 .th-ok{position:absolute;right:12px;bottom:14px;width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .th-ok::after{content:'';position:absolute;left:6px;top:5px;width:7px;height:4px;border-left:2px solid var(--accent-ink,#fff);border-bottom:2px solid var(--accent-ink,#fff);transform:rotate(-45deg)}
@@ -8094,7 +8095,7 @@ function renderTheme(){
 function thAct(act,a){
   if(act==='th-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
   if(act==='th-back'){hostView='';mTab('set');return}
-  if(act==='th-mer'){var sm=a.currentSrc||a.src;showImage(sm.replace(/\.webp$/,'-l.webp'));var li=lightbox.querySelector('img');li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l.webp），没有就用卡片上那张
+  if(act==='th-mer'){var sm=a.currentSrc||a.src;showImage(sm.replace(/\.webp$/,'-l.webp'));var li=lightbox.querySelector('img');li.style.background='repeating-conic-gradient(#d9d9d9 0 25%,#fff 0 50%) 0 0/16px 16px';li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l.webp），没有就用卡片上那张
   var el=act==='th-pick'?$('#setTheme'):act==='th-img'?$('#setScImg'):null;if(!el)return;
   el.value=a.dataset.v;el.dispatchEvent(new Event('change'));thSub();renderTheme();
 }
