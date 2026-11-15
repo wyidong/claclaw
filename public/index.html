@@ -1251,6 +1251,13 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .th-nm{display:flex;flex-direction:column;gap:2px;padding:0 4px;min-width:0}
 .th-nm b{font-size:14px;font-weight:600;line-height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .th-nm small{font-size:11.5px;color:var(--muted);line-height:15px}
+.claw-grid .claw-card.th-wide{grid-column:1/-1;flex-direction:row;gap:8px;padding:8px}
+.th-wide .th-l{position:relative;display:flex;flex-direction:column;gap:8px;flex:1;min-width:0;padding-bottom:2px}
+.th-wide .th-pv{flex:1;height:auto;min-height:118px}
+.th-wide .th-ok{right:6px;bottom:4px}
+.th-mer{position:relative;flex:0 0 57%;height:240px;border-radius:10px;overflow:hidden;background:var(--pb);box-shadow:0 0 0 .5px var(--pl);display:flex;align-items:center;justify-content:center}
+.th-mer b{font:600 17px/1.4 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.15em;color:var(--pi);opacity:.55;writing-mode:vertical-rl}
+.th-mer img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 35%}
 .th-ok{position:absolute;right:12px;bottom:14px;width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .th-ok::after{content:'';position:absolute;left:6px;top:5px;width:7px;height:4px;border-left:2px solid var(--accent-ink,#fff);border-bottom:2px solid var(--accent-ink,#fff);transform:rotate(-45deg)}
 .claw-grid .claw-card.th-img{padding:14px}
@@ -8054,6 +8061,7 @@ function thPal(v){
   r.classList.toggle('sc-dark',old.dk);r.classList.toggle('sc-img',old.im);
   return thPalC[v]=o;
 }
+var TH_MER=['足少阳胆经','足厥阴肝经','手太阴肺经','手阳明大肠经','足阳明胃经','足太阴脾经','手少阴心经','手太阳小肠经','足太阳膀胱经','足少阴肾经','手厥阴心包经','手少阳三焦经'];   // 子=0 … 亥=11
 var TH_DS={'':'手机浅色 / 深色自动跟','shichen':'按十二时辰自动换色',light:'浅色',dark:'深色',ziwei:'深紫'};
 function thCard(v,name,cur){
   var c=thPal(v===''?'light':v),pv='--pb:'+c.bg+';--ps:'+c.sf+';--pi:'+c.ink+';--pm:'+c.mu+';--pa:'+c.ac+';--pu:'+c.us+';--pl:'+c.ln+';--ph:'+(c.st&&c.st!=='transparent'?c.st:c.sf);
@@ -8061,9 +8069,12 @@ function thCard(v,name,cur){
   if(v==='shichen'){var zn=window.__sc.now().z,KJ=[[['肺寅',2],['大卯',3],['胃辰',4],['宫']],[['脾巳',5],['心午',6],['小未',7],['中']],[['申膀',8],['酉肾',9],['心包戌',10]],[['亥焦',11],['子胆',0],['丑肝',1],['通']]];
     mk='<i class="th-kj">'+KJ.map(function(l){return '<i>'+l.map(function(p){return p[1]==null?p[0]:'<b'+(p[1]===zn?' class="on"':'')+'>'+p[0]+'</b>'}).join('')+'</i>'}).join('')+'</i>'}   // 子午流注：预览写十二经流注口诀，当前时辰那一组高亮
   var sw='';if(v===''){var d=thPal('dark');sw='<i class="th-half" style="'+esc('--pb:'+d.bg+';--ps:'+d.sf+';--pi:'+d.ink+';--pm:'+d.mu+';--pa:'+d.ac+';--pu:'+d.us+';--pl:'+d.ln+';--ph:'+d.sf)+'">'+mk+'</i>'}   // 跟随系统：右下半边画深色
-  return '<button type="button" class="claw-card th-card" data-act="th-pick" data-v="'+esc(v)+'"'+(v===cur?' aria-current="true"':'')+'>'+
-    '<span class="th-pv" style="'+esc(pv)+'">'+mk+sw+'</span>'+
-    '<span class="th-nm"><b>'+esc(name)+'</b>'+(TH_DS[v]?'<small>'+TH_DS[v]+'</small>':'')+'</span>'+(v===cur?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>';
+  var body='<span class="th-pv" style="'+esc(pv)+'">'+mk+sw+'</span>'+
+    '<span class="th-nm"><b>'+esc(name)+'</b>'+(TH_DS[v]?'<small>'+TH_DS[v]+'</small>':'')+'</span>'+(v===cur?'<span class="th-ok" aria-hidden="true"></span>':''),
+    zi=/^shichen@(\d+)$/.exec(v);
+  // 十二时辰：卡片右边一大半放这个时辰的经络图（data/sc-mer/<序号>.jpg，没有图就只写经名）
+  if(zi)body='<span class="th-l">'+body+'</span><span class="th-mer" style="'+esc(pv)+'"><b>'+TH_MER[+zi[1]]+'</b><img alt="" loading="lazy" src="/sc-mer/'+zi[1]+'.jpg"></span>';
+  return '<button type="button" class="claw-card th-card'+(zi?' th-wide':'')+'" data-act="th-pick" data-v="'+esc(v)+'"'+(v===cur?' aria-current="true"':'')+'>'+body+'</button>';
 }
 function renderTheme(){
   if(hostView!=='theme')return;
@@ -8078,6 +8089,7 @@ function renderTheme(){
       return '<button type="button" class="claw-card th-card th-img" data-act="th-img" data-v="'+x[0]+'"'+(x[0]===im?' aria-current="true"':'')+'><span class="th-nm"><b>'+x[1]+'</b><small>'+x[2]+'</small></span>'+(x[0]===im?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>'}).join('')+'</div></div>';
   }
   $('#hostBody').innerHTML=h;
+  [].forEach.call($('#hostBody').querySelectorAll('.th-mer img'),function(im){im.addEventListener('error',function(){im.remove()})});   // 没有经络图：留下经名
 }
 function thAct(act,a){
   if(act==='th-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}

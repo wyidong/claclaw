@@ -2936,10 +2936,11 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
       return fs.createReadStream(iconFile).pipe(res);
     }
-    // 流变时辰的壁纸：data/sc-bg/<地支序号 0-11>.jpg（子=0 … 亥=11），图片来源不明不进仓库；没有这个时辰的图就 404，页面用回纯色
-    const scBg = url.pathname.match(/^\/sc-bg\/(\d{1,2})\.jpg$/);
-    if (scBg && +scBg[1] < 12) {
-      const f = path.join(DATA, 'sc-bg', scBg[1] + '.jpg');
+    // 流变时辰的壁纸 data/sc-bg/、十二时辰主题卡片上的经络图 data/sc-mer/：<地支序号 0-11>.jpg（子=0 … 亥=11），
+    // 图片来源不明不进仓库；没有这个时辰的图就 404，页面用回纯色 / 经名
+    const scBg = url.pathname.match(/^\/(sc-bg|sc-mer)\/(\d{1,2})\.jpg$/);
+    if (scBg && +scBg[2] < 12) {
+      const f = path.join(DATA, scBg[1], scBg[2] + '.jpg');
       if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
       return fs.createReadStream(f).pipe(res);
