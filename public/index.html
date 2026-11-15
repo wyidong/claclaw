@@ -567,6 +567,9 @@ html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important} 
 #bgReload:active{opacity:.4}
 #bgTheme{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-74px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 主题快捷入口：在「更新客户端」圈左边，一样淡 */
 #bgTheme[hidden]{display:none}
+#bgHost{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:30px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 宿主快捷入口：在「更新客户端」圈右边，和左边的主题对称 */
+#bgHost[hidden]{display:none}
+#bgHost:active{opacity:.4}
 #bgTheme:active{opacity:.4}
 #bgReload.new{color:var(--accent);opacity:.35}   /* 服务器有新版本：显眼一点 */
 #bgReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
@@ -2042,6 +2045,7 @@ select.pe-in{text-align-last:right}
   <!-- 手机底部菜单（只在列表页显示，进入聊天隐藏，像微信） -->
   <!-- 手机：Claw 页背景里的「更新客户端」圈，和 clarelay 顶上的房子上下对称；被列表内容盖住时隐藏 -->
   <button type="button" id="bgTheme" aria-label="主题" title="主题" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg></button>
+  <button type="button" id="bgHost" aria-label="宿主" title="宿主" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.6" y="3.64" width="18.8" height="12.53" rx="2.09"/><path d="M7.82 20.36h8.36M12 16.18v4.18"/></svg></button>
   <button type="button" id="bgReload" aria-label="更新客户端" title="更新客户端" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></button>
   <nav id="mtabs" aria-label="底部菜单">
     <button type="button" data-tab="recent"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle class="f" cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg><span>最近</span></button>
@@ -5905,7 +5909,7 @@ $('#rClear').addEventListener('click',recentClear);   // 「最近」顶上群�
     q=0;var app=$('#app');
     var on=!DESKTOP.matches&&app.classList.contains('m-list')&&app.classList.contains('claw-on')&&!app.classList.contains('set-on')&&!app.classList.contains('host-on');   // 最近 / 会话页的刷新挪到了顶栏
     if(on){btn.hidden=false;var top=btn.getBoundingClientRect().top;on=lastBottom($('#clawPane'))<top-6}
-    btn.hidden=!on;$('#bgTheme').hidden=!on;
+    btn.hidden=!on;$('#bgTheme').hidden=!on;$('#bgHost').hidden=!on;
   }
   function later(){if(!q)q=requestAnimationFrame(upd)}
   sp.addEventListener('scroll',later,{capture:true,passive:true});window.addEventListener('resize',later);DESKTOP.addEventListener('change',later);
@@ -5928,8 +5932,10 @@ try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionS
   if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
 $('#railSet').addEventListener('click',function(){railTab(true)});
 $('#railHost').addEventListener('click',function(){var sub=hostView;mTab('host');if(sub){hostView='';peerWatch(false);$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost()}});   // 在协同 / 模型管理子页时点「宿主」回宿主页
-$('#setHost').addEventListener('click',function(){mTab('host')});
-$('#hostBack').addEventListener('click',function(){mTab('set')});
+var hostFromClaw=false;   // 从 Claw 页背景里的「宿主」进来的：返回回到 Claw 页
+$('#setHost').addEventListener('click',function(){hostFromClaw=false;mTab('host')});
+$('#bgHost').addEventListener('click',function(){hostFromClaw=true;hostView='';mTab('host')});
+$('#hostBack').addEventListener('click',function(){if(hostFromClaw){hostFromClaw=false;var t=document.querySelector('#mtabs [data-tab="claw"]');if(t){t.click();return}}mTab('set')});
 // 会话列表宽度：拖右边缘调整，记在本机；最窄 240，最宽到聊天区还剩 420
 (function(){
   var MIN=240,DEF=300,g=$('#sheetGrip'),app=$('#app');
