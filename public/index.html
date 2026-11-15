@@ -5591,6 +5591,13 @@ function peerWanText(w){
   if(w.state==='err')return '没列出：探测出错'+(w.why?'（'+esc(w.why)+'）':'');
   return '没列出：clarelay 从外面回连 '+esc((w.ip||'公网 IP')+':'+(w.port||''))+' 不通'+(w.why?'（'+esc(w.why==='timeout'?'超时':w.why)+'）':'')+'。一般是在路由器后面、没做端口转发；不影响打洞直连和中继';
 }
+// 「本机与网络」入口上的一句话：我们有哪几类协同地址（加入了 clarelay 就有子域名，不用中继邀请码）＋其他中继的状态
+function peerNetSum(c){
+  var k={};(c.addrs||[]).forEach(function(a){if(a.kind==='relay'&&/#/.test(a.url))return;k[a.kind]=1});
+  var names=[];if(k.lan)names.push('局域网');if(k.tailscale)names.push('Tailscale');if(k.wan)names.push('公网直连');if(k.relay)names.push('clarelay');
+  var other=c.relayInvite?'其他中继'+relayStateText(c):'';
+  return names.concat(other?[other]:[]).join(' · ')||'只走局域网';
+}
 // 本机与网络：名字、端口、我们的地址、中继
 function peerNetHtml(c){
   var locked=c.peers&&c.peers.length;
@@ -5627,13 +5634,13 @@ function peerMainHtml(c){
     '<div class="h-row"><span class="k">协同</span><span class="v">'+on+'</span>'+(c.local?(c.enabled?'<button type="button" class="pe-btn del pe-mini pe-soft" data-act="peer-off">关闭</button>':'<button type="button" class="pe-btn pri pe-mini" data-act="peer-on">开启</button>'):'')+'</div>'+
     hRow('名字',esc(c.name||''))+
     (c.enabled&&peMainAddr(c)?peColRow('协同地址',peUrl(peMainAddr(c))):'')+
-    hRow('网络','局域网'+(c.relay||c.relayInvite?' + 中继（'+relayStateText(c)+'）':''))+
+    hRow('网络',esc(peerNetSum(c)))+
     '</div></div>';
   h+='<div id="pePending">'+peerPendingHtml(c)+'</div><div id="peOutbox">'+peerOutboxHtml(c)+'</div><div id="pePeers">'+peerPeersHtml(c)+'</div>';
   h+='<div><div class="h-card">'+
     (c.local?peerLink('peer-sub','add','添加对方',''):'')+
     peerLink('peer-sub','pool','协同会话',(c.sessions||[]).length+' 个')+
-    peerLink('peer-sub','net','本机与网络',c.relay||c.relayInvite?'中继'+relayStateText(c):'只走局域网')+
+    peerLink('peer-sub','net','本机与网络',peerNetSum(c))+
     '</div></div>';
   if(c.local&&c.enabled&&c.base)h+='<div class="pe-wide-w"><button type="button" class="pe-wide pri" data-act="peer-copy" data-copy="'+esc(peerInvite(c))+'">复制邀请</button>'+
     '<div class="pe-note">邀请含全部地址和配对说明，发给对方（或对方的 AI）照着申请即可。</div></div>';
