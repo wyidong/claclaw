@@ -1256,7 +1256,8 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .th-mk .th-dk>i:first-child{left:5px;right:22px}.th-mk .th-snd{right:5px}
 .th-mer{position:absolute!important;right:0;top:0;bottom:0;width:58%;display:flex!important;align-items:center;justify-content:center;overflow:hidden}
 .th-mer b{font:600 13px/1.25 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.1em;color:var(--pi);opacity:.55;writing-mode:vertical-rl}
-.th-mer img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%}
+.th-mer:has(img) b{visibility:hidden}
+.th-mer img{position:absolute;inset:3px 2px;width:calc(100% - 4px);height:calc(100% - 6px);object-fit:contain}
 .th-ok{position:absolute;right:12px;bottom:14px;width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .th-ok::after{content:'';position:absolute;left:6px;top:5px;width:7px;height:4px;border-left:2px solid var(--accent-ink,#fff);border-bottom:2px solid var(--accent-ink,#fff);transform:rotate(-45deg)}
 .claw-grid .claw-card.th-img{padding:14px}
@@ -8069,8 +8070,8 @@ function thCard(v,name,cur){
     mk='<i class="th-kj">'+KJ.map(function(l){return '<i>'+l.map(function(p){return p[1]==null?p[0]:'<b'+(p[1]===zn?' class="on"':'')+'>'+p[0]+'</b>'}).join('')+'</i>'}).join('')+'</i>'}   // 子午流注：预览写十二经流注口诀，当前时辰那一组高亮
   var sw='';if(v===''){var d=thPal('dark');sw='<i class="th-half" style="'+esc('--pb:'+d.bg+';--ps:'+d.sf+';--pi:'+d.ink+';--pm:'+d.mu+';--pa:'+d.ac+';--pu:'+d.us+';--pl:'+d.ln+';--ph:'+d.sf)+'">'+mk+'</i>'}   // 跟随系统：右下半边画深色
   var zi=/^shichen@(\d+)$/.exec(v);
-  // 十二时辰：预览块右边一大半放这个时辰的经络图（data/sc-mer/<序号>.jpg，没有图写经名），左边留窄一点的界面示意
-  if(zi)mk='<i class="th-mk">'+mk+'</i><i class="th-mer"><b>'+TH_MER[+zi[1]]+'</b><img alt="" loading="lazy" src="/sc-mer/'+zi[1]+'.jpg"></i>';
+  // 十二时辰：预览块右边一大半放这个时辰的经络图（data/sc-mer/<序号>.webp，抠好的透明图；没有图写经名），左边留窄一点的界面示意
+  if(zi)mk='<i class="th-mk">'+mk+'</i><i class="th-mer"><b>'+TH_MER[+zi[1]]+'</b><img alt="" loading="lazy" data-act="th-mer" src="/sc-mer/'+zi[1]+'.webp"></i>';   // 点图看大图，点卡片别处换主题
   return '<button type="button" class="claw-card th-card" data-act="th-pick" data-v="'+esc(v)+'"'+(v===cur?' aria-current="true"':'')+'>'+
     '<span class="th-pv" style="'+esc(pv)+'">'+mk+sw+'</span>'+
     '<span class="th-nm"><b>'+esc(name)+'</b>'+(TH_DS[v]?'<small>'+TH_DS[v]+'</small>':'')+'</span>'+(v===cur?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>';
@@ -8088,11 +8089,12 @@ function renderTheme(){
       return '<button type="button" class="claw-card th-card th-img" data-act="th-img" data-v="'+x[0]+'"'+(x[0]===im?' aria-current="true"':'')+'><span class="th-nm"><b>'+x[1]+'</b><small>'+x[2]+'</small></span>'+(x[0]===im?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>'}).join('')+'</div></div>';
   }
   $('#hostBody').innerHTML=h;
-  [].forEach.call($('#hostBody').querySelectorAll('.th-mer img'),function(im){im.addEventListener('error',function(){im.remove()})});   // 没有经络图：留下经名
+  [].forEach.call($('#hostBody').querySelectorAll('.th-mer img'),function(im){if(im.complete&&!im.naturalWidth)im.remove();else im.addEventListener('error',function(){im.remove()})});   // 没有经络图：留下经名（404 可能在挂监听前就已经失败）
 }
 function thAct(act,a){
   if(act==='th-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
   if(act==='th-back'){hostView='';mTab('set');return}
+  if(act==='th-mer'){var sm=a.currentSrc||a.src;showImage(sm.replace(/\.webp$/,'-l.webp'));var li=lightbox.querySelector('img');li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l.webp），没有就用卡片上那张
   var el=act==='th-pick'?$('#setTheme'):act==='th-img'?$('#setScImg'):null;if(!el)return;
   el.value=a.dataset.v;el.dispatchEvent(new Event('change'));thSub();renderTheme();
 }
