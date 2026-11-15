@@ -24,6 +24,7 @@
 window.__sc=(function(){
   var G='甲乙丙丁戊己庚辛壬癸',Z='子丑寅卯辰巳午未申酉戌亥';
   var YIN=[0,1,1,0,0,1,1,0,0,1,1,0];   // 阴阳看脏腑：脏（肝肺脾心肾心包）为阴 → 深色；腑（胆大肠胃小肠膀胱三焦）为阳 → 浅色
+  var MER=['足少阳胆经','足厥阴肝经','手太阴肺经','手阳明大肠经','足阳明胃经','足太阴脾经','手少阴心经','手太阳小肠经','足太阳膀胱经','足少阴肾经','手厥阴心包经','手少阳三焦经'];
   var N=['子 · 少阳胆 🦶','丑 · 厥阴肝 🦶','寅 · 太阴肺 ✋','卯 · 阳明大肠 ✋','辰 · 阳明胃 🦶','巳 · 太阴脾 🦶','午 · 少阴心 ✋','未 · 太阳小肠 ✋','申 · 太阳膀胱 🦶','酉 · 少阴肾 🦶','戌 · 厥阴心包 ✋','亥 · 少阳三焦 ✋'];   // 12 个时辰主题的名字（地支 · 当令的经络，🦶 足经 / ✋ 手经），设置下拉、快捷方块、流变时辰的选项名都用这份
   // 时辰壁纸（设置里「时辰背景：图片」时用，只有 6 阳（腑）用；6 阴（脏）是纯色）：/sc-bg/<地支序号>.jpg，图放在电脑的 data/sc-bg/ 下；这个时辰没有图就仍用纯色
   var ok={},SCV='5';   // 换了图就把 SCV 加一：图片缓存一天，不加的话手机上还是旧图
@@ -39,14 +40,29 @@ window.__sc=(function(){
     var day=Math.floor(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate())/864e5)+2440588+49;   // 儒略日 +49：0 = 甲子日
     var z=window.__scZ!=null?window.__scZ:Math.floor((d.getHours()+1)%24/2);return {g:(day%10%5*2+z)%10,z:z,name:G[(day%10%5*2+z)%10]+Z[z]};
   }
+  // 年、月干支按节气换（年从立春起，月从各个「节」起）：用太阳视黄经算（Meeus 简化公式，误差在分钟级）
+  function sunLon(d){
+    var T=(d.getTime()/864e5+2440587.5-2451545)/36525,R=Math.PI/180,M=(357.52911+35999.05029*T)*R,O=(125.04-1934.136*T)*R;
+    var L=280.46646+36000.76983*T+(1.914602-0.004817*T)*Math.sin(M)+0.019993*Math.sin(2*M)+0.000289*Math.sin(3*M)-0.00569-0.00478*Math.sin(O);
+    return (L%360+360)%360;
+  }
+  function bazi(d){
+    d=d||new Date();var n=now(d),lon=sunLon(d),y=d.getFullYear();
+    if(d.getMonth()<2&&lon>=270&&lon<315)y--;   // 立春（315°）前还算上一年
+    var ys=((y-4)%10+10)%10,yb=((y-4)%12+12)%12,m=Math.floor(((lon-315+360)%360)/30);   // m：0 = 寅月（立春起）
+    var x=d.getHours()>=23?new Date(d.getTime()+36e5):d,day=Math.floor(Date.UTC(x.getFullYear(),x.getMonth(),x.getDate())/864e5)+2440588+49;
+    return G[ys]+Z[yb]+G[(ys%5*2+2+m)%10]+Z[(m+2)%12]+G[day%10]+Z[day%12]+n.name;   // 年 月 日 时
+  }
   function apply(){
     var n=now(),r=document.documentElement;
     r.setAttribute('data-sc',String(n.z));r.classList.toggle('sc-dark',!!YIN[n.z]);   // 阴（脏）：深色
     img(n.z);   // 时辰背景：图片 / 纯色（默认纯色）
+    // 按时间自动走（子午流注）时，底部菜单下面淡淡写上这个时辰当令的经络；单选某个时辰不写
+    var auto=window.__scZ==null;r.classList.toggle('sc-auto',auto);if(auto)r.style.setProperty('--sc-mer','"'+bazi()+'\u2009'+MER[n.z]+'"');
     return n.name;
   }
-  function clear(){var r=document.documentElement;r.removeAttribute('data-sc');r.style.removeProperty('--sc-img');r.classList.remove('sc-dark','sc-img')}
-  return {now:now,apply:apply,clear:clear,names:N};
+  function clear(){var r=document.documentElement;r.removeAttribute('data-sc');r.style.removeProperty('--sc-img');r.classList.remove('sc-dark','sc-img','sc-auto')}
+  return {now:now,apply:apply,clear:clear,names:N,mer:MER,bazi:bazi};
 })();
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
@@ -1185,6 +1201,10 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
     padding:4px max(6px,env(safe-area-inset-right)) calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px))) max(6px,env(safe-area-inset-left))}
   #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
   #mtabs{gap:4px}
+  /* 子午流注：底部菜单下面（iPhone 横条那一截）居中淡淡写当令的经络，不抢菜单；没有横条留边的设备垫出 18px 来写 */
+  html[data-theme=shichen].sc-auto #app.m-list #mtabs{padding-bottom:calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px),18px))}
+  html[data-theme=shichen].sc-auto #app.m-list #mtabs::after{content:var(--sc-mer);position:absolute;left:0;right:0;bottom:calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px),18px) - 16px);
+    text-align:center;font:500 10px/14px "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.3em;color:color-mix(in srgb,var(--ink) 16%,var(--surface));pointer-events:none;white-space:nowrap}
   #mtabs button{border-radius:12px;transition:background .15s,box-shadow .15s}
   #mtabs button.on{color:var(--accent);background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 15%,transparent),transparent 60%),rgba(255,255,255,.03);box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 25%,transparent),0 3px 8px -5px rgba(0,0,0,.2)}   /* 选中这一栏：只一点点凸起（左上细亮边 + 很淡的投影）；底下垫一层很淡的白——浅色底上看不出，深色底上稍亮一点，背光那侧的边才看得出来 */
   #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1259,6 +1279,7 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .th-mer:has(img) b{visibility:hidden}
 .th-mer:has(img){background:repeating-conic-gradient(#d9d9d9 0 25%,#fff 0 50%) 0 0/8px 8px}   /* 透明图垫棋盘格（像素底） */
 .th-mer img{position:absolute;inset:3px 2px;width:calc(100% - 4px);height:calc(100% - 6px);object-fit:contain}
+.th-mer:has(img.m1) img.m0{height:calc(50% - 4px)}.th-mer img.m1{top:calc(50% + 1px);height:calc(50% - 4px)}   /* 两张：上下各半 */
 .th-ok{position:absolute;right:12px;bottom:14px;width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .th-ok::after{content:'';position:absolute;left:6px;top:5px;width:7px;height:4px;border-left:2px solid var(--accent-ink,#fff);border-bottom:2px solid var(--accent-ink,#fff);transform:rotate(-45deg)}
 .claw-grid .claw-card.th-img{padding:14px}
@@ -8065,7 +8086,7 @@ function thPal(v){
   r.classList.toggle('sc-dark',old.dk);r.classList.toggle('sc-img',old.im);
   return thPalC[v]=o;
 }
-var TH_MER=['足少阳胆经','足厥阴肝经','手太阴肺经','手阳明大肠经','足阳明胃经','足太阴脾经','手少阴心经','手太阳小肠经','足太阳膀胱经','足少阴肾经','手厥阴心包经','手少阳三焦经'];   // 子=0 … 亥=11
+var TH_MER=window.__sc.mer;   // 子=0 … 亥=11
 var TH_DS={'':'手机浅色 / 深色自动跟','shichen':'按十二时辰自动换色',light:'浅色',dark:'深色',ziwei:'深紫'};
 function thCard(v,name,cur){
   var c=thPal(v===''?'light':v),pv='--pb:'+c.bg+';--ps:'+c.sf+';--pi:'+c.ink+';--pm:'+c.mu+';--pa:'+c.ac+';--pu:'+c.us+';--pl:'+c.ln+';--ph:'+(c.st&&c.st!=='transparent'?c.st:c.sf);
@@ -8075,7 +8096,7 @@ function thCard(v,name,cur){
   var sw='';if(v===''){var d=thPal('dark');sw='<i class="th-half" style="'+esc('--pb:'+d.bg+';--ps:'+d.sf+';--pi:'+d.ink+';--pm:'+d.mu+';--pa:'+d.ac+';--pu:'+d.us+';--pl:'+d.ln+';--ph:'+d.sf)+'">'+mk+'</i>'}   // 跟随系统：右下半边画深色
   var zi=/^shichen@(\d+)$/.exec(v);
   // 十二时辰：预览块右边一大半放这个时辰的经络图（data/sc-mer/<序号>.webp，抠好的透明图；没有图写经名），左边留窄一点的界面示意
-  if(zi)mk='<i class="th-mk">'+mk+'</i><i class="th-mer"><b>'+TH_MER[+zi[1]]+'</b>'+(scMer[zi[1]]&&scMer[zi[1]].s?'<img alt="" loading="lazy" data-act="th-mer" data-z="'+zi[1]+'" src="/sc-mer/'+zi[1]+'.webp?v='+scMer[zi[1]].s+'">':'')+'</i>';   // 点图看大图，点卡片别处换主题
+  if(zi)mk='<i class="th-mk">'+mk+'</i><i class="th-mer"><b>'+TH_MER[+zi[1]]+'</b>'+[zi[1],zi[1]+'b'].map(function(k,i){return scMer[k]&&scMer[k].s?'<img alt="" loading="lazy" class="m'+i+'" data-act="th-mer" data-z="'+k+'" src="/sc-mer/'+k+'.webp?v='+scMer[k].s+'">':''}).join('')+'</i>';   // 一张放不下的经（如胃经）有第二张 Nb：上下各一张，各自点开看大图   // 点图看大图，点卡片别处换主题
   return '<button type="button" class="claw-card th-card" data-act="th-pick" data-v="'+esc(v)+'"'+(v===cur?' aria-current="true"':'')+'>'+
     '<span class="th-pv" style="'+esc(pv)+'">'+mk+sw+'</span>'+
     '<span class="th-nm"><b>'+esc(name)+'</b>'+(TH_DS[v]?'<small>'+TH_DS[v]+'</small>':'')+'</span>'+(v===cur?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>';

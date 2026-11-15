@@ -23,7 +23,7 @@ self.addEventListener('fetch', e => {
 // 经络图（/sc-mer/N.webp?v=版本）：取过一次就存下来，之后直接用；服务器换了图，页面拿到的地址版本变了，取新的、删掉同一张的旧版本
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (u.origin !== self.location.origin || !/^\/sc-mer\/\d{1,2}(-l)?\.webp$/.test(u.pathname) || !u.searchParams.get('v')) return;
+  if (u.origin !== self.location.origin || !/^\/sc-mer\/\d{1,2}b?(-l)?\.webp$/.test(u.pathname) || !u.searchParams.get('v')) return;
   e.respondWith(caches.open('claclaw-scmer').then(c => c.match(e.request).then(hit => hit || fetch(e.request).then(r => {
     if (r.ok) c.put(e.request, r.clone()).then(() => c.keys()).then(ks => Promise.all(ks.filter(k => { const x = new URL(k.url); return x.pathname === u.pathname && x.search !== u.search; }).map(k => c.delete(k)))).catch(() => {});
     return r;

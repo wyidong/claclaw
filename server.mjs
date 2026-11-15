@@ -2938,9 +2938,9 @@ const handler = async (req, res) => {
     }
     // 流变时辰的壁纸 data/sc-bg/、十二时辰主题卡片上的经络图 data/sc-mer/：<地支序号 0-11>（子=0 … 亥=11），
     // 图片来源不明不进仓库；没有这个时辰的图就 404，页面用回纯色 / 经名
-    // 经络图是抠好的透明 webp：<序号>.webp 卡片上用，<序号>-l.webp 点开看大图用
-    const scBg = url.pathname.match(/^\/sc-bg\/(\d{1,2})()\.(jpg)$/) || url.pathname.match(/^\/sc-mer\/(\d{1,2})(-l)?\.(webp)$/);
-    if (scBg && +scBg[1] < 12) {
+    // 经络图是抠好的透明 webp：<序号>.webp 卡片上用，<序号>-l.webp 点开看大图用；一条经一张放不下的，第二张叫 <序号>b.webp / <序号>b-l.webp（卡片上下各放一张）
+    const scBg = url.pathname.match(/^\/sc-bg\/(\d{1,2})()\.(jpg)$/) || url.pathname.match(/^\/sc-mer\/(\d{1,2}b?)(-l)?\.(webp)$/);
+    if (scBg && parseInt(scBg[1]) < 12) {
       const dir = scBg[3] === 'webp' ? 'sc-mer' : 'sc-bg', f = path.join(DATA, dir, scBg[1] + (scBg[2] || '') + '.' + scBg[3]);
       if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
       // 经络图地址带 ?v=版本（文件修改时间）：手机存下来长期用，服务器上换了图版本变、地址跟着变，手机重新取
@@ -2948,13 +2948,13 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'image/' + (scBg[3] === 'webp' ? 'webp' : 'jpeg'), 'cache-control': cc });
       return fs.createReadStream(f).pipe(res);
     }
-    // 有哪些经络图、各自的版本：{ "2": { s: 小图版本, l: 大图版本 } }，页面据此拼带版本的地址（没有图的时辰不去请求）
+    // 有哪些经络图、各自的版本：{ "2": { s: 小图版本, l: 大图版本 }, "4b": {…} }，页面据此拼带版本的地址（没有图的时辰不去请求）
     if (url.pathname === '/sc-mer/index.json' && req.method === 'GET') {
       const out = {};
       try {
         for (const n of fs.readdirSync(path.join(DATA, 'sc-mer'))) {
-          const m = n.match(/^(\d{1,2})(-l)?\.webp$/); if (!m || +m[1] > 11) continue;
-          (out[+m[1]] ||= {})[m[2] ? 'l' : 's'] = Math.round(fs.statSync(path.join(DATA, 'sc-mer', n)).mtimeMs).toString(36);
+          const m = n.match(/^(\d{1,2})(b?)(-l)?\.webp$/); if (!m || +m[1] > 11) continue;
+          (out[+m[1] + m[2]] ||= {})[m[3] ? 'l' : 's'] = Math.round(fs.statSync(path.join(DATA, 'sc-mer', n)).mtimeMs).toString(36);
         }
       } catch {}
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
