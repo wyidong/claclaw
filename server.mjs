@@ -3515,6 +3515,7 @@ const handler = async (req, res) => {
         const mod = await loadClarelay();
         if (!mod) return sendJson(res, 400, { error: '没找到 clarelay：把它放在 claclaw 旁边的 clarelay 目录，或用 npm 装上' });
         const inv = (add.match(/clarelay1\.[A-Za-z0-9_-]+/) || [''])[0];
+        if (!inv && /^https?:\/\/\S+\/claclaw-peer(#\S*)?$/.test(add.trim())) return sendJson(res, 400, { error: '这是某台电脑的协同地址（https://…/claclaw-peer#…），不是中继邀请码：这里只收中继服务给的邀请码（clarelay1. 开头）。对方的协同地址配对后会自动同步，不用填；还没配对就到「添加对方」里用它申请配对' });
         if (!inv || !mod.isInvite(inv)) return sendJson(res, 400, { error: '这不是中继邀请码（应该以 clarelay1. 开头）' });
         const list = relayInvitesOf(c);
         if (list.some(x => relayHostOf(x) === relayHostOf(inv))) c.relayInvites = list.map(x => relayHostOf(x) === relayHostOf(inv) ? inv : x);   // 同一台中继换了口令：原位替换
