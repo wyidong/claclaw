@@ -1244,15 +1244,9 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .th-dk{position:absolute;left:0;right:0;bottom:0;height:20px;background:var(--ps);border-top:.5px solid var(--pl)}
 .th-dk>i:first-child{position:absolute;left:8px;right:28px;top:5px;height:10px;border-radius:5px;background:var(--pb)}
 .th-snd{position:absolute;right:7px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--pa)}
-.th-12{position:absolute!important;inset:5px;display:grid!important;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(2,1fr);gap:4px}
-.th-z{position:relative;border-radius:5px;overflow:hidden;background:var(--pb);box-shadow:0 0 0 .5px var(--pl)}
-.th-z.on{box-shadow:0 0 0 2px var(--accent)}
-.th-zh{position:absolute;left:0;right:0;top:0;height:7px;background:var(--ph)}
-.th-zb{position:absolute;height:6px;border-radius:2px}
-.th-zb.l{left:3px;top:12px;width:60%;background:var(--ps)}
-.th-zb.r{right:3px;top:22px;width:50%;background:var(--pu)}
-.th-zd{position:absolute;left:0;right:0;bottom:0;height:8px;background:var(--ps)}
-.th-zd::after{content:'';position:absolute;right:3px;top:2px;width:4px;height:4px;border-radius:50%;background:var(--pa)}
+.th-kj{position:absolute!important;inset:0;display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:4px;font:600 14px/1.3 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.12em;color:var(--pi);white-space:nowrap}
+.th-kj b{font-weight:inherit}
+.th-kj b.on{color:var(--pb);background:var(--pa);border-radius:4px;box-shadow:0 0 0 2px var(--pa)}
 .th-half{position:absolute!important;inset:0;clip-path:polygon(100% 0,100% 100%,0 100%);background:var(--pb)}
 .th-nm{display:flex;flex-direction:column;gap:2px;padding:0 4px;min-width:0}
 .th-nm b{font-size:14px;font-weight:600;line-height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -8064,7 +8058,8 @@ var TH_DS={'':'手机浅色 / 深色自动跟','shichen':'按十二时辰自动�
 function thCard(v,name,cur){
   var c=thPal(v===''?'light':v),pv='--pb:'+c.bg+';--ps:'+c.sf+';--pi:'+c.ink+';--pm:'+c.mu+';--pa:'+c.ac+';--pu:'+c.us+';--pl:'+c.ln+';--ph:'+(c.st&&c.st!=='transparent'?c.st:c.sf);
   var mk='<i class="th-hd"><i></i></i><i class="th-b l"><i></i><i></i></i><i class="th-b r"><i></i></i><i class="th-b l s"><i></i></i><i class="th-dk"><i></i><i class="th-snd"></i></i>';
-  if(v==='shichen'){var zn=window.__sc.now().z,t12='';for(var k=0;k<12;k++){var i=(k+2)%12,q=thPal('shichen@'+i);t12+='<i class="th-z'+(i===zn?' on':'')+'" style="'+esc('--pb:'+q.bg+';--ps:'+q.sf+';--pu:'+q.us+';--pa:'+q.ac+';--pl:'+q.ln+';--ph:'+(q.st&&q.st!=='transparent'?q.st:q.sf))+'"><i class="th-zh"></i><i class="th-zb l"></i><i class="th-zb r"></i><i class="th-zd"></i></i>'}mk='<i class="th-12">'+t12+'</i>'}   // 子午流注：12 个时辰的小预览排成 6×2（从寅 · 太阴肺开始，经络流注的起点），当前时辰描边
+  if(v==='shichen'){var zn=window.__sc.now().z,KJ=[[['肺寅',2],['大卯',3],['胃辰',4],['宫']],[['脾巳',5],['心午',6],['小未',7],['中']],[['申膀',8],['酉肾',9],['心包戌',10]],[['亥焦',11],['子胆',0],['丑肝',1],['通']]];
+    mk='<i class="th-kj">'+KJ.map(function(l){return '<i>'+l.map(function(p){return p[1]==null?p[0]:'<b'+(p[1]===zn?' class="on"':'')+'>'+p[0]+'</b>'}).join('')+'</i>'}).join('')+'</i>'}   // 子午流注：预览写十二经流注口诀，当前时辰那一组高亮
   var sw='';if(v===''){var d=thPal('dark');sw='<i class="th-half" style="'+esc('--pb:'+d.bg+';--ps:'+d.sf+';--pi:'+d.ink+';--pm:'+d.mu+';--pa:'+d.ac+';--pu:'+d.us+';--pl:'+d.ln+';--ph:'+d.sf)+'">'+mk+'</i>'}   // 跟随系统：右下半边画深色
   return '<button type="button" class="claw-card th-card" data-act="th-pick" data-v="'+esc(v)+'"'+(v===cur?' aria-current="true"':'')+'>'+
     '<span class="th-pv" style="'+esc(pv)+'">'+mk+sw+'</span>'+
