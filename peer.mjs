@@ -226,7 +226,8 @@ export function applyListener(c, handler, log) {
 let relayLib = null;
 async function loadRelayLib() {
   if (relayLib) return relayLib;
-  for (const p of ['clarelay/tunnel.mjs', pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'clarelay', 'tunnel.mjs')).href]) {
+  const here = path.dirname(fileURLToPath(import.meta.url));   // 先内置的 ./clarelay/tunnel.mjs，再旁边的 clarelay 仓库、npm 包
+  for (const p of [pathToFileURL(path.join(here, 'clarelay', 'tunnel.mjs')).href, pathToFileURL(path.join(here, '..', 'clarelay', 'tunnel.mjs')).href, 'clarelay/tunnel.mjs']) {
     try { const m = await import(p); if (m.relayRequest) return relayLib = m; } catch {}
   }
   return null;

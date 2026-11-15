@@ -2,7 +2,9 @@
 import crypto from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 
-export const DEVICE_VERSION = '0.3.3';
+// clarelay 全项目一个版本号（client/tunnel.mjs 要能单文件下载，自己也写一份；package.json 同步；test/smoke 核对三处一致）
+export const VERSION = '0.4.0';
+export const DEVICE_VERSION = VERSION;   // 旧名字
 export const INVITE_PREFIX = 'clarelay-device1.';
 export const b64u = b => Buffer.from(b).toString('base64url');
 export const unb64u = s => Buffer.from(String(s), 'base64url');

@@ -1,1 +1,1 @@
-clarelay 09431c6 电脑端：开放路径（不过门卫，按 IP 限速）、公网地址探测 dev.probe、dev.stun；中继：/_device/probe 回连探测、内置 STUN（udp 3478）
+clarelay 1877e88 整理目录：client/（电脑端，claclaw 同步）+ relay/（服务器）；server 拆出 collab.mjs、notify.mjs；全项目统一版本号 0.4.0；部署脚本、文档跟着改

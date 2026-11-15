@@ -8,14 +8,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.resolve(process.argv[2] || path.join(ROOT, '..', 'clarelay'));
-const FROM = path.join(SRC, 'device'), TO = path.join(ROOT, 'clarelay');
-const FILES = ['agent.mjs', 'common.mjs', 'acme.mjs', 'x509.mjs', 'rtc.mjs', 'rtc-client.js', 'rtc-sw.js', 'rtc-test.html'];
+const FROM = path.join(SRC, 'client'), TO = path.join(ROOT, 'clarelay');   // clarelay 0.4.0 起电脑端在 client/（以前在 device/）
+const FILES = ['agent.mjs', 'common.mjs', 'acme.mjs', 'x509.mjs', 'rtc.mjs', 'tunnel.mjs', 'rtc-client.js', 'rtc-sw.js', 'rtc-test.html'];
 
 if (!fs.existsSync(path.join(FROM, 'agent.mjs'))) { console.error('找不到 ' + FROM + '/agent.mjs：参数给 clarelay 仓库路径'); process.exit(1); }
 let commit = '';
-try { commit = execFileSync('git', ['-C', SRC, 'log', '-1', '--format=%h %s', '--', 'device'], { encoding: 'utf8' }).trim(); } catch {}
+try { commit = execFileSync('git', ['-C', SRC, 'log', '-1', '--format=%h %s', '--', 'client'], { encoding: 'utf8' }).trim(); } catch {}
 let dirty = '';
-try { dirty = execFileSync('git', ['-C', SRC, 'status', '--porcelain', '--', ...FILES.map(f => 'device/' + f)], { encoding: 'utf8' }).trim(); } catch {}
+try { dirty = execFileSync('git', ['-C', SRC, 'status', '--porcelain', '--', ...FILES.map(f => 'client/' + f)], { encoding: 'utf8' }).trim(); } catch {}
 fs.mkdirSync(TO, { recursive: true });
 const changed = [];
 for (const f of FILES) {

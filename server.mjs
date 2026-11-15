@@ -1747,7 +1747,7 @@ setInterval(() => {
 
 // ---------- 跨网络：经 clarelay 中继 ----------
 // 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
-// clarelay 是独立项目：装成 npm 包，或者放在 claclaw 旁边的 ../clarelay 目录；都没有就提示。
+// clarelay 是独立项目：协同中继用的 tunnel.mjs 已经内置在 ./clarelay/（tools/sync-clarelay.mjs 同步）；也认旁边的 ../clarelay 仓库、npm 包。
 let clarelay = null;
 const relayTuns = new Map();
 const relayRetryFails = new Map();   // 邀请码 → 连续登记失败次数（决定下次重试等多久）   // 邀请码 → { to, t, state: { status, error } }   status: connecting | online | offline | error
@@ -1756,7 +1756,8 @@ const relayInvitesOf = c => (Array.isArray(c.relayInvites) ? c.relayInvites : c.
 const relayHostOf = inv => { try { return new URL(clarelay.parseInvite(inv).relay).host; } catch { return '?'; } };
 async function loadClarelay() {
   if (clarelay) return clarelay;
-  for (const p of ['clarelay/tunnel.mjs', pathToFileURL(path.join(ROOT, '..', 'clarelay', 'tunnel.mjs')).href]) {
+  // 先用内置的（./clarelay/tunnel.mjs，tools/sync-clarelay.mjs 同步来的），再退到旁边的 clarelay 仓库、npm 装的包
+  for (const p of [pathToFileURL(path.join(ROOT, 'clarelay', 'tunnel.mjs')).href, pathToFileURL(path.join(ROOT, '..', 'clarelay', 'tunnel.mjs')).href, 'clarelay/tunnel.mjs']) {
     try { return clarelay = await import(p); } catch {}
   }
   return null;

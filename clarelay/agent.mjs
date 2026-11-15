@@ -3,7 +3,7 @@
 //   import { startDevice } from 'clarelay/device';
 //   const dev = await startDevice({ invite, state, name, services: { claclaw: 'http://127.0.0.1:8787' } });
 //
-// 命令行：node device/agent.mjs <设备邀请码> --name 办公室Mac --to http://127.0.0.1:8787 [--state 文件]
+// 命令行：node client/agent.mjs <设备邀请码> --name 办公室Mac --to http://127.0.0.1:8787 [--state 文件]
 //   测试用：--acme devca --ca 测试CA.pem --connect 127.0.0.1:端口
 import http from 'node:http';
 import https from 'node:https';
@@ -438,12 +438,12 @@ export async function startDevice(o = {}) {
 }
 
 // ---------- 安装 / 卸载开机自启 ----------
-// node device/agent.mjs install ["<设备邀请码>"] [--name 名字] [--to http://127.0.0.1:8787] [--state 路径]
+// node client/agent.mjs install ["<设备邀请码>"] [--name 名字] [--to http://127.0.0.1:8787] [--state 路径]
 //   有邀请码且还没加入：先加入设备圈；然后装开机自启（登录后自动运行，退出了 10 秒后自动重起），并马上启动。
 //   macOS：~/Library/LaunchAgents/com.clarelay.device.plist（launchd KeepAlive），日志 ~/Library/Logs/clarelay-device.log
 //   Windows：「启动」文件夹里放 clarelay-device.vbs（不弹窗、不要管理员权限），日志 %LOCALAPPDATA%\clarelay\device.log
 //   程序就从当前这份 agent.mjs 所在目录运行：更新 = git pull 后重启（Windows 结束 node 进程即可，10 秒后自动重起）。
-// node device/agent.mjs uninstall：去掉开机自启并停掉正在跑的电脑端（身份文件保留，再 install 不用邀请码）。
+// node client/agent.mjs uninstall：去掉开机自启并停掉正在跑的电脑端（身份文件保留，再 install 不用邀请码）。
 const IS_WIN = process.platform === 'win32', IS_MAC = process.platform === 'darwin';
 const AGENT = fileURLToPath(import.meta.url);
 const STARTUP_VBS = () => path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'clarelay-device.vbs');
