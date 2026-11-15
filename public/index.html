@@ -763,11 +763,12 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 #diss.t .ds-nav{display:flex}
 #diss.t .ds-re{display:none}
 #diss .fv-share:disabled{opacity:.35}
-.ds-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(16px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));font-size:14px}
+.ds-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(16px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));font-size:13px}
+/* 解剖页字号只用五档：24 大数字 / 15 卡片数值 / 13 小节标题、正文 / 12 表格、标签、说明 / 11 表头、旁注 */
 .ds-k{color:var(--muted);font-size:12px}
-.ds-big{margin:2px 0 6px;font-size:30px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
-.ds-big small{display:block;margin:3px 0 0;font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0;line-height:1.4}
-.ds-lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ds-big{margin:2px 0 6px;font-size:24px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.ds-big small{display:block;margin:3px 0 0;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0;line-height:1.4}
+.ds-lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .ds-lg b{color:var(--ink);font-weight:600}
 .ds-dot{display:inline-block;width:9px;height:9px;margin-right:5px;border-radius:2px;vertical-align:-1px}
 .c-inp{background:var(--ds-inp)}.c-cr{background:var(--ds-cr)}.c-cw{background:var(--ds-cw)}.c-out{background:var(--ds-out)}
@@ -797,7 +798,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-tb .no.heavy{color:var(--warn);font-weight:600}
 .ds-tb .no.err{color:var(--deny);font-weight:600}
 .ds-tb .col-inp{color:var(--ds-inp)}.ds-tb .col-cr{color:var(--ds-cr)}.ds-tb .col-cw{color:var(--ds-cw)}.ds-tb .col-out{color:var(--ds-out)}
-.ds-tb tr.d td{white-space:normal;text-align:left;padding:6px 6px 10px;background:var(--surface);border-bottom:1px solid var(--line)}
+.ds-tb tr.d td{max-width:0;white-space:normal;text-align:left;padding:6px 6px 10px;background:var(--surface);border-bottom:1px solid var(--line)}
 @media (hover:hover){.ds-tb tr.r:hover td,.ds-tb tr.q:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 .ds-rec{margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
 .ds-rec b{color:var(--ink);font-weight:600}
@@ -817,7 +818,7 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-files{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.6;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .ds-tool{display:flex;gap:6px;color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
 .ds-tool .n{flex:none;color:var(--ink)}
-.ds-tool .a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+.ds-tool .a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
 .ds-tool .r{flex:none}
 .ds-tool.err .n,.ds-tool.err .r{color:var(--deny)}
 .ds-tx{margin-top:6px;color:var(--ink);font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
@@ -833,23 +834,23 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .ds-bar i{display:block;min-width:3px}
 .ds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px;margin-top:10px}
 .ds-st{padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);min-width:0;font-variant-numeric:tabular-nums}
-.ds-st .l{color:var(--muted);font-size:11.5px}
-.ds-st .v{margin-top:2px;font-size:17px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ds-st .s{margin-top:1px;color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ds-st .l{color:var(--muted);font-size:12px}
+.ds-st .v{margin-top:2px;font-size:15px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ds-st .s{margin-top:1px;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ds-st[data-i]{cursor:pointer}
 @media (hover:hover){.ds-st[data-i]:hover{border-color:var(--muted)}}
 .ds-st.bad .v{color:var(--deny)}
 .ds-st .add{color:var(--ds-out)}.ds-st .del{color:var(--deny)}
 .ds-meta2{margin-top:10px;color:var(--muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
-.ds-chips.tl .ds-chip{font-size:11.5px}
 .ds-sec{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin:22px 0 8px;font-size:13px;color:var(--ink);letter-spacing:0}
-.ds-sec small{margin-left:0;font-size:11.5px;color:var(--muted);font-weight:400}
+.ds-sec small{margin-left:0;font-size:12px;color:var(--muted);font-weight:400}
 .ds-sec .ds-tg{margin:0}
-.ds-tb tbody.tn tr.q td{color:var(--ink);opacity:.8}
-.ds-tb tbody.tn tr.q td .tm{color:var(--muted);margin-right:6px}
-.ds-tb tbody.tn tr.q td{border-bottom:1px solid var(--line);padding-bottom:8px}
-.ds-tb tbody.tn tr.r td{border-bottom:0;padding-top:8px}
-@media (hover:hover){.ds-tb tbody.tn:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
+.ds-tb tbody.ds-turn tr.q td{color:var(--muted);font-size:11px;line-height:15px;border-bottom:0;padding-top:0;padding-bottom:7px}   /* 和「逐步」一样不画分隔线：数字一行 + 下面一行小字预览 */
+.ds-tb tbody.ds-turn tr.q td .tm{margin-right:6px;font-variant-numeric:tabular-nums}
+.ds-tb tbody.ds-turn tr.r td{border-bottom:0;padding-bottom:1px}
+.ds-tb tr.q .ds-from{display:inline-block;margin-right:5px;padding:0 4px;border:1px solid var(--line);border-radius:4px;font-size:11px;line-height:13px;vertical-align:1px}   /* 协同 / 本机会话发来的：来源小标签 */
+@media (max-width:600px){.ds-tb th,.ds-tb td{padding:5px 3px}.ds-tb th:last-child,.ds-tb td:last-child{padding-right:0}}
+@media (hover:hover){.ds-tb tbody.ds-turn:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
 body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
 @media (min-width:1000px){#diss,#fview{top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
 /* 电脑：模型管理、语音管理整页（像会话解剖）——中间栏铺满右边，聊天区让开；内容居中限宽 */
@@ -859,7 +860,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
   #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #sheet::after{display:none}
   #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #hostBody{max-width:880px;margin:0 auto}
 }
-@media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb{font-size:12.5px}.ds-tb th,.ds-tb td{padding:6px 8px}}
+@media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb th,.ds-tb td{padding:6px 8px}}
 /* ════ 公共 · 聊天里的图片、文件 ════ */
 /* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最大 180）；点开才是原图 */
 .sfimg{align-self:flex-start;margin:6px 0;max-width:min(260px,80%)}
@@ -2841,6 +2842,9 @@ function dsTk(n){n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e8?0:1).replace(/\.0$
 function dsNum(n){return Math.round(+n||0).toLocaleString('en-US')}
 function dsVal(n,known){return known===false?'--':dsTk(n)}   // 全程没上报过的桶：-- 不补 0
 function dsDur(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1 秒':'0 秒';if(s<60)return s+' 秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h+' 小时 '+(m%60)+' 分';return m+' 分 '+(s%60)+' 秒'}
+function dsDurC(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1秒':'0秒';if(s<60)return s+'秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h>=100?h+'时':h+'时'+(m%60)+'分';return m+'分'+(s%60?s%60+'秒':'')}   // 表格里用的紧凑写法（不带空格），手机上一排放得下
+// 每轮明细的预览：协同 / 本机会话发来的话，开头那段给 AI 看的说明换成一个小标签（和聊天里一样），后面是正文
+function dsPreview(t){var m=/^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t||'');if(!m)return '<span>'+esc(dsBrief(t))+'</span>';var pf=m[2].split(' · ');if(pf.length>2&&pf[0]===pf[pf.length-1])pf.pop();var rest=dsBrief(t.slice(m[0].length));return '<span class="ds-from">'+m[1]+' · '+esc(pf.join(' · '))+'</span>'+(rest?'<span>'+esc(rest)+'</span>':'')}
 function dsSec(ms){ms=+ms||0;return (ms/1000).toFixed(ms<10000?2:1)+' 秒'}
 function dsBrief(s){s=String(s||'').replace(/\s+/g,' ').trim();return s.length>120?s.slice(0,119)+'…':s}   // 只给每轮明细列表做一行预览；点进那一轮看全文
 function dsRaw(label,txt,open){return '<details class="ds-raw"'+(open?' open':'')+'><summary>'+label+' · '+dsN(String(txt).length)+' 字</summary><pre>'+esc(txt)+'</pre></details>'}   // 原样显示：标签按源码、换行照留
@@ -2956,10 +2960,10 @@ function showSession(restore){
   h+='<div class="ds-tw"><table class="ds-tb"><thead><tr><th>轮</th><th>步</th><th>工具</th><th class="col-inp">输入Σ</th><th class="col-cw ds-opt" title="该轮各步缓存写之和">缓存写</th><th class="col-cr ds-opt" title="该轮末步命中缓存的输入，快照值，各轮不可相加">缓存读·末步</th><th class="col-cr" title="该轮各步缓存读之和，各轮可相加">缓存读Σ</th><th class="col-out">输出Σ</th><th title="输入Σ + 缓存写 + 缓存读Σ + 输出Σ">合计</th><th>耗时</th></tr></thead>';
   for(var k=hi-1;k>=lo;k--){   // 最新一轮在第一行
     var t=ts[k],cls=t.errors?'err':t.heavy?'heavy':'',marks=dsMarks(t);
-    h+='<tbody class="tn"><tr class="r" data-i="'+t.i+'"><td class="no '+cls+'">#'+t.i+'</td><td>'+t.nSteps+'</td><td>'+(t.nTools||'')+'</td>'+(t.noStats?'<td class="col-inp">--</td><td class="col-cw ds-opt">--</td><td class="col-cr ds-opt">--</td><td class="col-cr">--</td><td class="col-out">--</td><td>--</td><td>--</td></tr>':'<td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr ds-opt">'+(t.crLast==null?'--':dsTk(t.crLast))+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td><b>'+dsTk(t.total)+'</b></td><td>'+dsDur(t.durMs)+'</td></tr>')
-      +'<tr class="q" data-i="'+t.i+'"><td colspan="10"><span class="tm">'+dsWhen(t.at,multi)+'</span>'+(t.text?'<span>'+esc(dsBrief(t.text))+'</span>':'（接着上一轮）')+(marks.length?' · '+marks.map(function(m){return '<span>'+m+'</span>'}).join(' · '):'')+'</td></tr></tbody>';
+    h+='<tbody class="ds-turn"><tr class="r" data-i="'+t.i+'"><td class="no '+cls+'">'+t.i+'</td><td>'+t.nSteps+'</td><td>'+(t.nTools||'')+'</td>'+(t.noStats?'<td class="col-inp">--</td><td class="col-cw ds-opt">--</td><td class="col-cr ds-opt">--</td><td class="col-cr">--</td><td class="col-out">--</td><td>--</td><td>--</td></tr>':'<td class="col-inp">'+dsTk(t.inp)+'</td><td class="col-cw ds-opt">'+dsVal(t.cw,s.cwKnown)+'</td><td class="col-cr ds-opt">'+(t.crLast==null?'--':dsTk(t.crLast))+'</td><td class="col-cr">'+dsVal(t.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(t.out)+'</td><td><b>'+dsTk(t.total)+'</b></td><td>'+dsDurC(t.durMs)+'</td></tr>')
+      +'<tr class="q" data-i="'+t.i+'"><td colspan="10"><span class="tm">'+dsWhen(t.at,multi)+'</span>'+(t.text?dsPreview(t.text):'（接着上一轮）')+(marks.length?' · '+marks.map(function(m){return '<span>'+m+'</span>'}).join(' · '):'')+'</td></tr></tbody>';
   }
-  h+='<tfoot><tr><td>Σ全轮</td><td>'+(s.steps||0)+'</td><td>'+(s.tools||0)+'</td><td class="col-inp">'+dsTk(s.inp)+'</td><td class="col-cw ds-opt">'+dsVal(s.cw,s.cwKnown)+'</td><td class="ds-opt" style="color:var(--muted);font-weight:400">末轮快照</td><td class="col-cr">'+dsVal(s.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(s.out)+'</td><td>'+dsTk(s.total)+'</td><td>'+dsDur(s.durMs)+'</td></tr></tfoot></table></div>'+dsPager(ts.length);
+  h+='<tfoot><tr><td>Σ全轮</td><td>'+(s.steps||0)+'</td><td>'+(s.tools||0)+'</td><td class="col-inp">'+dsTk(s.inp)+'</td><td class="col-cw ds-opt">'+dsVal(s.cw,s.cwKnown)+'</td><td class="ds-opt" style="color:var(--muted);font-weight:400">末轮快照</td><td class="col-cr">'+dsVal(s.cr,s.crKnown)+'</td><td class="col-out">'+dsTk(s.out)+'</td><td>'+dsTk(s.total)+'</td><td>'+dsDurC(s.durMs)+'</td></tr></tfoot></table></div>'+dsPager(ts.length);
   var bl=s.bill;
   if(bl&&bl.total){var diff=s.total-bl.total,ok=Math.abs(diff)<=Math.max(1000,bl.total*0.02);
     h+='<div class="ds-rec">合计：Σ全轮 = <b>'+dsTk(s.total)+'</b>（'+dsNum(s.total)+'） vs 账单 = <b>'+dsTk(bl.total)+'</b>（'+dsNum(bl.total)+'）（差 '+(diff>0?'+':'')+dsNum(diff)+'） '+(ok?'✅ 基本一致':'⚠ 有出入')+'<br>账单 = '+esc(bl.source||'')+(ok?'':diff>0?'；账单比逐轮少：有的进程被杀掉没记账，或最近这段还没记':'；账单比逐轮多：多出来的多半是子代理、起标题这类不在聊天里的调用')+'</div>';
