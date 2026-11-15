@@ -43,7 +43,7 @@ export function parseInvite(invite) {
 export function tunnelCommand(invite, to = 'http://127.0.0.1:8788') {
   const { relay, pin } = parseInvite(invite);
   const get = pin ? `curl -fsSk --pinnedpubkey '${pin}'` : 'curl -fsS';
-  return `${get} ${relay}/tunnel.mjs -o clarelay-tunnel.mjs && node clarelay-tunnel.mjs '${String(invite).trim()}' --to ${to}`;
+  return `${get} ${relay}/_relay/tunnel.mjs -o clarelay-tunnel.mjs && node clarelay-tunnel.mjs '${String(invite).trim()}' --to ${to}`;
 }
 export const isInvite = s => { try { parseInvite(s); return true; } catch { return false; } };
 
