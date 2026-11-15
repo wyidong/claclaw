@@ -8046,7 +8046,10 @@ var TH_C={'':'linear-gradient(135deg,#fff 50%,#161B21 50%)',light:'#FFFFFF',dark
 (function(){var ZC=['6AAE65','3F7A3B','5E6C79','B8C4CF','D9B44A','8A6D1E','8E2A20','E06A5A','4A78B5','1F3F6E','8E4519','E8894A'];
   TH_C.shichen='conic-gradient('+ZC.map(function(c){return '#'+c}).join(',')+',#'+ZC[0]+')';ZC.forEach(function(c,i){TH_C['shichen@'+i]='#'+c})})();
 function thSub(){var sel=$('#setTheme'),o=sel.options[sel.selectedIndex],el=$('#setThemeSub');if(el)el.textContent=o?o.textContent:''}
-function openTheme(){mTab('host');hostView='theme';renderTheme()}
+// 经络图版本表：先用本机存的立刻画，再去服务器取最新的，变了就重画（换了图地址跟着变，手机重新取）
+var scMer=(function(){try{return JSON.parse(localStorage.getItem('claclaw.scMer'))||{}}catch(e){return {}}})();
+function scMerSync(){fetch('/sc-mer/index.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var t=JSON.stringify(j);if(t===JSON.stringify(scMer))return;scMer=j;try{localStorage.setItem('claclaw.scMer',t)}catch(e){}renderTheme()}).catch(function(){})}
+function openTheme(){mTab('host');hostView='theme';renderTheme();scMerSync()}
 var thPalC={};
 // 取某个主题的配色：临时把根元素切到那个主题读 CSS 变量，读完马上换回（同一帧里，不会闪）；结果缓存
 function thPal(v){
@@ -8072,7 +8075,7 @@ function thCard(v,name,cur){
   var sw='';if(v===''){var d=thPal('dark');sw='<i class="th-half" style="'+esc('--pb:'+d.bg+';--ps:'+d.sf+';--pi:'+d.ink+';--pm:'+d.mu+';--pa:'+d.ac+';--pu:'+d.us+';--pl:'+d.ln+';--ph:'+d.sf)+'">'+mk+'</i>'}   // 跟随系统：右下半边画深色
   var zi=/^shichen@(\d+)$/.exec(v);
   // 十二时辰：预览块右边一大半放这个时辰的经络图（data/sc-mer/<序号>.webp，抠好的透明图；没有图写经名），左边留窄一点的界面示意
-  if(zi)mk='<i class="th-mk">'+mk+'</i><i class="th-mer"><b>'+TH_MER[+zi[1]]+'</b><img alt="" loading="lazy" data-act="th-mer" src="/sc-mer/'+zi[1]+'.webp"></i>';   // 点图看大图，点卡片别处换主题
+  if(zi)mk='<i class="th-mk">'+mk+'</i><i class="th-mer"><b>'+TH_MER[+zi[1]]+'</b>'+(scMer[zi[1]]&&scMer[zi[1]].s?'<img alt="" loading="lazy" data-act="th-mer" data-z="'+zi[1]+'" src="/sc-mer/'+zi[1]+'.webp?v='+scMer[zi[1]].s+'">':'')+'</i>';   // 点图看大图，点卡片别处换主题
   return '<button type="button" class="claw-card th-card" data-act="th-pick" data-v="'+esc(v)+'"'+(v===cur?' aria-current="true"':'')+'>'+
     '<span class="th-pv" style="'+esc(pv)+'">'+mk+sw+'</span>'+
     '<span class="th-nm"><b>'+esc(name)+'</b>'+(TH_DS[v]?'<small>'+TH_DS[v]+'</small>':'')+'</span>'+(v===cur?'<span class="th-ok" aria-hidden="true"></span>':'')+'</button>';
@@ -8095,7 +8098,7 @@ function renderTheme(){
 function thAct(act,a){
   if(act==='th-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
   if(act==='th-back'){hostView='';mTab('set');return}
-  if(act==='th-mer'){var sm=a.currentSrc||a.src;showImage(sm.replace(/\.webp$/,'-l.webp'));var li=lightbox.querySelector('img');li.style.background='repeating-conic-gradient(#d9d9d9 0 25%,#fff 0 50%) 0 0/16px 16px';li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l.webp），没有就用卡片上那张
+  if(act==='th-mer'){var sm=a.currentSrc||a.src,mv=scMer[a.dataset.z]||{};showImage(mv.l?'/sc-mer/'+a.dataset.z+'-l.webp?v='+mv.l:sm);var li=lightbox.querySelector('img');li.style.background='repeating-conic-gradient(#d9d9d9 0 25%,#fff 0 50%) 0 0/16px 16px';li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l），没有就用卡片上那张
   var el=act==='th-pick'?$('#setTheme'):act==='th-img'?$('#setScImg'):null;if(!el)return;
   el.value=a.dataset.v;el.dispatchEvent(new Event('change'));thSub();renderTheme();
 }

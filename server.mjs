@@ -2943,8 +2943,22 @@ const handler = async (req, res) => {
     if (scBg && +scBg[1] < 12) {
       const dir = scBg[3] === 'webp' ? 'sc-mer' : 'sc-bg', f = path.join(DATA, dir, scBg[1] + (scBg[2] || '') + '.' + scBg[3]);
       if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, { 'content-type': 'image/' + (scBg[3] === 'webp' ? 'webp' : 'jpeg'), 'cache-control': 'public, max-age=' + (scBg[3] === 'webp' ? 3600 : 86400) });
+      // 经络图地址带 ?v=版本（文件修改时间）：手机存下来长期用，服务器上换了图版本变、地址跟着变，手机重新取
+      const cc = scBg[3] === 'webp' && url.searchParams.get('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=' + (scBg[3] === 'webp' ? 3600 : 86400);
+      res.writeHead(200, { 'content-type': 'image/' + (scBg[3] === 'webp' ? 'webp' : 'jpeg'), 'cache-control': cc });
       return fs.createReadStream(f).pipe(res);
+    }
+    // 有哪些经络图、各自的版本：{ "2": { s: 小图版本, l: 大图版本 } }，页面据此拼带版本的地址（没有图的时辰不去请求）
+    if (url.pathname === '/sc-mer/index.json' && req.method === 'GET') {
+      const out = {};
+      try {
+        for (const n of fs.readdirSync(path.join(DATA, 'sc-mer'))) {
+          const m = n.match(/^(\d{1,2})(-l)?\.webp$/); if (!m || +m[1] > 11) continue;
+          (out[+m[1]] ||= {})[m[2] ? 'l' : 's'] = Math.round(fs.statSync(path.join(DATA, 'sc-mer', n)).mtimeMs).toString(36);
+        }
+      } catch {}
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+      return res.end(JSON.stringify(out));
     }
     // 界面字体（public/fonts/，开源字体，授权见同目录 OFL-*.txt）：登录页也用，免登录；文件名不变就长期缓存
     const font = url.pathname.match(/^\/fonts\/([a-z0-9-]+\.woff2)$/);
