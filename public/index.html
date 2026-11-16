@@ -87,7 +87,7 @@ window.__sc=(function(){
 // 雾感（只在手机）：点刷新从清楚渐变到轻雾 → 页面加载、连服务器期间保持轻雾 → 连上变清楚；从打开算最多 1.5 秒，到时没连上就清掉雾、刷新图标变黄转圈；代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
 (function(){var h=document.documentElement,emb=window.parent!==window;if(emb){h.classList.add('emb');window.__clq=[];window.addEventListener('message',function(e){if(window.__clq&&e.source===window.parent&&e.data&&e.data.clarelay===1)window.__clq.push(e)})}if(!emb&&!window.matchMedia('(min-width:1000px)').matches){h.classList.add('fog');setTimeout(function(){h.classList.remove('fog')},1500)}try{if(emb)window.parent.postMessage({clarelay:1,type:'ready',app:'claclaw',connecting:true},'*')}catch(e){}})();   // 外壳里由外壳上雾，自己不再叠一层
 </script>
-<style>html.boot #app{filter:blur(1.2px);opacity:.88}</style>
+<style>html.boot #app{filter:blur(1.2px);opacity:.88}html.snap #app{visibility:hidden}html.snap #app *{transition:none!important}</style>
 <style>
 @font-face{font-family:"Nunito";font-style:normal;font-weight:400 800;font-display:swap;src:url(/fonts/nunito-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}   /* 圆润的英文 / 数字：苹果设备用系统自带的圆体（ui-rounded），别的浏览器用这个（开源，授权见 public/fonts/OFL-Nunito.txt）；中文仍是系统字体 */
 /* ════════ 主题：一共 15 套 ════════
@@ -267,10 +267,11 @@ html{background:var(--surface)}
 body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
 /* 雾感：加载中 / 刷新前蒙一层轻雾，最雾时也能勉强看清下面的内容（原来和 clarelay 外壳同一套 .45 / 8px，调轻了） */
-body.leaving #app{opacity:.88;filter:blur(1.2px);pointer-events:none;transition-duration:.12s}   /* 点刷新：清楚 → 轻雾，0.12 秒雾到位就刷新 */
+body.leaving #app{opacity:.88;filter:blur(1.2px);pointer-events:none;transition-duration:.26s}   /* 点刷新：清楚 → 轻雾，0.26 秒雾到位就刷新 */
+html.emb body.leaving #app{opacity:1;filter:none}   /* 嵌在外壳里：外壳给整个框上雾 */
 @media (min-width:1000px){body.leaving #app{opacity:1;filter:none}}   /* 电脑宽屏不做雾化 */
 html.fog #app{filter:blur(1.2px);opacity:.88;pointer-events:none}
-#app{transition:filter .2s,opacity .2s}
+#app{transition:filter .35s,opacity .35s}
 button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -1272,9 +1273,12 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .th-dk>i:first-child{position:absolute;left:8px;right:28px;top:5px;height:10px;border-radius:5px;background:var(--pb)}
 .th-snd{position:absolute;right:7px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--pa)}
 .th-kj{position:absolute!important;inset:0;display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:4px;font:600 14px/1.3 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.12em;color:var(--pi);white-space:nowrap}
-.th-kj>i{display:flex!important;align-items:center;gap:3px}
-.th-kj b{font-weight:inherit;padding:1px 1px 1px 3px;border-radius:5px;color:var(--ci);background:color-mix(in srgb,var(--cb) 86%,var(--pb));box-shadow:0 0 0 .5px color-mix(in srgb,var(--ci) 14%,transparent)}   /* 各时辰自己的底色字色，掺一点卡片底色统一观感 */
-.th-kj b.on{background:linear-gradient(150deg,rgba(255,255,255,.38),transparent 55%,color-mix(in srgb,var(--ca) 10%,transparent)),var(--cb);box-shadow:inset 1px 1px 0 rgba(255,255,255,.55),0 6px 12px -5px color-mix(in srgb,var(--ca) 60%,rgba(0,0,0,.35)),0 2px 4px -1px rgba(0,0,0,.28);transform:translateY(-1px)}   /* 当令：同会话目录选中的凸起 */
+.th-kj>i{display:flex!important;align-items:center}
+.th-kj b{--cx:color-mix(in srgb,var(--cb) 86%,var(--pb));position:relative;display:flex;font-weight:inherit;padding:1px 0;letter-spacing:0;color:var(--ci);
+  background:linear-gradient(90deg,color-mix(in srgb,color-mix(in srgb,var(--cl) 86%,var(--pb)) 50%,var(--cx)),var(--cx) 16%,var(--cx) 84%,color-mix(in srgb,color-mix(in srgb,var(--cr) 86%,var(--pb)) 50%,var(--cx)))}   /* 各时辰自己的底色字色（掺一点卡片底色），一行连成一条，接缝两边各取一半渐变过去 */
+.th-kj b span{width:20px;text-align:center}   /* 一字一格（固定宽，当令那组字放大也不挤歪），每句七格，上下对齐 */
+.th-kj b:first-of-type{border-radius:5px 0 0 5px}.th-kj b:last-of-type{border-radius:0 5px 5px 0}   /* 句末的宫 / 中 / 通也在条里，颜色接着前一组 */
+.th-kj b.on{font-size:16.5px;line-height:18px;font-weight:900}   /* 当令：只放大加粗，背景和别的组一样 */
 .th-half{position:absolute!important;inset:0;clip-path:polygon(100% 0,100% 100%,0 100%);background:var(--pb)}
 .th-nm{display:flex;flex-direction:column;gap:2px;padding:0 4px;min-width:0}
 .th-nm b{font-size:14px;font-weight:600;line-height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1285,7 +1289,7 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .th-mer{position:absolute!important;right:0;top:0;bottom:0;width:58%;display:flex!important;align-items:center;justify-content:center;overflow:hidden}
 .th-mer b{font:600 13px/1.25 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.1em;color:var(--pi);opacity:.55;writing-mode:vertical-rl}
 .th-mer:has(img) b{visibility:hidden}
-.th-mer:has(img){background:repeating-conic-gradient(#d9d9d9 0 25%,#fff 0 50%) 0 0/8px 8px}   /* 透明图垫棋盘格（像素底） */
+.th-mer:has(img){background:#fff}   /* 透明图垫白底 */
 .th-mer img{position:absolute;inset:3px 2px;width:calc(100% - 4px);height:calc(100% - 6px);object-fit:contain}
 .th-mer:has(img.m1) img.m0{height:calc(50% - 4px)}.th-mer img.m1{top:calc(50% + 1px);height:calc(50% - 4px)}   /* 两张：上下各半 */
 .th-ok{position:absolute;right:12px;bottom:14px;width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
@@ -1950,6 +1954,7 @@ select.pe-in{text-align-last:right}
   if(q.get('s')||q.get('view')==='peer')return;
   var claw=ls.getItem('claclaw.claw'),sess=ls.getItem('claclaw.session'),view=ss.getItem('claclaw.view')||'';
   var onClaw=window.parent!==window||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+  if(ss.getItem('claclaw.snap')){var h=document.documentElement;h.classList.add('snap');setTimeout(function(){h.classList.remove('snap')},2000)}   // 有刷新前的画面：页面骨架解析完、画面放回去之前先不显示（不先闪一下空页）
   var rt=ss.getItem('claclaw.reloadTo')||'';   // 刷新前在哪一页（见主脚本 railReload）：直接画那一页
   if(rt){app.className={set:'m-list set-on',host:'m-list host-on',claw:'m-list claw-on',recent:'m-list',chats:'m-list',chat:''}[rt]||'';return}
   if(onClaw||!/^(claude|openclaw|deepseek|opencode|kimi|qwen|codex|glm|mini|iflow|minimax|codebuddy|qoder|copilot)$/.test(claw||''))app.className='m-list claw-on';
@@ -2345,6 +2350,13 @@ select.pe-in{text-align-last:right}
   </div>
 </div>
 
+<script>(function(){try{   // 刷新前记下的列表画面（主脚本 railReload）：15 秒内有效，主脚本拿到新数据再换掉
+  var ss=sessionStorage,v=JSON.parse(ss.getItem('claclaw.snap')||'null');ss.removeItem('claclaw.snap');
+  if(!v||Date.now()-v.t>15000||window.matchMedia('(min-width:1000px)').matches||!/m-list/.test(document.getElementById('app').className))return;
+  var l=document.getElementById('sList');if(v.list){l.innerHTML=v.list;l.scrollTop=v.top||0}
+  if(v.tab)document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===v.tab)});
+  document.getElementById('gNew').hidden=!!v.g;document.getElementById('rClear').hidden=!!v.r;
+}catch(e){}finally{var h=document.documentElement;if(h.classList.contains('snap')){void document.getElementById('mtabs').offsetWidth;h.classList.remove('snap')}}})();   // 先让样式按放回去的画面算好（不带过渡），再显示，底部菜单不会从「会话」滑到「最近」</script>
 <button type="button" id="ttsStop" hidden aria-label="朗读" title="朗读（长按或右键：选从哪句开始）"></button>
 <div id="ttsPick"></div>
 <script>
@@ -5931,8 +5943,8 @@ $('#rClear').addEventListener('click',recentClear);   // 「最近」顶上群�
   sp.addEventListener('scroll',later,{capture:true,passive:true});window.addEventListener('resize',later);DESKTOP.addEventListener('change',later);
   new MutationObserver(later).observe($('#app'),{attributes:true,attributeFilter:['class']});
   new MutationObserver(later).observe(sp,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class']});
-  btn.addEventListener('click',function(){if(btn.classList.contains('spin'))return;btn.classList.add('spin');setTimeout(function(){$('#railReload').click()},150)});
-  var sb=$('#sReload');sb.addEventListener('click',function(){if(sb.classList.contains('spin'))return;sb.classList.add('spin');setTimeout(function(){$('#railReload').click()},150)});
+  btn.addEventListener('click',function(){if(btn.classList.contains('spin'))return;btn.classList.add('spin');setTimeout(function(){$('#railReload').click()},30)});
+  var sb=$('#sReload');sb.addEventListener('click',function(){if(sb.classList.contains('spin'))return;sb.classList.add('spin');setTimeout(function(){$('#railReload').click()},30)});
   later();
 })();
 var reloadTo='',reloadToSet=false;try{reloadTo=sessionStorage.getItem('claclaw.reloadTo')||'';reloadToSet=reloadTo==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
@@ -5942,7 +5954,11 @@ $('#railReload').addEventListener('click',function(){
   if(!DESKTOP.matches)try{var a=$('#app').classList;sessionStorage.setItem('claclaw.reloadTo',!mList?'chat':a.contains('set-on')?'set':a.contains('host-on')?'host':a.contains('claw-on')?'claw':listMode==='recent'?'recent':'chats')}catch(_){}   // 手机：刷新后回到同一页
   // 各会话没发的字都存起来（图片存不了）
   try{var all={};for(var k in drafts)if(drafts[k].text)all[k]=drafts[k].text;if(ta.value)all[draftOwner||'']=ta.value;if(Object.keys(all).length)sessionStorage.setItem('claclaw.drafts',JSON.stringify(all))}catch(_){}
-  document.body.classList.add('leaving');try{if(session&&!mList)sessionStorage.setItem('claclaw.scroll',JSON.stringify({id:session.id,top:feed.scrollTop,stick:stick}))}catch(_){}setTimeout(function(){location.reload()},120);   // 先上重雾再刷新；记下正在看的位置
+  try{if(session&&!mList)sessionStorage.setItem('claclaw.scroll',JSON.stringify({id:session.id,top:feed.scrollTop,stick:stick}))}catch(_){}   // 记下正在看的位置
+  // 列表页：把当前画面（列表、底部菜单、顶栏图标）记一份，新页面一出来就先画成这样，不出现空列表再逐块冒出来（见 #app 后面的小脚本）
+  try{if(mList&&!DESKTOP.matches){var sl=$('#sList'),tb=document.querySelector('#mtabs button.on');sessionStorage.setItem('claclaw.snap',JSON.stringify({t:Date.now(),list:sl.innerHTML.length<1500000?sl.innerHTML:'',top:sl.scrollTop,tab:tb?tb.dataset.tab:'',g:$('#gNew').hidden,r:$('#rClear').hidden}))}}catch(_){}
+  try{if(window.parent!==window)window.parent.postMessage({clarelay:1,type:'connecting'},'*')}catch(_){}   // 嵌在 clarelay 外壳里：由外壳上雾（和外壳自己刷新同一套淡出），自己不叠
+  document.body.classList.add('leaving');setTimeout(function(){location.reload()},260);   // 先用 0.26 秒淡到轻雾再刷新；新页面带着同样的雾出来，连上后 0.35 秒淡回清楚
 });
 try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionStorage.removeItem('claclaw.drafts');
   if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
@@ -8114,7 +8130,7 @@ function thCard(v,name,cur){
   var c=thPal(v===''?'light':v),pv='--pb:'+c.bg+';--ps:'+c.sf+';--pi:'+c.ink+';--pm:'+c.mu+';--pa:'+c.ac+';--pu:'+c.us+';--pl:'+c.ln+';--ph:'+(c.st&&c.st!=='transparent'?c.st:c.sf);
   var mk='<i class="th-hd"><i></i></i><i class="th-b l"><i></i><i></i></i><i class="th-b r"><i></i></i><i class="th-b l s"><i></i></i><i class="th-dk"><i></i><i class="th-snd"></i></i>';
   if(v==='shichen'){var zn=window.__sc.now().z,KJ=[[['肺寅',2],['大卯',3],['胃辰',4],['宫']],[['脾巳',5],['心午',6],['小未',7],['中']],[['申膀',8],['酉肾',9],['心包戌',10]],[['亥焦',11],['子胆',0],['丑肝',1],['通']]];
-    mk='<i class="th-kj">'+KJ.map(function(l){return '<i>'+l.map(function(p){if(p[1]==null)return p[0];var c=thPal('shichen@'+p[1]);return '<b'+(p[1]===zn?' class="on"':'')+' style="'+esc('--cb:'+c.bg+';--ci:'+c.ink+';--ca:'+c.ac)+'">'+p[0]+'</b>'}).join('')+'</i>'}).join('')+'</i>'}   // 子午流注：预览写十二经流注口诀，每组用自己时辰主题的底色和字色，当令那组像选中的会话一样凸起
+    mk='<i class="th-kj">'+KJ.map(function(l){return '<i>'+l.map(function(p,j){var x=p[1]==null,c=thPal('shichen@'+(x?l[j-1][1]:p[1])),bg=function(q){return q&&q[1]!=null?thPal('shichen@'+q[1]).bg:c.bg};return '<b'+(p[1]===zn?' class="on"':x?' class="x"':'')+' style="'+esc('--cb:'+c.bg+';--ci:'+c.ink+';--ca:'+c.ac+';--cl:'+bg(l[j-1])+';--cr:'+bg(l[j+1]))+'">'+p[0].split('').map(function(ch){return '<span>'+ch+'</span>'}).join('')+'</b>'}).join('')+'</i>'}).join('')+'</i>'}   // 子午流注：预览写十二经流注口诀，每组用自己时辰主题的底色和字色，当令那组像选中的会话一样凸起
   var sw='';if(v===''){var d=thPal('dark');sw='<i class="th-half" style="'+esc('--pb:'+d.bg+';--ps:'+d.sf+';--pi:'+d.ink+';--pm:'+d.mu+';--pa:'+d.ac+';--pu:'+d.us+';--pl:'+d.ln+';--ph:'+d.sf)+'">'+mk+'</i>'}   // 跟随系统：右下半边画深色
   var zi=/^shichen@(\d+)$/.exec(v);
   // 十二时辰：预览块右边一大半放这个时辰的经络图（data/sc-mer/<序号>.webp，抠好的透明图；没有图写经名），左边留窄一点的界面示意
@@ -8141,7 +8157,7 @@ function renderTheme(){
 function thAct(act,a){
   if(act==='th-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
   if(act==='th-back'){hostView='';mTab('set');return}
-  if(act==='th-mer'){var sm=a.currentSrc||a.src,mv=scMer[a.dataset.z]||{};showImage(mv.l?'/sc-mer/'+a.dataset.z+'-l.webp?v='+mv.l:sm);var li=lightbox.querySelector('img');li.style.background='repeating-conic-gradient(#d9d9d9 0 25%,#fff 0 50%) 0 0/16px 16px';li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l），没有就用卡片上那张
+  if(act==='th-mer'){var sm=a.currentSrc||a.src,mv=scMer[a.dataset.z]||{};showImage(mv.l?'/sc-mer/'+a.dataset.z+'-l.webp?v='+mv.l:sm);var li=lightbox.querySelector('img');li.style.background='#fff';li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l），没有就用卡片上那张
   var el=act==='th-pick'?$('#setTheme'):act==='th-img'?$('#setScImg'):null;if(!el)return;
   el.value=a.dataset.v;el.dispatchEvent(new Event('change'));thSub();renderTheme();
 }
