@@ -904,6 +904,7 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 .ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
 #sList .s-grp{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 4px;padding:6px 2px;border:0;background:none;font-size:13px;color:var(--muted);text-align:left}
 #sList .s-grp:first-child{margin-top:0}
+@media (max-width:999px){#sList .s-grp:first-child{margin-top:16px}}   /* 手机：第一个目录离顶栏的距离 = 目录之间的距离（字到字：6 + 10 + 6） */
 /* ════ 公共 · 会话列表：目录行、状态、干活中 ════ */
 /* 目录行前面：合着是关着的文件夹，展开是打开的文件夹（打开的那个右转 90 度）；和顶上「新建会话」的图标竖着对齐 */
 #sList .s-grp{gap:8px}
