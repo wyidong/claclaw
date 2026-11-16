@@ -1,0 +1,1865 @@
+@font-face{font-family:"Nunito";font-style:normal;font-weight:400 800;font-display:swap;src:url(/fonts/nunito-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}   /* 圆润的英文 / 数字：苹果设备用系统自带的圆体（ui-rounded），别的浏览器用这个（开源，授权见 public/fonts/OFL-Nunito.txt）；中文仍是系统字体 */
+/* ════════ 主题：一共 15 套 ════════
+   阳白明亮（light）、阴黑暗沉（dark）、九紫离火，加上流变时辰的 12 个时辰（子丑寅卯辰巳午未申酉戌亥，每个时辰算一套）。
+   这一段只放「各套主题不一样的地方」，按套分块：
+     ① 公共变量（也就是「阳白明亮」这一套；别的主题没写的变量都沿用它）
+     ② 阴黑暗沉、九紫离火：各自的变量 + 和公共不一样的规则
+     ③ 流变时辰 12 套共用的规则（时辰族公共），以及阳时辰、阴时辰两组各自的公共变量
+     ④ 12 个时辰各自的颜色（每块只有变量）
+   这一段之后的样式（布局、组件）所有主题共用，只用变量、不认主题：要对所有主题生效的规矩改那里一处。 */
+/* ── ① 公共变量 · 普通 ── */
+:root{
+  --bw:.5px;   /* 全局边框 / 分隔线的粗细：和「最近」会话之间那条线一样（.5px）；所有页面的卡片框、分隔线、顶栏底线、底部菜单顶线都用它 */
+  --gl-a:rgba(255,255,255,.62);--gl-b:rgba(255,255,255,.22);--gl-hi:rgba(255,255,255,.9);--gl-rim:rgba(255,255,255,.55);--gl-sh:rgba(0,0,0,.10);   /* 标题栏圆按钮的 iOS 玻璃：上亮下透、顶边高光、细亮边、轻投影 */
+  --bg:#F1F3F5;--surface:#FFFFFF;--ink:#14181C;--muted:#66707B;--line:#DDE1E6;
+  --accent:#12864A;--accent-ink:#FFFFFF;--user-bg:#DDF3E6;
+  --allow:#17794A;--on-allow:#FFFFFF;--deny:#B23A2E;--warn:#A86200;
+  --add-bg:#E2F3E8;--del-bg:#FBE5E2;--code-bg:#E9ECEF;--banner-bg:#FFF4DC;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:ui-rounded,"SF Pro Rounded","Nunito",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  /* 协同对方的 7 组配色（b 名字底色 / f 名字字色）；深色模式下面另有一套。字色和底色的对比度都在 6.4:1 以上 */
+  --strip:var(--surface);--strip-line:var(--line);--rail-on:var(--bg);
+  --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
+}
+/* 白色主题的会话目录、Claw 卡片：白卡片细边，选中浅绿平铺（不凸起）；别的主题这几个变量清空，用规则里的默认（浅色底、凸起） */
+:root{--dir-bg:transparent;--dir-bg-m:var(--bg);--dir-bd:1px solid var(--bg);--dir-hover:var(--bg);--dir-sel-bg:var(--user-bg);--dir-sel-sh:none;--claw-bg:var(--bg)}
+@media (min-width:1000px){:root{--claw-bg:var(--surface)}}   /* Claw 卡片跟会话目录：手机上灰卡片，电脑上白卡片 */
+:root:is([data-theme="dark"],[data-theme="ziwei"],[data-theme="shichen"]){--dir-bg:initial;--dir-bg-m:initial;--dir-bd:initial;--dir-hover:initial;--dir-sel-bg:initial;--dir-sel-sh:initial;--claw-bg:initial}
+@media (prefers-color-scheme:dark){:root:not([data-theme]){--dir-bg:initial;--dir-bg-m:initial;--dir-bd:initial;--dir-hover:initial;--dir-sel-bg:initial;--dir-sel-sh:initial;--claw-bg:initial}}
+/* ── ② 阴黑暗沉（「跟随系统」且系统是深色时也用这套） ── */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]):not([data-theme="ziwei"]):not([data-theme="shichen"]){
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--sel-sh2:0 7px 14px -5px rgba(0,0,0,.65),0 2px 4px -1px rgba(0,0,0,.4);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+    --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
+    --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
+    --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
+    --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
+    --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
+  }
+}
+:root[data-theme="dark"]{
+    --gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--sel-sh2:0 7px 14px -5px rgba(0,0,0,.65),0 2px 4px -1px rgba(0,0,0,.4);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+  --bg:#0E1115;--surface:#161B21;--ink:#E7EBEF;--muted:#8B95A1;--line:#262D35;
+  --accent:#3FCB86;--accent-ink:#0E1115;--user-bg:#173A2A;
+  --allow:#4CC38A;--on-allow:#0E1115;--deny:#F27C70;--warn:#E0A24A;
+  --add-bg:#12301F;--del-bg:#3A1A17;--code-bg:#232A32;--banner-bg:#2B2210;
+  --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB;
+}
+/* ── ② 九紫离火 ── */
+/* 九紫离火：照 clarelay 外壳的样子——淡紫底、白卡片带细边；字是重点：标题 / 名字用 clarelay 紫，说明用石板灰，正文近黑；离火的暖橙只做点缀（提醒、协同） */
+:root[data-theme="ziwei"]{
+  --bg:#F2F0F8;--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--line:#E4E0EE;
+  --accent:#5B21B6;--accent-ink:#FFFFFF;--user-bg:#EDE7FB;--title:#4C1D95;
+  --allow:#5B21B6;--on-allow:#FFFFFF;--deny:#D93636;--warn:#C2410C;
+  --add-bg:#E6F4EA;--del-bg:#FCE7E4;--code-bg:#F1EEF8;--banner-bg:#FFF0E3;
+  --strip:var(--bg);--rail-on:var(--surface);
+}
+/* ── ② 卡片风格（九紫离火、流变时辰共用）：淡底上放白卡片细边；标题 / 名字用 --title（各套自己给），返回键之类用强调色 ── */
+:root:is([data-theme="ziwei"],[data-theme="shichen"]){
+  #setPane .set-card,.h-card,.claw-card,.claw-tool,.s-item,.s-row{background:var(--surface);border:var(--bw) solid var(--line)}
+  #sList .s-row.wx .s-item{border:0}
+  #app #sheet,#app #sheet .sheet-p,#app #hostPane,#app #sTop,#app #setTop{background:var(--bg)}
+  .lb,.claw-tx b,.claw-r b,.s-item .t,#setTop,#nm,#setPane .set-h,.pg-hd,.h-h,.h-row .k{color:var(--title)}
+  #setPane .set-h,.h-h{font-weight:600}
+  .pe-back,#setTop button,#backBtn{color:var(--accent)}
+  @media (min-width:1000px){#sList .s-row:not(.wx){border:0;background:none}}   /* 电脑：卡片是 .s-item，外层 .s-row 不要再画一圈（等确认 / 工作中的卡片会出现双线） */
+}
+/* ── ③ 流变时辰 · 12 套共用 ── */
+/* 流变时辰：6 阳（腑：子胆 卯大肠 辰胃 未小肠 申膀胱 亥三焦）照九紫离火的配色（淡底白卡片），6 阴（脏：丑肝 寅肺 巳脾 午心 酉肾 戌心包）照深色主题（深底深卡片浅字，<html> 带 .sc-dark）。
+   window.__sc 只按当前时辰给 <html> 设 data-sc="0~11"（地支序号）和 .sc-dark，颜色全在下面 ④ 各时辰的变量块里——要调哪个时辰的颜色直接改那一块。
+   变量：--sc-b 本时辰的代表色（铺图时图片没加载出来先垫的底色） / --title 标题字色（卡片风格共用的变量） / --sc-out 外圈（电脑左栏、四周留边）/ --bg 淡底 / --line 细边 / --user-bg 选中、自己的话 / --code-bg 代码块底 */
+:root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface);--allow:var(--accent);--on-allow:var(--accent-ink)}
+:root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底，选中的靠强调色边框区分 */
+/* 时辰背景选「图片」：图铺在整页最底下；列表 / 设置 / 宿主页的底变透明露出图，顶栏 / 底栏 / 左栏是半透明的淡底毛玻璃，卡片仍是白底 */
+:root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
+:root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
+:root[data-theme="shichen"].sc-img{--strip:transparent}   /* 图原样显示，不压淡底、不雾化（像桌面壁纸） */
+:root:is([data-theme="ziwei"],[data-theme="shichen"]:not(.sc-dark)):not(.sc-img) #sTop :is(#sNew,#gNew,#sPeer,#sVoice,#sTheme,#sAcct,#sReload,#rClear):not(:hover):not([aria-pressed="true"]):not(.reconn){color:color-mix(in srgb,var(--accent) 45%,var(--muted))}   /* 紫微、时辰浅色：灰色是统一的石板灰，顶部快捷图标掺进主题色，跟着主题走（深色时辰的灰本来就带色） */
+/* ── 手机的页面骨架（所有主题共用）：顶部各条（快捷入口、会话标头、模型管理、设置页及子页、解剖页）= 顶栏色 + 底线；底部菜单、输入区 = 顶线；线的颜色都是页面底色 --bg ── */
+@media (max-width:999px){
+  html:root:not(.sc-img){--strip:var(--surface)}   /* 顶部各条（还有状态栏、外壳顶栏）和底部菜单同一个底色 */
+  html:root:not(.sc-img) #app #sTop{background:var(--surface)}
+  #app.m-list #sTop,#app header{position:sticky;top:0}   /* iPhone（iOS 26 起）状态栏取色找贴着顶边的 fixed / sticky 块；这几个所在的容器本身不滚，看起来不变 */
+  /* 白色、深色、跟随系统：页面底和块底对调——页面 --bg、卡片 --surface，和紫微 / 时辰同一个逻辑（它们在上面的卡片风格里） */
+  :root:not([data-theme="ziwei"]):not([data-theme="shichen"]){
+    --dir-bg-m:var(--surface);--dir-bd:1px solid var(--surface);--claw-bg:var(--surface);
+    #app #sheet,#app #sheet .sheet-p,#app #hostPane{background:var(--bg)}
+    #setPane .set-card,.h-card{background:var(--surface)}
+  }
+  /* 线：压过 nb-xxx 的「同色不画」，一律画 */
+  html:root:root{
+    #app #mtabs,#app #dock{border-top:var(--bw) solid var(--bg)!important}
+    :is(#app.m-list #sTop,#app.m-list.claw-on #clawModels,#app.m-list.set-on #setTop,#app.m-list.host-on #hostPane .pg-hd,#app header){border-bottom:var(--bw) solid var(--bg)!important}
+    #diss>.fv-h{box-sizing:content-box;min-height:calc(56px - var(--bw));padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip);border-bottom:var(--bw) solid var(--bg)}   /* 解剖页标题条：顶栏色、56 高 */
+  }
+  html #app.m-list #sTop{padding-bottom:calc(8px - var(--bw))}   /* 加了底线，总高还是 56 */
+}
+:root[data-theme="shichen"].sc-img{   /* 时辰铺图：聊天页、列表、顶栏 / 底栏的透明和浅底 */
+  .msg.ai{background:color-mix(in srgb,var(--surface) 30%,transparent);border-radius:14px;padding:10px 12px;margin-left:-12px;margin-right:-12px}   /* 回复的字直接压在原图上：垫一层很浅的底，字更清楚，图还看得见 */
+  .msg.ai.has-play[data-ts]>.gm-foot{left:6px;bottom:2px}   /* 朗读按钮跟着内边距往里挪，和时间同一行 */
+  .tgroup{margin-left:-12px;margin-right:-12px}   /* 工具卡片：和回复一样宽 */
+  :is(.tool,.tg-h){background:color-mix(in srgb,var(--surface) 42%,transparent);border-radius:10px}   /* 比回复的浅底只深一点点，圆角小一点 */
+  @media (min-width:1000px){:is(#sList .s-item,#dock){background:color-mix(in srgb,var(--surface) 30%,transparent)}}
+  #app #dock{background:color-mix(in srgb,var(--surface) 30%,transparent)}   /* 输入区：手机也垫同样很浅的底，用底色和聊天区分开，不要分隔线 */   /* 电脑：同样很浅的底垫在会话列表每一行、输入区下面（选中的行仍是选中色；手机的列表行本来就是白卡片） */
+  #app:not(.m-list){background:var(--strip)}   /* 聊天页：整页一层半透明淡底盖在图上，聊天内容、输入区都透出图 */
+  :is(#feed,#banner,#dock,#workBar){background:transparent}   /* 「运行 Bash」那条工作状态也不要底色 */
+  #rail{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+  /* 顶部固定的几条（列表顶上的图标条、聊天标题栏、设置 / 宿主页标题）：纯色淡底，和外壳顶栏、状态栏同一个颜色接成一片（底部菜单是雾化半透明，两者不一样） */
+  :is(#app #sTop,header,#app #setTop,#hostPane .pg-hd){background:var(--bg)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+  #app.m-list #mtabs{background:color-mix(in srgb,var(--bg) 70%,transparent);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%)}   /* 底部菜单：半透明淡底毛玻璃（列表从它下面滚过） */
+}
+@media (min-width:1000px){   /* 电脑：图铺满整个窗口——左栏、列表、标题栏、聊天区、输入区都是同一层半透明淡底（#app 的底），不再各叠一层（叠了就出现深一块的边）；卡片仍是白底 */
+  :root[data-theme="shichen"]{
+    /* 电脑：外圈（左栏、四周留边）用 --sc-out，和里面的 --bg 轻微不同；聊天区没有自己的底（透出 #app 的 --sc-out），和外圈分不开，所以纯色时辰照样画一圈细边框；图片背景的内圈是整张图，靠图区分，不画 */
+    #app::after{box-shadow:0 0 0 6px var(--sc-out)}
+    &:not(.sc-img) :is(#app,#rail){background:var(--sc-out)}
+    &.sc-img{
+      :is(#rail,#app #sheet,#app #sheet .sheet-p,#app #hostPane){background:transparent!important}
+      :is(#app #sTop,header,#app #setTop,#hostPane .pg-hd){background:transparent!important}   /* 电脑：顶部那条不要纯色，和下面的区域一样透出图（手机才和外壳接成纯色） */
+      :is(#app header,#app #_hdx){background:var(--sc-veil)!important}   /* 顶上两块（列表图标条、聊天标题栏）也垫同样很浅的底；#_hdx 不存在，只是把优先级抬到和上面那条一样，后写的生效 */
+      /* 图上的图标、灰字：原来的浅灰压在彩色图上看不清——图标用正文色，再加一圈很淡的白光；说明字（--muted）也调深 */
+      :is(#sTop>button,#sTop .th-tg,header .hd-ic,header #cfgBtn,header #sid,#rail button:not(.on)){color:var(--ink);filter:drop-shadow(0 0 1.5px color-mix(in srgb,var(--surface) 75%,transparent))}
+      #sheet::after{background:var(--sc-veil)}   /* 列表和聊天之间的竖线：不用灰线，用同样很浅的白，和浅底一样的色差 */
+      :is(#app #sTop,#app #setTop,#hostPane .pg-hd){background:linear-gradient(var(--sc-veil),var(--sc-veil)),var(--sc-in)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}   /* 钉在顶上的标题条：内容会从它下面滚过——铺上和内圈同一张图（都按窗口定位，接缝看不出），看着和聊天标题栏一样透明，又挡住下面滚过的内容 */
+      #app::after{border-color:transparent}
+        /* 图片背景：图只铺在内圈（列表 + 聊天这一块，圆角），外圈（左栏、四周留边）是纯色 --sc-out；图原样显示，不压淡底 */
+      #app{background:var(--sc-out)!important;isolation:isolate;--sc-veil:color-mix(in srgb,var(--surface) 30%,transparent);--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
+      #app::before{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;z-index:-1;pointer-events:none;background:var(--sc-in)}
+    }
+  }
+}
+/* ── ③ 流变时辰 · 阳（腑）公共（子卯辰未申亥）：白卡片、石板灰说明字、强调色上白字 ── */
+:root[data-theme="shichen"]:not(.sc-dark){--surface:#FFFFFF;--muted:#64748B;--accent-ink:#FFFFFF}
+:root[data-theme="shichen"].sc-img:not(.sc-dark){--muted:color-mix(in srgb,var(--ink) 72%,var(--surface))}   /* 铺了图：说明字压在图上，石板灰看不清，调深 */
+/* ── ③ 流变时辰 · 阴（脏）公共（丑寅巳午酉戌）：浅色正文 / 标题，提示色、玻璃按钮、协同配色用深色主题那一套 ── */
+:root[data-theme="shichen"].sc-dark{--ink:#ECEEF0;--title:#ECEEF0;
+  --add-bg:#12301F;--del-bg:#3A1A17;--banner-bg:#2B2210;--deny:#F27C70;--warn:#E0A24A;--gl-a:rgba(255,255,255,.14);--gl-b:rgba(255,255,255,.03);--gl-hi:rgba(255,255,255,.28);--sel-sh:0 2px 4px -2px rgba(0,0,0,.5);--sel-sh2:0 7px 14px -5px rgba(0,0,0,.65),0 2px 4px -1px rgba(0,0,0,.4);--gl-rim:rgba(255,255,255,.12);--gl-sh:rgba(0,0,0,.35);
+  --pc0b:#881337;--pc0f:#FFE4E6;--pc1b:#78350F;--pc1f:#FEF3C7;--pc2b:#0C4A6E;--pc2f:#E0F2FE;--pc3b:#7C2D12;--pc3f:#FFEDD5;--pc4b:#134E4A;--pc4f:#CCFBF1;--pc5b:#701A75;--pc5f:#FAE8FF;--pc6b:#365314;--pc6f:#ECFCCB}
+/* ── ④ 12 个时辰各自的颜色：按五行配色（子丑木 · 绿，寅卯金 · 银灰，辰巳土 · 黄，午未火 · 红，申酉水 · 蓝，戌亥相火 · 橙——和午未的君火红分开） ──
+   阳 · 腑（子卯辰未申亥）：淡底 / 细边 / 选中 / 代码底是本行色相的淡色，强调色、标题是同色相的深色，正文近黑带一点色；外圈比淡底深一档。
+   阴 · 脏（丑寅巳午酉戌）：底是本行色相的深色，说明字是带一点色的浅灰，强调色是本行色调亮到看得清。 */
+/* 子 · 少阳胆（阳 · 木） */
+:root[data-theme="shichen"][data-sc="0"]{--bg:#EEF9F2;--line:#E0EEE5;--user-bg:#E7F8ED;--code-bg:#EDF7F1;--accent:#268649;--ink:#1B2D21;--sc-b:#1E6B3A;--title:#1F703C;--sc-out:#D7F2E1}
+/* 丑 · 厥阴肝（阴 · 木） */
+:root[data-theme="shichen"][data-sc="1"]{--bg:#162612;--surface:#21381A;--line:#335728;--code-bg:#27421F;--user-bg:#315427;--muted:#ACBBA8;--accent:#9CCB8E;--accent-ink:#162612;--sc-b:#9CCB8E;--sc-out:#101C0D}
+/* 寅 · 太阴肺（阴 · 金） */
+:root[data-theme="shichen"][data-sc="2"]{--bg:#191C1F;--surface:#25292D;--line:#3A4046;--code-bg:#2B3035;--user-bg:#373D43;--muted:#ABB1B7;--accent:#D6D9DC;--accent-ink:#191C1F;--sc-b:#D6D9DC;--sc-out:#121416}
+/* 卯 · 阳明大肠（阳 · 金） */
+:root[data-theme="shichen"][data-sc="3"]{--bg:#EFF4F8;--line:#DFE8EF;--user-bg:#EAF0F5;--code-bg:#EEF3F7;--accent:#466D90;--ink:#182430;--sc-b:#E9EFF4;--title:#3B5B77;--sc-out:#DCE5ED}
+/* 辰 · 阳明胃（阳 · 土） */
+:root[data-theme="shichen"][data-sc="4"]{--bg:#F9F5EE;--line:#EEE9E0;--user-bg:#FAF3E5;--code-bg:#F7F4ED;--accent:#966D1E;--ink:#2D271B;--sc-b:#D49A2A;--title:#7D5B19;--sc-out:#F2E8D7}
+/* 巳 · 太阴脾（阴 · 土） */
+:root[data-theme="shichen"][data-sc="5"]{--bg:#332705;--surface:#4A3807;--line:#74580B;--code-bg:#584309;--user-bg:#70550B;--muted:#BBB6A8;--accent:#F2D27A;--accent-ink:#332705;--sc-b:#F2D27A;--sc-out:#251C04}
+/* 午 · 少阴心（阴 · 火） */
+:root[data-theme="shichen"][data-sc="6"]{--bg:#2F0909;--surface:#450D0D;--line:#6B1414;--code-bg:#520F0F;--user-bg:#671313;--muted:#BBA8A8;--accent:#E16060;--accent-ink:#2F0909;--sc-b:#D62828;--sc-out:#220606}
+/* 未 · 太阳小肠（阳 · 火） */
+:root[data-theme="shichen"][data-sc="7"]{--bg:#F9EEEE;--line:#EEE0E0;--user-bg:#FAE5E5;--code-bg:#F7EDED;--accent:#B62020;--ink:#2D1B1B;--sc-b:#F2A0A0;--title:#951D1D;--sc-out:#F2D7D7}
+/* 申 · 太阳膀胱（阳 · 水） */
+:root[data-theme="shichen"][data-sc="8"]{--bg:#EEF3F9;--line:#E0E7EE;--user-bg:#E8EFF7;--code-bg:#EDF2F7;--accent:#3769A0;--ink:#1B232D;--sc-b:#5B8FC7;--title:#2D5885;--sc-out:#D7E4F1}
+/* 酉 · 少阴肾（阴 · 水） */
+:root[data-theme="shichen"][data-sc="9"]{--bg:#0D182B;--surface:#12223F;--line:#1D3663;--code-bg:#16294B;--user-bg:#1B335F;--muted:#A8AFBB;--accent:#86A6D6;--accent-ink:#0D182B;--sc-b:#123678;--sc-out:#091120}
+/* 戌 · 厥阴心包（阴 · 火（相火）） */
+:root[data-theme="shichen"][data-sc="10"]{--bg:#2F1709;--surface:#45220D;--line:#6B3414;--code-bg:#52280F;--user-bg:#673213;--muted:#BBAFA8;--accent:#E18F60;--accent-ink:#2F1709;--sc-b:#D66828;--sc-out:#221006}
+/* 亥 · 少阳三焦（阳 · 火（相火）） */
+:root[data-theme="shichen"][data-sc="11"]{--bg:#FCF2EB;--line:#F2E5DC;--user-bg:#FFECE0;--code-bg:#FAF0EA;--accent:#B65C20;--ink:#2D221B;--sc-b:#FFBE93;--title:#954D1D;--sc-out:#F9E0D0}
+/* ════════ 主题到此为止；下面是所有主题共用的样式 ════════
+   按区域分节，每节开头一行「════ 公共 · 区域名 ════」，搜「公共 · 」能逐节跳。顺序就是层叠顺序：后写的同级规则会盖前面的，挪动整节前先确认没有被后面覆盖的规则。 */
+/* ── 通用规矩（所有主题）：块和它所在区域的底色不一样、靠底色就分得开 → 不画边框；底色一样分不开 → 才画边框 ──
+   哪些块按这个规矩来，在脚本的 BDR 表里（bdSync）；它换主题、换时辰、换图、电脑 / 手机切换时实际比一次两边的底色，
+   底色不同就在 <html> 上加 nb-xxx，下面这些规则把边框去掉。等确认的提醒边框不算在内，照常显示。 */
+:root.nb-tool #feed .tool:not([data-k="wait"]),:root.nb-tgh #feed .tgroup:not([data-k="wait"]) .tg-h,:root.nb-uvid #feed .uvid,
+:root.nb-srow #sList .s-row:not(.working):not(.waiting),:root.nb-sitem #sList .s-row:not(.working):not(.waiting) .s-item:not([aria-current="true"]),:root.nb-set #setPane .set-card,:root.nb-hcard #hostPane .h-card,:root.nb-claw #clawPane :is(.claw-card:not([aria-current="true"]),.claw-tool){border-color:transparent!important}
+:root.nb-dock #app #dock{border-top-color:transparent!important}
+:root.nb-hd #app header{border-bottom-color:transparent!important}
+:root.nb-stop #app #sTop,:root.nb-settop #app #setTop{border-bottom-color:transparent!important}
+:root.nb-tabs #app #mtabs{border-top-color:transparent!important}
+/* ════ 公共 · 页面骨架：不滚动、雾感、整体框 ════ */
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+/* 页面本身不许滚：iOS 弹键盘时会把整个页面往上推，收起后不一定推回来，顶栏就一直压在状态栏下面被模糊。
+   只让聊天区、列表这些自己的区域滚动 */
+html,body{overflow:hidden;overscroll-behavior:none}
+body{position:fixed;inset:0;width:100%}
+html{background:var(--surface)}
+body{background:var(--surface);color:var(--ink);font:16px/1.55 var(--sans);overflow:hidden;-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+/* 雾感：加载中 / 刷新前蒙一层轻雾，最雾时也能勉强看清下面的内容（原来和 clarelay 外壳同一套 .45 / 8px，调轻了） */
+body.leaving #app{opacity:.88;filter:blur(1.2px);pointer-events:none;transition-duration:.26s}   /* 点刷新：清楚 → 轻雾，0.26 秒雾到位就刷新 */
+html.emb body.leaving #app{opacity:1;filter:none}   /* 嵌在外壳里：外壳给整个框上雾 */
+@media (min-width:1000px){body.leaving #app{opacity:1;filter:none}}   /* 电脑宽屏不做雾化 */
+html.fog #app{filter:blur(1.2px);opacity:.88;pointer-events:none}
+#app{transition:filter .35s,opacity .35s}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+#app{position:relative;height:100%;display:flex;flex-direction:column;max-width:760px;margin:0 auto;background:var(--bg)}
+@media (min-width:800px){#app{border-left:var(--bw) solid var(--line);border-right:var(--bw) solid var(--line)}}
+
+/* ════ 公共 · 聊天标题栏（会话名、ID、目录、会话设置按钮、圆形功能按钮） ════ */
+/* 标题栏：平的，不加底边框（白底坐在浅灰的聊天区上，边界自然就有）；左边两行「名字 ID / 目录 · 分支」，右边两行「模型 · 推理强度 / 权限」 */
+header{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 4px) 12px 6px;border-bottom:var(--bw) solid var(--line);background:var(--strip)}
+#sessBtn{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
+/* 标题栏的会话 ID：显示前 8 位，里面放的是完整 ID，拖选复制得到的就是完整的 */
+#sid .hid{display:inline-block;max-width:8ch;overflow:hidden;white-space:nowrap;vertical-align:baseline;margin-left:8px;cursor:copy}   /* 只露出前 8 位，里面是完整 ID；点一下复制完整 ID */
+#sid .hid:active{color:var(--accent)}
+#sid .fee{margin-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
+/* 名字前面是这个会话所属 Claw 的图标（Claude 螃蟹、DeepSeek 鲸鱼……）；断线 / 会话关闭时变灰，干活时一闪一闪。还不知道是哪个 Claw 时退回小圆点 */
+#sessBtn .dot{flex:none;display:grid;place-items:center;width:20px;height:20px;transition:filter .2s,opacity .2s}
+#sessBtn .dot svg,#sessBtn .dot img{display:block;width:20px;height:20px;object-fit:contain}
+#sessBtn .dot img.tile{border-radius:22.5%}
+#sessBtn .dot:empty{width:8px;height:8px;border-radius:50%;background:var(--allow)}
+#sessBtn .nm{font-weight:700;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sid{font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:nowrap}
+#sessBtn svg{flex:none;color:var(--muted)}
+#sessBtn .st{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+#sessBtn .r1{display:flex;align-items:center;min-width:0}
+/* 第二行：目录 · 分支。放不下时从左边截（direction:rtl + 里面 bdi 保持正常顺序），目录名和分支一直看得见 */
+#sessBtn .where{display:block;font-family:var(--mono);font-size:12px;line-height:1.3;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+#sessBtn .where:empty{display:none}
+#sessBtn .where bdi{direction:ltr;unicode-bidi:isolate}
+/* 会话设置按钮：标题栏右边，两行——上「模型 · 推理强度」、下权限模式（颜色跟模式走）；点开是底部面板 */
+#hdAct{flex:none;display:flex;align-items:flex-end;gap:6px;min-width:0;max-width:60%}
+#cfgBtn{flex:none;display:flex;align-items:center;align-self:flex-end;min-width:0;color:var(--muted);text-align:left}
+/* 只有 › 能点：图标小，点击范围往四周透明扩大 */
+#cfgGo{position:relative;flex:none;align-self:flex-end;display:grid;place-items:center;width:22px;height:22px;margin:0 11px 0 2px;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 手机：› 和下面发送键（输入区右边往里 22px 的中线）在同一条竖线上 */
+#cfgGo::after{content:'';position:absolute;inset:-10px -6px}
+#cfgGo:active{opacity:.5}
+/* 标题栏功能按钮：和浮动朗读键一样大的圆圈，底透明；底边和第二行对齐、往上伸进第一行（第一行没有可点的，透明底不挡字） */
+.hd-ic{flex:none;display:grid;place-items:center;width:42px;height:42px;margin-top:-20px;padding:0;border:1px solid transparent;border-radius:50%;background:color-mix(in srgb,var(--muted) 12%,transparent);color:color-mix(in srgb,var(--muted) 60%,var(--line));font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:border-color .15s}   /* 平时淡淡的底色、没有边框；暂时不能点（压缩中、刚点过）才出现边框，颜色和字一样 */
+.hd-ic.lock{border-color:currentColor}
+#popBtn{display:none}@media (min-width:1000px){html:not(.solo) #popBtn{display:grid}}   /* 弹出成独立窗口：只在电脑上 */
+html.solo #backBtn{display:none!important}
+html.solo.has-skin #hdCard{grid-template-columns:44px minmax(78px,1fr) auto}   /* 弹出窗口有头像：头像占两行高 */
+html.solo.has-skin #sessBtn .dot{grid-row:1/3;position:relative;width:44px;height:44px}
+html.solo.has-skin #sessBtn .dot img.sk{width:44px;height:44px;border-radius:10px;object-fit:cover}
+html.solo.has-skin #sessBtn .dot .wx-cl{position:absolute;right:1px;bottom:1px;display:grid;place-items:center;width:16px;height:16px;pointer-events:none;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25))}
+html.solo.has-skin #sessBtn .dot .wx-cl :is(svg,img){width:14px;height:14px;background:none}
+#hdCk{flex:none;align-self:flex-end;display:grid;place-items:center;width:14px;height:14px;margin:0 -2px 4px 0;opacity:.85}#hdCk[hidden]{display:none}#hdCk :is(svg,img){width:14px;height:14px;background:none}   /* 弹出窗口换了头像：第二行模型名左边的小 Claw 图标 */   /* 弹出窗口只放这一个会话，没有列表可回 */
+@media (min-width:1000px){html.solo #app{grid-template-columns:0 0 minmax(0,1fr);padding:0}html.solo :is(#rail,#sheet){display:none!important}html.solo #app::after{display:none}}   /* 弹出窗口再宽也只放聊天区：不要左边栏和会话列表 */
+.hd-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.hd-ic:active{opacity:.5}
+@media (max-width:999px){.hd-ic{touch-action:none;position:relative;z-index:3;opacity:.5;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}.hd-ic:active{opacity:1}}   /* 手机上圆球能左右拖，拖到标题上要盖在字上；平时半透明，按住/拖动时不透明 */
+.hd-ic{background:linear-gradient(180deg,var(--gl-a),var(--gl-b));-webkit-backdrop-filter:blur(14px) saturate(180%);backdrop-filter:blur(14px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh)}
+.hd-ctx{font-size:12.5px;font-weight:700;letter-spacing:-.2px}
+.hd-ctx.busy{font-size:11px;font-weight:600;cursor:default}
+.hd-ctx.busy{color:var(--accent);animation:ctxw 1.4s ease-in-out infinite}   /* 压缩中：一圈强调色从边缘往里收（向内呼吸），不用边框 */
+@keyframes ctxw{0%,100%{box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh),inset 0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}50%{box-shadow:inset 0 1px 0 var(--gl-hi),inset 0 0 0 .5px var(--gl-rim),inset 0 -1px 2px rgba(0,0,0,.05),0 1px 2px var(--gl-sh),0 4px 14px var(--gl-sh),inset 0 0 9px 3px color-mix(in srgb,var(--accent) 38%,transparent)}}
+.hd-ctx.done{cursor:default}
+#cfgBtn>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#cfgBtn .c1{font-size:12px;line-height:1.2;font-weight:600;color:var(--ink);opacity:.75}
+#cfgBtn .c1:empty{display:none}
+#cfgBtn .c2{font-size:14px;line-height:1.25}
+#cfgBtn[data-m="accept"] .c2{color:var(--warn)}
+#cfgBtn[data-m="plan"] .c2{color:var(--accent)}
+#cfgBtn[data-m="bypass"] .c2{color:var(--deny);font-weight:600}
+#hdCard{flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:44px}
+#sessBtn .mtag{display:none}   /* 权限模式右边按钮已经显示，这里不再重复 */
+.cpid{cursor:copy;border-radius:4px}
+.cpid:hover{text-decoration:underline dotted;text-underline-offset:3px;color:var(--accent)}
+/* 会话 ID：浅底小胶囊 + 透明扩大的点击范围（四周各多 8px），点 ID 复制时不容易误点成「打开会话」 */
+#sList .s-item .m .id.cpid,#sid .cpid{position:relative;display:inline-block;padding:1px 6px;margin:-1px 0;border-radius:6px;background:var(--code-bg);line-height:1.4}
+#sList .s-item .m .id.cpid::after,#sid .cpid::after{content:'';position:absolute;inset:-8px -8px}
+@media (pointer:fine){.cpid:active{background:var(--user-bg)!important;color:var(--accent)}}   /* 手机上短按是打开会话，不给「要复制」的反馈 */
+.cpid{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}   /* 长按时不弹系统的选字菜单 */
+.cpid.lp{background:var(--accent)!important;color:var(--accent-ink)!important}
+
+/* ════ 公共 · 提示条、聊天区、消息、播放键 ════ */
+#banner{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;background:var(--banner-bg);color:var(--warn);font-size:13px;line-height:1.4}
+#banner span{flex:1}
+#banner button{flex:none;width:36px;height:36px;border:0;background:none;color:inherit;font-size:20px;line-height:1}
+
+#feed{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:16px 14px 10px;display:flex;flex-direction:column;gap:14px}
+#feed>*{flex-shrink:0}   /* 消息多了也不许被压扁（工具卡片 overflow:hidden，以前会被压成 0 高，只剩两条边框）*/
+.msg{white-space:pre-wrap;word-break:break-word;max-width:100%}
+.msg.user.pending{opacity:.55}
+/* ACP 的 Claw（DeepSeek / OpenCode / Kimi / Qwen / Codex）回复中又发的消息：排队，这一轮结束后自动发出 */
+.msg.user.queued{opacity:.7}
+.msg.user.queued::after{content:'排队中 · 这一轮结束后自动发出';display:block;margin-top:4px;font-size:11.5px;opacity:.8}
+.upeer{font-size:12px;opacity:.6;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg.user{align-self:flex-end;max-width:86%;padding:9px 13px;background:var(--user-bg);border-radius:16px 16px 4px 16px}
+.msg.ai{align-self:stretch}
+.msg[data-ts]::after,.peer[data-ts]::after{content:attr(data-ts);display:block;margin-top:3px;font-size:11px;line-height:1.3;color:var(--muted);text-align:right;white-space:nowrap}
+.msg.ai[data-ts]::after{text-align:left}
+/* 每轮回复的播放键：放左边，和时间同一行、在时间前面 */
+.msg.ai>.gm-foot{justify-content:flex-start;margin:2px 0 -4px -6px}
+.msg.ai.has-play[data-ts]{position:relative}
+.msg.ai.has-play[data-ts]>.gm-foot{position:absolute;left:-6px;bottom:-8px;margin:0}
+.msg.ai.has-play[data-ts]::after{padding-left:26px}
+/* 用户消息、协同消息：时间放在气泡外面、下方右侧 */
+.msg.user[data-ts]:not(.queued),.peer[data-ts]{position:relative;margin-bottom:17px}
+.msg.user[data-ts]:not(.queued)::after,.peer[data-ts]::after{position:absolute;right:4px;top:100%;margin-top:3px;opacity:1}
+/* 手机：发出的消息长按复制、连点两下放回输入框；关掉系统的选字 / 放大，免得和这两个手势打架 */
+@media (pointer:coarse){.msg.user.lp{filter:brightness(.9)}.msg.user{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}}
+.msg code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:5px}
+/* ════ 公共 · 回复里的 Markdown ════ */
+/* 渲染后的 Markdown（流式输出期间仍是纯文本，结束后才渲染） */
+.msg.md{white-space:normal}
+.md>:first-child{margin-top:0}.md>:last-child{margin-bottom:0}
+.md p{margin:0 0 .7em}
+.md h3,.md h4,.md h5,.md h6{margin:1em 0 .4em;line-height:1.35}
+.md h3{font-size:1.18em}.md h4{font-size:1.08em}.md h5,.md h6{font-size:1em}
+.md ul,.md ol{margin:0 0 .7em;padding-left:1.4em}
+.md li{margin:.15em 0}.md li>ul,.md li>ol{margin:.15em 0 0}
+.md strong{font-weight:650}
+.md a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+.md hr{border:0;border-top:var(--bw) solid var(--line);margin:1em 0}
+.md blockquote{margin:0 0 .7em;padding:2px 0 2px 12px;border-left:3px solid var(--line);color:var(--muted)}
+.md pre{margin:0 0 .7em;padding:10px 12px;background:var(--code-bg);border-radius:10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.md pre code{background:none;padding:0;font-size:12.5px;line-height:1.5;white-space:pre}
+.md .tbl{margin:0 0 .7em;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.md table{border-collapse:collapse;font-size:14px;min-width:60%}
+.md th,.md td{border:var(--bw) solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+.md th{background:var(--code-bg);font-weight:600;white-space:nowrap}
+.md .mdh{margin:0 0 .7em;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.md [style]{max-width:100%}
+.md .mdsvg{margin:.4em 0;padding:8px;border-radius:10px;background:#fff;max-width:100%;overflow:auto;box-sizing:border-box}   /* 矢量图多半是透明底深色线条：垫白底，深色主题也看得清 */
+.md .mdsvg img{display:block;max-width:100%;height:auto;margin:0 auto}
+.md .mdsvg.fill img{width:100%;max-height:480px;object-fit:contain}   /* 只写了 viewBox 的：铺满宽度，太高的限高 */
+.md .mdsvg-src{margin:0 0 .4em;font-size:12px;color:var(--muted)}
+.md .mdsvg-src summary{cursor:pointer}
+.sfimg.sfsvg img{background:#fff}
+.md img.mdimg{display:block;max-width:100%;max-height:320px;margin:.3em 0;border-radius:10px;cursor:zoom-in}
+.peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:1.5px solid var(--muted);border-radius:2px 10px 10px 2px;background:var(--code-bg);font-size:14px;line-height:1.5}
+.md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px}
+.md li>.cb{margin:.4em 0 .5em}
+.cp{position:absolute;top:5px;right:6px;display:flex;align-items:center;justify-content:center;width:30px;height:28px;border:var(--bw) solid var(--line);background:var(--surface);color:var(--muted);padding:0;border-radius:7px}
+.cp svg,.ic svg{pointer-events:none;flex:none}
+.md :not(pre)>code{cursor:copy}
+.md :not(pre)>code.fp{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--muted)}
+.ic{display:inline-flex;align-items:center;justify-content:center;vertical-align:-3px;width:22px;height:20px;margin:0 1px 0 3px;padding:0;border:0;border-radius:5px;background:none;color:var(--muted)}
+.ic:active,.cp:active{background:var(--code-bg)}
+.md blockquote{position:relative;padding-right:40px}
+.md blockquote>.cp{top:0;right:2px}
+#toast{position:fixed;left:50%;bottom:calc(90px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;font-size:13px;padding:7px 14px;border-radius:18px;z-index:99;pointer-events:none;opacity:0;transition:opacity .2s}
+#gyroAsk{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:99;border:0;border-radius:18px;padding:9px 16px;background:rgba(0,0,0,.78);color:#fff;font:inherit;font-size:14px;cursor:pointer}   /* 拖完圆球后请求重力感应授权的按钮（iOS 要点击才能弹授权框） */
+#toast.on{opacity:1}
+html.emb #pushBtn,html.emb #pushLocal,html.emb #pushTip{display:none!important}   /* 嵌在 clarelay 外壳里：通知由外壳收，不在这里订阅 */
+.peer .from{font-size:12px;color:var(--muted);margin-bottom:3px}
+.peer .body{word-break:break-word}
+/* ════ 公共 · 群聊 ════ */
+/* 群聊：成员的话（Claw logo + 协同标识 + 名字）、状态行、建群按钮和选成员面板 */
+.peer.gm{border-left-color:var(--accent)}
+.gm-foot{display:flex;justify-content:flex-end;margin:2px -6px -4px 0}
+.gm-play{width:30px;height:30px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.gm-play svg{width:18px;height:18px}
+.gm-play:hover{background:var(--surface);color:var(--ink)}
+.gm-play.on{color:var(--accent)}
+.gm-who{display:flex;align-items:center;gap:4px;align-self:flex-start;margin:0 0 -10px;padding:2px 8px 2px 2px;border:0;border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 群成员：和回复分开，点一下 @ 它 */
+.gm-who:active,.gm-who:hover{background:var(--code-bg)}
+.gm-ic{display:inline-grid;place-items:center;width:18px;height:18px;flex:none}
+.gm-ic svg,.gm-ic img{width:16px;height:16px;object-fit:contain;display:block}
+.gm-co{display:inline-block;width:18px;height:14px;flex:none;color:var(--muted)}
+.gm-co svg{width:18px;height:14px;display:block}
+.gp-mark{color:var(--accent)}
+.u-via{font-size:11.5px;color:var(--muted);margin-bottom:2px}
+#gStat{align-self:flex-start;font-size:12.5px;color:var(--muted);padding:2px 4px}
+#gStat div::before{content:'· '}
+#gNew{flex:none;width:46px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+#gNew:hover,#gNew[aria-pressed="true"]{color:var(--accent)}#gNew[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.s-gadd{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:8px 0 4px;padding:14px;border:1px dashed var(--line);border-radius:12px;background:none;color:var(--accent);font:inherit;font-size:15px;cursor:pointer}.s-gadd:hover{border-color:var(--accent)}.s-gadd b{font-size:20px;font-weight:400;line-height:1}
+#gNew[hidden]{display:none}
+#rClear{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#rClear:hover{color:var(--danger,#d33)}#rClear[hidden]{display:none}
+#sSearch[hidden]{display:none}.s-gap{flex:1}
+#sReload{display:none}   /* 只在手机的最近 / 会话页顶栏显示 */
+#sReload.dot::after,#railReload.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 有新版本：点一下刷新 */
+#railReload{position:relative}
+#sReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
+#sReload.reconn,#railReload.reconn{color:#E0A100!important}#sReload.reconn svg,#railReload.reconn svg{animation:rlspin 1s linear infinite}   /* 正在重连：刷新图标变黄、一直转（代替黄条） */
+#sVoice[hidden],#sTheme[hidden],#sAcct[hidden],#sPeer[hidden]{display:none}
+#sVoice,#sTheme,#sAcct,#sPeer{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}#sVoice:hover,#sTheme:hover,#sAcct:hover,#sPeer:hover{color:var(--accent)}
+#sAcct,#sPeer{position:relative}
+#sPeer.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 有配对申请 */
+.ac-mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;min-height:min(70vh,560px)}   /* 设置用户名和密码：上下居中 */
+.ac-mid .pe-err{margin:0}
+.ac-pw{display:flex;align-items:center;gap:6px}.ac-pw .md-in{flex:1}
+.ac-eye{flex:none;width:32px;height:28px;margin:-2px -6px -2px 0;padding:0;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}.ac-eye svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#sAcct.dot::after{content:'';position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--strip,var(--bg))}   /* 还没设登录账号 */
+#setAcctGo.dot .lb>span::after{content:'';display:inline-block;width:8px;height:8px;margin-left:6px;border-radius:50%;background:#F23C3C;vertical-align:2px}
+#rClear:disabled{opacity:.35;cursor:default}#rClear:disabled:hover{color:var(--muted);background:none}
+@media (min-width:1000px){   /* 电脑：新建、群、语音管理挨着排在左边，清空最近在最右；左边栏不再放协同 */
+  #gNew,#rClear,#sVoice,#sTheme,#sAcct,#sPeer{width:34px;height:32px;margin:0;border-radius:8px}
+  #gNew:hover,#rClear:hover,#sVoice:hover,#sTheme:hover,#sAcct:hover,#sPeer:hover{background:var(--bg)}
+  /* 图标之间的空白 = 第一个图标离列表左边的距离（12px）：按钮 = 图标宽 + 两边各 6px，再用负边距抵掉 8px 的 gap */
+  #gNew{width:36px}#sVoice,#sTheme,#sAcct{width:33px}#sPeer{width:34px}
+  #gNew,#sVoice,#sTheme,#sAcct,#sPeer{margin-left:-8px}
+  #railPeer{display:none!important}
+  /* 刷新：从左栏挪到这里，放在语音管理右边，和手机同一个图标；左栏那个按钮只留着给脚本点（不显示） */
+  #sReload{flex:none;position:relative;display:grid;place-items:center;width:32px;height:32px;margin:0 0 0 -8px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
+  #sReload:hover{color:var(--accent);background:var(--bg)}
+  #railReload{display:none!important}
+}
+:is(#grpPane,#avPane){position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35)}
+:is(#grpPane,#avPane).on{display:flex}
+:is(#grpPane,#avPane) .gp-card{width:100%;max-width:520px;max-height:86vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom));box-sizing:border-box}
+@media (min-width:1000px){:is(#grpPane,#avPane){align-items:center}:is(#grpPane,#avPane) .gp-card{border-radius:16px}}
+:is(#grpPane,#avPane) .gp-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+:is(#grpPane,#avPane) .gp-hd b{font-size:16px}
+:is(#grpPane,#avPane) .gp-x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
+:is(#grpPane,#avPane) input.gp-in{width:100%;box-sizing:border-box;height:40px;padding:0 12px;margin-bottom:8px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
+:is(#grpPane,#avPane) .gp-list{flex:1;min-height:120px;overflow-y:auto;overscroll-behavior:contain}
+:is(#grpPane,#avPane) .gp-sec{font-size:12px;color:var(--muted);margin:10px 2px 4px}
+#grpPane label.gp-row{display:flex;align-items:center;gap:9px;padding:7px 4px;border-radius:9px;cursor:pointer}
+#grpPane label.gp-row:hover{background:var(--bg)}
+#grpPane .gp-row input{flex:none;width:18px;height:18px;accent-color:var(--accent)}
+#grpPane .gp-av{flex:none;display:flex;align-items:center;gap:2px}
+#grpPane .gp-av .gm-ic{width:26px;height:26px}
+#grpPane .gp-av .gm-ic svg,#grpPane .gp-av .gm-ic img{width:22px;height:22px}
+/* ════ 公共 · 会话列表：分组树（Claw / 协同对方 / 目录） ════ */
+/* 第一级（Claw、协同的对方）的图标比第二级的文件夹（18px）大一点 */
+#grpPane .gp-nh>.gm-ic{width:24px;height:24px}
+#grpPane .gp-nh>.gm-ic svg,#grpPane .gp-nh>.gm-ic img{width:22px;height:22px}
+#grpPane .gp-nh>.gm-co,#grpPane .gp-nh>.gm-co svg{width:24px;height:19px}
+#grpPane .gp-t{flex:1;min-width:0}
+#grpPane .gp-t b{display:block;font-weight:500;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grpPane .gp-t small{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grpPane .gp-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+#grpPane .gp-chips:empty{display:none}
+#grpPane .gp-chip{display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:3px 4px 3px 8px;border-radius:999px;background:var(--bg);font-size:13px}
+#grpPane .gp-chip i{font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:9em}
+#grpPane .gp-chip i{cursor:pointer}
+#grpPane .gp-chips.ro .gp-chip{padding-right:8px}#grpPane .gp-chips.ro .gp-chip i{cursor:default;max-width:14em}#grpPane .gp-name[readonly]{color:var(--muted)}   /* 对方建的群：只看不改 */
+.gm .gm-att{display:flex;flex-direction:column;gap:6px;margin:6px 0 2px}
+.gm .gm-att .uimgs img{max-width:220px;max-height:220px;border-radius:10px;cursor:zoom-in}
+#grpPane .gp-chip.host{background:color-mix(in srgb,var(--accent) 16%,var(--bg))}
+#grpPane .gp-chip em{font-style:normal;font-size:11px;color:var(--accent);margin-left:2px}
+#grpPane .gp-hosthint{font-size:12px;color:var(--muted);margin:-2px 0 8px}
+#grpPane .gp-chip button{border:0;background:none;color:var(--muted);font-size:12px;padding:0 4px;cursor:pointer}
+#grpPane .gp-nh{display:flex;align-items:center;gap:8px;width:100%;padding:9px 4px;border:0;border-radius:9px;background:none;color:var(--ink);font:inherit;font-size:14.5px;text-align:left;cursor:pointer}
+#grpPane .gp-nh:hover{background:var(--bg)}
+#grpPane .gp-chev{flex:none;color:var(--muted);transition:transform .15s}
+#grpPane .gp-node.open>.gp-nh>.gp-chev{transform:rotate(90deg)}
+#grpPane .gp-nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grpPane .gp-nn{flex:none;font-style:normal;font-size:12px;color:var(--muted)}
+/* 目录这一级：没有箭头，文件夹图标表示开合（关着 / 打开右转 90 度），和会话列表的目录行同一套图标 */
+#grpPane .gp-nh .fdw{flex:none;width:18px;height:18px;color:var(--muted)}
+#grpPane .gp-nh .fd{display:block;width:18px;height:18px}
+#grpPane .gp-nh .fd-o,#grpPane .gp-node.open>.gp-nh .fd-c{display:none}
+#grpPane .gp-node.open>.gp-nh .fd-o{display:block}
+#grpPane .gp-kids{padding-left:18px}
+:is(#grpPane,#avPane) .gp-ft{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+:is(#grpPane,#avPane) .gp-ft button{height:36px;padding:0 16px;border-radius:9px;border:0;font:inherit;font-size:14.5px;cursor:pointer}
+:is(#grpPane,#avPane) .gp-go{background:var(--accent);color:#fff}
+:is(#grpPane,#avPane) .gp-go:disabled{opacity:.45;cursor:default}
+:is(#grpPane,#avPane) .gp-cancel{background:var(--bg);color:var(--ink)}
+/* 会话头像和网名（「最近」里点头像打开；长按头像随机一套）：外框、标题、按钮和建群同一套（上面 :is(#grpPane,#avPane)） */
+#avPane .av-me{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+#avPane .av-pv{flex:none;position:relative;display:grid;place-items:center;width:52px;height:52px;border-radius:12px;background:var(--bg);overflow:hidden}
+#avPane .av-pv.shk{animation:avShk .4s linear 6 both}   /* 拨「抖一抖」开关时预览：上面的头像抖一遍 */
+#avPane .av-pv img{width:100%;height:100%;object-fit:cover}
+#avPane .av-pv svg,#avPane .av-pv img.claw{width:32px;height:32px;object-fit:contain}
+#avPane .av-me input.gp-in{flex:1;min-width:0;margin:0}
+#avPane .av-dice{flex:none;width:40px;height:36px;border:0;border-radius:9px;background:var(--bg);font-size:19px;cursor:pointer}
+#avPane .av-opts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:-2px 2px 10px}   /* 个性提示音 / 抖一抖：一行两个小开关，不抢换头像的戏；提示音打开才多出选声音的一行 */
+#avPane .av-o{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px;color:var(--muted);cursor:pointer}
+#avPane .av-o .md-sw{width:36px;height:22px;border-radius:11px}
+#avPane .av-o .md-sw::after{top:2px;left:2px;width:18px;height:18px}
+#avPane .av-o .md-sw:checked::after{transform:translateX(14px)}
+#avPane .av-pick{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;color:var(--muted)}
+#avPane .av-pick[hidden]{display:none}
+#avPane .av-sndw{position:relative;display:flex;align-items:center;gap:4px;min-width:0;max-width:136px;padding:3px 10px;border:var(--bw) solid var(--line);border-radius:8px;background:var(--surface);font-size:14px;color:var(--ink)}
+#avPane .av-sndv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#avPane .av-sndw::after{content:'▾';flex:none;font-size:11px;color:var(--muted)}
+#avPane .av-snd{position:absolute;inset:0;width:100%;opacity:0;font-size:16px;cursor:pointer}   /* 透明的下拉盖在字上：点字就是选，字号 16 免得 iPhone 放大 */
+#avPane .av-tabs{display:flex;gap:6px;margin-bottom:6px}
+#avPane .av-tabs button{flex:1;height:32px;border:0;border-radius:9px;background:var(--bg);color:var(--muted);font:inherit;font-size:14px;cursor:pointer}
+#avPane .av-tabs button[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 14%,var(--bg));color:var(--accent);font-weight:600}
+#avPane .gp-ft .av-sp{flex:1}
+#avPane .av-ops{display:flex;gap:6px;margin:4px 0 2px}
+#avPane .av-ops button{height:30px;padding:0 12px;border:0;border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+#avPane .av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(50px,1fr));gap:6px}
+#avPane .av-grid button{aspect-ratio:1;padding:0;border:2px solid transparent;border-radius:11px;background:var(--bg);overflow:hidden;cursor:pointer}
+#avPane .av-grid img{display:block;width:100%;height:100%;object-fit:cover}
+#avPane .av-grid button[aria-pressed="true"]{border-color:var(--accent)}
+#avPane .av-names{display:flex;flex-wrap:wrap;gap:6px}
+#avPane .av-names button{max-width:100%;padding:5px 10px;border:1.5px solid transparent;border-radius:999px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#avPane .av-names button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.cmd .c-ic{display:inline-flex;vertical-align:-3px;margin-right:6px}
+.peer code{font-family:var(--mono);font-size:.88em;background:var(--surface);padding:1px 5px;border-radius:5px}
+.peer .md pre{background:var(--surface)}
+.sys-dir{align-self:flex-start!important;text-align:left!important}
+.sys{align-self:center;max-width:92%;min-width:0;text-align:center;color:var(--muted);font-size:13px;line-height:1.45;white-space:pre-line;overflow-wrap:anywhere}   /* 报错里的长网址也要折行，不然把聊天区撑宽 */
+/* ════ 公共 · 加载动画、刷新按钮 ════ */
+/* 顶部图标不闪：干活的闪烁在底部工作条上 */
+@keyframes rlspin{to{transform:rotate(360deg)}}
+#bgReload{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-22px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 不仔细看看不出来 */
+#bgReload:active{opacity:.4}
+#bgTheme{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:-74px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 主题快捷入口：在「更新客户端」圈左边，一样淡 */
+#bgTheme[hidden]{display:none}
+#bgHost{position:fixed;left:50%;bottom:calc(84px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));z-index:6;width:44px;height:44px;margin-left:30px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);opacity:.13;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .2s}   /* 宿主快捷入口：在「更新客户端」圈右边，和左边的主题对称 */
+#bgHost[hidden]{display:none}
+#bgHost:active{opacity:.4}
+#bgTheme:active{opacity:.4}
+#bgReload.new{color:var(--accent);opacity:.35}   /* 服务器有新版本：显眼一点 */
+#bgReload.spin svg{animation:rlspin .6s cubic-bezier(.4,0,.2,1) 2}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ════ 公共 · 工具调用卡片、工具组 ════ */
+.tool{border:var(--bw) solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.tool[data-k="wait"]{border-color:var(--warn)}
+.tool-h{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:0;background:none;text-align:left}
+.tool-h .st{flex:none;width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.tool[data-k="wait"] .st{background:var(--warn)}
+.tool[data-k="run"] .st{background:var(--accent);animation:pulse 1s infinite}
+.tool[data-k="ok"] .st{background:var(--allow)}
+.tool[data-k="no"] .st{background:var(--deny)}
+.tn{flex:none;font-weight:600;font-size:14px}
+.tt{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ts{flex:none;font-size:13px;color:var(--muted)}
+.tool-b{display:none;border-top:var(--bw) solid var(--line)}
+/* 连续的工具调用合成一组：外面只显示条数统计（完成 / 出错 / 运行中），点开列出全部；只有一个时就是普通卡片 */
+.tgroup{display:flex;flex-direction:column}
+.tg-h{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:var(--bw) solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tg-h .st{flex:none;width:8px;height:8px;border-radius:50%;background:var(--allow)}
+.tgroup[data-k="run"] .tg-h .st{background:var(--accent);animation:pulse 1s infinite}
+.tgroup[data-k="wait"] .tg-h{border-color:var(--warn)}
+.tgroup[data-k="wait"] .tg-h .st{background:var(--warn)}
+.tgroup[data-k="no"] .tg-h .st{background:var(--deny)}
+.tg-h .tg-n{flex:none;color:var(--muted);font-size:14px}
+.tg-h .tg-s{flex:1;min-width:0;color:var(--muted);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tg-h .tg-s .no{color:var(--deny)}
+.tg-h .tg-s .wait{color:var(--warn)}
+.tg-h::after{content:'';flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-bottom:1.6px solid var(--muted);transform:rotate(45deg);margin:-4px 4px 0 0;transition:transform .15s}
+.tgroup.open .tg-h::after{transform:rotate(-135deg);margin-top:4px}
+.tg-l{display:none;flex-direction:column;gap:10px;margin-top:10px}
+.tgroup.open .tg-l{display:flex}
+.tgroup.one .tg-h{display:none}
+.tgroup.one .tg-l{display:flex;margin-top:0}
+.tool.open .tool-b{display:block}
+.diff{font-family:var(--mono);font-size:12.5px;line-height:1.55;overflow-x:auto;padding:4px 0}
+.diff div{padding:0 12px;white-space:pre;min-width:max-content}
+.diff .a{background:var(--add-bg)}
+.diff .d{background:var(--del-bg)}
+.out{margin:0;padding:10px 12px;font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-all}
+
+#dock{background:var(--surface);border-top:var(--bw) solid var(--line);padding:10px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 7px)}
+/* ════ 公共 · 输入区上的权限确认、选择题面板 ════ */
+/* 软键盘弹起时底部横条被键盘盖住，不再留安全区 */
+body.kb #dock{padding-bottom:10px}
+#dock[data-state="perm"]{border-top:2px solid var(--warn)}
+#perm{display:none}
+#dock[data-state="perm"] #perm{display:block}
+#dock[data-state="perm"] #composer{display:none}
+/* 选择题面板：替换输入区；限高、框内滚动，提交 / 取消按钮始终在屏幕上 */
+#ask{display:none}
+#dock[data-state="ask"]{border-top:2px solid var(--accent)}
+#dock[data-state="ask"] #ask{display:block}
+#dock[data-state="ask"] #composer,#dock[data-state="ask"] #atts,#dock[data-state="perm"] #atts{display:none}
+/* 高度按「实际可见区域」算：iOS 弹键盘时 vh 不变，用 vh 会把输入框和按钮压到键盘后面 */
+#askBody{max-height:min(calc(var(--vvh,100vh) * .56),440px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin:0 -2px 10px;padding:0 2px}
+body.kb #askBody{max-height:calc(var(--vvh,60vh) * .4)}
+body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
+.q{margin-bottom:14px}
+.q:last-child{margin-bottom:4px}
+.qh{display:inline-block;font-size:12px;font-weight:600;color:var(--accent);background:var(--user-bg);border-radius:6px;padding:1px 7px;margin-bottom:4px}
+.qt{font-weight:600;margin-bottom:8px}
+.qm{font-size:12.5px;color:var(--muted);font-weight:400;margin-left:4px}
+.opt{display:block;width:100%;text-align:left;min-height:48px;margin-top:6px;padding:9px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface)}
+.opt[aria-checked="true"]{border-color:var(--accent);background:var(--user-bg)}
+.opt .ol{font-weight:600}
+.opt .od{display:block;font-size:13px;color:var(--muted);margin-top:1px}
+.opt-other{margin-top:6px;width:100%;box-sizing:border-box;min-height:44px;padding:9px 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit}
+.opt-other:focus{outline:none;border-color:var(--accent)}
+.tool .answers{margin:0;padding:10px 12px;font-size:14px}
+.tool .answers b{font-weight:600}
+.perm-t{font-weight:600}
+.perm-s{margin:4px 0 12px;font-family:var(--mono);font-size:12.5px;color:var(--muted);overflow-wrap:anywhere;white-space:pre-wrap;
+  /* 命令可能很长（heredoc 一大段）：限高、框内滚动，保证下面的允许 / 拒绝按钮永远在屏幕上 */
+  max-height:min(calc(var(--vvh,100vh) * .34),260px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  padding:8px 10px;background:var(--bg);border-radius:10px}
+.perm-row{display:grid;grid-template-columns:1fr 1.6fr;gap:10px}
+.btn{min-height:52px;border-radius:12px;font-weight:600;border:1.5px solid}
+.btn.deny{background:transparent;color:var(--deny);border-color:var(--deny)}
+.btn.allow{background:var(--allow);color:var(--on-allow);border-color:var(--allow)}
+.always{display:block;width:100%;min-height:44px;margin-top:6px;border:0;background:none;color:var(--muted);font-size:14px;text-decoration:underline}
+
+/* ════ 公共 · iOS 状态栏、最近活跃、协同配色 ════ */
+/* iOS 主屏幕 Web App 会在状态栏区域盖一层从背景色渐变到透明的遮罩，透出下面的内容；
+   遮罩层不画到状态栏区域，保证那里永远是纯色，否则会看到一截灰色模糊 */
+#sheet{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:flex-end;background:rgba(0,0,0,.42);z-index:5}
+#sheet.on{display:flex}
+.sheet-p{width:100%;max-height:88%;overflow-y:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:14px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 16px)}
+.sheet-p h2{margin:0 4px 4px;font-size:16px;font-weight:600}
+.sheet-p p{margin:0 4px 6px;font-size:13px;color:var(--muted)}
+.s-item{display:block;width:100%;min-height:56px;margin-top:8px;padding:10px 12px;text-align:left;border:var(--bw) solid var(--line);border-radius:12px;background:var(--bg)}
+.s-item[aria-current="true"]{border-color:var(--accent)}
+.s-item .t{font-weight:600}
+/* 最近活跃：标题行 = 标题（截断）+ 最右边的目录名 */
+.s-row.rec .s-item .t{display:flex;align-items:baseline;gap:8px}
+.s-row.rec .rtt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
+/* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
+.pc0{--pbg:var(--pc0b);--pfg:var(--pc0f)}.pc1{--pbg:var(--pc1b);--pfg:var(--pc1f)}.pc2{--pbg:var(--pc2b);--pfg:var(--pc2f)}.pc3{--pbg:var(--pc3b);--pfg:var(--pc3f)}.pc4{--pbg:var(--pc4b);--pfg:var(--pc4f)}.pc5{--pbg:var(--pc5b);--pfg:var(--pc5f)}.pc6{--pbg:var(--pc6b);--pfg:var(--pc6f)}
+.ptint .pe-peer-name>span{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px}   /* 只给名字加底色，和会话列表里这个对方的名字标签一样 */
+.s-row.ptint .t .ptn{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.s-item .m{display:flex;gap:10px;font-size:12.5px;color:var(--muted);margin-top:2px}
+/* 加入了 claclaw 协同的会话：会话名左上方的背景里藏一个「两个人、箭头一来一回」的矢量图（取代原来的浅紫色边框）；和背景里的「更新客户端」圈一样淡，仔细看才看得到 */
+.s-row.collab .s-item,.s-row.collab .wx-b,.s-row.collab .t,.s-row.collab .m,.s-row.collab .wx-top{position:relative}
+.s-row.collab.wx .wx-b::before,.s-row.collab:not(.wx) .s-item::before{content:'';position:absolute;width:40px;height:30px;background:var(--muted);opacity:.13;pointer-events:none;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 48'%3E%3Ccircle cx='14' cy='14' r='7'/%3E%3Cpath d='M2 37V32C2 26.5 7.5 23 14 23S26 26.5 26 32V37Z'/%3E%3Ccircle cx='50' cy='24' r='7'/%3E%3Cpath d='M38 47V42C38 36.5 43.5 33 50 33S62 36.5 62 42V47Z'/%3E%3Cpath d='M30 7L37 1V4.5H50V9.5H37V13Z'/%3E%3Crect x='23' y='11' width='11' height='3' rx='1.5'/%3E%3Crect x='27' y='19' width='13' height='3' rx='1.5' fill-opacity='.5'/%3E%3Cpath d='M41 30L34 24.5V27.5H27V32.5H34V35.5Z'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 48'%3E%3Ccircle cx='14' cy='14' r='7'/%3E%3Cpath d='M2 37V32C2 26.5 7.5 23 14 23S26 26.5 26 32V37Z'/%3E%3Ccircle cx='50' cy='24' r='7'/%3E%3Cpath d='M38 47V42C38 36.5 43.5 33 50 33S62 36.5 62 42V47Z'/%3E%3Cpath d='M30 7L37 1V4.5H50V9.5H37V13Z'/%3E%3Crect x='23' y='11' width='11' height='3' rx='1.5'/%3E%3Crect x='27' y='19' width='13' height='3' rx='1.5' fill-opacity='.5'/%3E%3Cpath d='M41 30L34 24.5V27.5H27V32.5H34V35.5Z'/%3E%3C/svg%3E") no-repeat center/contain}
+.s-row.collab.wx .wx-b::before{left:-10px;top:2px}
+.s-row.collab:not(.wx) .s-item::before{left:0;top:0}
+.s-item .m .id{font-family:var(--mono)}.s-item .m .cwd:empty{display:none}
+
+@media (prefers-reduced-motion:reduce){.tool[data-k="run"] .st,.tgroup[data-k="run"] .tg-h .st{animation:none}}
+#dock{position:relative}
+/* ════ 公共 · 底部输入区 ════ */
+/* 底部输入区：分割线以下没有任何边框和底色块，靠光标和淡色提示表明这里能输入；
+   左上角「+」加图片、右上角发送/停止，都是浮在输入框上的纯符号 */
+#composer{position:relative}
+#dockGrip{display:none}
+#taWrap{position:relative}
+#ta{display:block;width:100%;resize:none;overflow-y:hidden;scrollbar-width:thin;min-height:44px;max-height:132px;padding:11px 48px 11px 36px;border:0;border-radius:0;background:transparent;color:var(--ink);font:inherit;line-height:1.4;box-sizing:border-box;caret-color:var(--accent)}
+#ta:focus,#ta:focus-visible{outline:none}
+#ta::placeholder{color:var(--muted);opacity:.65}
+#taWrap.sug #ta{}
+#taWrap.sug #ta::placeholder{opacity:.9}
+#attachBtn,#send{position:absolute;top:2px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1}
+#attachBtn{left:-8px;color:var(--muted)}
+#send{right:2px;color:var(--accent)}
+#send:disabled,#send.sugfill{color:var(--muted);opacity:.45;cursor:default}
+#send.sugfill{cursor:pointer}
+/* 清空输入框：手机上字有三行以上才出现，在左下角（左上角是「+」）；电脑上有字就出现，在「+」右边 */
+#taClr{position:absolute;bottom:4px;left:-6px;width:36px;height:36px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--muted);opacity:.7}
+#taClr[hidden]{display:none}
+#stopBtn{position:absolute;top:2px;right:42px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--deny)}
+#composer.busy #ta{padding-right:88px}
+#composer.nosend #send{display:none}
+#composer.nosend #ta{padding-right:12px}
+#composer.nosend #stopBtn{right:2px}
+#composer.nosend.busy #ta{padding-right:48px}
+#atBtn{position:absolute;top:2px;right:2px;width:40px;height:40px;padding:0;border:0;background:none;display:grid;place-items:center;z-index:1;color:var(--accent);font-size:21px;font-weight:600;line-height:1;-webkit-tap-highlight-color:transparent}   /* 群聊：@ 成员，一直在 */
+#composer:not(.nosend) #atBtn{right:42px}
+#composer.grp #ta,#composer.grp.nosend #ta{padding-right:48px}
+#composer.grp:not(.nosend) #ta{padding-right:88px}
+#cmdMenu{position:absolute;left:10px;right:10px;bottom:calc(100% + 6px);max-height:46vh;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:var(--bw) solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.14);z-index:4;padding:4px}
+.cmd{display:block;width:100%;min-height:48px;padding:7px 10px;border:0;border-radius:9px;background:none;text-align:left}
+.cmd[aria-selected="true"]{background:var(--bg)}
+.cmd .cn{font-family:var(--mono);font-size:14px;font-weight:600}
+.cmd .ch{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-left:6px}
+.cmd .cd{display:block;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmd-empty{padding:12px 10px;font-size:13px;color:var(--muted)}
+.cmdout{align-self:stretch;margin:0;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:12px;background:var(--surface);font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+#atts{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px}
+.att{position:relative;flex:none;width:60px;height:60px;border-radius:10px;overflow:hidden;border:var(--bw) solid var(--line);background:var(--bg)}
+.att img{width:100%;height:100%;object-fit:cover;display:block}
+.uvid{position:relative;display:inline-block;max-width:220px;border-radius:12px;overflow:hidden;background:#000;margin-bottom:4px}
+.uvid img,.uvid video{display:block;max-width:220px;max-height:300px}
+.uvid.nothumb{width:160px;height:90px}.uvid.nothumb img{display:none}
+.uvid-b{position:absolute;left:6px;bottom:6px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.6);color:#fff;font-size:12px}
+.att video{width:100%;height:100%;object-fit:cover;display:block}
+.att-vid{position:absolute;left:3px;bottom:3px;padding:0 4px;border-radius:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;line-height:16px}
+.att.loading::after{content:'…';position:absolute;inset:0;display:grid;place-items:center;color:var(--muted)}
+.att button{position:absolute;top:2px;right:2px;width:22px;height:22px;border:0;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:14px;line-height:22px;padding:0}
+.uimgs{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.uimgs img{max-width:180px;max-height:180px;border-radius:10px;display:block;cursor:zoom-in}
+.uimgs .ph{padding:8px 10px;border-radius:10px;background:var(--bg);color:var(--muted);font-size:13px}
+.msg.user .uimgs+.ut{margin-top:6px}
+#lightbox{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.85)}
+#lightbox.on{display:flex}
+#vplayer{position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;background:#000}
+#vplayer.on{display:flex}
+#vplayer video{max-width:100%;max-height:100%}
+#vplayer button{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;width:36px;height:36px;border:0;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;font-size:22px;line-height:36px;padding:0}
+.uvid{cursor:pointer}
+#fview{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg)}
+#fview.on{display:flex}
+.fv-h{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;border-bottom:var(--bw) solid var(--line)}
+.fv-n{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fv-share{border:var(--bw) solid var(--line);border-radius:8px;background:none;color:var(--ink);padding:6px 10px;font-size:14px}
+.fv-x{width:36px;height:36px;border:0;border-radius:50%;background:var(--line);color:var(--ink);font-size:22px;line-height:36px;padding:0}
+.fv-b{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+.fv-b pre{margin:0;padding:12px;white-space:pre-wrap;word-break:break-word;font-size:14px}
+.fv-b img{display:block;max-width:100%;margin:0 auto}
+.fv-b iframe{width:100%;height:100%;border:0}
+.fv-md{padding:14px 16px 28px;font-size:15px;line-height:1.65;word-break:break-word}   /* .md 文件：按回复里的 Markdown 样式排版 */
+.fv-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+/* ════ 公共 · 会话解剖页 ════ */
+/* 会话解剖页：标题栏点会话名打开。三层：会话（总消耗、四桶、每轮一颗球、每轮明细表）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） */
+#diss{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg);--ds-inp:#e8912d;--ds-cr:#8b7bff;--ds-cw:#9aa0a6;--ds-out:#3fb950}
+#diss.on{display:flex}
+#diss .ds-back{flex:none;width:36px;height:36px;margin-left:-6px;padding:0;border:0;border-radius:50%;background:none;color:var(--ink);display:grid;place-items:center;-webkit-tap-highlight-color:transparent}
+#diss .ds-nav{display:none;gap:6px}
+#diss.t .ds-nav{display:flex}
+#diss.t .ds-re{display:none}
+#diss .fv-share:disabled{opacity:.35}
+.ds-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(16px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));font-size:13px}
+/* 解剖页字号只用五档：24 大数字 / 15 卡片数值 / 13 小节标题、正文 / 12 表格、标签、说明 / 11 表头、旁注 */
+.ds-k{color:var(--muted);font-size:12px}
+.ds-big{margin:2px 0 6px;font-size:24px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.ds-big small{display:block;margin:3px 0 0;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0;line-height:1.4}
+.ds-lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ds-lg b{color:var(--ink);font-weight:600}
+.ds-dot{display:inline-block;width:9px;height:9px;margin-right:5px;border-radius:2px;vertical-align:-1px}
+.c-inp{background:var(--ds-inp)}.c-cr{background:var(--ds-cr)}.c-cw{background:var(--ds-cw)}.c-out{background:var(--ds-out)}
+.ds-meta{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
+.ds-meta b{color:var(--ink);font-weight:600}
+.ds-sec{margin:16px 0 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.3px}
+.ds-sec small{font-weight:400;margin-left:6px}
+.ds-beads{display:flex;flex-wrap:wrap;gap:5px 6px;align-items:center;margin:6px 0 4px}
+.ds-beads.one{flex-wrap:nowrap;justify-content:flex-end;overflow:hidden;-webkit-mask-image:linear-gradient(to right,transparent,#000 48px);mask-image:linear-gradient(to right,transparent,#000 48px)}   /* 收起：一行，最近的几轮靠右，更早的从左边淡出（不再露出上一行被切掉的半个球） */
+.ds-tg{margin:0 2px 0 8px;padding:1px 8px;border:var(--bw) solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:11px;line-height:1.5;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ds-bead{display:block;cursor:pointer;flex:none;transition:transform .14s ease-out,filter .14s ease-out,opacity .14s ease-out}
+.ds-bead.dim{opacity:.35}
+@media (hover:hover){.ds-bead:hover{transition-duration:.05s;transform:scale(1.14);filter:brightness(1.07) drop-shadow(0 2px 4px rgba(0,0,0,.18));opacity:1}}   /* 鼠标移上去：球稍微放大、提亮、浮起一点（照 dsh） */
+.ds-bead text{font-size:11px;font-weight:600;fill:#fff;text-anchor:middle;pointer-events:none}
+.ds-tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -12px;padding:0 12px}
+.ds-tb{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ds-tb th,.ds-tb td{padding:5px 5px;text-align:right;border-bottom:var(--bw) solid var(--line)}
+.ds-tb th:first-child,.ds-tb td:first-child{text-align:left;padding-left:2px}
+.ds-tb th{color:var(--muted);font-weight:500;font-size:11px;white-space:nowrap}
+.ds-tb tr.r{cursor:pointer}
+.ds-tb tr.r td{border-bottom:0}
+.ds-tb tr.q td{text-align:left;color:var(--muted);font-size:12px;padding:0 2px 6px;max-width:0;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.ds-tb tr.q td i{font-style:normal;color:var(--warn)}
+.ds-tb tr.q td u{text-decoration:none;color:var(--deny)}
+.ds-tb tfoot td{font-weight:600;border-top:1px solid var(--ink);border-bottom:0;color:var(--ink)}
+.ds-tb .no{color:var(--muted)}
+.ds-tb .no.heavy{color:var(--warn);font-weight:600}
+.ds-tb .no.err{color:var(--deny);font-weight:600}
+.ds-tb .col-inp{color:var(--ds-inp)}.ds-tb .col-cr{color:var(--ds-cr)}.ds-tb .col-cw{color:var(--ds-cw)}.ds-tb .col-out{color:var(--ds-out)}
+.ds-tb tr.d td{max-width:0;white-space:normal;text-align:left;padding:6px 6px 10px;background:var(--surface);border-bottom:var(--bw) solid var(--line)}
+@media (hover:hover){.ds-tb tr.r:hover td,.ds-tb tr.q:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
+.ds-rec{margin:8px 0;padding:8px 10px;border:var(--bw) solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
+.ds-rec b{color:var(--ink);font-weight:600}
+.ds-pg{display:flex;flex-wrap:nowrap;gap:5px;align-items:center;justify-content:flex-end;margin:8px 0;font-size:12px;color:var(--muted)}
+.ds-pg>span:first-child{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}   /* 分页始终一行：放不下时说明字先省略 */
+.ds-pg>*{flex:none}
+.ds-pg button{min-width:30px;height:28px;padding:0 8px;border:var(--bw) solid var(--line);border-radius:6px;background:none;color:var(--ink);font:inherit;font-size:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ds-pg button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ds-pg button:disabled{opacity:.35;cursor:default}
+@media (max-width:600px){.ds-pg{gap:4px}.ds-pg button{min-width:26px;padding:0 5px}}   /* 手机：按钮紧凑一点，中间页（两头各有省略号）也放得下一行 */
+.ds-q{margin:6px 0;padding:10px 12px;border-radius:12px;background:var(--user-bg);white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.ds-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ds-chip{padding:2px 9px;border:var(--bw) solid var(--line);border-radius:999px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.ds-chip b{color:var(--ink);font-weight:600}
+.ds-chip.warn{color:var(--warn);border-color:var(--warn)}
+.ds-chip.bad{color:var(--deny);border-color:var(--deny)}
+.ds-files{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.6;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.ds-tool{display:flex;gap:6px;color:var(--muted);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
+.ds-tool .n{flex:none;color:var(--ink)}
+.ds-tool .a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+.ds-tool .r{flex:none}
+.ds-tool.err .n,.ds-tool.err .r{color:var(--deny)}
+.ds-tx{margin-top:6px;color:var(--ink);font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
+.ds-raw{margin-top:6px;font-size:12px;color:var(--muted)}.ds-raw summary{cursor:pointer}.ds-raw pre{margin:4px 0 0;padding:8px 10px;border-radius:8px;background:rgba(127,127,127,.08);white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.45;color:var(--ink)}
+.ds-note{margin-top:6px;color:var(--muted);font-size:11px;line-height:1.5}
+.ds-reply{margin:6px 0;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word;white-space:pre-wrap}
+.ds-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+@media (max-width:999px){.ds-tb .ds-opt{display:none}}
+/* 解剖页重排：总消耗卡片 + 比例条，概况用数字格子，工具用标签，表格每轮两行一起高亮 */
+.ds-hero{padding:16px 18px 14px;border:var(--bw) solid var(--line);border-radius:14px;background:var(--surface)}
+.ds-hero .ds-big{margin-bottom:10px}
+.ds-bar{display:flex;gap:2px;height:8px;margin:0 0 10px;border-radius:4px;overflow:hidden}
+.ds-bar i{display:block;min-width:3px}
+.ds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px;margin-top:10px}
+.ds-st{padding:10px 12px;border:var(--bw) solid var(--line);border-radius:12px;background:var(--surface);min-width:0;font-variant-numeric:tabular-nums}
+.ds-st .l{color:var(--muted);font-size:12px}
+.ds-st .v{margin-top:2px;font-size:15px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ds-st .s{margin-top:1px;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ds-st[data-i]{cursor:pointer}
+@media (hover:hover){.ds-st[data-i]:hover{border-color:var(--muted)}}
+.ds-st.bad .v{color:var(--deny)}
+.ds-st .add{color:var(--ds-out)}.ds-st .del{color:var(--deny)}
+.ds-meta2{margin-top:10px;color:var(--muted);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.ds-sec{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin:22px 0 8px;font-size:13px;color:var(--ink);letter-spacing:0}
+.ds-sec small{margin-left:0;font-size:12px;color:var(--muted);font-weight:400}
+.ds-sec .ds-tg{margin:0}
+.ds-tb tbody.ds-turn tr.q td{color:var(--muted);font-size:11px;line-height:15px;border-bottom:0;padding-top:0;padding-bottom:7px}   /* 和「逐步」一样不画分隔线：数字一行 + 下面一行小字预览 */
+.ds-tb tbody.ds-turn tr.q td .tm{margin-right:6px;font-variant-numeric:tabular-nums}
+.ds-tb tbody.ds-turn tr.r td{border-bottom:0;padding-bottom:1px}
+.ds-tb tr.q .ds-from{display:inline-block;margin-right:5px;padding:0 4px;border:var(--bw) solid var(--line);border-radius:4px;font-size:11px;line-height:13px;vertical-align:1px}   /* 协同 / 本机会话发来的：来源小标签 */
+@media (max-width:600px){.ds-tb th,.ds-tb td{padding:5px 3px}.ds-tb th:last-child,.ds-tb td:last-child{padding-right:0}}
+@media (hover:hover){.ds-tb tbody.ds-turn:hover td{background:color-mix(in srgb,var(--muted) 8%,transparent)}}
+body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{display:none}   /* 解剖页上不浮朗读按钮 */
+@media (min-width:1000px){#diss,#fview{top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;overflow:hidden}}   /* 电脑：放进右边的卡片里，不被卡片边框压住标题 */
+/* 电脑：模型管理、语音管理整页（像会话解剖）——中间栏铺满右边，聊天区让开；内容居中限宽 */
+@media (min-width:1000px){
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #sheet{grid-column:2 / -1;z-index:6}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #sheet::after{display:none}
+  #app.host-on:has(#hostBody :is([data-act="mdl-back"],[data-act="vc-back"],[data-act="th-back"],[data-act="ac-back"])) #hostBody{max-width:880px;margin:0 auto}
+  #app.host-on:has(#hostBody [data-act="th-back"]) #hostBody{max-width:none;padding:0 24px}
+  #app.host-on:has(#hostBody [data-act="th-back"]) #hostBody .pg-hd{margin-left:-34px;margin-right:-34px}   /* 标题栏和底线铺满整栏 */
+  #app.host-on:has(#hostBody [data-act="th-back"]) #hostBody .claw-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}   /* 主题页：不限宽，按页面宽度排多列（手机两列不变） */
+}
+@media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb th,.ds-tb td{padding:6px 8px}}
+/* ════ 公共 · 聊天里的图片、文件 ════ */
+/* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最大 180）；点开才是原图 */
+.sfimg{align-self:flex-start;margin:6px 0;max-width:min(260px,80%)}
+.sfimg:not(.sfmedia){max-width:min(180px,60%)}
+.sfimg img{display:block;max-width:100%;max-height:180px;border-radius:10px;border:var(--bw) solid var(--line);cursor:zoom-in;background:var(--bg)}
+.sfmedia{width:min(300px,85%)}
+.sfmedia audio{display:block;width:100%;height:40px}
+.sfvideo video{display:block;width:100%;max-height:320px;border-radius:10px;background:#000}
+.sf-save{cursor:pointer}
+.sfmedia.playing audio{outline:2px solid var(--accent,#2F6F4F);outline-offset:2px;border-radius:20px}
+.sf-next{display:block;margin-top:6px;padding:6px 12px;border:var(--bw) solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sfimg figcaption{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dlcard{position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;cursor:pointer;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 52px 10px 12px;border:var(--bw) solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none;box-sizing:border-box}
+.dlcard.nopv{cursor:default}
+/* 聊天里的文件：右边一个下载按钮，点了直接存到本机（手机弹系统分享面板，可「存储到文件」；电脑下到「下载」）；看得了的文件点卡片才打开预览 */
+.f-dl{position:absolute;right:8px;top:50%;width:36px;height:36px;margin-top:-18px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);cursor:pointer}
+.f-dl:disabled{opacity:.45;cursor:default}
+.f-dl.spin svg{animation:pulse 1s infinite}
+.ufile .f-dl{top:auto;bottom:6px;margin-top:0;width:30px;height:30px}
+.ufile.nopv{cursor:default}
+.dl-n{font-size:14px;word-break:break-all}
+.dl-m{font-size:12px;color:var(--muted)}
+.ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:var(--bw) solid var(--line);color:var(--ink)}
+.ufile-n{font-size:14px;word-break:break-all}
+.att-file{width:auto;max-width:160px;padding:6px 26px 6px 8px;display:flex;align-items:center}
+.att-audio{height:auto;max-width:280px;flex-direction:column;align-items:stretch;gap:4px}
+.att-audio audio,.uaudio audio{display:block;width:100%;min-width:220px;height:36px}
+.uaudio{max-width:300px}
+.att-fn{font-size:12px;line-height:16px;max-height:48px;overflow:hidden;word-break:break-all}
+#lightbox img{max-width:100%;max-height:100%;object-fit:contain;margin:auto;flex:none}
+#lightbox{overflow:auto;-webkit-overflow-scrolling:touch}
+#lightbox,.fv-b{touch-action:pan-x pan-y}   /* 预览图双指缩放由 pinchZoom 自己做（只放大这张图）：整页缩放会把底下所有层一起放大，iOS 上很闪 */
+.sheet-p{overflow-x:hidden}
+.ver{text-align:center;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:2px;opacity:.8}
+#sList .s-grp{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 4px;padding:6px 2px;border:0;background:none;font-size:13px;color:var(--muted);text-align:left}
+#sList .s-grp:first-child{margin-top:0}
+@media (max-width:999px){#sList .s-grp:first-child{margin-top:16px}}   /* 手机：第一个目录离顶栏的距离 = 目录之间的距离（字到字：6 + 10 + 6） */
+/* ════ 公共 · 会话列表：目录行、状态、干活中 ════ */
+/* 目录行前面：合着是关着的文件夹，展开是打开的文件夹（打开的那个右转 90 度）；和顶上「新建会话」的图标竖着对齐 */
+#sList .s-grp{gap:8px}
+#sList .s-grp .fdw{position:relative;flex:none;width:20px;height:20px}
+#sList .s-grp .fd{display:block;width:20px;height:20px}
+/* 文件夹右上角的小圆点：目录里有没看的回复 = 红点；有会话正在干活 = 绿点闪烁（优先于红点；干完了还有没看的就变回红点） */
+#sList .s-grp .fdw::after{content:'';display:none;position:absolute;top:-1px;right:-2px;width:8px;height:8px;border-radius:50%}
+#sList .s-grp.unread .fdw::after{display:block;background:#F23C3C}
+#sList .s-grp.working .fdw::after{display:block;background:var(--allow);animation:pulse 1.2s infinite}
+#sList .s-grp .fd-o,#sList .s-grp[aria-expanded="true"] .fd-c{display:none}
+#sList .s-grp[aria-expanded="true"] .fd-o{display:block}
+#sList .s-grp .gn{flex:0 1 auto;min-width:0;font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-gpath{margin:-2px 2px 4px 30px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
+#sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
+#sList .s-grp.recent .gn{font-family:var(--sans)}
+/* 状态和「多久前」共用行尾一个固定宽度的位置：干活时显示状态，不干活时显示冷却时间；
+   左边的分支 / 目录太长就截断，所以状态变化不会让这一行重新排版或换行 */
+#sList .s-item .m{flex-wrap:nowrap;align-items:baseline}
+#sList .s-item .m .id{flex:none}
+#sList .s-item .m .cwd{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-item .m .cwd.lp{font-family:inherit}   /* 最后一条消息用正文字体，不用等宽 */
+#sList .s-item .m .when{flex:none;width:7.2em;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden}
+/* 正在干活的会话：绿色边框，状态文字绿色、前面一个闪动的点；等确认的用橙色 */
+.s-row.opening .s-item{background:var(--user-bg)!important}
+.s-row.working .s-item:not([aria-current="true"]){border-color:var(--allow)!important}   /* 选中的已经凸起，不再叠一层状态边框（状态看右下的圆点和文字） */
+.s-row.working .s-item .when{color:var(--allow);font-weight:600}
+.s-row.working .s-item .when::before{content:'';display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:currentColor;vertical-align:middle;animation:pulse 1.2s infinite}
+.s-row.waiting .s-item:not([aria-current="true"]){border-color:var(--warn)!important}
+.s-row.waiting .s-item .when{color:var(--warn)}
+/* ════ 公共 · 设置页 ════ */
+/* 设置区（手机在会话列表下面，电脑是单独一页）：分组卡片，退出登录单独放最下面 */
+#setPane .set-sec{margin:0 0 20px}
+/* 设置：一组一张圆角卡片，每行左边名称 + 灰色说明，右边开关或「当前值 ›」，行间细线（参考常见 App 的设置页） */
+#setPane .set-h{margin:0 14px 7px;font-size:12.5px;color:var(--muted)}
+#setPane .set-card{background:var(--bg);border-radius:12px;overflow:hidden}
+#setPane .set-card:not(:has(> :not([hidden]))){display:none}
+#setPane .set-sec:not(:has(.set-card > :not([hidden]))):not(:has(.set-note:not([hidden]))){display:none}
+#setPane .set-item{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:54px;margin:0;padding:11px 14px;border:0;background:none;text-align:left;font:inherit;font-size:15px;color:var(--ink);cursor:pointer;box-sizing:border-box}
+#setPane .set-item:not([hidden]) ~ .set-item:not([hidden])::before{content:'';position:absolute;top:0;left:14px;right:14px;border-top:var(--bw) solid var(--line)}
+#setPane .set-item:active{background:var(--surface)}
+#setPane .lb{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;line-height:1.35}
+#setPane .lb small{font-size:12.5px;color:var(--muted)}
+#setPane .set-item select{flex:none;max-width:45%;border:0;background:none;color:var(--muted);font:inherit;font-size:16px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;padding:4px 18px 4px 4px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
+#setPane .set-num{flex:none;display:flex;align-items:center;gap:2px;color:var(--muted);font-size:14.5px}
+#setPane .set-num input{width:64px;border:var(--bw) solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;text-align:left;padding:4px 6px}
+#setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
+/* ════ 公共 · 朗读 ════ */
+/* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
+   没在念：播放三角，点了念最后一条回复；在念：方块（外圈呼吸），点了停；被 iPhone 拦住：绿色播放键 */
+#ttsStop{position:fixed;right:14px;bottom:calc(var(--dockTop,96px) + 10px);z-index:30;width:42px;height:42px;padding:0;border:var(--bw) solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:pointer;opacity:.92}
+#ttsStop,.gm-play,#ttsMute{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+#ttsMute{position:relative}#ttsMute.cv::after{content:'';position:absolute;right:7px;top:7px;width:5px;height:5px;border-radius:50%;background:currentColor}   /* 单独设了声音/语速：小点，和图标同色 */
+#ttsPick{display:none;position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.35);align-items:flex-end;justify-content:center}
+#ttsPick.on{display:flex}
+#ttsPick .tp-box{width:100%;max-width:640px;max-height:70vh;display:flex;flex-direction:column;background:var(--surface);border-radius:16px 16px 0 0;padding-bottom:env(safe-area-inset-bottom)}
+#ttsPick .tp-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px;font-weight:600}
+#ttsPick .tp-x{border:0;background:none;color:var(--muted);font-size:16px;padding:4px 8px;cursor:pointer}
+#ttsPick .tp-list{overflow:auto;padding:0 8px 10px}
+#ttsPick .tp-rate{padding:2px 16px 8px}
+#ttsPick .tp-rh{display:flex;align-items:center;gap:8px;font-size:14px}
+#ttsPick .tp-rv{flex:1;color:var(--muted);font-variant-numeric:tabular-nums}
+#ttsPick .tp-rd{border:var(--bw) solid var(--line);background:none;color:var(--ink);border-radius:999px;padding:3px 10px;font-size:13px;cursor:pointer}
+#ttsPick .tp-rate .rate-row{display:flex;align-items:center;gap:8px;margin-top:4px}
+#ttsPick .tp-rate input{flex:1}
+#ttsPick .tp-sub{padding:6px 16px 2px;font-size:13px;color:var(--muted)}
+#ttsPick .tp-i{display:flex;gap:10px;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:10px 8px;border-radius:10px;font-size:15px;line-height:1.5;cursor:pointer}
+#ttsPick .tp-i:active,#ttsPick .tp-i:hover{background:var(--bg)}
+#ttsPick .tp-i.cur{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+#ttsPick .tp-i em{font-style:normal;color:var(--muted);min-width:1.6em;text-align:right;flex:none}
+@media (min-width:1000px){#ttsPick{align-items:center}#ttsPick .tp-box{border-radius:16px}}
+#roBar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin:6px 10px 8px;border-radius:12px;background:var(--bg);color:var(--muted);font-size:14px;line-height:1.4}
+#roBar[hidden]{display:none}
+#roBar .ro-t{flex:1}
+#roBar .ro-go{border:0;border-radius:999px;padding:6px 14px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer}
+body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!important}
+#ttsStop svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+#ttsStop.on{color:var(--accent)}
+#ttsStop.on{animation:ttsw 1.4s ease-in-out infinite}
+@keyframes ttsw{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent)}}
+@media (min-width:1000px){#ttsStop{right:26px}}
+#pairBanner{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:60;transform:translate(-50%,-150%);max-width:min(92vw,520px);padding:11px 16px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:14.5px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.22);cursor:pointer;transition:transform .25s ease;text-align:center}
+#pairBanner.on{transform:translate(-50%,0)}
+#setPane .tts-rate{flex-wrap:wrap;cursor:default}
+#setPane .tts-rate:active{background:none}
+#setPane .tts-rate .lb{flex:1 1 100%}
+#setPane .rate-row{flex:1 1 100%;display:flex;align-items:center;gap:10px}
+#setPane .rate-row input{flex:1;min-width:0;accent-color:var(--accent);height:28px}
+#setPane .rate-end{flex:none;font-size:12.5px;color:var(--muted)}
+#ttsStop.go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#setPane .sw{flex:none;position:relative;width:50px;height:30px;border-radius:15px;background:var(--line);transition:background .2s}
+#setPane .sw::after{content:'';position:absolute;top:2px;left:2px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+#setPane [data-on="1"] .sw{background:var(--allow)}
+#setPane [data-on="1"] .sw::after{transform:translateX(20px)}
+#setPane .set-note{margin:8px 14px 0;font-size:12.5px;color:var(--muted);text-align:left}
+#setPane .set-foot{margin-top:auto;padding-top:28px}
+#setPane .set-foot #logout{display:block;width:100%;margin:0 0 10px;padding:10px 14px;border:1px solid var(--deny);border-radius:10px;background:none;color:var(--deny);text-decoration:none;font-size:14px;text-align:center;cursor:pointer}
+#setPane .set-foot #logout:hover{background:var(--del-bg)}
+#setPane .set-foot .ver{text-align:center;padding:0}
+
+#sList .s-rempty{padding:2px 10px 8px 24px;font-size:12px}
+/* ════ 公共 · 未读红点、会话行按钮、右键菜单 ════ */
+/* 未读红点 */
+.s-row.unread .s-item .t::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
+#railChats{position:relative}
+#railPeer{position:relative}
+#railPeer.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+#railChats.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+#sessBtn{position:relative}
+#sessBtn.unr::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
+#soundPick{display:block;font-size:13px;margin:4px 0 10px;opacity:1}
+#soundSel{font-size:13px;padding:3px 6px;border:var(--bw) solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.s-row{position:relative;margin-top:8px}
+.s-row .s-item{margin-top:0;padding-right:52px;overflow:hidden}
+.s-row.two .s-item{padding-right:92px}
+.s-row.three .s-item{padding-right:132px}
+.s-row.pn .s-item{padding-right:92px}
+.s-row.three .s-ren{right:46px}
+.s-new{position:absolute;top:6px;right:46px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
+.s-row.three .s-new{right:86px}
+.s-new:hover,.s-new:focus-visible{color:var(--accent);background:var(--bg)}
+.s-ren{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
+.s-row.two .s-ren{right:46px}
+.s-ren:hover,.s-ren:focus-visible{color:var(--accent);background:var(--bg)}
+.s-item .t,.s-item .m span,.s-item .bz{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+.s-hide{display:none}
+.ctxm{position:fixed;z-index:80;min-width:150px;padding:5px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.ctxm button{display:block;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:var(--ink);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.ctxm button:hover{background:var(--bg)}
+.ctxm button.danger{color:#E5484D}
+.s-del{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
+.s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
+#delDlg,#keyDlg,#crDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
+#delDlg.on,#keyDlg.on,#crDlg.on{display:flex}
+#crIn{width:100%;box-sizing:border-box;min-height:180px;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);resize:vertical}
+#newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
+#newDlg.on{display:flex}
+#newDlg,#delDlg,#keyDlg,#crDlg{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-items:flex-start}#newDlg>.dlg,#delDlg>.dlg,#keyDlg>.dlg,#crDlg>.dlg{margin:auto 0}   /* 弹框比屏幕高（手机键盘弹起、选项多）时能上下滚，不会把上面的「目录」挤出屏幕够不着；放得下时照样居中 */
+#newDlg .newIn{margin:4px 0 8px;font-size:14px;color:var(--muted);line-height:1.6}
+/* 目录看起来就是一段文字；点进去才发现能改（不主动提示） */
+.dlg input.plainIn{display:inline;width:auto;min-height:0;padding:0 2px;border:0;border-bottom:1px solid transparent;border-radius:0;background:none;color:var(--ink);font-family:var(--mono);font-size:13.5px}
+.dlg input.plainIn:focus{outline:none;border-bottom-color:var(--accent)}
+.dlg{width:100%;max-width:380px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:16px;padding:18px 16px}
+.dlg h3{margin:0 0 6px;font-size:17px;overflow-wrap:anywhere}
+.dlg p{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.dlg label{display:block;font-size:14px;margin:10px 0 4px}
+.dlg .newNmRow{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.dlg label.newSkin{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}   /* 勾上：建好的会话在「最近」里随机配一套头像和网名 */
+.dlg label.newSkin input{flex:none;width:16px;height:16px;min-height:0;margin:0;padding:0;accent-color:var(--accent)}
+.dlg input{width:100%;box-sizing:border-box;min-height:44px;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+.dlg input:focus{outline:none;border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}   /* 不要浏览器默认的粗黑焦点框 */
+.dlg .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.dlg .err{min-height:1.4em;margin-top:10px;color:var(--deny);font-size:14px}
+.dlg .chips{display:flex;flex-wrap:wrap;gap:6px}
+.dlg select{width:100%;box-sizing:border-box;min-height:42px;padding:8px 10px;border:var(--bw) solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.chip{min-height:34px;padding:4px 12px;border:var(--bw) solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
+.chip[aria-checked="true"]{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600}
+/* ════ 公共 · 会话设置面板（模型、推理强度、权限） ════ */
+/* 会话设置面板：手机从底部滑上来，电脑居中；三组：模型（卡片）、推理强度（分段）、权限（卡片） */
+#cfgDlg{position:fixed;inset:0;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);z-index:9}
+#cfgDlg.on{display:flex}
+.cfg-p{box-sizing:border-box;width:100%;max-width:520px;max-height:88vh;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border-radius:20px 20px 0 0;padding:6px 16px calc(18px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)));animation:cfgUp .2s ease-out}
+@keyframes cfgUp{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
+@media (min-width:600px){#cfgDlg{align-items:center}.cfg-p{border-radius:18px;padding-bottom:18px}.cfg-grab{display:none}}
+/* 电脑端会话设置：滚动条收在上下圆角以内（轨道上下各让出圆角的高度），去掉轨道底色 */
+@media (min-width:600px){.cfg-p::-webkit-scrollbar{width:8px}.cfg-p::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:4px}.cfg-p::-webkit-scrollbar-track{background:transparent;margin:18px 0}}
+.cfg-grab{width:38px;height:5px;margin:4px auto 6px;border-radius:3px;background:var(--line)}
+.cfg-h{display:flex;align-items:center;justify-content:space-between;min-height:40px}
+.cfg-h b{font-size:17px}
+.cfg-h button{width:40px;height:40px;border:0;border-radius:50%;background:var(--bg);color:var(--muted);font-size:22px;line-height:1;cursor:pointer}
+.cfg-p h4{display:flex;align-items:baseline;gap:8px;margin:16px 2px 8px;font-size:13px;font-weight:600;color:var(--muted)}
+.cfg-p h4 span{font-weight:400;font-size:12.5px}
+.cfg-list{display:flex;flex-direction:column;gap:8px}
+.cfg-list[role="radiogroup"]{gap:4px;padding:4px;border-radius:16px;background:var(--bg)}   /* 模型、权限：和推理强度一样合成一块，选中的那项凸起 */
+.cfg-list[role="radiogroup"]>.cfg-opt{border-radius:12px}.cfg-list[role="radiogroup"]>.cfg-opt:not([aria-checked="true"]){background:none}
+.cfg-list[role="radiogroup"]>.cfg-g{margin:6px 10px 0}
+.cfg-list[role="radiogroup"]>.cfg-empty{padding:12px 10px}
+.cfg-tog .sw{flex:none;position:relative;width:46px;height:28px;border-radius:14px;background:var(--line);transition:background .2s}
+.cfg-tog .sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.cfg-tog[aria-checked="true"] .sw{background:var(--allow)}.cfg-tog[aria-checked="true"] .sw::after{transform:translateX(18px)}
+.cfg-tog small{color:var(--muted);font-size:12.5px}
+.cfg-sel select{flex:none;max-width:60%;border:0;background:none;color:var(--ink);font:inherit;font-size:15px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;cursor:pointer}
+.cfg-sel,.cfg-rate{box-sizing:border-box;min-width:0;max-width:100%}.cfg-sel .tx{flex:none}.cfg-sel select{flex:1 1 0;min-width:0;max-width:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cfg-rate input{min-width:0}.cfg-rate{flex-direction:column;align-items:stretch;gap:6px;cursor:default}.cfg-rh{display:flex;align-items:center;gap:8px;width:100%}.cfg-rate input{accent-color:var(--accent)}.cfg-rh span{color:var(--muted);font-size:13px}
+.cfg-rh button{margin-left:auto;border:0;background:none;color:var(--accent);font:inherit;font-size:13px;cursor:pointer}.cfg-rate .rate-row{display:flex;align-items:center;gap:8px;width:100%}.cfg-rate input{flex:1}.cfg-rate .rate-end{flex:none;font-size:12.5px;color:var(--muted)}
+.cfg-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 14px;border:0;border-radius:14px;background:var(--user-bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s,box-shadow .15s}   /* 和 Agent 卡片一样：靠底色分块，不画边框 */
+.cfg-opt .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.cfg-opt .t{font-size:15.5px;font-weight:600}
+.cfg-opt .s{font-size:12.5px;line-height:1.4;color:var(--muted)}
+.cfg-opt .ck{flex:none;width:20px;height:20px;border:1.5px solid var(--line);border-radius:50%;box-sizing:border-box}
+.cfg-opt[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 7%,transparent)),var(--user-bg);box-shadow:inset 1px 1px 0 var(--gl-hi),var(--sel-sh,0 10px 22px -10px color-mix(in srgb,var(--accent) 45%,transparent),0 3px 8px -3px color-mix(in srgb,var(--ink) 12%,transparent))}   /* 深色主题用 --sel-sh：只要贴身一点暗影，不要底下外扩的光雾；选中 / 打开：和 Agent 卡片选中一样凸起（左上向光细亮边 + 背光柔和投影） */
+.cfg-opt[aria-checked="true"] .ck{visibility:hidden}   /* 选中的已经凸起了，再点也没变化：不再画单选圈（占位留着，免得文字换行跳动） */
+.cfg-use{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:4px 12px;padding:12px 14px;border-radius:14px;background:var(--bg)}
+.cfg-use b{font-size:14.5px;font-weight:600}
+.cfg-use .cu-bar{position:relative;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.cfg-use .cu-bar .pace{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;border-radius:1px;background:var(--ink);opacity:.35}
+.cfg-use .cu-bar i{display:block;height:100%;border-radius:4px;background:var(--accent)}
+.cfg-use .cu-bar.hi i{background:var(--warn)}
+.cfg-use .cu-pct.over{color:var(--warn)}
+.cfg-use .cu-pct{font-size:14px;font-variant-numeric:tabular-nums;text-align:right;min-width:3em}
+.cfg-use small{grid-column:2/-1;margin:-2px 0 6px;font-size:12px;color:var(--muted)}
+.cfg-use small:last-child{margin-bottom:0}
+.cfg-opt .md{flex:none;width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.cfg-opt .md[data-m="accept"]{background:var(--warn)}
+.cfg-opt .md[data-m="plan"]{background:var(--accent)}
+.cfg-opt .md[data-m="bypass"]{background:var(--deny)}
+.cfg-opt:disabled{opacity:.5;cursor:default}
+.cfg-g{margin:6px 2px -2px;font-size:12px;color:var(--muted)}
+.cfg-empty{padding:14px 4px;font-size:13.5px;color:var(--muted)}
+.cfg-opt.busy,.cfg-seg button.busy{opacity:.55;animation:cfgPulse 1s ease-in-out infinite alternate}
+@keyframes cfgPulse{to{opacity:.25}}
+.cfg-seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:4px;border-radius:14px;background:var(--bg)}
+.cfg-seg button{min-height:40px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;font-size:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cfg-seg button[aria-checked="true"]{background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 45%,transparent),transparent 55%),var(--user-bg);color:var(--accent);font-weight:600;box-shadow:inset 1px 1px 0 var(--gl-hi),var(--sel-sh,0 6px 14px -8px color-mix(in srgb,var(--accent) 50%,transparent),0 2px 5px -2px color-mix(in srgb,var(--ink) 14%,transparent))}   /* 选中的一档凸起，不用实心色块 */
+.cfg-seg button:disabled{opacity:.3;cursor:default}
+.btn.del{background:var(--deny);color:#fff;border-color:var(--deny)}
+.btn.cancel{background:transparent;color:var(--ink);border-color:var(--line)}
+.s-item[data-busy="1"]{opacity:.55}
+.s-item .bz{color:var(--warn);font-size:12.5px;margin-top:2px}
+.s-item .m{flex-wrap:wrap}
+.s-empty{padding:16px 4px;color:var(--muted);font-size:14px}
+.plan{margin:0;padding:10px 12px;white-space:pre-wrap;font-size:14px;max-height:40vh;overflow-y:auto}
+#sessBtn .dot.off{filter:grayscale(1);opacity:.45}
+#sessBtn .dot.off:empty{background:var(--muted);filter:none;opacity:1}
+/* ════ 公共 · 工作状态条 ════ */
+/* 输入框上方的工作状态条：一直告诉你 Claude 在不在干活、多久没动静了 */
+#workBar{display:flex;align-items:center;gap:8px;padding:4px 14px 8px;background:var(--bg);font-size:12.5px;color:var(--muted)}
+/* 干活时：这个会话所属 Claw 的图标一闪一闪（代替原来的绿点和「XXX 正在工作」） */
+#workBar .wlogo{flex:none;display:grid;place-items:center;width:18px;height:18px;animation:wbreath 2.4s ease-in-out infinite}
+@keyframes wpulse{0%,100%{opacity:1}50%{opacity:.6}}   /* 轻一点：看得出在闪就行（文字用） */
+/* Claw 图标干活时：原色、原大小 ⇄ 黑白、缩到一半，来回渐变（黑白的 logo 只看得出缩放） */
+@keyframes wbreath{0%,100%{filter:grayscale(0);transform:scale(1)}50%{filter:grayscale(1);transform:scale(.8)}}
+#workBar .wlogo svg,#workBar .wlogo img{display:block;width:18px;height:18px;object-fit:contain}
+#workBar .wlogo img.tile{border-radius:22.5%}
+/* Kimi 吉祥物干活时还会眨眼 */
+.km-mark .eyes{transform-box:fill-box;transform-origin:50% 50%}
+#rail .rclaw.busy .km-mark .eyes,.claw-card.busy .km-mark .eyes,#mtabs button.busy .km-mark .eyes,#workBar .wlogo .km-mark .eyes,#sessBtn .dot.busy .km-mark .eyes{animation:kmblink 2.4s ease-in-out infinite}
+@keyframes kmblink{0%,82%,100%{transform:scaleY(1)}88%{transform:scaleY(.12)}94%{transform:scaleY(1)}}
+#workBar.quiet{color:var(--warn)}
+#workUse{margin-left:auto;flex:none;font-variant-numeric:tabular-nums;cursor:pointer;white-space:nowrap}
+#workUse .over{color:var(--warn)}
+body:has(#ttsStop:not([hidden])) #workUse{margin-right:46px}   /* 右下角浮着朗读按钮：让开 */
+@media (min-width:1000px){body:has(#ttsStop:not([hidden])) #workUse{margin-right:58px}}
+#workBar.quiet .wlogo{animation-duration:3.6s}
+#bannerT.link{cursor:pointer;text-decoration:underline}
+
+/* ════ 公共 · 电脑端布局（左边图标栏、中间列表、右边聊天） ════ */
+/* ---------- 电脑端（宽屏）：参照微信 / Teams —— 左边图标栏、中间会话列表、右边聊天 ---------- */
+#rail{display:none}
+#sheetGrip{display:none}
+@media (min-width:1000px){
+  /* 会话列表右边缘：拖动改宽度（像微信：往左有最窄限制，往右可以拉宽） */
+  #sheetGrip{display:block;position:absolute;top:0;bottom:0;right:-4px;width:8px;z-index:5;cursor:col-resize}
+  #sheetGrip:hover,#sheetGrip.drag{background:linear-gradient(to right,transparent 3px,var(--accent) 3px,var(--accent) 5px,transparent 5px)}
+  body.col-drag{cursor:col-resize;user-select:none}
+}
+/* ════ 公共 · 手机布局 ════ */
+/* ---------- 手机：像微信，首页是会话列表，点进去是聊天页，左上角返回 ---------- */
+#backBtn{display:none}
+/* 标题栏两行网格：手机、电脑一样（第一行 ● 会话名；第二行 模型 · 推理强度 · 权限  ID ······ 圆球 ›，只有 › 打开会话设置）。
+   会话名、ID 嵌在 #sessBtn 里：把外层拆掉（display:contents），直接排进 #hdCard 的网格；目录、右箭头、未读红点不在标题栏显示 */
+#sessBtn>svg{display:none}
+#sessBtn.unr::after{display:none}
+#hdCard{display:grid;grid-template-columns:20px minmax(78px,1fr) auto;gap:0 8px;align-items:center;min-height:0}   /* ID 至少留够 8 位 */
+#hdCard #sessBtn,#sessBtn .st,#sessBtn .r1{display:contents}
+#sessBtn .dot{grid-column:1;grid-row:1}
+#sessBtn .nm{grid-column:2/4;grid-row:1;font-size:17px;line-height:28px}
+#sessBtn .where{display:none}
+#hdAct{grid-column:1/-1;grid-row:2;align-self:stretch;max-width:none}   /* 第二行整行：模型 · 权限从 Claw 图标的左边开始排 */
+#sid{flex:0 1 auto;align-self:flex-end;display:flex;align-items:center;min-width:min-content;overflow:hidden;margin-left:-1px;font-size:13px;line-height:22px;cursor:default}   /* ID 的 8 位始终完整（后面的费用可以截短） */
+#hdAct .hd-balls{flex:0 1 auto;min-width:0;align-self:flex-end;display:flex;align-items:flex-end;justify-content:flex-end;gap:6px}   /* 圆球：位置够就排在右边；不够时字优先，圆球往左浮到字上（手机上本来就能拖开） */
+#sid .hid{margin-left:0;line-height:22px}
+#hdAct .hd-fill{flex:1 1 0;min-width:4px;align-self:stretch}
+html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像占两行，第二行从头像右边开始 */
+#cfgBtn .c1{font-size:13px;line-height:22px}
+#cfgBtn{flex:0 1 auto}#cfgBtn .c1{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#cfgBtn .c2{flex:none}
+#sid{flex-shrink:6;min-width:calc(8ch + 12px)}#sid .hid{flex:none}#hdAct .hd-balls{flex-shrink:100000}   /* 一行放不下：先让圆球让位（浮到字上），再截费用，最后截模型名；ID 8 位和最右边的 ›（会话设置入口）始终在 */
+#cfgBtn .c2{font-size:13px;line-height:22px}
+#cfgBtn .c1:not(:empty)+.c2{margin-left:5px}   /* 模型 · 权限 · ID 之间都只隔一个小空格（约 5px） */
+#cfgBtn>span{flex:0 1 auto;min-width:0}
+.sheet-p>h2:first-child{display:none}   /* 会话列表顶部不要「会话」标题，搜索栏直接在最上面（手机、电脑都一样） */
+@media (max-width:999px){
+  #backBtn{position:relative;display:grid;place-items:center;flex:none;width:36px;height:44px;margin-left:-6px;border:0;background:none;color:var(--ink)}
+  #backBtn.unr::after{content:'';position:absolute;top:9px;right:3px;width:8px;height:8px;border-radius:50%;background:#F23C3C}
+  /* 聊天页顶栏（手机）：两行，往状态栏下面的空白里贴——
+     第一行  ‹  ● 会话名称（整行都给名字）
+     第二行     模型 · 推理强度 · 权限  ID（点一下复制） ······ 圆球 ›（整行点开会话设置）
+     返回键、绿点和名字对齐；目录、分支不放（聊天区「已恢复会话」那行有）。
+     会话名、ID 嵌在 #sessBtn 里（电脑端是一行）：手机上把外层拆掉（display:contents），直接排进 #hdCard 的网格 */
+  header{align-items:stretch;padding:max(4px,calc(env(safe-area-inset-top,0px) - 8px)) 12px 5px}
+  #backBtn{align-self:stretch;height:auto;place-items:center;padding:0}   /* 返回键独占左边一栏（占满两行），箭头在这一栏里上下左右居中 */
+  #app.m-list>header,#app.m-list>#feed,#app.m-list>#workBar,#app.m-list>#dock{display:none}
+  #app.m-list>#sheet{position:relative;inset:auto;top:0;display:block;flex:1;min-height:0;background:var(--surface);z-index:auto}
+  /* 列表页：搜索栏是固定的顶栏，只有下面的列表滚动。
+     新版 iOS 会在「顶到状态栏的可滚动区域」上加一层渐变模糊，整页滚动时顶部会一直发虚 */
+  #app.m-list .sheet-p{max-height:none;height:100%;box-sizing:border-box;border-radius:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
+  #app.m-list #sTop{flex:none;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 8px;background:var(--strip)}
+  /* 手机顶栏图标放大到和外壳的 home 图标差不多大（看得见的部分约 21px） */
+  #app.m-list #sTop button svg{width:26px;height:26px}   /* 图标都按同一规格画（见 #sTop 的说明），手机只放大成同一个尺寸 */
+  #app.m-list #sReload{flex:none;position:relative;display:grid;place-items:center;width:42px;height:38px;margin-left:-6px;border:0;border-radius:10px;background:none;color:var(--muted);cursor:pointer}
+  #app.m-list #sNew{width:45px;margin-left:-4px}   /* 图标离左边 18px */
+  /* 图标之间空 20px：按钮 = 图标宽 + 两边各 10px，再用负边距抵掉 6px 的 gap（整块都能点，没有空隙） */
+  #app.m-list #gNew{width:46px}#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct,#app.m-list #sPeer{width:47px}#app.m-list #rClear{width:47px;margin-right:-10px}
+  #app.m-list #gNew,#app.m-list #sVoice,#app.m-list #sTheme,#app.m-list #sAcct,#app.m-list #sPeer{margin-left:-6px}
+  #app.m-list #sList{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
+  /* 底部菜单：图标 24px 线框（线宽 1.8）、文字 12px 加粗；选中的变主题色并填一层淡色；避开 iPhone 底部横条 */
+  #app.m-list #mtabs{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--surface);border-top:var(--bw) solid var(--line);
+    padding:4px max(6px,env(safe-area-inset-right)) calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px))) max(6px,env(safe-area-inset-left))}
+  #mtabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0 3px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:12px;font-weight:600}
+  #mtabs{gap:4px}
+  /* 子午流注：底部菜单下面（iPhone 横条那一截）居中淡淡写当令的经络，不抢菜单；没有横条留边的设备垫出 18px 来写 */
+  html[data-theme=shichen].sc-auto #app.m-list #mtabs{padding-bottom:calc(4px + max(env(safe-area-inset-bottom,0px),var(--sab,0px),18px))}
+  html[data-theme=shichen].sc-auto #app.m-list #mtabs::after{content:var(--sc-mer);position:absolute;left:0;right:0;bottom:calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px),18px) - 16px);
+    text-align:center;font:500 10px/14px "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.3em;color:color-mix(in srgb,var(--ink) 16%,var(--surface));pointer-events:none;white-space:nowrap}
+  #mtabs button{border-radius:12px;transition:background .15s,box-shadow .15s}
+  #mtabs button.on{color:var(--accent);background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 15%,transparent),transparent 60%),rgba(255,255,255,.03);box-shadow:inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 25%,transparent),0 3px 8px -5px rgba(0,0,0,.2)}   /* 选中这一栏：只一点点凸起（左上细亮边 + 很淡的投影）；底下垫一层很淡的白——浅色底上看不出，深色底上稍亮一点，背光那侧的边才看得出来 */
+  #mtabs button>span{max-width:100%;padding:0 4px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 放 logo 时去掉「会话」两个字（文字的主题色和 logo 的颜色不搭），logo 放大占满图标 + 文字的位置，按钮高度不变 */
+  #mtabs button.logo>span:not(.tlogo){display:none}
+  #mtabs .tlogo{display:grid;place-items:center;width:42px;height:42px;filter:grayscale(1);opacity:.55;transition:filter .15s,opacity .15s}
+  #mtabs .tlogo svg,#mtabs .tlogo img{display:block;width:34px;height:34px;object-fit:contain}
+  #mtabs .tlogo img.tile{border-radius:22.5%}
+  #mtabs button.on .tlogo,#mtabs button.busy .tlogo,#mtabs button.dot .tlogo{filter:none;opacity:1}   /* 在干活或有没看的：在别的栏也保持原色，提醒更显眼 */   /* 选中这一栏：图标原色；没选中：灰色，和其它栏的灰色图标一致 */
+  #mtabs .ti{display:block;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  #mtabs .ti .f{fill:currentColor;fill-opacity:0;transition:fill-opacity .15s}
+  #mtabs button.on .ti .f{fill-opacity:.22}
+  #mtabs button.dot::after{content:'';position:absolute;top:3px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:#F23C3C}
+  #mtabs button.logo.dot::after{top:4px;left:calc(50% + 11px);box-shadow:0 0 0 2px var(--surface)}   /* 大 logo：红点挂在右上角 */
+  /* 这个 Claw 有任意会话在干活：「会话」图标跟着轻闪，和列表里目录的绿点呼应 */
+  #mtabs button.busy .tlogo{animation:wbreath 2.4s ease-in-out infinite}
+  #mtabs button.busy .ti{animation:wpulse 1.8s ease-in-out infinite}
+  /* 「设置」页：只显示设置；「会话」页：只显示列表 */
+  #app.m-list #setPane{display:none;margin-top:0;padding-top:0;border-top:0}
+  #app.m-list.set-on #setPane{display:block}
+  #app.m-list.set-on #sTop,#app.m-list.set-on #sList{display:none}
+  #app.m-list #setBody>h2{display:none}
+  /* 设置是子页面（像点进一个会话）：没有底部菜单，左上角返回，退出登录和版本沉到页面最底下 */
+  #app.m-list.set-on #mtabs{display:none}
+  #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
+  #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip)}
+  #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:22px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
+  #app.m-list.set-on #setTop{position:sticky;top:0;display:flex;align-items:center;justify-content:center;min-height:calc(56px - var(--bw));margin:0;border-bottom:var(--bw) solid var(--line);font-size:17px;font-weight:600}
+  /* 标题栏下不留空：原来空出的 14px 里内容滚上去会被截掉，像多了一节；留白挪进滚动区 */
+  #setBack{position:absolute;left:0;top:env(safe-area-inset-top,0px);bottom:0;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
+}
+#mtabs{display:none}
+body:is(.kb,.kbf) #app.m-list #mtabs{display:none!important}   /* 键盘弹出时收起底部菜单：不然它浮在键盘上面挡住正在填的输入框 */
+body.kb :is(#loginPane,#avPane,#grpPane){top:var(--vvo,0px);bottom:auto;height:var(--vvh,100%)}   /* 挂在 body 上的弹层：只占键盘上面那块 */
+body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:calc(var(--vvh,100vh) - 10px);overflow-y:auto}
+#setTop{display:none}
+#clawPane{display:none}
+#clawTop{display:none}   /* Claw 页的标题条：只在电脑端显示 */
+#hostPane{display:none}
+#hostPane:has(#hostBody .pg-hd) #hostHd{display:none}   /* 协同、技能子页面有自己的标题栏 */
+/* ════ 公共 · 宿主页、子页面、模型管理、协同 ════ */
+/* 宿主页的分组卡片（手机和电脑共用） */
+.h-link{cursor:pointer}
+.h-link:active{background:var(--surface)}
+.claw-grid .claw-card.th-card{position:relative;flex-direction:column;align-items:stretch;gap:8px;height:auto;padding:8px 8px 10px}
+.th-pv{position:relative;display:block;height:118px;border-radius:10px;overflow:hidden;background:var(--pb);box-shadow:0 0 0 .5px var(--pl)}
+.th-pv i{display:block;font-style:normal}
+.th-hd{position:absolute;left:0;right:0;top:0;height:20px;background:var(--ph);border-bottom:.5px solid var(--pl)}
+.th-hd i{position:absolute;left:50%;top:7px;width:34px;height:6px;margin-left:-17px;border-radius:3px;background:var(--pi);opacity:.75}
+.th-b{position:absolute;border-radius:8px;padding:6px 7px;display:flex!important;flex-direction:column;gap:4px}
+.th-b i{height:4px;border-radius:2px;background:var(--pm);opacity:.6}
+.th-b.l{left:8px;top:28px;width:56%;background:var(--ps);border-top-left-radius:3px}
+.th-b.l i:last-child{width:60%}
+.th-b.r{right:8px;top:58px;width:42%;background:var(--pu);border-top-right-radius:3px}
+.th-b.r i{background:var(--pi);opacity:.45}
+.th-b.l.s{top:80px;width:38%}
+.th-dk{position:absolute;left:0;right:0;bottom:0;height:20px;background:var(--ps);border-top:.5px solid var(--pl)}
+.th-dk>i:first-child{position:absolute;left:8px;right:28px;top:5px;height:10px;border-radius:5px;background:var(--pb)}
+.th-snd{position:absolute;right:7px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--pa)}
+.th-kj{position:absolute!important;inset:0;display:flex!important;flex-direction:column;justify-content:center;align-items:center;gap:4px;font:600 14px/1.3 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.12em;color:var(--pi);white-space:nowrap}
+.th-kj>i{display:flex!important;align-items:center}
+.th-kj b{--cx:color-mix(in srgb,var(--cb) 86%,var(--pb));position:relative;display:flex;font-weight:inherit;padding:1px 0;letter-spacing:0;color:var(--ci);
+  background:linear-gradient(90deg,color-mix(in srgb,color-mix(in srgb,var(--cl) 86%,var(--pb)) 50%,var(--cx)),var(--cx) 16%,var(--cx) 84%,color-mix(in srgb,color-mix(in srgb,var(--cr) 86%,var(--pb)) 50%,var(--cx)))}   /* 各时辰自己的底色字色（掺一点卡片底色），一行连成一条，接缝两边各取一半渐变过去 */
+.th-kj b span{width:20px;text-align:center}   /* 一字一格（固定宽，当令那组字放大也不挤歪），每句七格，上下对齐 */
+.th-kj b:first-of-type{border-radius:5px 0 0 5px}.th-kj b:last-of-type{border-radius:0 5px 5px 0}   /* 句末的宫 / 中 / 通也在条里，颜色接着前一组 */
+.th-kj b.on{font-size:16.5px;line-height:18px;font-weight:900}   /* 当令：只放大加粗，背景和别的组一样 */
+.th-half{position:absolute!important;inset:0;clip-path:polygon(100% 0,100% 100%,0 100%);background:var(--pb)}
+.th-nm{display:flex;flex-direction:column;gap:2px;padding:0 4px;min-width:0}
+.th-nm b{font-size:14px;font-weight:600;line-height:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.th-nm small{font-size:11.5px;color:var(--muted);line-height:15px}
+.th-mk{position:absolute!important;left:0;top:0;bottom:0;width:42%;border-right:.5px solid var(--pl)}
+.th-mk .th-b.l{left:5px;width:72%}.th-mk .th-b.r{right:5px;width:62%}.th-mk .th-b.l.s{width:50%}
+.th-mk .th-dk>i:first-child{left:5px;right:22px}.th-mk .th-snd{right:5px}
+.th-mer{position:absolute!important;right:0;top:0;bottom:0;width:58%;display:flex!important;align-items:center;justify-content:center;overflow:hidden}
+.th-mer b{font:600 13px/1.25 "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.1em;color:var(--pi);opacity:.55;writing-mode:vertical-rl}
+.th-mer:has(img) b{visibility:hidden}
+.th-mer:has(img){background:#fff}   /* 透明图垫白底 */
+.th-mer img{position:absolute;inset:3px 2px;width:calc(100% - 4px);height:calc(100% - 6px);object-fit:contain}
+.th-mer:has(img.m1) img.m0{height:calc(50% - 4px)}.th-mer img.m1{top:calc(50% + 1px);height:calc(50% - 4px)}   /* 两张：上下各半 */
+.th-ok{position:absolute;right:12px;bottom:14px;width:20px;height:20px;border-radius:50%;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.th-ok::after{content:'';position:absolute;left:6px;top:5px;width:7px;height:4px;border-left:2px solid var(--accent-ink,#fff);border-bottom:2px solid var(--accent-ink,#fff);transform:rotate(-45deg)}
+.claw-grid .claw-card.th-img{padding:14px}
+.h-link .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-left:2px}
+/* 所有子页面的返回：和会话页、设置页同一个样式（左边一个箭头，标题居中） */
+.ovs{display:none}
+.pg-hd{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:-6px 0 14px;font-size:17px;font-weight:600;color:var(--ink)}
+.pg-t{max-width:calc(100% - 96px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hostPane .pg-hd{margin-top:-17px}
+#hostPane .pe-back{left:-12px}   /* 宿主页有内边距：箭头位置对齐设置页 */
+.pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
+.pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
+.pe-in::placeholder{text-align:right}
+@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#grpPane input.gp-in,#avPane input.gp-in,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select),#crIn{font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
+.pe-in.left,.pe-in.left::placeholder{text-align:left}
+.md-sub{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
+/* 模型管理：Key 列表、Key 详情、接口格式下拉、「更多」、从接口读到的模型 */
+.md-key{font-family:var(--mono);font-size:14px;letter-spacing:.3px;overflow-wrap:anywhere}
+.h-row .k.md-kk{flex:1;min-width:0}
+.md-kk .md-key{display:block}
+.md-keyrow .md-key{flex:1;min-width:0}
+.md-key.on{-webkit-user-select:all;user-select:all}
+.md-kbtns{flex:none;display:flex;gap:8px}
+.md-kbtns .pe-btn{height:30px;padding:0 12px;font-size:13px}
+/* Key 详情：一行一项，小标题在上、无框输入在下；Key 后面两个小药丸按钮；保存整行宽；删除放最底下 */
+.h-row.md-f{flex-direction:column;align-items:stretch;gap:4px;min-height:0;padding:11px 14px 10px}
+.md-lb{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;line-height:18px;color:var(--muted);transition:color .15s}
+.md-fmtx{color:var(--muted);opacity:.85}
+.h-row.md-f:focus-within .md-lb{color:var(--accent)}
+.md-in{display:block;width:100%;min-width:0;height:26px;margin:0;padding:0;border:0;background:transparent;color:var(--ink);font:inherit;font-size:15px;outline:none;box-sizing:border-box;text-overflow:ellipsis}
+textarea.md-in{height:auto;min-height:38px;margin-top:2px;padding:7px 11px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--surface);line-height:22px;resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;transition:border-color .15s}
+textarea.md-in::placeholder{font-family:inherit;font-size:13px;line-height:22px}   /* 占位字小一号（框里的字手机上要 16px 防放大，占位字不受影响） */
+/* 所有输入框一个样子：1px 浅边、10px 圆角；点进去边框变主题色、外面一圈淡淡的主题色光晕（不要浏览器默认的蓝 / 黑焦点框）；占位字小一号、淡色。
+   :is() 里有 ID，优先级盖过各处单独写的规则 */
+:is(.pe-in,.lg-in,.opt-other,#sSearch,textarea.md-in,.dlg input:not(.plainIn):not([type=checkbox]):not([type=radio]),#grpPane input.gp-in,#avPane input.gp-in):focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+:is(.pe-in,.lg-in,.opt-other,#sSearch,textarea.md-in,.dlg input:not(.plainIn):not([type=checkbox]):not([type=radio]),#grpPane input.gp-in,#avPane input.gp-in)::placeholder{color:var(--muted);opacity:.7;font-size:13px}
+textarea.md-in:focus-visible{outline:none}
+.md-secret{-webkit-text-security:disc}   /* Key 用多行框也打点（不用 password 框：放不下时看不全提示） */
+.md-in::placeholder{color:var(--muted);opacity:.6}
+.md-kv{display:flex;align-items:center;gap:10px;min-height:28px}
+.md-kv .md-key{flex:1;min-width:0;font-family:inherit;font-size:15px;letter-spacing:.5px}
+.md-pill{height:28px;padding:0 13px;border:0;border-radius:14px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);font:inherit;font-size:13px;font-weight:500;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.md-pill:active{opacity:.6}
+.h-row.cr-row{flex-wrap:wrap;row-gap:8px}
+.cr-row .cr-btns{flex-basis:100%;display:flex;justify-content:flex-end;gap:8px}
+.cr-row .md-pill.del{color:var(--deny);background:color-mix(in srgb,var(--deny) 10%,transparent)}
+.cr-row .md-pill:disabled{opacity:.5}
+.md-acts{margin:0}
+.md-save{display:block;width:100%;height:46px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink,#fff);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+.md-save:active{opacity:.8}
+.md-mrow{gap:10px}
+.h-row .k.md-mn{flex:1;min-width:0;font-weight:500}
+.md-caps{flex:none;display:flex;gap:4px}
+.md-caps i{font-style:normal;padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted);font-size:11.5px;line-height:16px}
+.md-acts2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 0}
+.md-btn2{height:42px;border:0;border-radius:12px;background:var(--bg);color:var(--accent);font:inherit;font-size:14.5px;font-weight:500;cursor:pointer}
+.md-btn2:active{opacity:.6}
+.md-btn2[hidden]{display:none}
+.md-acts2.one{grid-template-columns:1fr}
+.md-ro{font-size:15px;line-height:24px;color:var(--muted);overflow-wrap:anywhere}
+/* 字号层次：小标题 13px 灰；填的值（输入框、选择框、Key、ID）都是 15px（手机 16px），同一种字体 */
+.h-row.md-f>.md-fk{position:relative;display:block;margin-top:2px}   /* 接口格式：和输入框一个样子的选择框 */
+.h-row.md-f>.md-fk::after{position:absolute;right:12px;top:50%;transform:translateY(-50%);margin:0}
+.md-sel{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;line-height:26px;cursor:pointer}
+.h-row.md-f>.md-fk .md-sel{display:block;width:100%;min-height:38px;padding:7px 30px 7px 11px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--surface);line-height:22px;box-sizing:border-box}
+.h-row.md-f>.md-fk.md-fkb .md-fv{display:block;min-height:38px;padding:8px 30px 8px 11px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font-size:14px;line-height:20px;box-sizing:border-box;pointer-events:none}   /* 接口格式：框里显示小一号的字，点开是透明盖在上面的系统选择框（16px 免得 iOS 放大） */
+.h-row.md-f>.md-fk.md-fkb .md-sel{position:absolute;inset:0;width:100%;min-height:0;padding:0;border:0;opacity:0;font-size:16px}
+.h-row.md-f>.md-fk.md-fkb:focus-within .md-fv{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+.h-row.md-f>.md-fk .md-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+.md-fko{position:relative;display:inline-flex;align-items:center;color:var(--muted)}   /* 小标题右边的格式：看着是小字，点开是系统选择框（透明盖在上面，16px 免得 iOS 放大） */
+.md-fko select{position:absolute;inset:0;width:100%;opacity:0;font-size:16px;cursor:pointer}
+@media (pointer:coarse){.md-kv .md-key,.md-ro{font-size:16px}}
+.md-danger{margin:10px 0 6px}
+.md-danger button{display:block;width:100%;height:46px;border:0;border-radius:12px;background:var(--bg);color:var(--deny);font:inherit;font-size:15px;cursor:pointer}
+.md-danger button:active{opacity:.6}
+.h-row.md-swrow{cursor:pointer}
+.h-row.md-swrow .k{flex:1;min-width:0}
+.md-swrow .k small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.md-sw{flex:none;-webkit-appearance:none;appearance:none;position:relative;width:46px;height:28px;margin:0;border-radius:14px;background:var(--line);cursor:pointer;transition:background .2s}
+.md-sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.md-sw:checked{background:var(--allow,var(--accent))}
+.md-sw:checked::after{transform:translateX(18px)}
+.md-sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pe-ss input[type=checkbox],.md-pick input[type=checkbox]{accent-color:var(--accent)}   /* 勾选框用主题色，不要系统蓝 */
+.md-fk{display:flex;align-items:center}
+.md-fk::after{content:'▾';margin-left:4px;font-size:12px;color:var(--muted);pointer-events:none}
+.md-fmt{-webkit-appearance:none;appearance:none;border:0;padding:0;margin:0;background:none;color:var(--ink);font:inherit;font-size:15px;cursor:pointer}
+.md-addk .k{color:var(--muted);font-size:14px}
+.md-more>summary{list-style:none;display:flex;align-items:center;gap:7px;margin:-4px 14px 0;padding:4px 0;font-size:13.5px;color:var(--muted);cursor:pointer}
+.md-more>summary::-webkit-details-marker{display:none}
+.md-more>summary::before{content:'';width:6px;height:6px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+.md-more[open]>summary{margin-bottom:10px}
+.md-more[open]>summary::before{transform:rotate(45deg)}
+.md-h2{margin-top:16px}
+.md-solo .pe-in{flex:1;min-width:0;width:100%;max-width:none;text-align:left}   /* 添加 / 编辑 Key：输入框占满一行，说明在占位字里 */
+.md-main{margin-top:0}
+.md-eps2:empty{display:none}
+.md-eps2{margin-top:10px}
+.md-pid{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.pe-ta{height:auto;min-height:52px;padding:6px 8px;line-height:1.4;text-align:left;resize:vertical;word-break:break-all}
+.pe-ta::placeholder{text-align:left}
+.pe-urlrow{align-items:flex-start}
+/* 设置类页面的「名称 — 值」行：值一行放不下（会被挤变形）时改成上下结构——名称在上，值另起一行、左对齐（脚本量过后加 .stack） */
+.h-row.stack{flex-wrap:wrap;align-items:flex-start;row-gap:6px}
+.h-row.stack>.k{flex:1 0 100%}
+.h-row.stack>.v{flex:1 1 100%;text-align:left}
+.h-row.stack>.v .h-bar{margin-left:0}
+.h-row.pe-urlrow{flex-wrap:wrap;row-gap:6px}   /* 填长地址 / 邀请码的输入框：总是上下结构、占满整行 */
+.h-row.pe-urlrow>.k{flex:1 0 100%}
+.h-row.pe-urlrow>.pe-in{flex:1 1 100%;width:100%;margin-left:0}
+.pe-req{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.pe-req+.pe-req{border-top:var(--bw) solid var(--line)}
+.pe-req-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.pe-req-t small{color:var(--muted);font-size:12px}
+.pe-code{flex:none;font-family:var(--mono);font-size:30px;font-weight:700;letter-spacing:4px;color:var(--accent)}
+.pe-req-b{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.pe-req-b small{color:var(--muted);font-size:12px;font-family:var(--mono)}
+.pe-mini{height:28px;padding:0 10px;font-size:13px;flex:none}
+.pe-tag{flex:none;font-size:12px;color:var(--allow)}
+.pe-peer-name{flex:1;min-width:0;display:flex;align-items:center;gap:0;padding:0;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.pe-peer-name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 已配对：这次实际走的路（局域网 / 中继） */
+.pe-route{flex:none;margin-left:6px;padding:0 6px;border:var(--bw) solid var(--line);border-radius:6px;font-style:normal;font-size:11.5px;line-height:18px;color:var(--muted)}
+.pe-route.rl{color:var(--accent);border-color:var(--accent)}
+.h-row.pe-relay .k{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.h-row.pe-relay .pe-rl1{display:flex;align-items:flex-start;gap:6px;min-width:0}
+.h-row.pe-relay .pe-rl1 .pe-mono{min-width:0;font-size:13.5px;line-height:20px;overflow-wrap:anywhere}   /* 地址不省略，放不下就折行 */
+.h-row.pe-relay .k .pe-route{margin-left:0}
+.h-row.pe-relay small{font-size:12px;color:var(--muted)}
+.h-row.pe-col{flex-direction:column;align-items:stretch;gap:6px}
+.h-row.pe-col>.k{flex:none}
+.pe-left{text-align:left!important}
+.pe-btns.pe-end{margin:14px 6px 4px}
+.claw-h.pe-title{background:none}
+/* 协同里的地址：等宽字放在浅底圆角框里（长地址在 / 处断行），右边一个复制图标；整块可长按选中 */
+.pe-url{display:flex;align-items:flex-start;gap:6px;padding:6px 6px 6px 10px;border-radius:8px;background:var(--bg);min-width:0}
+.pe-url+.pe-url{margin-top:6px}
+.pe-url-t{flex:1;min-width:0;padding-top:3px;font-family:var(--mono);font-size:12.5px;line-height:18px;color:var(--ink);overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.pe-url-t .pe-route{margin:0 6px 0 0;vertical-align:1px}
+.pe-cp{flex:none;width:28px;height:24px;margin:0;padding:0;border:0;border-radius:6px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pe-cp:hover,.pe-cp:active{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.pe-cp svg{width:15px;height:15px}
+.h-row.pe-col>.k.pe-kx{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.h-row.pe-col>.v,.h-row.pe-col>small{text-align:left}
+.h-row.pe-col>small{font-size:12.5px;line-height:1.5;color:var(--muted)}
+/* 对方详情 · 各条路：一条一行，左边路线标签 + 地址，右边快慢 */
+.pe-chs{display:flex;flex-direction:column;gap:6px}
+.pe-ch{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:20px}
+.pe-ch .pe-route{margin:1px 0 0}
+.pe-ch-a{flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.pe-ch{flex-wrap:wrap}
+.pe-ch-p{flex:1 0 100%;padding:2px 8px;border-left:2px solid var(--line);font-family:var(--mono);font-size:11px;line-height:16px;color:var(--muted);overflow-wrap:anywhere}   /* 打洞打通的那一对地址（IPv6 很长）：另起一行占满宽 */
+.pe-btn.pe-soft{background:var(--bg)}
+.pe-ferr{flex:1 0 100%;margin-top:4px;font-size:12.5px;line-height:1.45;color:var(--deny)}   /* 输入框下面的错误 */
+#hostBody :is(.pe-in,textarea.md-in).bad{border-color:var(--deny)}
+#hostBody :is(.pe-in,textarea.md-in).bad:focus{border-color:var(--deny);box-shadow:0 0 0 3px color-mix(in srgb,var(--deny) 16%,transparent)}   /* 卡片里的小按钮：白卡片上用浅底，看得出是按钮 */
+.pe-ch-ms{flex:none;font-variant-numeric:tabular-nums;color:var(--ink)}
+.pe-ch-ms.bad{color:var(--deny)}
+.pe-ch-ms.wait{color:var(--muted)}
+/* 对方开放的会话：名字 + 可复制的 ID */
+.pe-ss-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pe-ss-list li{display:flex;align-items:center;gap:8px;min-height:30px;font-size:14px}
+.pe-ss-list li+li{border-top:var(--bw) solid var(--line)}
+.pe-ss-list .pe-sn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-ss-list em{flex:none;font-style:normal;font-size:11.5px;color:var(--accent)}
+.pe-id{flex:none;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 6px 0 8px;border:0;border-radius:6px;background:var(--bg);color:var(--muted);font-family:var(--mono);font-size:12px;cursor:pointer}
+.pe-id svg{width:12px;height:12px}
+.pe-id:hover,.pe-id:active{color:var(--accent)}
+/* 整行宽的按钮（复制邀请、撤销配对）：和卡片一样宽、一样圆角 */
+.pe-wide{display:block;width:100%;height:46px;margin:0;border:0;border-radius:var(--card-r,14px);font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.pe-wide.pri{background:var(--accent);color:var(--accent-ink)}
+.pe-wide.del{background:var(--surface);color:var(--deny)}
+.pe-wide-w{display:flex;flex-direction:column;gap:8px}
+.pe-wide-w .pe-note{margin-top:0}
+/* 附近的 claclaw：名字在上、电脑名 · IP 在下 */
+.pe-near .k{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pe-near .k small{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.h-row.pe-peer{flex-direction:row;align-items:center;flex-wrap:nowrap}
+.h-row.pe-peer .pe-peer-name{flex:1;min-width:0;display:flex;align-items:center}
+.h-row.pe-peer>.v{flex:none}
+.h-row.pe-peer{transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+.h-row.pe-peer.sw{transform:translateX(-76px)}
+.pe-peer .pe-ren{position:absolute;top:0;bottom:0;right:-76px;width:76px;padding:0;border:0;background:#8B95A3;color:#fff;font:inherit;font-size:14px;font-weight:600;display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}   /* 手机：左滑露出，和会话列表的「编辑」同色 */
+.pe-peer .pe-ren svg{display:none}
+@media (hover:hover) and (pointer:fine){   /* 电脑：和会话列表一样，鼠标移上去在名字后面出现铅笔 */
+  .pe-peer .pe-ren{position:static;flex:none;width:30px;height:26px;border-radius:8px;background:none;color:var(--muted);opacity:0}
+  .pe-peer .pe-ren svg{display:block}.pe-peer .pe-ren span{display:none}
+  .pe-peer:hover .pe-ren,.pe-peer .pe-ren:focus-visible{opacity:1}
+  .pe-peer .pe-ren:hover{color:var(--ink);background:color-mix(in srgb,var(--muted) 12%,transparent)}
+}
+.pe-peer .pnm-in{min-width:0;flex:0 1 220px;padding:2px 8px;border:1px solid var(--accent);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px;outline:none}
+.pe-allow label{display:flex;align-items:center;gap:8px;padding:2px 0;cursor:pointer}
+.pe-allow label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-allow-dir{margin:6px 0 2px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.pe-allow-dir:first-child{margin-top:0}
+.pe-allow label{padding-left:2px}
+.pe-ss-list li{margin:1px 0}
+.pe-ss-list em{font-style:normal;font-size:12px;color:var(--allow)}
+.pe-scan{margin-left:8px;padding:0;border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
+.pe-scan:disabled{color:var(--muted);cursor:default}
+.pe-in[type=number]{-moz-appearance:textfield}
+.pe-in[type=number]::-webkit-inner-spin-button,.pe-in[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.pe-in.mono,.pe-mono{font-family:var(--mono)}
+select.pe-in{text-align-last:right}
+.pe-ss{display:flex;flex-direction:column}
+/* 协同会话页：Claw 分段选择、已加入按 Claw 分组 */
+.pe-seg{display:flex;gap:4px;margin:10px 12px 2px;padding:3px;border-radius:10px;background:var(--bg);overflow-x:auto}
+.pe-seg button{position:relative;flex:1 0 auto;display:grid;place-items:center;height:38px;padding:0 10px;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
+.pe-seg button img,.pe-seg button svg{width:24px;height:24px;object-fit:contain}
+.pe-seg button img.tile{border-radius:22.5%}
+.pe-seg button.on{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.pe-seg i{position:absolute;top:2px;right:calc(50% - 22px);min-width:16px;font-style:normal;font-size:10.5px;line-height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:var(--accent-ink);text-align:center}
+.pe-q{width:100%;text-align:left!important}
+.pe-q::placeholder{text-align:left}
+.pe-pool-dir{margin:10px 14px 2px}
+.pe-claw-h{display:flex;justify-content:space-between;padding:10px 14px 2px;font-size:12.5px;color:var(--muted)}
+.pe-claw-h b{display:flex;align-items:center;font-weight:600;color:var(--ink)}
+.pe-claw-g{display:flex;align-items:center;margin:12px 0 2px;font-size:13px;font-weight:600;color:var(--ink)}
+.pe-claw-g:first-child{margin-top:0}
+.pe-claw-ic{display:inline-grid;place-items:center;width:18px;height:18px;margin-right:6px}
+.pe-claw-ic img,.pe-claw-ic svg{width:18px;height:18px;object-fit:contain}
+.pe-claw-ic img.tile{border-radius:22.5%}
+.h-row.pe-pool-row{min-height:40px}
+.h-row.pe-pool-row .k{flex:1;min-width:0;display:flex;flex-direction:column}
+.h-row.pe-pool-row .pe-pt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-row.pe-pool-row small{font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-ss label{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:14px;cursor:pointer}
+.pe-ss label+label{border-top:var(--bw) solid var(--line)}
+.pe-ss label span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-ss small{flex:none;color:var(--muted);font-family:var(--mono);font-size:12px}
+.pe-btns{display:flex;gap:10px;flex-wrap:wrap;padding:12px 14px}
+.vc-tip{margin:0 4px 10px;font-size:13px;color:var(--muted)}
+.vc-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:6px;background:var(--surface);font-size:11px;line-height:18px;color:var(--muted)}.vc-tag.paid{color:#b45309}
+.h-row.vc-hint{font-size:13px;color:var(--muted);min-height:0}.vc-ht{flex:1;min-width:0}
+.vc-all{flex:none;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer}.vc-all input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+/* 一个声音一行：勾选框 · 名字（就是别名输入框，看着像字，点了才像输入框）+ 下面一行小字（平台 · 性别 · 原名）· 试听圆钮 */
+.h-row.vc-row{gap:12px;min-height:0;padding:10px 14px}
+.h-row.vc-row+.h-row.vc-row::before{left:46px}
+.h-row.vc-row .vc-on{flex:none;width:20px;height:20px;margin:0;accent-color:var(--accent);cursor:pointer}
+.vc-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.vc-al{display:block;width:calc(100% + 12px);min-width:0;height:28px;margin:-2px -6px;padding:0 6px;border:0;border-radius:7px;background:transparent;color:var(--ink);font:inherit;font-size:15.5px;font-weight:500;text-overflow:ellipsis;box-sizing:border-box;transition:background .15s,box-shadow .15s}
+.vc-al:hover{background:color-mix(in srgb,var(--muted) 8%,transparent)}
+.vc-al:focus{outline:none;background:var(--surface);box-shadow:0 0 0 1.5px var(--accent)}
+.vc-sub{font-size:12.5px;line-height:1.4;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vc-sub:empty{display:none}
+.h-row.vc-row.off .vc-main{opacity:.45}
+.vc-try{flex:none;width:34px;height:34px;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--accent) 11%,transparent);color:var(--accent);display:grid;place-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s}.vc-try svg{width:18px;height:18px;margin-left:2px}
+.vc-try:active{transform:scale(.9)}
+@media (pointer:coarse){.vc-al{font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就放大页面 */
+.pe-btn{height:34px;padding:0 14px;border:0;border-radius:9px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.pe-btn.pri{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.pe-btn.del{color:var(--deny)}
+.pe-note{margin:8px 14px 0;font-size:12.5px;line-height:1.6;color:var(--muted)}
+.sk-row{display:flex;align-items:center;gap:10px}
+.sk-row .k{flex:1;min-width:0}
+.sk-row .pe-btn{margin-left:auto;flex:none}
+.sk-ic{display:inline-grid;place-items:center;width:30px;height:30px;flex:none}
+.sk-ic img,.sk-ic svg{width:30px;height:30px;object-fit:contain}
+.sk-ic img.tile{border-radius:22.5%}
+.pe-err{margin:8px 14px 0;font-size:13px;color:var(--deny)}
+.pe-ok{margin:8px 14px 0;font-size:13px;color:var(--allow)}
+#hostBody{display:flex;flex-direction:column;gap:18px}
+#hostBody>div:empty{display:none}   /* 还没内容的占位块（提示、消息）不占一份间距 */
+.h-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.h-h{margin:0 14px 7px;font-size:12.5px;color:var(--muted)}
+.h-card{background:var(--bg);border-radius:12px;overflow:hidden}
+.h-row{position:relative;display:flex;align-items:center;gap:12px;min-height:46px;padding:10px 14px;font-size:15px}
+.h-row+.h-row::before{content:'';position:absolute;top:0;left:14px;right:14px;border-top:var(--bw) solid var(--line)}
+.h-row .k{flex:none;color:var(--ink)}
+.h-row .v{flex:1;min-width:0;text-align:right;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
+.h-row .v small{display:block;font-size:12px}
+.h-bar{display:flex;justify-content:flex-end;width:min(150px,100%);height:4px;margin:5px 0 0 auto;border-radius:2px;background:var(--line);overflow:hidden}   /* 各行进度条一样长、靠右对齐，从右往左填 */
+.h-bar i{display:block;height:100%;background:var(--accent)}
+.h-bar.hi i{background:var(--warn)}
+.h-dot{display:inline-block;width:7px;height:7px;margin:0 5px 1px 0;border-radius:50%;background:var(--muted);vertical-align:middle}
+.h-dot.on{background:var(--allow)}
+/* 已配对列表：底色是对方的颜色，点要更醒目——在线 = 亮绿实心 + 白圈，离线 = 空心圈 */
+.pe-peer .h-dot{flex:none;width:11px;height:11px;margin:0 8px 0 0;background:transparent;border:2px solid var(--muted);box-sizing:border-box}
+.pe-peer .h-dot.wait{border-style:dotted;animation:rlspin 1s linear infinite}
+.pe-peer .h-dot.on{background:#22C55E;border-color:#fff;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 0 6px rgba(34,197,94,.8)}
+/* ════ 公共 · Claw 登录、Claw 页、各 Claw 图标 ════ */
+/* 各 Claw 的登录：卡片上的「登录」小按钮；登录面板（网址 / 一次性代码 / 要粘贴的授权码） */
+/* 各 Claw 的 logo 统一可见大小（rail、Claw 卡片、底部栏、干活提示里的 logo 都是 rail 按钮里那个元素的拷贝，所以按元素定一次全都生效）：
+   --lk 按实测可见外框定：实心 / 方块类（Codex、CodeBuddy、Qoder、MiniMax 满框）缩到约 88%，和 GLM 一样；镂空的（Claude、Qwen、DeepSeek、Kimi、iFlow）保持满框。
+   --lz 是所在位置的整体比例：Claw 卡片里整体再小一点。用 scale 属性：不影响排版、不和闪烁动画（只改透明度）冲突。
+   MiniMax、iFlow 的官方图片自带白底板（深色主题、灰底上会露出白块）：MiniMax 用去掉白底、裁到图形的一份；iFlow 用它安装包里自带的透明底 logo.png（bundle/logo.png）；都内联成 data URI */
+.cx-mark,.mm-logo,img[src*="ide/logo.svg"],img[src*="O1CN01QkSxiCocd3D0prc8"]{--lk:.88}
+.cp-mark{color:var(--ink)}   /* Copilot：GitHub Octicons 的 copilot 图标（MIT），单色，跟着主题的字色 */
+.oc-mark{--lk:.9}
+.cc-mark,.ds-mark,.oc-mark,.km-mark,.qw-mark,.cx-mark,.cp-mark,.mm-logo,.if-logo,img[src*="ide/logo.svg"],img[src*="O1CN01QkSxiCocd3D0prc8"],img[src*="z-cdn.chatglm.cn"],img[src*="openclaw.ai"]{scale:calc(var(--lk,1)*var(--lz,1))}
+.claw-card .claw-ic{--lz:.86}
+.claw-login{margin-left:auto;flex:none;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);font-size:12.5px;white-space:nowrap;cursor:pointer}   /* 一行「登录 ›」，淡淡一点底色 */
+.claw-login::after{content:' ›'}
+.claw-grid .claw-card{position:relative}
+.claw-grid .claw-login{position:absolute;right:9px;bottom:8px;margin:0;font-size:11.5px;line-height:15px}   /* 两列卡片：放在右下角，不改说明文字的宽度 */
+#loginPane{position:fixed;inset:0;z-index:40;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.42)}
+#loginPane.on{display:flex}
+#loginPane .lg-card{width:100%;max-width:440px;max-height:85vh;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+@media (min-width:1000px){#loginPane{align-items:center}#loginPane .lg-card{border-radius:16px}}
+.lg-hd{display:flex;align-items:center;justify-content:space-between;font-size:17px;margin-bottom:8px}
+.lg-x{border:0;background:none;font-size:18px;color:var(--muted);padding:4px 8px;cursor:pointer}
+.lg-hint,.lg-lb{color:var(--muted);font-size:13.5px;line-height:1.5}
+.lg-sec{margin:12px 0}
+.lg-key{display:flex;gap:8px;margin-top:8px}
+.lg-in{flex:1;min-width:0;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+.lg-btn{display:inline-block;padding:9px 16px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
+.lg-btn.ghost{background:var(--bg);color:var(--ink);border:var(--bw) solid var(--line)}
+.lg-code{font:700 28px/1.2 ui-monospace,Menlo,monospace;letter-spacing:2px;margin:8px 0;user-select:all;-webkit-user-select:all}
+.lg-st{margin-top:12px;color:var(--muted);font-size:13.5px;word-break:break-all;line-height:1.5}
+.lg-st.ok{color:var(--allow)}.lg-st.bad{color:#D33}
+.lg-ft{margin-top:14px;text-align:right}
+@media (max-width:999px){
+  /* Claw 页：每个 Claw 一张大卡片，选了哪个，会话页就显示哪一种的会话 */
+  #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
+  /* Claw 页：整页滚动；底部多留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），内容多时圈被盖住，滚到底就露出来、点得到 */
+  #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
+  #app.m-list.claw-on #clawPane{padding-top:0}
+  #app.m-list.claw-on #clawModels{position:sticky;top:0;z-index:3;flex:none;box-sizing:border-box;width:auto;align-self:stretch;margin:0 -12px;min-height:calc(56px + env(safe-area-inset-top,0px));padding:calc(env(safe-area-inset-top,0px) + 4px) 16px 4px 12px;border:0;border-bottom:var(--bw) solid var(--strip-line);border-radius:0;background:var(--strip);box-shadow:none}   /* 「模型管理」钉在 Claw 页顶上当标题条：和列表页快捷入口一样高（56）、一样的底色，Claw 列表从它下面滚过 */
+  #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
+  #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
+  /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
+  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;min-height:calc(56px - var(--bw));margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip);border-bottom:var(--bw) solid var(--line)}   /* 设置页各页的标题条：和快捷入口、模型管理同高 56（含底线；会话页标头 60，略高） */
+  #app.m-list.host-on #hostPane .pe-back{left:0;top:env(safe-area-inset-top,0px);bottom:0}   /* 标题上下留白一样：不再往上多挪 6px、底下不多留 6px */
+}
+/* Claw 页的卡片：手机、电脑共用（电脑端的 Claw 页整页显示，见下面 min-width:1000px 里的 claw-on） */
+#clawList{flex:none;display:flex;flex-direction:column;gap:12px}
+/* Claw 按出品方分组，每行两张：图标在上，名字、出品方在下；说明放在 title 里 */
+.claw-g[hidden]{display:none}
+.claw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+/* 每张一样高（112px）：左边一列 logo（占一半高 56px）+ 下面出品方；右边一列名字（最多两行）+ 一句话说明能接管哪些会话；有状态说明（暂不支持…）时换掉说明 */
+.claw-grid .claw-card{display:flex;align-items:flex-start;gap:10px;height:112px;min-height:0;padding:10px 11px;overflow:hidden}
+.claw-grid .claw-l{flex:none;width:56px;display:flex;flex-direction:column;align-items:center;gap:5px}
+.claw-grid .claw-ic{width:56px;height:56px}
+.claw-grid .claw-l small{max-width:64px;text-align:center;font-size:11px;line-height:13px;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.claw-grid .claw-r{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding-top:2px}
+.claw-grid .claw-r b{font-size:14.5px;line-height:18px;color:var(--ink);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.claw-grid .claw-st,.claw-grid .claw-ds{font-size:11.5px;line-height:15px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.claw-grid .claw-ds{color:var(--muted)}
+@media (max-width:375px){.claw-grid .claw-card{gap:8px;padding:10px 9px}.claw-grid .claw-r b{font-size:13.5px}}   /* 窄屏：CodeBuddy 这种长词不被拆开 */
+.claw-grid .claw-card:has(.claw-st:not(:empty)) .claw-ds{display:none}
+.claw-h{margin:2px 4px 4px;font-size:13px;color:var(--muted)}
+.claw-need{padding:48px 16px;text-align:center;line-height:1.8}
+.claw-go{margin-top:14px;padding:9px 22px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600}
+.claw-card{display:flex;align-items:center;gap:14px;width:100%;min-height:92px;padding:16px;border:var(--bw) solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.claw-card{background:var(--claw-bg,var(--user-bg))}   /* Agent 卡片：浅色底（和会话列表选中色一致）；白色主题是白卡片细边，和会话目录一样 */
+:root .claw-card[aria-current="true"]{border-color:transparent;background:linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 70%,transparent),transparent 50%,color-mix(in srgb,var(--accent) 10%,transparent)),var(--user-bg);box-shadow:inset 1.5px 1.5px 0 var(--gl-hi),var(--sel-sh2,0 14px 26px -10px color-mix(in srgb,var(--accent) 55%,transparent),0 4px 10px -3px color-mix(in srgb,var(--ink) 18%,transparent));transform:translateY(-1px)}   /* 选中：凸起的立体感——左上向光一道细亮边，背光一侧只靠柔和的投影（不画暗边，免得像边框） */
+:root #sList .s-row:not(.wx) .s-item[aria-current="true"]{border-color:transparent;background:var(--dir-sel-bg,linear-gradient(150deg,color-mix(in srgb,var(--gl-hi) 50%,transparent),transparent 55%,color-mix(in srgb,var(--accent) 6%,transparent)),linear-gradient(rgba(255,255,255,.03),rgba(255,255,255,.03)),var(--user-bg));box-shadow:var(--dir-sel-sh,inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent),var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14)))}   /* 会话目录选中：凸起，但比 Claw 卡片弱（不上浮、投影小）；深色主题用 --sel-sh 黑色小投影，不起雾 */
+.claw-card:disabled{opacity:.45;cursor:default}
+.claw-card.claw-down>:not(.claw-start){opacity:.45}   /* 装了没启动、能在这里启动的（OpenClaw）：灰着，「启动」按钮不灰 */
+.claw-ic{flex:none;display:block;width:48px;height:48px;object-fit:contain}
+.claw-ic.tile{border-radius:22.5%}   /* 方形底色的官方图标切成圆角，和 App 图标一个样子 */
+/* Claude Code：用 Claude 的花瓣标记（LobeHub 图标库 claude-color.svg，MIT），无底板，颜色 #D97757 */
+/* DeepSeek：官方 icon.png 是蓝底方块，这里换成透明底的蓝鲸标记（LobeHub 图标库 deepseek-color.svg，MIT），和其它几个一样没有底板 */
+/* OpenCode：官方的 apple-touch-icon 是「近黑方块里一个小标记」，比其它几个重得多也小得多。
+   这里只取它的标记（官方 favicon.svg 里那两个图形，形状原样不改），去掉深色底板；
+   颜色用主题变量（--ink 描边、--muted 实心块），深浅主题都看得清 */
+/* Kimi：用 Kimi Code 自带网页界面里的吉祥物（KimiMascotPeek：蓝色半圆探头 + 两只白眼睛 + 右上角蓝点），上下居中；干活时眨眼，不跟别的图标一起闪 */
+#clawList{margin-top:14px}
+.claw-tool{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:var(--bw) solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.claw-tool .claw-ic{width:34px;height:34px;margin:0 7px;color:var(--accent)}
+.claw-tool .chev{flex:none;width:8px;height:8px;border-right:1.6px solid var(--muted);border-top:1.6px solid var(--muted);transform:rotate(45deg);margin-right:4px}
+.claw-none{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
+.claw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.claw-tx b{font-size:17px}
+.claw-tx small{font-size:12.5px;color:var(--muted);line-height:1.4}
+.claw-st{flex:none;font-size:12.5px;color:var(--muted)}
+.claw-st:empty{display:none}   /* 选中靠边框表示；只有「即将支持」这类说明才显示 */
+.claw-card[aria-current="true"] .claw-st{color:var(--accent);font-weight:600}
+/* Claw 页卡片和底部「会话」logo 呼应：这个 Claw 有会话在干活 → logo 轻闪；有没看的 → logo 右上角红点（两者可以同时） */
+.claw-icw{position:relative;flex:none;display:block}
+.claw-card.busy .claw-ic{animation:wbreath 2.4s ease-in-out infinite}
+.claw-card.unread .claw-icw::after{content:'';position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--bg)}
+/* ════ 公共 · 列表顶栏（搜索、新建、主题方块）、手机会话卡片、「最近」 ════ */
+/* 手机：会话面板顶部也有搜索、新建、刷新；设置区和会话列表用分隔线隔开 */
+#sTop{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
+/* 15 个主题快捷方块：点一下切主题（普通 / 深色 / 九紫离火 / 流变时辰 12 个时辰） */
+#sTop{position:relative}
+#tmpTh{position:absolute;left:12px;right:12px;bottom:3px;display:flex;gap:3px;z-index:3}
+#tmpTh button{position:relative;width:14px;height:14px;padding:0;border:0;background:none;cursor:pointer;flex:none}
+#tmpTh button{border-radius:3px}
+#tmpTh button::after{content:"";position:absolute;left:3.5px;top:3.5px;width:7px;height:7px;border-radius:1.5px;background:var(--c);box-shadow:0 0 0 .5px rgba(0,0,0,.18)}   /* 极淡的一圈：流变时辰下选中色和底色相同、申白在白底上，不加就看不见 */
+#tmpTh:not(.open) button[data-th]:not([aria-pressed="true"]){display:none}   /* 收起时只露选中的那个 + 展开箭头（像目录组标题） */
+#tmpTh .th-tg{order:-1;display:flex;align-items:center;justify-content:center;color:var(--line)}
+#tmpTh .th-tg svg{transition:transform .15s}
+#tmpTh:not(.open) .th-tg svg{transform:rotate(-90deg)}
+@media (max-width:999px){#tmpTh{display:none}}   /* 手机端不要 */
+/* 电脑端没有底部菜单：子午流注自动走时，八字 + 当令经络淡淡写在顶栏底下这一行，垫在最底层；主题方块展开时铺一层底色盖住它 */
+@media (min-width:1000px){
+  html[data-theme=shichen].sc-auto #sTop::after{content:var(--sc-mer);position:absolute;left:34px;right:12px;bottom:3px;z-index:1;
+    text-align:center;font:500 11px/14px "Songti SC","STSong","Noto Serif SC","Source Han Serif SC",serif;letter-spacing:.3em;color:color-mix(in srgb,var(--ink) 30%,var(--strip));pointer-events:none;white-space:nowrap;overflow:hidden}
+  #tmpTh.open{background:var(--strip)}
+}
+#sSearch{flex:1;min-width:0;height:38px;padding:0 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+#sSearch:focus{outline:none;border-color:var(--accent)}
+#sNew{flex:none;width:38px;height:38px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
+#setPane{margin-top:22px;padding-top:16px;border-top:var(--bw) solid var(--line)}
+/* 手机会话卡片：没有常驻按钮，像微信一样左滑露出「编辑 / 删除」 */
+.s-ren span,.s-del span{display:none}
+/* 「最近」：像微信聊天列表——左边 Claw 图标当头像，右上角时间，下面一行最后一条消息；行间细线，不画卡片框 */
+#sList{--lpad:12px}   /* 列表左右留白；「最近」的行用负边距铺满到两边 */
+#sList .s-row.wx{margin:0 calc(var(--lpad) * -1);border:0;border-radius:0;background:transparent;overflow:visible}
+#sList .s-row.wx .s-item{display:flex;align-items:center;gap:12px;min-height:0;margin:0;padding:0 calc(var(--lpad) + 6px);border:0;border-radius:0;background:transparent}
+#sList .s-row.wx .wx-av{position:relative;flex:none;display:grid;place-items:center;width:46px;height:46px;border-radius:11px;background:var(--surface);border:var(--bw) solid var(--line)}
+#sList .s-row.wx .wx-av svg,#sList .s-row.wx .wx-av img{display:block;width:30px;height:30px;object-fit:contain}
+#sList .s-row.wx .wx-av img.tile{border-radius:22.5%}
+#sList .s-row.wx .wx-av{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;cursor:pointer}   /* 点头像换头像 / 网名，长按随机一套：不弹系统的图片菜单 */
+#sList .s-row.wx .wx-av img.sk{width:100%;height:100%;border-radius:inherit;object-fit:cover;pointer-events:none}
+#sList .s-row.wx.shk .wx-av{animation:avShk .4s linear 6 both;animation-delay:var(--shk-d,0ms)}   /* 来消息：头像连着抖 2.4 秒就停 */
+@keyframes avShk{0%,100%{transform:none}20%{transform:translateX(-2px) rotate(-8deg)}45%{transform:translateX(2px) rotate(7deg)}70%{transform:translateX(-1.5px) rotate(-5deg)}88%{transform:translateX(1px) rotate(3deg)}}
+@media (prefers-reduced-motion:reduce){#sList .s-row.wx.shk .wx-av{animation:none}}
+#sList .s-row.wx .wx-av:has(>img.sk){border-color:transparent;background:transparent}   /* 换了头像的不要边框；默认的 Claw 图标照旧有框 */
+#sList .s-row.wx .wx-cl{position:absolute;right:1px;bottom:1px;display:grid;place-items:center;width:16px;height:16px;pointer-events:none;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25))}   /* 换了头像：右下角透明底的小水印，标出是哪个 Claw */
+#sList .s-row.wx .wx-cl svg,#sList .s-row.wx .wx-cl img{width:14px;height:14px;background:none}
+#sList .s-row.wx .wx-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:13px 0;border-bottom:var(--bw) solid var(--line)}
+#sList .s-row.wx:last-child .wx-b{border-bottom:0}
+#sList .s-row.wx .wx-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+#sList .s-row.wx .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:16px}
+#sList .s-row.wx .when{flex:none;font-size:12px;color:var(--muted)}
+#sList .s-row.wx .wx-ck{flex:none;align-self:center;display:grid;place-items:center;width:14px;height:14px;margin-right:-4px;opacity:.85}#sList .s-row.wx .wx-ck :is(svg,img){width:14px;height:14px;background:none}   /* 换了头像的会话：时间左边的小 Claw 图标 */
+#sList .s-row.wx.working .when{color:var(--allow);font-weight:600}#sList .s-row.wx.waiting .when{color:var(--warn)}   /* 在干活 / 等确认：和 Claw 列表一样上色 */
+#sList .s-row.wx .m{display:block;margin:0;font-size:13.5px;color:var(--muted)}
+#sList .s-row.wx .cwd{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sList .s-row.wx.unread .s-item .t::before{display:none}
+#sList .s-row.wx .wx-bd{display:none;position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--surface);color:#fff;font-size:11px;font-weight:600;line-height:18px;text-align:center}
+#sList .s-row.wx.unread .wx-bd{display:block}
+#sList .s-row.wx .wx-bd.num{top:-7px;right:-8px;width:auto;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px}   /* 1 条只亮红点；多于 1 条显示条数（像微信） */
+@media (hover:hover){#sList .s-row.wx .s-item:hover{background:color-mix(in srgb,var(--user-bg) 55%,transparent)}#sList .s-row.wx .s-item:hover .wx-b{border-bottom-color:transparent}}   /* 鼠标划过：选中色的一半深浅，跟着主题走（普通淡绿、九紫离火淡紫、流变时辰地支淡色） */
+#sList .s-row.wx .s-item[aria-current="true"],#sList .s-row.wx.opening .s-item{background:var(--user-bg)!important}
+#sList .s-row.wx .s-item[aria-current="true"] .wx-b,#sList .s-row.wx.opening .wx-b{border-bottom-color:transparent}
+@media (max-width:999px){
+  /* 边框画在外层（不动）：滑动时只有里面的内容往左移，编辑 / 删除也在框里 */
+  .s-row{overflow:hidden;border:var(--bw) solid var(--line);border-radius:12px;background:var(--bg)}
+  #sList .s-row:not(.wx),#sList .s-row:not(.wx)>.s-item{background:var(--dir-bg-m,var(--user-bg))}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底（底色和列表不同时边框自动去掉，见 nb-srow） */
+  .s-row.working:not(:has(> .s-item[aria-current="true"])){border-color:var(--allow)}
+  .s-row.waiting:not(:has(> .s-item[aria-current="true"])){border-color:var(--warn)}
+  /* 选中的会话：和电脑端一样，整张卡片浅绿底、不再画绿框 */
+  .s-row:has(> .s-item[aria-current="true"]){border-color:var(--user-bg);background:var(--user-bg)}
+  .s-row > .s-item[aria-current="true"]{background:var(--user-bg)}
+  /* 选中：一点点凸起——亮边、渐变画在里层（滑动时跟着走），投影画在外层（里层被外层 overflow 裁掉） */
+  #sList .s-row:not(.wx):has(> .s-item[aria-current="true"]){border-color:transparent;box-shadow:var(--dir-sel-sh,var(--sel-sh,0 6px 14px -7px color-mix(in srgb,var(--accent) 45%,transparent),0 2px 5px -2px rgba(0,0,0,.14)))}
+  :root #sList .s-row:not(.wx)>.s-item[aria-current="true"]{box-shadow:var(--dir-sel-sh,inset 1px 1px 0 color-mix(in srgb,var(--gl-hi) 75%,transparent))}
+  .s-row .s-item,.s-row.two .s-item,.s-row.pn .s-item,.s-row.three .s-item{position:relative;z-index:1;min-height:0;margin:0;padding:9px 10px;border:0!important;border-radius:0;transition:transform .22s cubic-bezier(.2,.8,.2,1);will-change:transform;touch-action:pan-y}
+  .s-row.dragging .s-item{transition:none}
+  .s-row .s-item .t,.s-row.two .s-item .t,.s-row.pn .s-item .t,.s-row.three .s-item .t{padding-right:0}
+  .s-new{display:none!important}
+  .s-ren,.s-del{top:0;bottom:0;height:auto;width:72px;border-radius:0;opacity:1;z-index:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;font-size:13px;font-weight:600;visibility:hidden}
+  .s-row.sw .s-ren,.s-row.sw .s-del{visibility:visible}
+  .s-ren span,.s-del span{display:block}
+  .s-del{right:0;background:#F23C3C}
+  .s-hide{position:absolute;top:0;bottom:0;right:0;width:72px;border:0;background:#F23C3C;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;visibility:hidden;z-index:0}
+  .s-row.sw .s-hide{visibility:visible}
+  #sList .s-row.wx{position:relative;overflow:hidden}
+  #sList .s-row.wx .s-item{position:relative;z-index:1;background:var(--surface)}
+  .s-ren{right:0;background:#8B95A3}
+  .s-row.two .s-ren,.s-row.three .s-ren{right:72px}
+  .s-ren:hover,.s-ren:focus-visible{color:#fff;background:#8B95A3}
+  .s-del:hover,.s-del:focus-visible{color:#fff;background:#F23C3C}
+  .s-item .m{font-size:12px;gap:8px}
+}
+#setPane .set-foot{padding-top:18px}
+/* ════ 公共 · 电脑端：列表、聊天的细节 ════ */
+@media (min-width:1000px){
+  #app{max-width:none;margin:0;border:0;display:grid;grid-template-columns:64px var(--listW,300px) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto auto}
+  header,#banner,#feed,#dock{grid-column:3}
+  header{grid-row:1}#banner{grid-row:2}#feed{grid-row:3}#dock{grid-row:5}
+
+  /* 图标栏 */
+  #rail{grid-column:1;grid-row:1 / -1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0 12px;background:var(--code-bg);border-right:var(--bw) solid var(--line)}
+  /* 顶部一条：左栏头像、列表搜索栏、聊天标头连成一体——等高（--hd-h 量自聊天标头）、同底色（--strip）、同一条底线（--strip-line），
+     这一条里不画左右分界线（分界线改成从这条下面才开始的 ::after） */
+  #rail{position:relative;border-right:0;padding-top:calc((var(--hd-h,56px) - 39px) / 2);
+    background:var(--strip)}   /* 左栏整条一个底色，和顶部那条同色，不画横线 */
+  #railCur{margin:-2.5px 0 calc(var(--hd-h,56px) / 2 - 20px)}   /* 顶上那格（原 logo 的位置）：竖直居中在顶部那条里，「最近」从这条下面开始 */
+  #railChats{margin-top:8px}   /* 「最近」：中心和列表第一个会话的头像齐平（行从顶部那条下面开始，头像中心在行高一半 38px 处） */
+  #sheet::after{content:'';position:absolute;top:var(--hd-h,56px);bottom:0;right:0;width:1px;background:var(--line);pointer-events:none;z-index:3}
+  /* 列表栏 + 聊天区是一整块：外面一圈细边框、四角圆角，左边是图标栏、右下留一点边（底色同顶部那条）。
+     圆角外面那一小块用同色的外阴影盖住（只扩 6px，盖不到图标栏的按钮） */
+  #app{position:relative;box-sizing:border-box;padding:4px 4px 4px 0;background:var(--strip)}   /* 内圈四周都留 4px */
+  #app::after{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border:var(--bw) solid var(--line);border-radius:12px;box-shadow:0 0 0 6px var(--strip);pointer-events:none;z-index:20}
+  #newDlg,#delDlg,#keyDlg,#crDlg,#cfgDlg,#lightbox,#vplayer,#fview,#diss{z-index:21}   /* 弹框 / 全屏查看盖在这圈边框上面：整屏一起变暗，不留一圈亮边 */
+  /* 聊天区滚动条：位置始终留着（内容不跟着跳），没有底色 */
+  #feed{scrollbar-gutter:stable}
+  #feed::-webkit-scrollbar{width:8px}
+  #feed::-webkit-scrollbar-thumb{background:rgba(128,128,128,.35);border-radius:4px}
+  #feed::-webkit-scrollbar-track{background:transparent}
+  :root[data-theme="shichen"]:not(.sc-img) #feed::-webkit-scrollbar-track{background:linear-gradient(var(--strip),var(--surface))}   /* 时辰（纯色）：聊天区是彩色底，滚动条那条和外面分不开——放出底色，上接标题栏、下接输入区渐变 */
+  /* 会话列表照微信：每行铺满到两边，滚动条浮在行上面、不占位置。系统滚动条在有的 WebView 里是常驻的粗条（占一条白底），
+     所以把它藏掉，换成脚本画的细条 .ovs：滚动、鼠标移进列表时出现，停一会儿淡出；可以拖 */
+  .sheet-p{scrollbar-width:none}
+  .sheet-p::-webkit-scrollbar{display:none}
+  .ovs{display:block;position:absolute;top:0;right:2px;width:6px;border-radius:3px;background:rgba(128,128,128,.5);opacity:0;transition:opacity .3s;z-index:4;cursor:default;touch-action:none}
+  .ovs.on,#sheet:hover .ovs{opacity:1}
+  .ovs:hover,.ovs.drag{background:rgba(128,128,128,.75)}
+  #app #sheet .sheet-p{background-image:linear-gradient(var(--strip) calc(var(--hd-h,56px) - 1px),var(--strip-line) 0,var(--strip-line) var(--hd-h,56px),transparent 0)!important}   /* 滚动条那一窄条在顶部也用顶部的底色（各主题给 .sheet-p 设的是 background，这里只补图层） */
+  #rail button{width:44px;height:44px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+  #rail button:hover{background:var(--rail-on,var(--surface));color:var(--ink)}
+  #rail button.on{color:var(--accent);background:var(--rail-on,var(--surface))}
+  #rail .gap{flex:1}
+  /* 左栏只放活跃的 Claw（当前选中的、有会话在干活的、有未读的）；其余收在下面的「⌃」里，点开在它上方展开 */
+  #rclaws{display:flex;flex-direction:column;align-items:center;gap:6px}
+  #rclaws .rclaw{order:0}         /* 顺序：活跃的 → （展开时）不活跃的 → ⌃，展开的出现在 ⌃ 上方 */
+  #rclaws .rclaw.idle{order:1}
+  #rclawMore{order:2}
+  #rclaws:not(.open) .rclaw.idle{display:none}
+  #rclawMore svg{transition:transform .18s}
+  #rclaws.open #rclawMore svg{transform:rotate(180deg)}
+  #rail .rclaw{position:relative}
+  #rail .rclaw.busy svg,#rail .rclaw.busy img{animation:wbreath 2.4s ease-in-out infinite}   /* 别的 Claw 有会话在干活：左栏图标轻闪 */
+  #rail .rclaw img,#rail .rclaw svg{width:26px;height:26px;object-fit:contain}
+  #rail .rclaw img.tile{border-radius:22.5%}
+  #rail .rclaw.on{background:var(--user-bg)}
+  #rclaws.solo .rclaw.on{background:none}
+  #rclaws.solo .rclaw.on:hover{background:var(--surface)}   /* 当前 Claw：浅绿底，和选中的会话一个样子 */
+  #rail .rclaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+  #rail .rsep{width:24px;margin:4px 0;border-top:var(--bw) solid var(--line)}
+  /* 左栏不再一个个列 Claw：#railCur = 当前 Claw 的会话（图标随 Claw 换），#railClaw = Claw 页（切 Claw、模型管理），和手机底栏一样 */
+  #rclaws,#rail .rsep{display:none}
+  #railCur,#railClaw{position:relative}
+  #railCur img,#railCur svg{width:26px;height:26px;object-fit:contain}
+  #railCur img.tile{border-radius:22.5%}
+  #railCur.on{background:var(--user-bg)}
+  #railCur.busy :is(svg,img),#railClaw.busy svg{animation:wbreath 2.4s ease-in-out infinite}
+  #railCur.dot::after,#railClaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+  /* Claw 页：像模型管理一样占满列表 + 聊天区，卡片按宽度排几列 */
+  #app.claw-on #sheet{grid-column:2 / -1;z-index:6}
+  #app.claw-on :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */
+  #app.claw-on #sheet::after{display:none}
+  #app.claw-on #sTop,#app.claw-on #sList{display:none}
+  #app.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;padding-bottom:24px}
+  #app.claw-on #clawPane>:not(#clawTop){width:100%;max-width:880px;margin-left:auto;margin-right:auto}
+  #app.claw-on #clawTop{display:flex;position:sticky;top:0;z-index:2;align-items:center;justify-content:center;box-sizing:border-box;min-height:var(--hd-h,56px);margin:0 -10px 2px;background:var(--strip);border-bottom:var(--bw) solid var(--strip-line);font-size:17px;font-weight:600}
+  #app.claw-on .claw-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+
+  /* 会话列表栏 */
+  #sheet,#sheet.on{grid-column:2;grid-row:1 / -1;position:relative;display:block;background:var(--surface);border-right:0;min-height:0;z-index:auto}
+  .sheet-p{height:100%;max-height:none;box-sizing:border-box;border-radius:0;padding:0 10px 16px;overflow-y:auto}
+  #sList{--lpad:10px}
+  #sTop{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:2;margin:0 -10px 4px;padding:14px 12px 10px;background:var(--surface)}
+  #sTop{box-sizing:border-box;min-height:var(--hd-h,56px);margin-bottom:0;padding-top:0;padding-bottom:0;border-bottom:var(--bw) solid var(--strip-line);background:var(--strip)}   /* 和右边聊天标头一样高、底线对齐（--hd-h 由脚本量标头得来） */
+  #sSearch{flex:1;min-width:0;height:32px;padding:0 10px;border:var(--bw) solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+  #sSearch:focus{outline:none;border-color:var(--accent)}
+  #sNew{flex:none;width:32px;height:32px;margin-left:-6px;border:0;border-radius:8px;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}   /* 往左挪 6px：图标和下面目录行的文件夹图标竖着对齐 */
+  #sNew:hover{color:var(--accent);background:var(--bg)}
+  /* 设置页（点图标栏的齿轮）：会话列表和设置二选一显示 */
+  #setPane{display:none;padding-top:16px;margin-top:0;border-top:0}
+  #setPane h2{margin:0 6px 16px;font-size:17px}
+  #app.set-on #sTop,#app.set-on #sList{display:none}
+  /* 设置页：分组卡片；退出登录和页面版本沉到最底下，和其他设置拉开 */
+  #app.set-on .sheet-p{display:flex;flex-direction:column}
+  #app.set-on #setPane{display:flex;flex-direction:column;flex:1}
+  #app.set-on #setBody{display:flex;flex-direction:column;flex:1}
+  /* 宿主页（图标栏的显示器）：和设置一样，占会话列表那一栏 */
+  #app.host-on #sTop,#app.host-on #sList{display:none}
+  #app.host-on #hostPane{display:block;padding:16px 0 8px}
+  /* 设置页、宿主 / 协同等子页的标题栏：和会话列表的搜索栏一样，做成顶部那一条（等高、同底色、同底线、滚动时钉在顶上） */
+  #app.set-on #setTop,#app.host-on #hostPane .pg-hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:var(--hd-h,56px);margin:0 -10px 14px;padding:0 48px;background:var(--strip);border-bottom:var(--bw) solid var(--strip-line);font-size:17px;font-weight:600}
+  #app.set-on #setBack{display:none}   /* 电脑端回会话列表点图标栏，不要返回键 */
+  #app.set-on #setPane{padding-top:0}
+  #app.set-on #setPane h2{display:none}   /* 标题已在顶部那条里 */
+  #app.host-on #hostPane{padding-top:0}
+  #app.host-on #hostPane .pe-back{left:4px;top:0;bottom:0}
+  #hostPane .claw-h{margin:0 6px 16px;font-size:17px;font-weight:600;color:var(--ink)}
+  #hostPane .h-row{min-height:40px;padding:8px 12px;font-size:13.5px}
+  #hostPane .h-row .v{font-size:12.5px}
+
+  /* 会话行：紧凑，一行一个；操作按钮鼠标移上去才出现 */
+  .s-row{margin-top:2px}
+  /* 每行始终有一条最细的边框，颜色就是鼠标移上去时的背景色：移上去时边框和背景融为一体，尺寸不变、不跳动 */
+  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{min-height:0;padding-top:7px;padding-bottom:7px;padding-left:9px;border:1px solid var(--bg);border-radius:8px;background:none;cursor:pointer}
+  #sList .s-row:not(.wx) .s-item{border:var(--dir-bd,var(--bw) solid var(--line));background:var(--dir-bg,var(--user-bg))}   /* 按目录的会话卡片：和 Claw 卡片一样铺浅色底，底色和列表不同时边框自动去掉（nb-sitem）；带 #sList 压过各主题的卡片底 */
+  #sList .s-row:not(.wx):hover .s-item:not([aria-current="true"]){background:var(--dir-hover,color-mix(in srgb,var(--user-bg),var(--accent) 10%))}
+  .s-item .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;word-break:normal}
+  .s-item .m{font-size:11.5px;gap:8px;margin-top:1px}
+  .s-item .bz{font-size:11.5px}
+  .s-ren,.s-new,.s-del{top:4px;width:30px;height:26px;opacity:0}
+  .s-row:hover .s-ren,.s-row:hover .s-new,.s-row:hover .s-del,.s-row :focus-visible{opacity:1}
+  /* 行的排版始终和鼠标移上去时一样（右边给按钮留好位置），移上去只变背景、露出改名/删除 */
+  /* 按钮只出现在标题那一行：只给标题留位置，下面一行（ID、分支、状态）用满整行 */
+  .s-row .s-item,.s-row.two .s-item,.s-row.three .s-item,.s-row.pn .s-item{padding-right:9px}
+  .s-row .s-item .t,.s-row.pn .s-item .t{padding-right:34px}
+  .s-row.two .s-item .t,.s-row.three .s-item .t{padding-right:66px}
+  .s-new{display:none}   /* 新建在列表顶部的 ⊕，每行不再单独放 */
+  .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:36px}.s-row.pn .s-ren{right:4px}
+  .s-del{right:4px}
+  .s-row.rec .s-item .t{padding-right:0}
+  .s-row.rec:hover .rdir,.s-row.rec:focus-within .rdir{visibility:hidden}   /* 鼠标移上去：目录让位给「编辑」 */
+
+  /* 聊天区标题：像微信，只有名字加粗，没有框 */
+  header{padding:0 20px;min-height:56px;border-bottom:var(--bw) solid var(--strip-line);background:var(--strip)}
+  /* 和手机一样的两行（不显示目录，「已恢复会话」那行有）：
+     第一行  ● 会话名称（整行）
+     第二行  模型 · 推理强度 · 权限  ID ······ 圆球 ›
+     电脑端没有返回键；别的会话有未读看左边列表，这里不放红点 */
+  header{gap:12px;padding:6px 20px}
+  #sessBtn{border:0;background:none;padding:0;cursor:pointer}   /* 点会话名进解剖页：鼠标显示手型 */
+  /* 和左边列表顶栏两行对齐：左边图标那行和会话名（Claw logo + 名字）同一高度，会话 ID 往下贴底、和左边主题色块那行同一高度 */
+  #sTop{padding-bottom:23px}
+  :is(#cfgBtn,#sid,#cfgGo){position:relative;top:10px}
+  #cfgGo{margin-right:-6px}   /* 电脑上发送是带字的按钮，› 照旧贴右 */   /* 第二行的字（模型 · 权限、ID、›）一起往下，圆球不动 */
+  #feed{padding:20px max(28px,calc((100% - 960px) / 2)) 14px}
+
+  /* 输入区：像微信的大输入面板，左下角工具、右下角「发送」 */
+  #dock{padding:0;border-top:var(--bw) solid var(--line)}
+  #dock>#perm,#dock>#ask,#dock>#cmdMenu,#dock>#atts{margin:10px max(20px,calc((100% - 960px) / 2)) 0}
+  #workBar{grid-column:3;grid-row:4;padding:4px max(28px,calc((100% - 960px) / 2)) 10px}
+  /* 输入框和底下一排按钮（附件、发送……）上下分开，字不会滚到加号底下；输入区高度可以拖顶边调（--compH，记在本机） */
+  #composer{height:var(--compH,190px);box-sizing:border-box;padding-bottom:42px;display:flex;flex-direction:column}
+  #taWrap{flex:1;min-height:0}
+  #ta{height:100%!important;min-height:0;max-height:none;padding:14px 20px 4px;font-size:15px;line-height:1.6}
+  #dockGrip{display:block;position:absolute;left:0;right:0;top:-5px;height:10px;z-index:3;cursor:row-resize}
+  #dockGrip::after{content:'';position:absolute;left:50%;top:3px;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--accent);opacity:0;transition:opacity .15s}
+  #dockGrip:hover::after,#dockGrip.drag::after{opacity:.55}
+  body.row-drag{cursor:row-resize;user-select:none}
+  #attachBtn{top:auto;bottom:5px;left:12px;width:34px;height:34px;border-radius:8px}
+  #attachBtn:hover{background:var(--bg);color:var(--ink)}
+  #taClr{bottom:5px;left:50px;width:34px;height:34px;border-radius:8px}
+  #taClr:hover{background:var(--bg);color:var(--ink);opacity:1}
+  #send{top:auto;bottom:6px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
+  #send:disabled,#send.sugfill{background:var(--code-bg);color:var(--muted);opacity:1}
+  #stopBtn{top:auto;bottom:6px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
+  #stopBtn:hover{background:var(--del-bg)}
+  #atBtn{top:auto;bottom:6px;right:16px;width:32px;height:32px;border-radius:6px;font-size:18px}
+  #atBtn:hover{background:var(--bg)}
+  #composer:not(.nosend) #atBtn{right:100px}
+  #composer.grp #ta,#composer.grp.nosend #ta,#composer.grp:not(.nosend) #ta{padding-right:20px}
+  #composer.busy #ta{padding-right:20px}
+}
+/* 弹出窗口（窄，走手机布局）：输入区也用电脑那套——大输入面板、拖顶边调高低（规则照抄上面电脑端那段，只对 .solo） */
+@media (max-width:999px){
+  html.solo #dock{padding:0;border-top:var(--bw) solid var(--line)}
+  html.solo #dock>#perm,html.solo #dock>#ask,html.solo #dock>#cmdMenu,html.solo #dock>#atts{margin:10px max(20px,calc((100% - 960px) / 2)) 0}
+  html.solo #composer{height:var(--compH,190px);box-sizing:border-box;padding-bottom:42px;display:flex;flex-direction:column}
+  html.solo #taWrap{flex:1;min-height:0}
+  html.solo #ta{height:100%!important;min-height:0;max-height:none;padding:14px 20px 4px;font-size:15px;line-height:1.6}
+  html.solo #dockGrip{display:block;position:absolute;left:0;right:0;top:-5px;height:10px;z-index:3;cursor:row-resize}
+  html.solo #dockGrip::after{content:'';position:absolute;left:50%;top:3px;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--accent);opacity:0;transition:opacity .15s}
+  html.solo #dockGrip:hover::after,html.solo #dockGrip.drag::after{opacity:.55}
+  html.solo #attachBtn{top:auto;bottom:5px;left:12px;width:34px;height:34px;border-radius:8px}
+  html.solo #attachBtn:hover{background:var(--bg);color:var(--ink)}
+  html.solo #taClr{bottom:5px;left:50px;width:34px;height:34px;border-radius:8px}
+  html.solo #taClr:hover{background:var(--bg);color:var(--ink);opacity:1}
+  html.solo #send{top:auto;bottom:6px;right:16px;width:auto;height:32px;padding:0 20px;border-radius:6px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
+  html.solo #send:disabled,html.solo #send.sugfill{background:var(--code-bg);color:var(--muted);opacity:1}
+  html.solo #stopBtn{top:auto;bottom:6px;right:100px;width:auto;height:32px;padding:0 16px;border:1px solid var(--deny);border-radius:6px;background:none;color:var(--deny);font-size:14px;font-weight:600}
+  html.solo #stopBtn:hover{background:var(--del-bg)}
+  html.solo #atBtn{top:auto;bottom:6px;right:16px;width:32px;height:32px;border-radius:6px;font-size:18px}
+  html.solo #atBtn:hover{background:var(--bg)}
+  html.solo #composer:not(.nosend) #atBtn{right:100px}
+  html.solo #composer.grp #ta,html.solo #composer.grp.nosend #ta,html.solo #composer.grp:not(.nosend) #ta{padding-right:20px}
+  html.solo #composer.busy #ta{padding-right:20px}
+  body.row-drag{cursor:row-resize;user-select:none}
+}

@@ -2969,6 +2969,11 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=2592000' });
       return fs.createReadStream(fontFile).pipe(res);
     }
+    // 页面样式（public/app.css，里面只有样式）：免登录；带 ?v=当前版本的长期缓存，版本由页面写进地址，改了样式地址就变
+    if (url.pathname === '/app.css') {
+      const css = appCss();
+      return sendZ(req, res, css.body, 'text/css; charset=utf-8', url.searchParams.get('v') === css.ver ? 'public, max-age=31536000, immutable' : 'no-cache');
+    }
     // 英文界面的词典 + 翻译引擎（登录页也用，免登录；里面只有界面文字）
     if (url.pathname === '/i18n/en.js') {
       res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache' });
@@ -3010,11 +3015,12 @@ const handler = async (req, res) => {
       const html = fs.readFileSync(file, 'utf8');
       const mt = new Date(fs.statSync(file).mtimeMs);
       const pad = n => String(n).padStart(2, '0');
-      const ver = crypto.createHash('sha1').update(html).digest('hex').slice(0, 7) +
+      const css = appCss();
+      const ver = crypto.createHash('sha1').update(html).update(css.body).digest('hex').slice(0, 7) +
         ' · ' + pad(mt.getMonth() + 1) + '-' + pad(mt.getDate()) + ' ' + pad(mt.getHours()) + ':' + pad(mt.getMinutes());
       if (!setUp && isFirstDev(req)) res.setHeader('set-cookie', devCookie(devCookieVal(req), req));   // 第一台设备：每次打开续期
       const prefs = JSON.stringify(clientPrefs()).replace(/</g, '\\u003c').replace(/\u2028|\u2029/g, c => '\\u' + c.charCodeAt(0).toString(16));
-      return sendPage(req, res, html.replace('__PAGE_VERSION__', ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
+      return sendPage(req, res, html.replace('__PAGE_VERSION__', ver).replace('__CSS_VER__', css.ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
     }
     if (url.pathname === '/api/upload/file') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));
@@ -3641,19 +3647,29 @@ const handler = async (req, res) => {
   }
 };
 
-// 页面（近 500KB）：压缩后发（brotli 约 140KB），带 ETag——没改过手机就用自己存的（304），改了马上拿新的。
-// 压缩结果按 ETag 记一份，同一版页面只压一次
-let pageZ = { tag: '', br: null, gz: null };
-function sendPage(req, res, body) {
+// 页面（近 600KB）和样式（近 200KB）：压缩后发，带 ETag——没改过手机就用自己存的（304），改了马上拿新的。
+// 压缩结果按 ETag 记一份（每个地址一份），同一版内容只压一次
+const zCache = new Map();
+function sendZ(req, res, body, type, cache) {
   const tag = '"' + crypto.createHash('sha1').update(body).digest('base64url').slice(0, 20) + '"';
-  const hdr = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', etag: tag, vary: 'accept-encoding' };
+  const hdr = { 'content-type': type, 'cache-control': cache, etag: tag, vary: 'accept-encoding' };
   if (String(req.headers['if-none-match'] || '').split(/\s*,\s*/).includes(tag)) { res.writeHead(304, hdr); return res.end(); }
   const ae = String(req.headers['accept-encoding'] || ''), enc = /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gz' : '';
   if (!enc) { res.writeHead(200, hdr); return res.end(body); }
-  if (pageZ.tag !== tag) pageZ = { tag, br: null, gz: null };
-  const z = pageZ[enc] ??= enc === 'br' ? zlib.brotliCompressSync(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } }) : zlib.gzipSync(body);
-  res.writeHead(200, { ...hdr, 'content-encoding': enc === 'br' ? 'br' : 'gzip', 'content-length': z.length });
-  res.end(z);
+  const key = type.split(';')[0];
+  let z = zCache.get(key);
+  if (!z || z.tag !== tag) zCache.set(key, z = { tag, br: null, gz: null });
+  const out = z[enc] ??= enc === 'br' ? zlib.brotliCompressSync(body, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } }) : zlib.gzipSync(body);
+  res.writeHead(200, { ...hdr, 'content-encoding': enc === 'br' ? 'br' : 'gzip', 'content-length': out.length });
+  res.end(out);
+}
+const sendPage = (req, res, body) => sendZ(req, res, body, 'text/html; charset=utf-8', 'no-cache');
+// 样式文件按修改时间缓存内容和版本（短哈希），改了就重读
+let cssC = { mt: 0, body: '', ver: '' };
+function appCss() {
+  const f = path.join(ROOT, 'public', 'app.css'), mt = fs.statSync(f).mtimeMs;
+  if (mt !== cssC.mt) { const body = fs.readFileSync(f, 'utf8'); cssC = { mt, body, ver: crypto.createHash('sha1').update(body).digest('hex').slice(0, 10) }; }
+  return cssC;
 }
 
 // ---------- WebSocket ----------
