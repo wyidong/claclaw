@@ -1245,7 +1245,7 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
   #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip)}
   #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:22px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
-  #app.m-list.set-on #setTop{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;margin:0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
+  #app.m-list.set-on #setTop{position:sticky;top:0;display:flex;align-items:center;justify-content:center;min-height:55px;margin:0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
   /* 标题栏下不留空：原来空出的 14px 里内容滚上去会被截掉，像多了一节；留白挪进滚动区 */
   #setBack{position:absolute;left:0;top:env(safe-area-inset-top,0px);bottom:0;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
 }
@@ -1614,12 +1614,12 @@ select.pe-in{text-align-last:right}
   /* Claw 页：整页滚动；底部多留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），内容多时圈被盖住，滚到底就露出来、点得到 */
   #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   #app.m-list.claw-on #clawPane{padding-top:0}
-  #app.m-list.claw-on #clawModels{position:sticky;top:0;z-index:3;flex:none;box-sizing:border-box;width:auto;align-self:stretch;margin:0 -12px;min-height:calc(60px + env(safe-area-inset-top,0px));padding:calc(env(safe-area-inset-top,0px) + 4px) 16px 5px 12px;border:0;border-bottom:1px solid var(--strip-line);border-radius:0;background:var(--strip);box-shadow:none}   /* 「模型管理」钉在 Claw 页顶上当标题条：和会话页标头一样高、一样的底色，Claw 列表从它下面滚过 */
+  #app.m-list.claw-on #clawModels{position:sticky;top:0;z-index:3;flex:none;box-sizing:border-box;width:auto;align-self:stretch;margin:0 -12px;min-height:calc(56px + env(safe-area-inset-top,0px));padding:calc(env(safe-area-inset-top,0px) + 4px) 16px 4px 12px;border:0;border-bottom:1px solid var(--strip-line);border-radius:0;background:var(--strip);box-shadow:none}   /* 「模型管理」钉在 Claw 页顶上当标题条：和列表页快捷入口一样高（56）、一样的底色，Claw 列表从它下面滚过 */
   :root.nb-hd #app.m-list.claw-on #clawModels{border-bottom-color:transparent}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
-  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip);border-bottom:1px solid var(--line)}
+  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;min-height:55px;margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip);border-bottom:1px solid var(--line)}   /* 设置页各页的标题条：和快捷入口、模型管理同高 56（55 + 1px 底线；会话页标头 60，略高） */
   #app.m-list.host-on #hostPane .pe-back{left:0;top:env(safe-area-inset-top,0px);bottom:0}   /* 标题上下留白一样：不再往上多挪 6px、底下不多留 6px */
 }
 /* Claw 页的卡片：手机、电脑共用（电脑端的 Claw 页整页显示，见下面 min-width:1000px 里的 claw-on） */
