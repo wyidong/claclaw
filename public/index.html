@@ -184,7 +184,23 @@ window.__sc=(function(){
 :root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
 :root[data-theme="shichen"].sc-img{--strip:transparent}   /* 图原样显示，不压淡底、不雾化（像桌面壁纸） */
 :root:is([data-theme="ziwei"],[data-theme="shichen"]:not(.sc-dark)):not(.sc-img) #sTop :is(#sNew,#gNew,#sPeer,#sVoice,#sTheme,#sAcct,#sReload,#rClear):not(:hover):not([aria-pressed="true"]):not(.reconn){color:color-mix(in srgb,var(--accent) 45%,var(--muted))}   /* 紫微、时辰浅色：灰色是统一的石板灰，顶部快捷图标掺进主题色，跟着主题走（深色时辰的灰本来就带色） */
-@media (max-width:999px){#app.m-list #sTop,#app header,#app.m-list.set-on #setTop{position:sticky;top:0}}   /* 手机：顶栏设成 sticky——iPhone（iOS 26 起）状态栏取色找的是贴着顶边的 fixed / sticky 块，不是的话就取到下面一层的淡底（和顶栏不同色）；这几个所在的容器本身不滚，看起来不变 */
+@media (max-width:999px){#app.m-list #sTop,#app header,#app.m-list.set-on #setTop{position:sticky;top:0}}
+@media (max-width:999px){   /* 手机：顶部各条（快捷入口、会话标头、模型管理、设置页及子页）一律有底线，底部菜单一律有顶线——不管和旁边是不是同色（压过 nb-xxx 的「同色不画」） */
+  :root{--hair:1px}   /* 最细的线：屏幕上的 1 个物理像素（2 倍屏 0.5px、3 倍屏 0.34px） */
+  @media (-webkit-min-device-pixel-ratio:2),(min-resolution:2dppx){:root{--hair:.5px}}
+  @media (-webkit-min-device-pixel-ratio:3),(min-resolution:3dppx){:root{--hair:.34px}}
+  :root{--mid-list:var(--surface)}:root:is([data-theme="ziwei"],[data-theme="shichen"]){--mid-list:var(--bg)}   /* 底部菜单各页的中间区底色（.sheet-p） */
+  /* 白色、深色主题（和「跟随系统」）：页面底和块底对调——页面用 --bg、卡片用 --surface，和紫微 / 时辰同一个逻辑；最近、会话、Claw、设置四页底色统一 */
+  :root:is([data-theme="light"],[data-theme="dark"]){--mid-list:var(--bg);--dir-bg-m:var(--surface);--dir-bd:1px solid var(--surface);--claw-bg:var(--surface)}:root:is([data-theme="light"],[data-theme="dark"]) #app #sheet,:root:is([data-theme="light"],[data-theme="dark"]) #app #sheet .sheet-p,:root:is([data-theme="light"],[data-theme="dark"]) #app #hostPane{background:var(--bg)}:root:is([data-theme="light"],[data-theme="dark"]) #setPane .set-card,:root:is([data-theme="light"],[data-theme="dark"]) .h-card{background:var(--surface)}
+  @media (prefers-color-scheme:light){:root:not([data-theme]){--mid-list:var(--bg);--dir-bg-m:var(--surface);--dir-bd:1px solid var(--surface);--claw-bg:var(--surface)}:root:not([data-theme]) #app #sheet,:root:not([data-theme]) #app #sheet .sheet-p,:root:not([data-theme]) #app #hostPane{background:var(--bg)}:root:not([data-theme]) #setPane .set-card,:root:not([data-theme]) .h-card{background:var(--surface)}}
+  @media (prefers-color-scheme:dark){:root:not([data-theme]){--mid-list:var(--bg);--dir-bg-m:var(--surface);--dir-bd:1px solid var(--surface);--claw-bg:var(--surface)}:root:not([data-theme]) #app #sheet,:root:not([data-theme]) #app #sheet .sheet-p,:root:not([data-theme]) #app #hostPane{background:var(--bg)}:root:not([data-theme]) #setPane .set-card,:root:not([data-theme]) .h-card{background:var(--surface)}}
+  html:root:root #app #mtabs{border-top:var(--hair) solid var(--mid-list)!important}   /* 上下的线 = 中间区底色 */
+  html:root:root :is(#app.m-list #sTop,#app.m-list.claw-on #clawModels,#app.m-list.set-on #setTop,#app.m-list.host-on #hostPane .pg-hd){border-bottom:var(--hair) solid var(--mid-list)!important}
+  html:root:root #app header{border-bottom:var(--hair) solid var(--bg)!important}
+  html:root:root #app #dock{border-top:var(--hair) solid var(--bg)!important}
+  html:root:root #diss>.fv-h{box-sizing:content-box;min-height:calc(56px - var(--hair));padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip);border-bottom:var(--hair) solid var(--bg)}   /* 会话解剖页：标题条和别的页一样——顶栏色、56 高、底线是页面底色（页面 --bg，卡片 --surface） */   /* 会话页底部输入区的顶线：也是聊天区底色 */   /* 会话页：聊天区底色 */
+  html #app.m-list #sTop{padding-bottom:calc(8px - var(--hair,1px))}   /* 多了一条底线，总高还是 56 */
+}   /* 手机：顶栏设成 sticky——iPhone（iOS 26 起）状态栏取色找的是贴着顶边的 fixed / sticky 块，不是的话就取到下面一层的淡底（和顶栏不同色）；这几个所在的容器本身不滚，看起来不变 */
 @media (max-width:999px){html:root:not(.sc-img){--strip:var(--surface)}html:root:not(.sc-img) #app #sTop{background:var(--surface)}}   /* 手机：顶部快捷入口、会话标头（还有状态栏、外壳顶栏）和底部菜单同一个底色 */
 :root[data-theme="shichen"].sc-img .msg.ai{background:color-mix(in srgb,var(--surface) 30%,transparent);border-radius:14px;padding:10px 12px;margin-left:-12px;margin-right:-12px}   /* 回复的字直接压在原图上：垫一层很浅的底，字更清楚，图还看得见 */
 :root[data-theme="shichen"].sc-img .msg.ai.has-play[data-ts]>.gm-foot{left:6px;bottom:2px}   /* 朗读按钮跟着内边距往里挪，和时间同一行 */
@@ -1245,7 +1261,7 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #app.m-list.set-on #setPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0}
   #app.m-list.set-on #setTop{flex:none;margin:0;padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip)}
   #app.m-list.set-on #setBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;padding:22px 12px calc(max(env(safe-area-inset-bottom,0px),var(--sab,0px)) + 14px)}
-  #app.m-list.set-on #setTop{position:sticky;top:0;display:flex;align-items:center;justify-content:center;min-height:55px;margin:0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
+  #app.m-list.set-on #setTop{position:sticky;top:0;display:flex;align-items:center;justify-content:center;min-height:calc(56px - var(--hair,1px));margin:0;border-bottom:1px solid var(--line);font-size:17px;font-weight:600}
   /* 标题栏下不留空：原来空出的 14px 里内容滚上去会被截掉，像多了一节；留白挪进滚动区 */
   #setBack{position:absolute;left:0;top:env(safe-area-inset-top,0px);bottom:0;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink)}   /* 和会话页返回键一样：箭头离屏幕边 13px，点击区宽 48、占满标题栏高 */
 }
@@ -1615,11 +1631,10 @@ select.pe-in{text-align-last:right}
   #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   #app.m-list.claw-on #clawPane{padding-top:0}
   #app.m-list.claw-on #clawModels{position:sticky;top:0;z-index:3;flex:none;box-sizing:border-box;width:auto;align-self:stretch;margin:0 -12px;min-height:calc(56px + env(safe-area-inset-top,0px));padding:calc(env(safe-area-inset-top,0px) + 4px) 16px 4px 12px;border:0;border-bottom:1px solid var(--strip-line);border-radius:0;background:var(--strip);box-shadow:none}   /* 「模型管理」钉在 Claw 页顶上当标题条：和列表页快捷入口一样高（56）、一样的底色，Claw 列表从它下面滚过 */
-  :root.nb-hd #app.m-list.claw-on #clawModels{border-bottom-color:transparent}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
-  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;min-height:55px;margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip);border-bottom:1px solid var(--line)}   /* 设置页各页的标题条：和快捷入口、模型管理同高 56（55 + 1px 底线；会话页标头 60，略高） */
+  #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;min-height:calc(56px - var(--hair,1px));margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip);border-bottom:1px solid var(--line)}   /* 设置页各页的标题条：和快捷入口、模型管理同高 56（含底线；会话页标头 60，略高） */
   #app.m-list.host-on #hostPane .pe-back{left:0;top:env(safe-area-inset-top,0px);bottom:0}   /* 标题上下留白一样：不再往上多挪 6px、底下不多留 6px */
 }
 /* Claw 页的卡片：手机、电脑共用（电脑端的 Claw 页整页显示，见下面 min-width:1000px 里的 claw-on） */
