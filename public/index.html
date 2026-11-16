@@ -33,7 +33,7 @@ window.__sc=(function(){
     if(YIN[z])on=false;   // 6 阴（脏）只用纯色深底，不铺图；6 阳（腑）才用图
     if(on&&ok[z]===true){r.style.setProperty('--sc-img','url("/sc-bg/'+z+'.jpg?v='+SCV+'")');r.classList.add('sc-img');return}
     r.classList.remove('sc-img');if(!on||ok[z]===false)return;
-    var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z)img(z)};im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg?v='+SCV;
+    var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z){img(z);if(window.__scTop)window.__scTop()}};   // 图后到：状态栏 / 外壳顶栏跟着换im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg?v='+SCV;
   }
   function now(d){
     d=d||new Date();var x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
@@ -183,6 +183,9 @@ window.__sc=(function(){
 :root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
 :root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
 :root[data-theme="shichen"].sc-img{--strip:transparent}   /* 图原样显示，不压淡底、不雾化（像桌面壁纸） */
+:root:is([data-theme="ziwei"],[data-theme="shichen"]:not(.sc-dark)):not(.sc-img) #sTop :is(#sNew,#gNew,#sPeer,#sVoice,#sTheme,#sAcct,#sReload,#rClear):not(:hover):not([aria-pressed="true"]):not(.reconn){color:color-mix(in srgb,var(--accent) 45%,var(--muted))}   /* 紫微、时辰浅色：灰色是统一的石板灰，顶部快捷图标掺进主题色，跟着主题走（深色时辰的灰本来就带色） */
+@media (max-width:999px){#app.m-list #sTop,#app header,#app.m-list.set-on #setTop{position:sticky;top:0}}   /* 手机：顶栏设成 sticky——iPhone（iOS 26 起）状态栏取色找的是贴着顶边的 fixed / sticky 块，不是的话就取到下面一层的淡底（和顶栏不同色）；这几个所在的容器本身不滚，看起来不变 */
+@media (max-width:999px){html:root:not(.sc-img){--strip:var(--surface)}html:root:not(.sc-img) #app #sTop{background:var(--surface)}}   /* 手机：顶部快捷入口、会话标头（还有状态栏、外壳顶栏）和底部菜单同一个底色 */
 :root[data-theme="shichen"].sc-img .msg.ai{background:color-mix(in srgb,var(--surface) 30%,transparent);border-radius:14px;padding:10px 12px;margin-left:-12px;margin-right:-12px}   /* 回复的字直接压在原图上：垫一层很浅的底，字更清楚，图还看得见 */
 :root[data-theme="shichen"].sc-img .msg.ai.has-play[data-ts]>.gm-foot{left:6px;bottom:2px}   /* 朗读按钮跟着内边距往里挪，和时间同一行 */
 :root[data-theme="shichen"].sc-img .tgroup{margin-left:-12px;margin-right:-12px}   /* 工具卡片：和回复一样宽 */
@@ -1038,6 +1041,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 #crIn{width:100%;box-sizing:border-box;min-height:180px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);resize:vertical}
 #newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #newDlg.on{display:flex}
+#newDlg,#delDlg,#keyDlg,#crDlg{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-items:flex-start}#newDlg>.dlg,#delDlg>.dlg,#keyDlg>.dlg,#crDlg>.dlg{margin:auto 0}   /* 弹框比屏幕高（手机键盘弹起、选项多）时能上下滚，不会把上面的「目录」挤出屏幕够不着；放得下时照样居中 */
 #newDlg .newIn{margin:4px 0 8px;font-size:14px;color:var(--muted);line-height:1.6}
 /* 目录看起来就是一段文字；点进去才发现能改（不主动提示） */
 .dlg input.plainIn{display:inline;width:auto;min-height:0;padding:0 2px;border:0;border-bottom:1px solid transparent;border-radius:0;background:none;color:var(--ink);font-family:var(--mono);font-size:13.5px}
@@ -1608,6 +1612,9 @@ select.pe-in{text-align-last:right}
   #app.m-list.claw-on #sTop,#app.m-list.claw-on #sList{display:none}
   /* Claw 页：整页滚动；底部多留出背景里「更新客户端」圈的位置（它在底栏上方 84px、高 44px），内容多时圈被盖住，滚到底就露出来、点得到 */
   #app.m-list.claw-on #clawPane{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(140px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
+  #app.m-list.claw-on #clawPane{padding-top:0}
+  #app.m-list.claw-on #clawModels{position:sticky;top:0;z-index:3;flex:none;box-sizing:border-box;width:auto;align-self:stretch;margin:0 -12px;min-height:calc(60px + env(safe-area-inset-top,0px));padding:calc(env(safe-area-inset-top,0px) + 4px) 16px 5px 12px;border:0;border-bottom:1px solid var(--strip-line);border-radius:0;background:var(--strip);box-shadow:none}   /* 「模型管理」钉在 Claw 页顶上当标题条：和会话页标头一样高、一样的底色，Claw 列表从它下面滚过 */
+  :root.nb-hd #app.m-list.claw-on #clawModels{border-bottom-color:transparent}
   #app.m-list.host-on #sTop,#app.m-list.host-on #sList{display:none}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
@@ -1943,7 +1950,7 @@ select.pe-in{text-align-last:right}
   body.row-drag{cursor:row-resize;user-select:none}
 }
 </style>
-<script>(function(){var r=document.documentElement;if(r.getAttribute('data-theme')!=='shichen')return;var b=getComputedStyle(r).getPropertyValue(matchMedia('(min-width:1000px)').matches?'--sc-out':'--bg').trim();if(b)document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})})();</script>   <!-- 流变时辰：状态栏颜色要等上面的样式读进来才知道 -->
+<script>(function(){var r=document.documentElement;if(r.getAttribute('data-theme')!=='shichen')return;var b=getComputedStyle(r).getPropertyValue(matchMedia('(min-width:1000px)').matches?'--sc-out':r.classList.contains('sc-img')?'--bg':'--strip').trim();if(b)document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=b})})();</script>   <!-- 流变时辰：状态栏颜色要等上面的样式读进来才知道 -->
 </head>
 <body>
 <div id="app"><script>
@@ -7054,13 +7061,15 @@ var bdT=0;function bdLater(){cancelAnimationFrame(bdT);bdT=requestAnimationFrame
 new MutationObserver(bdLater).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-sc','class']});
 new MutationObserver(bdLater).observe(document.getElementById('app'),{attributes:true,attributeFilter:['class']});
 DESKTOP.addEventListener('change',bdLater);bdLater();
+window.__scTop=function(){var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});postTheme()};
+function scTopVar(){return DESKTOP.matches?'--sc-out':document.documentElement.classList.contains('sc-img')?'--bg':'--strip'}   // 流变时辰的状态栏 / 外壳顶栏色：电脑和外圈同色；手机有图时用淡底，没图时和顶栏（= 底部菜单）同色
 function scVar(k){return getComputedStyle(document.documentElement).getPropertyValue(k).trim()}
 function scTick(force){
   var on=document.documentElement.getAttribute('data-theme')==='shichen';
   if(!on){if(scName){window.__sc.clear();scName=''}return}
   var n=window.__sc.now().name;if(n===scName&&!force)return;
   scName=window.__sc.apply();
-  var sb=scVar(DESKTOP.matches?'--sc-out':'--bg');document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
+  var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
   var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=document.documentElement.classList.contains('sc-dark')?'dark':'light';   // 6 阴是深色
   if(!force)postTheme();
   var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='子午流注';
@@ -7130,7 +7139,7 @@ setTimeout(function(){var q=window.__clq||[];window.__clq=null;q.forEach(functio
 function postTheme(){
   if(window.parent===window)return;
   var t=document.documentElement.getAttribute('data-theme');
-  if(t==='shichen'){try{window.parent.postMessage({clarelay:1,type:'theme',top:scVar(DESKTOP.matches?'--sc-out':'--bg'),fg:titleColor(),scheme:document.documentElement.classList.contains('sc-dark')?'dark':'light'},'*')}catch(e){}return}
+  if(t==='shichen'){try{window.parent.postMessage({clarelay:1,type:'theme',top:scVar(scTopVar()),fg:titleColor(),scheme:document.documentElement.classList.contains('sc-dark')?'dark':'light'},'*')}catch(e){}return}
   var dark=t?t==='dark':!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
   try{window.parent.postMessage({clarelay:1,type:'theme',top:stripColor(),fg:titleColor(),scheme:dark?'dark':'light'},'*')}catch(e){}
 }
@@ -8489,7 +8498,7 @@ function newSibling(s){
     newOptsFor=s.claw;wsSend({t:'claw.opts',claw:s.claw});   // 按上次记下的清单给可选项，回来再画（claw.opts）
   }
   showDlg(newDlg,true);
-  $('#newName').focus();
+  if(!matchMedia('(pointer:coarse)').matches)$('#newName').focus();   // 手机不自动弹键盘：键盘一弹弹框被顶上去，看不到也点不到上面的目录
 }
 var newOptsFor=null;
 // Claude 新建：模型库里有 Anthropic 格式地址的 Key，就把模型换成下拉（Claude 自己的一组 + 每个 Key 一组）；
