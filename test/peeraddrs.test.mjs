@@ -60,3 +60,12 @@ test('中继地址：带 #pin= 的和只带 #key= 的（域名 + 正式证书）
   assert.deepEqual(parseRelaysHeader(a + ' ' + b + ' https://relay.example/t/z/claclaw-peer http://1.2.3.4/t/x#key=k'), [a, b]);
   assert.ok(RELAY_ADDR.test(b) && !RELAY_ADDR.test('https://relay.example/x#foo=1'));
 });
+
+test('局域网换了 IP：旧 IP 不留作备用，主机名留着', async () => {
+  const { keepLanAlt } = await import('../peer.mjs');
+  const A = 'http://192.168.1.27:8799/claclaw-peer', B = 'http://192.168.1.204:8799/claclaw-peer', H = 'http://X.local:8788/claclaw-peer';
+  assert.equal(keepLanAlt(A, B, undefined), undefined);
+  assert.equal(keepLanAlt(A, B, H), H);
+  assert.equal(keepLanAlt(A, H, B), H);
+  assert.equal(keepLanAlt(H, A, B), undefined);
+});

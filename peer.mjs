@@ -461,7 +461,7 @@ export async function peerCall(c, p, sub, opts = {}) {
       noteChan(p.id, url, true, cheap ? ms : null);
       trail.push(label(url) + ' ok ' + ms + 'ms');
       peerRoute.set(p.id, { via: url === DIRECT ? 'direct' : viaRelay ? 'relay' : addrKind(url) === 'tailscale' ? 'tailscale' : addrKind(url) === 'wan' ? 'wan' : 'lan', rel: viaRelay && relays.length > 1 ? (url === relays[0] ? 'main' : 'backup') : undefined, at: Date.now(), ms, trail: trail.join(' → ') });
-      if (!viaRelay && url !== DIRECT && addrKind(url) === 'lan' && url !== lan[0] && p.inbox && !isRelayAddr(p.inbox)) { const old = p.inbox; p.inbox = url; p.inboxAlt = old; const f = loadPeer(), q = f.peers.find(x => x.id === p.id); if (q) { q.inbox = url; q.inboxAlt = old; savePeer(f); } }   // 局域网里换了能用的那个当首选；重新读一遍再改（等回复期间配置可能被改过，不能整份用旧的覆盖）
+      if (!viaRelay && url !== DIRECT && addrKind(url) === 'lan' && url !== lan[0] && p.inbox && !isRelayAddr(p.inbox)) { const alt = keepLanAlt(url, p.inbox, p.inboxAlt); p.inbox = url; p.inboxAlt = alt; const f = loadPeer(), q = f.peers.find(x => x.id === p.id); if (q) { q.inbox = url; if (alt) q.inboxAlt = alt; else delete q.inboxAlt; savePeer(f); } }   // 局域网里换了能用的那个当首选；重新读一遍再改（等回复期间配置可能被改过，不能整份用旧的覆盖）
       return j;
     } catch (e) {
       trail.push(label(url) + ' 失败(' + (e.code || e.message || '').toString().slice(0, 40) + ') ' + (Date.now() - t0) + 'ms'); err = e;
@@ -481,6 +481,9 @@ export async function probeChan(c, p, url, ms = 8000) {
     noteChan(p.id, url, true, Date.now() - t0); return { ok: true, ms: Date.now() - t0 };
   } catch (e) { noteChan(p.id, url, false); return { ok: false, error: e.message }; }
 }
+// 局域网换到新地址后，备用地址留谁：对方断开重连会换 IP，旧 IP 换了就没用了，不留；主机名（.local）不随 IP 变，留着
+const isLanIp = u => { try { return addrKind(u) === 'lan' && /^[\d.]+$/.test(new URL(u).hostname); } catch { return false; } };
+export const keepLanAlt = (url, ...olds) => olds.find(u => u && u !== url && !isRelayAddr(u) && !isLanIp(u)) || undefined;
 export const peerLanUrls = p => {
   const lan = [p.inbox, p.inboxAlt, ...(Array.isArray(p.addrs) ? p.addrs : [])].filter(u => u && !isRelayAddr(u));
   if (p.ip && lan[0]) { try { const u = new URL(lan[0]); if (u.hostname !== p.ip) { u.hostname = p.ip; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
