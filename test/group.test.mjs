@@ -438,3 +438,19 @@ test('群头像：仓库预设图同步给群里所有电脑（哪边换都行�
   // 不在群里的对方不能改
   assert.equal(host.peerAv(g.id, 'POTHER', 'p/x/y.png'), false);
 });
+
+test('建议回复：成员的建议也贴到群；没 @ 人且不是主理人就补 @它；用户发言后清掉', async () => {
+  const { groups } = setup(async () => ({ ok: true, reply: 'ok' }));
+  const g = groups.create({ members: [M('s1', '后端'), M('s2', '前端')], host: 's1' });
+  const got = []; groups.get(g.id).subscribe({ readyState: 1, send: s => got.push(JSON.parse(s)) });
+  assert.ok(groups.suggest(g.id, '前端', '按第 2 种改'));
+  assert.equal(g.sug, '@前端 按第 2 种改');
+  assert.deepEqual(got.at(-1), { t: 'suggest', text: '@前端 按第 2 种改', sessionId: g.id });
+  groups.suggest(g.id, '前端', '@后端 先改接口');
+  assert.equal(g.sug, '@后端 先改接口', '自己写了 @ 就不补');
+  groups.suggest(g.id, '后端', '继续');
+  assert.equal(g.sug, '继续', '主理人的不补 @');
+  assert.ok(!groups.suggest(g.id, '后端', '  '));
+  groups.post(g.id, '好');
+  assert.equal(g.sug, null);
+});

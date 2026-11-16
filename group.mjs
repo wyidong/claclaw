@@ -78,6 +78,7 @@ class Group {
     Object.assign(this, { name: '', created: Date.now(), members: [], items: [], seen: {}, pending: {}, seqMax: 0, mirror: null, status: {}, host: '' }, d);
     this.subs = new Set(); this.q = {}; this.running = {}; this.closed = false; this.perms = new Map();   // perms：本机成员这一轮在等的确认（只在内存）
     this.busy = false; this.queue = [];
+    this.sug = null;   // 建议回复：本机成员这一轮结束后 Claude Code 给的「下一句」，群里也显示（只在内存）
   }
   get title() { return this.mirror ? (this.mirrorTitle || this.name || '群聊') : this.name || cut(this.members.map(m => m.name).join('、'), 24) || '群聊'; }
   // 主理人：用户发的消息没 @ 任何人时由它接（镜像里看成员的 host 标记）
@@ -254,6 +255,7 @@ export class Groups {
       this.peerOp(g.mirror.peerId, { op: 'post', id: toWire(id), text, ...(att ? { att } : {}) }).then(j => { if (!j?.ok) fail(j?.error || '对方没收下'); }, e => { this.log('group post fwd', e.message); fail(e.message); });
       return true;
     }
+    if (!via) g.sug = null;
     const it = this.add(g, { kind: 'user', text: text.slice(0, 8000), att, via: via || undefined, depth: 0 });
     this.route(g, it);
     return true;
@@ -266,6 +268,16 @@ export class Groups {
     att = cleanAtt(att);
     for (const a of att || []) await this.fetchAtt(id, peerId, a);
     return this.post(id, text, { via, att });
+  }
+  // 本机成员（群里叫 name）这一轮结束后的建议回复：群里也显示成输入框的灰字。
+  // 建议里没 @ 人、它又不是主理人：前面补上 @它，填进去发出去还是给它
+  suggest(id, name, text) {
+    const g = this.get(id); text = String(text || '').trim();
+    if (!g || g.closed || !text) return false;
+    if (name && name !== g.hostName && !parseMentions(text, g.members).length) text = '@' + name + ' ' + text;
+    g.sug = text;
+    g.emit({ t: 'suggest', text, sessionId: id });
+    return true;
   }
   // 本机这个群是不是对方 peerId 那边建的群的镜像（对方发来的群投递，只有这时才按群消息处理）
   isMirrorOf(id, peerId) { return this.get(id)?.mirror?.peerId === peerId; }

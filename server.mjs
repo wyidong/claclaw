@@ -1296,7 +1296,8 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
         end(200, { ok: m.subtype === 'success', reply: out, error: m.error, files: group ? files : undefined });
       }
     } };
-    const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); if (group?.gid) groups.permEnd(group.gid, id); if (group) setTimeout(() => { r.quietTurn = false; }, 0); resolve([code, obj]); };
+    // 群这一轮成功结束：之后才到的建议回复（prompt_suggestion）也贴到群的输入框（groupSug）
+    const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); if (group?.gid) groups.permEnd(group.gid, id); if (group?.gid && obj?.ok) r.groupSug = { gid: group.gid, name: group.self }; if (group) setTimeout(() => { r.quietTurn = false; }, 0); resolve([code, obj]); };
     if (group) r.quietTurn = true;   // 群投递的这一轮：回复贴回群里、由群推送，成员会话自己不再记未读、不推送（要确认的照推）
     const timer = setTimeout(() => end(504, { ok: false, error: '30 分钟内没等到回复', partial: (cur || reply).trim() }), 30 * 60 * 1000);   // 对方早已拿到 202，这里只是兜底
     r.subscribe(sub);
@@ -1998,6 +1999,7 @@ class Runner {
         // 在 result 之后才到；只保留最新一条，重新打开会话时也带上
         this.suggestion = m.suggestion;
         this.emit({ t: 'suggest', text: m.suggestion });
+        if (this.groupSug) { const gs = this.groupSug; this.groupSug = null; groups.suggest(gs.gid, gs.name, m.suggestion); }   // 群投递的这一轮：群里也显示
       } else if (m.type === 'result') {
         touchWeb(this.id);
         // 有 session_state 时以它的 idle 为准。SDK 0.3.x 会把 CLI 的 session_state_changed（sdk_host_only）自己吞掉，
@@ -2093,7 +2095,7 @@ class Runner {
     touchWeb(this.id);
     this.busy = true;
     if (!steering) this.busySince = Date.now();   // 网页显示「已工作多久」从这里算，刷新页面也不归零
-    this.suggestion = null;
+    this.suggestion = null; this.groupSug = null;
     this.cancelClose();
     // 有图片时用内容块数组：图片在前、文字在后（Claude 看图再读问题效果更好）
     const content = images.length
@@ -3863,7 +3865,7 @@ wss.on('connection', (ws, req) => {
           t: 'session.opened', id: m.id, title: g.title, cwd: '', cwdShort: g.members.length + ' 个成员：' + g.members.map(x => x.name + (x.name === g.hostName ? '（主理人）' : '')).join('、'), claw: 'group',
           group: { members: g.membersView(), mirror: !!g.mirror, status: g.statusView() },
           mode: 'default', modes: ['default'], busy: false, history: pg.items, historyStart: pg.start, historyTotal: hist.total, historyMore: pg.more,
-          pending: g.pendingPerms(), suggestion: null, commands: [],
+          pending: g.pendingPerms(), suggestion: g.sug || null, commands: [],
         });
       } else if (m.t === 'session.open' && clawOf(m.id)?.acp) {
         const c = clawOf(m.id);
