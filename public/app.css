@@ -21,6 +21,12 @@
   --strip:var(--surface);--strip-line:var(--line);--rail-on:var(--bg);
   --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
 }
+/* 外观「线条深浅」（<html class="lc">，见页面开头 __lines）：线色在 body 上重算——取 :root 上主题给的色当底（同一元素上自己引用自己会成环），
+   往文字色加深 --lk、往卡片底减淡 --lkl；--sep 是手机顶栏底线 / 底部菜单顶线（主题给的是页面底色）。各主题只管配色，这里不分主题 */
+:root{--line0:var(--line);--sline0:var(--strip-line);--sep:var(--bg)}
+html.lc body{--line:color-mix(in srgb,color-mix(in srgb,var(--line0),var(--surface) var(--lkl)),var(--ink) var(--lk));
+  --strip-line:color-mix(in srgb,color-mix(in srgb,var(--sline0),var(--surface) var(--lkl)),var(--ink) var(--lk));
+  --sep:color-mix(in srgb,color-mix(in srgb,var(--bg),var(--surface) var(--lkl)),var(--ink) var(--lk))}
 /* 白色主题的会话目录、Claw 卡片：白卡片细边，选中浅绿平铺（不凸起）；别的主题这几个变量清空，用规则里的默认（浅色底、凸起） */
 :root{--dir-bg:transparent;--dir-bg-m:var(--bg);--dir-bd:1px solid var(--bg);--dir-hover:var(--bg);--dir-sel-bg:var(--user-bg);--dir-sel-sh:none;--claw-bg:var(--bg)}
 @media (min-width:1000px){:root{--claw-bg:var(--surface)}}   /* Claw 卡片跟会话目录：手机上灰卡片，电脑上白卡片 */
@@ -88,9 +94,9 @@
   }
   /* 线：压过 nb-xxx 的「同色不画」，一律画 */
   html:root:root{
-    #app #mtabs,#app #dock{border-top:var(--bw) solid var(--bg)!important}
-    :is(#app.m-list #sTop,#app.m-list.claw-on #clawModels,#app.m-list.set-on #setTop,#app.m-list.host-on #hostPane .pg-hd,#app header){border-bottom:var(--bw) solid var(--bg)!important}
-    #diss>.fv-h{box-sizing:content-box;min-height:calc(56px - var(--bw));padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip);border-bottom:var(--bw) solid var(--bg)}   /* 解剖页标题条：顶栏色、56 高 */
+    #app #mtabs,#app #dock{border-top:var(--bw) solid var(--sep)!important}
+    :is(#app.m-list #sTop,#app.m-list.claw-on #clawModels,#app.m-list.set-on #setTop,#app.m-list.host-on #hostPane .pg-hd,#app header){border-bottom:var(--bw) solid var(--sep)!important}
+    #diss>.fv-h{box-sizing:content-box;min-height:calc(56px - var(--bw));padding:env(safe-area-inset-top,0px) 12px 0;background:var(--strip);border-bottom:var(--bw) solid var(--sep)}   /* 解剖页标题条：顶栏色、56 高 */
   }
   html #app.m-list #sTop{padding-bottom:calc(8px - var(--bw))}   /* 加了底线，总高还是 56 */
 }

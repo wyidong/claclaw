@@ -67,7 +67,7 @@ window.__sc=(function(){
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
 (function(){
-  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsSessVoice','ttsSessRate','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang'],ls,pend={},n=0,t=0;
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsSessVoice','ttsSessRate','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang','lineW','lineC'],ls,pend={},n=0,t=0;
   try{ls=localStorage}catch(_){return}
   function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
   function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
@@ -82,6 +82,11 @@ window.__sc=(function(){
 // 界面语言：默认中文；设置里选了 English 就先加载 /i18n/en.js（词典 + 翻译引擎，看着页面把界面文字换成英文）
 (function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
 (function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply()}}catch(e){}})();
+// 外观「边框粗细」「线条深浅」：首帧前就写到 <html> 上（--bw 线宽；lc 类 + --lk 往文字色加深 / --lkl 往卡片底减淡，线色在 app.css 的 body 上重算）
+(window.__lines=function(){var r=document.documentElement,w='',c='';try{w=localStorage.getItem('claclaw.lineW')||'';c=localStorage.getItem('claclaw.lineC')||''}catch(_){}
+  var W={none:'0px',xs:'.33px',md:'.67px',lg:'1px',xl:'1.5px'},C={lt:['0%','55%'],dk:['18%','0%'],dk2:['36%','0%']};
+  if(W[w])r.style.setProperty('--bw',W[w]);else r.style.removeProperty('--bw');
+  r.classList.toggle('lc',!!C[c]);if(C[c]){r.style.setProperty('--lk',C[c][0]);r.style.setProperty('--lkl',C[c][1])}else{r.style.removeProperty('--lk');r.style.removeProperty('--lkl')}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(window.matchMedia('(min-width:1000px)').matches)return;var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},1500)})();   // 和轻雾同一档（不再有重雾），最多 1.5 秒；电脑宽屏不上雾
 // 雾感（只在手机）：点刷新从清楚渐变到轻雾 → 页面加载、连服务器期间保持轻雾 → 连上变清楚；从打开算最多 1.5 秒，到时没连上就清掉雾、刷新图标变黄转圈；代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳
@@ -446,6 +451,10 @@ window.__sc=(function(){
             <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
           <button type="button" class="set-item" id="setThemeGo"><span class="lb">主题<small id="setThemeSub"></small></span><span class="chev" aria-hidden="true"></span></button>
           <div hidden><select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">子午流注</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option></optgroup></select></div>
+          <label class="set-item"><span class="lb">边框粗细<small>卡片框、分隔线、顶栏和底部菜单的线</small></span>
+            <select id="setLineW"><option value="none">无</option><option value="xs">特细</option><option value="">细（默认）</option><option value="md">标准</option><option value="lg">粗</option><option value="xl">特粗</option></select></label>
+          <label class="set-item"><span class="lb">线条深浅<small>线条和底色的反差</small></span>
+            <select id="setLineC"><option value="lt">淡</option><option value="">标准（默认）</option><option value="dk">深</option><option value="dk2">更深</option></select></label>
           <div hidden><select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></div>
         </div>
       </div>
@@ -6197,6 +6206,8 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
     try{if(lg.value)localStorage.setItem('claclaw.lang',lg.value);else localStorage.removeItem('claclaw.lang')}catch(_){}
     setTimeout(function(){$("#railReload").click()},350);   // 等设置同步到电脑（300ms 防抖）再刷新，刷新后停在设置页
   });
+  ['lineW','lineC'].forEach(function(k){var e=$('#set'+k[0].toUpperCase()+k.slice(1));try{e.value=localStorage.getItem('claclaw.'+k)||''}catch(_){}
+    e.addEventListener('change',function(){try{if(e.value)localStorage.setItem('claclaw.'+k,e.value);else localStorage.removeItem('claclaw.'+k)}catch(_){}window.__lines()})});
   var im=$('#setScImg');
   try{im.value=localStorage.getItem('claclaw.scImg')==='1'?'1':''}catch(_){}
   im.addEventListener('change',function(){
