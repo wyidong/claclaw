@@ -1233,15 +1233,27 @@ function peerMark(list) {
     return { ...x, peer: on.has(x.id) || undefined, peerLast: p ? { id: p.id, no: p.no, color: p.color, name: p.name, at: l.at } : undefined };
   });
 }
+// 拉起别的 Claw 的会话进程（c.make 有 await）：同一个会话同时打开（连点、网页打开 + 协同消息）共用一次，
+// 否则各建一个 runner、后 set 的顶掉先 set 的，先建的那个没人管。返回 [runner, 是不是这次新建的]
+const clawMaking = new Map();   // 会话 id → 正在建的 Promise
+function clawMake(c, id) {
+  let p = clawMaking.get(id), fresh = false;
+  if (!p) {
+    fresh = true;
+    p = (async () => { try { const r = await c.make(id); if (r) c.runners.set(id, r); return r; } finally { clawMaking.delete(id); } })();
+    clawMaking.set(id, p);
+  }
+  return p.then(r => [r, fresh]);
+}
 async function peerRunner(info) {
   const id = info.sessionId, c = clawOf(id);
   if (c) {
-    let r = c.runners.get(id);
+    let r = c.runners.get(id), fresh;
     if (r) return r;
     if (c.takeover?.(id)) return [409, { ok: false, error: '这个会话正在对方电脑的终端里使用，暂时收不了消息' }];
-    r = await c.make(id);
+    [r, fresh] = await clawMake(c, id);
     if (!r) return [404, { ok: false, error: '会话不存在' }];
-    c.runners.set(id, r);
+    if (!fresh) return r;   // 别处正好同时在建：用它建好的，打开 / 读历史由它做
     if (c.id === 'openclaw') { try { await r.open(); } catch (e) { r.dispose(); return [502, { ok: false, error: '连不上 OpenClaw 网关：' + e.message }]; } }
     else if (!c.attachOnOpen) r.history();   // history() 顺带读出会话目录，发消息要用
     return r;
@@ -1297,6 +1309,8 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
         if (q) return end(429, { ok: false, code: 'quota_exhausted', error: '对方 Claude 额度已用完，消息未处理' + (q.resets ? '，' + q.resets + ' 恢复，之后请重发' : '，请稍后重发'), resets: q.resets || null, raw: out });
         end(200, { ok: m.subtype === 'success', reply: out, error: m.error, files: group ? files : undefined });
       }
+      // 这一轮没结束会话就关了（进程退出、被关掉）：不再干等 30 分钟，告诉对方没处理完（500：可能做了一半，不让发件箱自动重发）
+      else if (m.t === 'session.closed') end(500, { ok: false, error: '会话已关闭，这一轮没处理完' + (m.reason ? '（' + m.reason + '）' : ''), partial: (cur || reply).trim() });
     } };
     // 群这一轮成功结束：之后才到的建议回复（prompt_suggestion）也贴到群的输入框（groupSug）
     const end = (code, obj) => { if (done) return; done = true; clearTimeout(timer); r.unsubscribe(sub); if (group?.gid) groups.permEnd(group.gid, id); if (group?.gid && obj?.ok) r.groupSug = { gid: group.gid, name: group.self }; if (group) setTimeout(() => { r.quietTurn = false; }, 0); resolve([code, obj]); };
@@ -1500,7 +1514,15 @@ const peerSeen = new Map();   // 对方 id:msg_id → { at, result }：去重（
 const peerSeenDisk = new DiskMap(path.join(DATA, 'peer-seen.json'), { ttl: SEEN_TTL, max: 5000 });
 const seenRecord = (code, obj) => ({ at: Date.now(), code, obj: { ...obj, reply: obj?.reply ? String(obj.reply).slice(0, 8000) : obj?.reply, partial: undefined } });
 const cleanIp = ip => String(ip || '').replace(/^::ffff:/, '');
+// 协同端口的入口：整段兜住（坏地址让 new URL 抛、配置读坏、回复时头已发出等），异步处理里漏出的错会让整个进程退出
 async function peerHandler(req, res) {
+  try { await peerHandle(req, res); }
+  catch (e) {
+    log('peer handler error', e?.message);
+    try { if (!res.headersSent) sendJson(res, e?.code === 'ERR_INVALID_URL' ? 400 : 500, { ok: false, error: e?.message || '出错了' }); else res.end(); } catch {}
+  }
+}
+async function peerHandle(req, res) {
   const out = (code, obj) => sendJson(res, code, obj);
   const c = loadPeer();
   const u = new URL(req.url, 'http://x');
@@ -2097,7 +2119,7 @@ class Runner {
 
   // 正在工作时也能发：作为「插话」排队（priority next），Claude 在下一个合适的时机读到，和终端里边干边打字一样
   send(text, images = []) {
-    if (this.libErr) return this.emit({ t: 'error', message: this.libErr });
+    if (this.libErr) { this.peerTurn = null; this.emit({ t: 'error', message: this.libErr }); return this.emit({ t: 'turn.done', subtype: 'error', error: this.libErr }); }   // 也要结束这一轮：等回复的（协同投递）不用干等
     const steering = this.busy;
     // 干活中途插的话：被 Claude 读到之前还不在会话文件里，先记着，重新打开会话时补显示
     if (steering && text) { (this.steered ||= []).push(text); if (this.steered.length > 10) this.steered.shift(); }
@@ -2590,9 +2612,10 @@ function saveWebSessions(all) { writeJsonAtomic(WEB_SESSIONS, all); }
 function switchToBypass(old) {
   rememberWebSession(old.id, 'bypassPermissions', true);
   const subs = [...old.subs];
+  const isNew = old.unsent();   // 新建、还没发过消息的：没有会话文件可 resume，新进程照样用这个 id 新开
   old.subs.clear();   // 先摘掉订阅：dispose 发的 session.closed 不要让网页以为会话关了
   old.dispose('mode');
-  const r = new Runner(old.info, 'bypassPermissions', [...MODES, 'bypassPermissions'], { model: old.wantModel, effort: old.effort, lib: old.lib });
+  const r = new Runner(old.info, 'bypassPermissions', [...MODES, 'bypassPermissions'], { isNew, model: old.wantModel, effort: old.effort, lib: old.lib });
   runners.set(old.id, r);
   for (const w of subs) r.subscribe(w);
   r.emit({ t: 'mode', mode: 'bypassPermissions', modes: r.allowedModes });
@@ -2683,9 +2706,11 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref?.();
 
+// cookie 值解码：坏的百分号编码（如 `%`）当没带，不抛错（ws 升级里抛错会让整个进程退出）
+const cookieDecode = v => { try { return decodeURIComponent(v); } catch { return null; } };
 function cookieToken(req) {
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)claclaw_sid=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  return m ? cookieDecode(m[1]) : null;
 }
 // 按 id 找一个 Claude 会话：先只读那一个文件；读不到（没有可提取摘要的等）再用开着的 runner、最后全量列表兜底
 async function claudeInfo(id, alt) {
@@ -2703,7 +2728,7 @@ const readFirst = () => readJson(FIRST_FILE) || {};
 const writeFirst = o => writeJsonAtomic(FIRST_FILE, { ...readFirst(), ...o });
 function devCookieVal(req) {
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)claclaw_dev=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  return m ? cookieDecode(m[1]) : null;
 }
 const isFirstDev = req => { const h = readFirst().dev, v = devCookieVal(req); return !!h && !!v && sha256(v) === h; };
 // cookie 每次打开页面都续一年（浏览器最长也就保留 400 天）
@@ -3736,17 +3761,24 @@ const wss = new WebSocketServer({ noServer: true });
 try { pruneUnread(); } catch (e) { log('unread prune', e.message); }   // 要在 wss 之后：清未读会广播给已连的页面
 setInterval(() => { try { pruneUnread(); } catch (e) { log('unread prune', e.message); } }, 10 * 60 * 1000).unref();
 let ttsOwner = null, ttsOwnerAt = 0;   // 正在朗读的页面
+// 整段包 try：这里抛错（坏地址让 new URL 抛、坏 cookie 等）没人接，会让整个进程退出
 function onUpgrade(req, socket, head) {
-  if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
-    log('ws rejected', req.headers.origin || '', realIp(req));
-    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-    return socket.destroy();
+  try {
+    if (new URL(req.url, 'http://x').pathname !== '/ws' || !sameOrigin(req)) {
+      log('ws rejected', req.headers.origin || '', realIp(req));
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      return socket.destroy();
+    }
+    if (!authed(req)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      return socket.destroy();
+    }
+    wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
+  } catch (e) {
+    log('ws upgrade error', e.message);
+    try { socket.write('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch {}
+    socket.destroy();
   }
-  if (!authed(req)) {
-    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-    return socket.destroy();
-  }
-  wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
 }
 
 wss.on('connection', (ws, req) => {
@@ -3949,9 +3981,8 @@ wss.on('connection', (ws, req) => {
         runner = null;
         let r = c.runners.get(m.id);
         if (!r) {
-          r = await c.make(m.id);
+          [r] = await clawMake(c, m.id);   // 同时打开同一个会话的共用一个
           if (!r) return send({ t: 'error', message: '找不到这个会话' });
-          c.runners.set(m.id, r);
         }
         if (c.attachOnOpen) {   // 先接上（Kimi：session/load 顺带把历史重放过来）
           try { await r.attach(); } catch (e) { if (!r.busy && !r.subs.size) r.dispose(); return send({ t: 'error', message: c.label + ' 打开会话失败：' + e.message }); }
