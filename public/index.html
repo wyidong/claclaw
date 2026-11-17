@@ -82,6 +82,8 @@ window.__sc=(function(){
 // 界面语言：默认中文；设置里选了 English 就先加载 /i18n/en.js（词典 + 翻译引擎，看着页面把界面文字换成英文）
 (function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
 (function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply()}}catch(e){}})();
+// 「协同」快捷入口：没用过协同的不显示（大多数人可能永远不用）；用过一次（打开过协同页、有配对 / 申请 / 协同池）以后一直显示。先按本机记的画，免得闪
+(function(){try{if(localStorage.getItem('claclaw.peerOn')==='1')document.documentElement.classList.add('peer-on')}catch(_){}})();
 // 外观「边框粗细」「线条深浅」：首帧前就写到 <html> 上（--bw 线宽；lc 类 + --ln-dk 往文字色加深 / --ln-lt 往卡片底减淡，线色在 app.css 的 body 上重算）
 (window.__lines=function(){var r=document.documentElement,w='',c='';try{w=localStorage.getItem('claclaw.lineW')||'';c=localStorage.getItem('claclaw.lineC')||''}catch(_){}
   var W={none:'0px',xs:'.33px',md:'.67px',lg:'1px',xl:'1.5px'},C={lt:['0%','55%'],dk:['18%','0%'],dk2:['36%','0%']};
@@ -3475,6 +3477,7 @@ function peerCheckNow(){
 // 页面开着时来了配对申请：顶部横幅（App 在前台时系统通知往往不弹），15 秒后自动收起
 var pairBannerT=null;
 function pairBanner(m){
+  peerUsed();   // 有人来申请配对：入口亮出来
   if(!($('#app').classList.contains('host-on')&&hostView==='peer')){$('#railPeer').classList.add('dot');$('#sPeer').classList.add('dot')}   // 左边栏「协同」也标红点
   var el=$('#pairBanner');
   if(!el){el=document.createElement('button');el.type='button';el.id='pairBanner';document.body.appendChild(el);
@@ -3485,7 +3488,10 @@ function pairBanner(m){
 }
 // 点「配对申请」通知：直接打开 宿主 → claclaw 协同
 var wantPeer=new URLSearchParams(location.search).get('view')==='peer';
+function peerUsed(){document.documentElement.classList.add('peer-on');try{localStorage.setItem('claclaw.peerOn','1')}catch(_){}}
+fetch('/api/peer').then(function(r){return r.json()}).then(function(j){if(j&&((j.peers||[]).length||(j.pending||[]).length||(j.sessions||[]).length||j.outPair))peerUsed()}).catch(function(){});   // 本机记录丢了（iOS 嵌入页会清）也能按电脑上的协同数据补回
 function openPeerView(){
+  peerUsed();
   if(!DESKTOP.matches&&!mList)goList();
   mTab('host');hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();
 }

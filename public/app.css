@@ -917,6 +917,7 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 /* 未读红点 */
 .s-row.unread .s-item .t::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
 #railChats{position:relative}
+html:not(.peer-on) #sPeer{display:none!important}   /* 没用过协同不显示入口（见页面开头 peer-on） */
 #railPeer{position:relative}
 #railPeer.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
 #railChats.dot::after{content:'';position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
