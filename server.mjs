@@ -11,7 +11,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { execFileSync, execFile } from 'node:child_process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { query, listSessions, getSessionInfo, getSessionMessages, renameSession, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
@@ -41,18 +41,13 @@ import { AUTO_COMPACT, AUTO_COMPACT_CHOICES, autoCompactDue, autoCompactRun } fr
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './dsh.mjs';
 import * as skills from './skills.mjs';
 import { userTextOf, dissectClaude, dissectDs, dissectKimi, dissectMini } from './dissect.mjs';
-import { opModelsChanged } from './opencode.mjs';
-import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opTokSum } from './opencode.mjs';
-const STARTED_AT = Date.now();
-setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
-setTimeout(() => slowInfo(path.dirname(fileURLToPath(import.meta.url))).catch(() => {}), 3000);
-setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
+import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opTokSum, opModelsChanged } from './opencode.mjs';
 import { makeClaudeUsage } from './claudeusage.mjs';
-import { DATA, verify, verifyMaster, verifyMasterPassword, verifyPassword, anyNoPassword, setLastSet, setupMaster, isSetUp, describeCredential, authSummary, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
+import { DATA, verify, verifyMasterPassword, verifyPassword, anyNoPassword, setLastSet, setupMaster, isSetUp, describeCredential, authSummary, issueToken, checkToken, revokeToken, TOKEN_TTL_MS, writeJsonAtomic } from './auth.mjs';
 import { readBody, jsonBody } from './httpbody.mjs';
 import { makeSkins } from './skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
-import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
+import { loginInfo, loginStart, loginInput, loginCancel, loginUnsubscribe } from './login.mjs';
 import { INSTALLS, installStart, installState, installing } from './install.mjs';
 import { claudeExe, claudeRunnable } from './claudebin.mjs';
 import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs';
@@ -61,16 +56,22 @@ import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_T
 import { peerJudge } from './peerjudge.mjs';
 import { storeNow as libStoreNow, claudeLibProviders, parseLibPick, claudeLibEnv, noProxyAdd } from './modelpick.mjs';
 import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './modelstore.mjs';
+import { saveVideo, videoFile, videoDuration, videoThumb, imageThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
+const STARTED_AT = Date.now();
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const HOME = os.homedir();
+setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
+setTimeout(() => slowInfo(ROOT).catch(() => {}), 3000);
+setTimeout(() => { if (kmInstalled()) kmSessionList().catch(() => {}); }, 4000);   // Kimi 列表要跑一次 CLI：先跑好，第一次打开「最近」不用等
 const PEER_ROOTS = sensitiveRoots(DATA);
 // 群记录文件（成员会话按需读）：不能放数据目录里——那里对协同那一轮算敏感位置，读一下就要确认
-const GROUP_LOGS = process.env.CLACLAW_DATA ? DATA + '-group-logs' : path.join(os.homedir(), '.cache', 'claclaw', 'groups');
+const GROUP_LOGS = process.env.CLACLAW_DATA ? DATA + '-group-logs' : path.join(HOME, '.cache', 'claclaw', 'groups');
 const isGroupLog = p => typeof p === 'string' && path.resolve(p).startsWith(GROUP_LOGS + path.sep);
 // 协同那一轮里不用确认的常规维护（npm run check / npm test / npm run restart）：只在本仓库、且没有没提交的改动时
 const PEER_OPTS = {
-  repos: [path.dirname(fileURLToPath(import.meta.url))],
+  repos: [ROOT],
   clean: dir => { try { return execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8', timeout: 5000 }).trim() === ''; } catch { return false; } },
 };
-import { saveVideo, videoFile, videoDuration, videoThumb, imageThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './video.mjs';
 const uploadKeepDays = () => { const d = Math.round(Number(settings().uploadKeepDays)); return d >= 1 && d <= 3650 ? d : KEEP_DAYS_DEFAULT; };
 setTimeout(() => { try { cleanUploads(uploadsDir(DATA), uploadKeepDays()); } catch {} }, 15000);   // 启动后清一次过期附件
 // 推送走哪：auto = clarelay 设备在线就交给它（推到外壳），不在线 claclaw 自己推；clarelay = 只走它；self = 只自己推；both = 都推
@@ -126,11 +127,9 @@ function argPort() {
 }
 const PORT = Number(argPort() ?? process.env.CLACLAW_PORT ?? 8787);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('端口不合法：' + (argPort() ?? process.env.CLACLAW_PORT));
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const claudeUsage = makeClaudeUsage(DATA);   // Claude 订阅 5 小时 / 周用量（data/claude-usage.json）
 const skins = makeSkins(DATA, ROOT, { soundOk: (n) => soundList().includes(n) });   // 会话的头像和网名（data/skins.json）
-const REGISTRY = path.join(os.homedir(), '.claude', 'sessions');
-const HOME = os.homedir();
+const REGISTRY = path.join(HOME, '.claude', 'sessions');
 
 // 网页上每个 Claude 会话都能切的模式（运行中直接 setPermissionMode）。
 // 「跳过确认」不在这里：它要在进程启动时就允许（allowDangerouslySkipPermissions），切过去走 switchToBypass——
@@ -213,7 +212,7 @@ function claudeToken() {
 // 上面过滤掉了 CLAUDE* 变量，令牌要在过滤之后加回去；每次起进程现读，换令牌不用重启 claclaw
 const childEnv = () => { const t = claudeToken(); return t ? { ...CHILD_ENV, CLAUDE_CODE_OAUTH_TOKEN: t.token } : CHILD_ENV; };
 const CLAUDE_TOKEN_RE = /^sk-ant-oat\d{2}-[A-Za-z0-9_-]{20,400}$/;
-function claudeTokenPublic(req) {
+function claudeTokenPublic() {
   const t = claudeToken();
   return { set: !!t, last4: t ? t.token.slice(-4) : '', at: t?.at || null, port: PORT };
 }
@@ -361,8 +360,6 @@ function lastPromptOf(file) {
   lastPromptCache.set(file, { key, text });
   return text;
 }
-// 会话最后一条真正的消息（用户 / AI / 工具结果）的时间。不能用文件修改时间：Claude Code 进程退出、重启时会往文件末尾补
-// cost-state、last-prompt 这类记录，文件时间变了但没有新消息（重启 claclaw 后一批会话会被顶到「最近」最上面）
 // 会话累计用量：所有 AI 回复的 usage 相加。↑ 输入 = input + 缓存写入 + 缓存读取（每次调用都把整个上下文送一遍，所以很大），↓ 输出 = output。
 // 同一条回复流式写好几行（message.id 相同），只算最后一行。会话文件只会追加：记住读到哪，下次只读新增部分
 const usageCache = new Map();
@@ -394,6 +391,8 @@ function usageOf(file) {
   }
   return c.in || c.out ? { in: c.in, out: c.out } : null;
 }
+// 会话最后一条真正的消息（用户 / AI / 工具结果）的时间。不能用文件修改时间：Claude Code 进程退出、重启时会往文件末尾补
+// cost-state、last-prompt 这类记录，文件时间变了但没有新消息（重启 claclaw 后一批会话会被顶到「最近」最上面）
 const lastMsgCache = new Map();
 function lastMsgAt(file) {
   let st; try { st = fs.statSync(file); } catch { return 0; }
@@ -687,7 +686,6 @@ async function loadHistory(sessionId, cwd) {
   return { items: out, total: c.dropped + all.length, timing: 'read ' + (T1 - T0) + ' head ' + (T2 - T1) + '(' + added + ') tail ' + (T3 - T2) + '(' + tail.length + ') total ' + (T3 - T0) };
 }
 
-// 文件大小 + 修改时间没变：上次的结果直接用（连最后一轮都不用再解析）
 // ---------- 只读打开：别处（终端 / VS Code）正在用的 Claude 会话 ----------
 // 不起 Claude 进程、不写会话文件（两边一起写会把对话写乱），只读会话文件来显示；
 // 每 3 秒看一眼：文件长了就把最新一页重发（网页按序号只补新的），原处关掉了就通知网页正常打开
@@ -724,6 +722,7 @@ async function roOpen(ws, send, info, el) {
     } catch (e) { log('readonly tick', e.message); } finally { ro.busy = false; }
   }, RO_TICK);
 }
+// 文件大小 + 修改时间没变：上次的结果直接用（连最后一轮都不用再解析）
 async function loadHistoryCached(sessionId, cwd) {
   let key = null;
   try { const st = fs.statSync(jsonlPathOf({ sessionId, cwd })); key = st.size + ':' + st.mtimeMs; } catch {}
@@ -1059,8 +1058,6 @@ function quotaHit(text) {
   const m = text.match(/resets?\s+(?:at\s+)?([^\n·|]+)/i);
   return { resets: m ? m[1].trim() : '' };
 }
-// 把对方的消息送进会话，收集这一轮的回复
-// 找到（没有就拉起）接收协同消息的会话进程；各 Claw 的进程对外接口一样：subscribe / send / emit / turn.done
 // ---------- 会话找会话：本机各个 Claw 之间、以及跨电脑（协同）----------
 // Claude 会话的 peer_sessions / peer_send 工具、本机命令 claclaw-peer 共用这一套。
 // 发起方必须认得出是哪个会话（fromId）：本机命令没带 --from 时，按「命令在哪个目录跑 + 哪个会话正在回复」自动认；认不出就拒绝。
@@ -1245,6 +1242,7 @@ function clawMake(c, id) {
   }
   return p.then(r => [r, fresh]);
 }
+// 找到（没有就拉起）接收协同消息的会话进程；各 Claw 的进程对外接口一样：subscribe / send / emit / turn.done
 async function peerRunner(info) {
   const id = info.sessionId, c = clawOf(id);
   if (c) {
@@ -1266,6 +1264,7 @@ async function peerRunner(info) {
   }
   return runners.get(id);
 }
+// 把对方的消息送进会话，收集这一轮的回复。
 // group：群聊投递 {name, members: [名字], asUser}。开头沿用协同 / 本机消息的格式（历史、列表缩略照旧认得），说明换成群聊的；
 // asUser = 用户本人在本机群里 @ 它（不加「只能提需求」、不要确认）；群消息不单独给成员会话推送（群自己推）
 async function peerDeliver(info, text, from, peerId, { local = false, fromId = null, late = '', oneWay = false, group = null } = {}) {
@@ -1782,8 +1781,8 @@ setInterval(() => {
 // clarelay 是独立项目：协同中继用的是第三方库 clarelay.mjs（vendor.mjs，单文件），和内置电脑端同一份。
 // 只在加入 clarelay 时从加入的那台中继下载（relaydev，验发布签名）；别人给的中继邀请码只用来连接，不用来下载代码。
 let clarelay = null, clarelayDir = '';
-const relayTuns = new Map();
-const relayRetryFails = new Map();   // 邀请码 → 连续登记失败次数（决定下次重试等多久）   // 邀请码 → { to, t, state: { status, error } }   status: connecting | online | offline | error
+const relayTuns = new Map();   // 邀请码 → { to, t, state: { status, error } }   status: connecting | online | offline | error
+const relayRetryFails = new Map();   // 邀请码 → 连续登记失败次数（决定下次重试等多久）
 // 中继邀请码（主 → 备）：兼容旧的单个 relayInvite
 const relayInvitesOf = c => (Array.isArray(c.relayInvites) ? c.relayInvites : c.relayInvite ? [c.relayInvite] : []).filter(Boolean);
 const relayHostOf = inv => { try { return new URL(clarelay.parseInvite(inv).relay).host; } catch { return '?'; } };
@@ -2054,8 +2053,6 @@ class Runner {
           this.sawState = true;
           if (m.state === 'running' && !this.busy) { this.busy = true; this.busySince = Date.now(); this.cancelClose(); this.emit({ t: 'busy', on: true }); }
           else if (m.state === 'idle' && this.busy) { this.busy = false; this.steered = []; this.emit({ t: 'busy', on: false }); this.maybeScheduleClose(); this.maybeAutoCompact(); }
-        } else if (m.subtype === 'status') {
-          // 不需要显示
         }
       } else if (m.type === 'rate_limit_event') {
         if (!this.lib && claudeUsage.note(m.rate_limit_info)) this.emit({ t: 'claude.usage', usage: claudeUsage.get() });
@@ -2081,9 +2078,8 @@ class Runner {
     }
   }
 
-  // 当前会话可用的斜杠命令（内置 + skill + 插件 + MCP），去掉只能在终端里用的
-  // 这个账号能用的模型（含每个模型支持的推理强度）：打开就取，网页的设置面板用
   libProvider() { return this.lib ? claudeLibProviders(libStoreNow()).find(p => p.id === this.lib) || null : null; }
+  // 这个账号能用的模型（含每个模型支持的推理强度）：打开就取，网页的设置面板用
   async loadModels() {
     if (this.lib) {   // 模型库会话：只列这个 Key 下的模型
       const p = this.libProvider();
@@ -2135,6 +2131,7 @@ class Runner {
     }
   }
 
+  // 当前会话可用的斜杠命令（内置 + skill + 插件 + MCP），去掉只能在终端里用的
   async loadCommands() {
     try {
       const list = await this.q.supportedCommands();
@@ -2189,7 +2186,6 @@ class Runner {
 
   askPermission(name, input, o) {
     if (name === 'Read' && isGroupLog(input?.file_path)) return Promise.resolve({ behavior: 'allow', updatedInput: input });   // 读群记录不用问
-    // 网页端还不支持回答选择题：拒绝并让 Claude 改成在回复里直接问
     const requestId = crypto.randomUUID();
     const canAlways = !!o.peerKey || (!!(o.suggestions?.length) && !o.suppressAlwaysAllowRule);
     const req = {
@@ -2278,10 +2274,10 @@ class Runner {
   }
   unsubscribe(ws) { this.subs.delete(ws); this.maybeScheduleClose(); }
 
-  // 没人看、也没在跑 → 过一会儿（设置里的空闲关闭时间）关掉进程，把会话还给终端
   // 新建的、还没有会话文件（= 一条消息都没发过）
   unsent() { return this.isNew && !fs.existsSync(jsonlPathOf(this.info)); }
 
+  // 没人看、也没在跑 → 过一会儿（设置里的空闲关闭时间）关掉进程，把会话还给终端
   maybeScheduleClose() {
     if (this.subs.size || this.busy || this.pending.size || this.closeTimer) return;
     this.closeTimer = setTimeout(() => this.dispose(), this.unsent() ? Math.max(IDLE_CLOSE_NEW_MS, idleCloseMs()) : idleCloseMs());
@@ -2363,7 +2359,6 @@ const soundName = () => { const all = soundList(), n = settings().soundName; ret
 // ---------- 各会话正在做什么（会话列表实时显示）----------
 const activityMap = {};
 let activityTimer = null;
-// OpenClaw 会话一轮结束：没人看着就推送（和 Claude 会话一样）
 // 推送正文：回复的开头（去掉 Markdown 记号，压成一行，最多 80 字）；没有文字就退回「回复完了」
 function snippet(text, fallback) {
   const t = String(text || '')
@@ -2374,6 +2369,7 @@ function snippet(text, fallback) {
   if (!t) return fallback;
   return t.length > 80 ? t.slice(0, 80) + '…' : t;
 }
+// OpenClaw / ACP 会话一轮结束：没人看着就推送（和 Claude 会话一样）
 function ocTurnDone(r, ok, text) {
   if (r.quietTurn) return;
   const w = r.watched();
@@ -3025,7 +3021,6 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache' });
       return fs.createReadStream(path.join(ROOT, 'public', 'i18n', 'en.js')).pipe(res);
     }
-    // manifest 由浏览器不带 cookie 去取，必须免登录
     // Service Worker 脚本：浏览器更新它时不一定带 cookie，免登录（里面没有任何敏感内容）
     if (url.pathname === '/sw.js') {
       // 没加入 clarelay：去掉引它 sw.js 的那行（加入 / 移除后内容变了，浏览器会自动换新的 service worker）
@@ -3033,6 +3028,7 @@ const handler = async (req, res) => {
       res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache' });
       return res.end(relayDev.info().joined ? sw : sw.replace(/^try \{ importScripts\('\/_clarelay\/sw\.js'\); \} catch \(e\) \{\}\n/m, ''));
     }
+    // manifest 由浏览器不带 cookie 去取，必须免登录
     if (url.pathname === '/manifest.webmanifest') {
       res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' });
       return fs.createReadStream(path.join(ROOT, 'public', 'manifest.webmanifest')).pipe(res);
@@ -3167,7 +3163,7 @@ const handler = async (req, res) => {
           saveClaudeToken('');
           const rc = recycleClaudeRunners();
           log('claude-token cleared', JSON.stringify(rc));
-          return sendJson(res, 200, { ...claudeTokenPublic(req), ...rc });
+          return sendJson(res, 200, { ...claudeTokenPublic(), ...rc });
         }
         const tok = String(body.token || '').replace(/\s+/g, '');
         if (!CLAUDE_TOKEN_RE.test(tok)) return sendJson(res, 400, { error: '格式不对：应该是 claude setup-token 输出的 sk-ant-oat01-… 那一整串' });
@@ -3176,9 +3172,9 @@ const handler = async (req, res) => {
         saveClaudeToken(tok);
         const rc = recycleClaudeRunners();
         log('claude-token set …' + tok.slice(-4), JSON.stringify(rc));
-        return sendJson(res, 200, { ...claudeTokenPublic(req), ...rc });
+        return sendJson(res, 200, { ...claudeTokenPublic(), ...rc });
       }
-      return sendJson(res, 200, claudeTokenPublic(req));
+      return sendJson(res, 200, claudeTokenPublic());
     }
     // 模型库：看完整的 key 要再输一次 claclaw 的密码（登录用的哪组都行；没设密码的账号要输用户名），输错和登录一起计次数、会锁；日志不写 key
     if (url.pathname === '/api/models/key' && req.method === 'POST') {
@@ -3293,7 +3289,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/claws') {
       // running：装了但没启动的（OpenClaw 网关没开）灰着显示，带「启动」（canStart）；其他 Claw 用的时候才拉起进程，装了就算可用
       const list = detectClaws();
-      for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.id === 'claude') c.login = { can: true, ctok: claudeTokenPublic(req) }; else if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）；Claude 只有长期令牌这一项
+      for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.id === 'claude') c.login = { can: true, ctok: claudeTokenPublic() }; else if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）；Claude 只有长期令牌这一项
       // 一个都没装：能在网页上一键装的（DeepSeek）标上 canInstall，网页显示它的卡片和「安装」按钮
       if (!list.some(c => c.installed)) for (const c of list) if (INSTALLS[c.id] && c.supported) c.canInstall = true;
       const inst = installing(); for (const c of list) if (c.id === inst) c.installing = true;   // 正在装：卡片写「安装中」，点开看进度（不会重复装）
@@ -3482,7 +3478,6 @@ const handler = async (req, res) => {
       }
       let b = await jsonBody(req, 16 * 1024);
       const act = url.pathname.slice('/api/peer'.length);
-      // 查对方在不在线是只读的：手机、Tailscale 打开的网页也能看
       // 手机、经中继打开的网页也能做全部操作，包括「开放哪些会话」（协同池、给某个对方开放哪些）
       if (act === '/approve') { const p = approvePending(String(b.id || '')); if (!p) return sendJson(res, 404, { error: '配对申请不存在或已过期' }); log('peer pair approved', p.ip, p.name); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
       if (act === '/reject') { dropPending(String(b.id || '')); return sendJson(res, 200, peerPublic(loadPeer(), true)); }
@@ -3511,11 +3506,6 @@ const handler = async (req, res) => {
         else if (Array.isArray(b.sessions)) p.allow = b.sessions.filter(x => typeof x === 'string' && PEER_SID.test(x)).slice(0, 100);
         savePeer(c); log('peer allow', p.name, Array.isArray(p.allow) ? p.allow.length : 'all');
         return sendJson(res, 200, pub(c));
-      }
-      if (act === '/relay-first') {   // 给某个对方指定主中继（host:port，空 = 按我们的默认顺序）
-        const p = c.peers.find(x => x.id === b.id); if (!p) return sendJson(res, 404, { error: '没有这个对方' });
-        const h = String(b.host || '').trim(); if (h && !/^[\w.-]+:\d+$/.test(h)) return sendJson(res, 400, { error: '格式：host:port' });
-        if (h) p.relayFirst = h; else delete p.relayFirst; savePeer(c); log('peer relay-first', p.name, h || '默认'); return sendJson(res, 200, pub(c));
       }
       if (act === '/rename') {   // 给已配对的对方改个别名（只改我们这边的叫法；AI 用 peer_send 时按这个名字找对方）
         const p = c.peers.find(x => x.id === b.id); if (!p) return sendJson(res, 404, { error: '没有这个对方' });
@@ -3829,7 +3819,6 @@ wss.on('connection', (ws, req) => {
       if (m.t === 'login.start') { try { const lj = loginStart(String(m.claw || ''), ws, { key: typeof m.key === 'string' ? m.key : '', log }); if (lj?.status === 'ok' && m.key) loginKeyToLib(lj.claw, m.key); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
       if (m.t === 'login.input') { try { loginInput(String(m.claw || ''), String(m.text || '')); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
       if (m.t === 'login.cancel') { loginCancel(String(m.claw || ''), log); return; }
-      if (m.t === 'login.watch') { if (!loginWatch(String(m.claw || ''), ws)) send({ t: 'login.update', claw: m.claw, status: 'none' }); return; }
       if (m.t === 'session.open' || m.t === 'session.new' || m.t === 'session.leave') roStop(ws);   // 换会话：只读的那个不再盯着
       // 手机回到会话列表页：不再看着这个会话（推送、未读、空闲关闭都照常算）
       if (m.t === 'session.leave') { runner?.unsubscribe(ws); runner = null; return; }
@@ -4071,7 +4060,6 @@ wss.on('connection', (ws, req) => {
           runners.set(m.id, new Runner(info, inherited, allowed));
         }
         runner = runners.get(m.id);
-        runners.set(m.id, runner);
         if (runner.ctx === undefined) runner.ctx = ctxFromFile(info);
         runner.subscribe(ws);
         touchWeb(m.id);
