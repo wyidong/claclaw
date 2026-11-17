@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { installStart, installState } from '../install.mjs';
+import { installStart, installState, installReset } from '../install.mjs';
 import { dsWriteKey, dsHasKey } from '../login.mjs';
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-install-'));
@@ -56,6 +56,11 @@ test('安装：只能装列出来的；跑 npm install -g 固定的包；成功 
   assert.equal(installStart('deepseek', { npmBin: '/usr/bin/npm', spawnImpl: fakeSpawn(0).impl }).status, 'running', '正在装：不重复起');
   await settle();
   assert.equal(installState().status, 'ok');
+  assert.equal(installState().pct, 100);
+  const again = fakeSpawn(0);
+  assert.equal(installStart('deepseek', { npmBin: '/usr/bin/npm', spawnImpl: again.impl }).status, 'ok', '刚装好：再点只回结果，不重复装');
+  assert.equal(again.calls.length, 0);
+  installReset();
   f = fakeSpawn(243, 'npm error code EACCES\nnpm error syscall mkdir\n');
   installStart('deepseek', { npmBin: '/usr/bin/npm', spawnImpl: f.impl });
   await settle();
@@ -64,4 +69,23 @@ test('安装：只能装列出来的；跑 npm install -g 固定的包；成功 
   await settle();
   assert.equal(installState().status, 'fail');
   assert.match(installState().error, /ETIMEDOUT/);
+});
+
+test('安装进度：按 npm http 行数出阶段和百分比，只增不减；http 行不进出错信息', async () => {
+  installReset();
+  const p = new EventEmitter(); p.stdout = new EventEmitter(); p.stderr = new EventEmitter(); p.kill = () => {};
+  installStart('deepseek', { npmBin: '/usr/bin/npm', spawnImpl: () => p });
+  const st = () => installState();
+  assert.equal(st().phase, 'resolve');
+  for (let i = 0; i < 340; i++) p.stderr.emit('data', 'npm http fetch GET 200 https://r.example/pkg' + i + ' 10ms (cache miss)\n');
+  const a = st(); assert.equal(a.phase, 'resolve'); assert.ok(a.pct >= 15 && a.pct <= 20, a.pct); assert.match(a.tail, /查依赖（340 \/ 约 680）/);
+  // 拆在两块里的一行也要认
+  p.stderr.emit('data', 'npm http cache a@https://r.example/a/-/a-1.0.0.t'); p.stderr.emit('data', 'gz 1ms (cache hit)\nnpm http cache b@https://r.example/b/-/b-1.0.0.tgz 0ms (cache hit)\n');
+  const b = st(); assert.equal(b.phase, 'fetch'); assert.equal(b.pct, 35); assert.match(b.tail, /0 \/ 2 个包/);
+  p.stderr.emit('data', 'npm http fetch GET 200 https://cdn.example/packages/a/1.0.0/a-1.0.0.tgz 99ms (cache miss)\n');
+  const c = st(); assert.ok(c.pct > 60 && c.pct < 70, c.pct); assert.match(c.tail, /1 \/ 2 个包/);
+  p.stderr.emit('data', 'npm http fetch GET 200 https://cdn.example/packages/b/1.0.0/b-1.0.0.tgz 99ms (cache miss)\n');
+  const d = st(); assert.equal(d.phase, 'finish'); assert.ok(d.pct >= 92 && d.pct < 100, d.pct);
+  p.stderr.emit('data', 'npm error network ETIMEDOUT\n'); p.emit('exit', 1);
+  assert.equal(st().status, 'fail'); assert.match(st().error, /ETIMEDOUT/); assert.doesNotMatch(st().error, /npm http/);
 });

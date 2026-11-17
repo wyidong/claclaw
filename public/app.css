@@ -1512,6 +1512,11 @@ select.pe-in{text-align-last:right}
 .lg-code{font:700 28px/1.2 ui-monospace,Menlo,monospace;letter-spacing:2px;margin:8px 0;user-select:all;-webkit-user-select:all}
 .lg-st{margin-top:12px;color:var(--muted);font-size:13.5px;word-break:break-all;line-height:1.5}
 .lg-st.ok{color:var(--allow)}.lg-st.bad{color:#D33}
+.inst-bar{margin-top:14px;height:8px;border-radius:4px;background:var(--code-bg);overflow:hidden}
+.inst-bar i{display:block;height:100%;width:0;border-radius:4px;background:var(--accent);transition:width 1.9s linear}   /* 每 2 秒取一次进度，中间平滑走过去 */
+.inst-meta{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+.inst-st{margin-top:4px}
+.inst-note{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.5}
 .lg-ft{margin-top:14px;text-align:right}
 @media (max-width:999px){
   /* Claw 页：每个 Claw 一张大卡片，选了哪个，会话页就显示哪一种的会话 */

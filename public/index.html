@@ -3948,13 +3948,13 @@ function applyClaws(list){
     var card=document.querySelector('.claw-card[data-claw="'+c.id+'"]');if(!card)return;
     card.hidden=!(c.installed||c.canInstall)||(down&&!canStart&&DESKTOP.matches);if(!card.hidden)any=true;
     card.disabled=!c.supported||(down&&!canStart);card.classList.toggle('claw-down',canStart);
-    card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):starting?'正在启动…':down?'已安装，没有启动':c.canInstall?'还没安装，点「安装」帮你装好':'';
+    card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):starting?'正在启动…':down?'已安装，没有启动':c.canInstall?(c.installing?'正在安装，点开看进度':'还没安装，点「安装」帮你装好'):'';
     var sb=card.querySelector('.claw-start');
     if(canStart){if(!sb){sb=document.createElement('span');sb.className='claw-login claw-start';sb.setAttribute('role','button');sb.addEventListener('click',function(e){e.stopPropagation();startClaw(c.id)});card.appendChild(sb)}sb.textContent=starting?'启动中…':'启动';sb.hidden=false}
     else if(sb)sb.hidden=true;
     // 一个 Claw 都没装：这张卡片（DeepSeek）带「安装」按钮，点卡片也是装
     var ib=card.querySelector('.claw-install');
-    if(c.canInstall){if(!ib){ib=document.createElement('span');ib.className='claw-login claw-install';ib.setAttribute('role','button');ib.textContent='安装';ib.addEventListener('click',function(e){e.stopPropagation();openInstall(c.id)});card.appendChild(ib)}ib.hidden=false}
+    if(c.canInstall){if(!ib){ib=document.createElement('span');ib.className='claw-login claw-install';ib.setAttribute('role','button');ib.addEventListener('click',function(e){e.stopPropagation();openInstall(c.id)});card.appendChild(ib)}ib.hidden=false;ib.textContent=c.installing?'安装中…':'安装'}
     else if(ib)ib.hidden=true;
     // 登录：没登录（模型库也顶不上）就写「未登录」；claclaw 能替它登的加个「登录」小按钮（已登录的写「换账号」）
     var lg=c.login,lb=card.querySelector('.claw-login:not(.claw-install):not(.claw-start)');
@@ -4042,31 +4042,49 @@ function startClaw(id){
 }
 // ---------- 帮用户装第一个 Agent（一个都没装时的 DeepSeek 卡片；见 install.mjs）：装完接着填 API key ----------
 var instTimer=null;
+// 正在装：卡片的「安装」写成「安装中…」，状态写「正在安装，点开看进度」
+function instCard(claw,on){
+  var i=clawInfo[claw];if(i)i.installing=on;
+  var card=document.querySelector('.claw-card[data-claw="'+claw+'"]');if(!card)return;
+  var ib=card.querySelector('.claw-install');if(ib)ib.textContent=on?'安装中…':'安装';
+  if(i&&i.canInstall&&!i.installed)card.querySelector('.claw-st').textContent=on?'正在安装，点开看进度':'还没安装，点「安装」帮你装好';
+}
 function openInstall(claw){
   var nm=CLAW_NAMES[claw]||claw;
   var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
   loginClaw=null;
-  p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc('安装 '+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
-    +'<p class="lg-hint">在本机安装 '+esc(nm)+'，约几分钟；装好填 API Key 即可用。</p>'
+  p.innerHTML='<div class="lg-card" data-inst="'+esc(claw)+'"><div class="lg-hd"><b>'+esc('安装 '+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
+    +'<p class="lg-hint">在本机安装 '+esc(nm)+'，通常 1–5 分钟（看网速）；装好填 API Key 即可用。</p>'
     +'<div class="lg-body"><div class="lg-st">正在开始…</div></div>'
     +'<div class="lg-ft"><button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';
   p.classList.add('on');
-  var stop=function(){clearInterval(instTimer);instTimer=null;closeLogin()};
-  p.querySelector('.lg-x').addEventListener('click',stop);p.querySelector('.lg-cancel').addEventListener('click',stop);
+  // 关掉窗口不停：安装在电脑上继续，这里接着取进度（卡片上写「安装中」，装完提示一下）；再点卡片回到这个窗口看进度，不会重复装
+  p.querySelector('.lg-x').addEventListener('click',closeLogin);p.querySelector('.lg-cancel').addEventListener('click',closeLogin);
   var paint=function(j){
-    if(!p.classList.contains('on'))return clearInterval(instTimer);
+    instCard(claw,j.status==='running');
+    var vis=p.classList.contains('on')&&p.querySelector('.lg-card[data-inst="'+claw+'"]');   // 窗口还开着、没换成别的（登录窗口共用这个面板）
+    if(j.status!=='running'){clearInterval(instTimer);instTimer=null}
+    if(j.status==='ok'&&!vis){toast(nm+' 装好了：点它的卡片填 API key');fetch('/api/claws').then(function(r){return r.json()}).then(applyClaws).catch(function(){})}
+    if(!vis)return;
     var b=p.querySelector('.lg-body');
-    if(j.error&&j.status!=='fail'){b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error)+'</div>';return clearInterval(instTimer)}
+    if(j.error&&j.status!=='fail'){b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error)+'</div>';return}
     if(j.status==='ok'){
-      clearInterval(instTimer);instTimer=null;
       b.innerHTML='<div class="lg-st ok">✓ 安装完成</div><div class="lg-key"><button type="button" class="lg-btn lg-next">下一步：填 API key</button></div>';
       b.querySelector('.lg-next').addEventListener('click',function(){
         fetch('/api/claws').then(function(r){return r.json()}).then(function(list){applyClaws(list);var i=clawInfo[claw];if(i&&i.login&&i.login.key)openLogin(claw);else{closeLogin();pickClaw(claw)}}).catch(function(e){toast(e.message)});
       });
       return;
     }
-    if(j.status==='fail'){clearInterval(instTimer);instTimer=null;b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error||'没装上')+'</div><div class="lg-key"><button type="button" class="lg-btn lg-retry">再试一次</button></div>';b.querySelector('.lg-retry').addEventListener('click',function(){openInstall(claw)});return}
-    b.innerHTML='<div class="lg-st">'+esc(j.tail||'正在安装…')+'</div>';
+    if(j.status==='fail'){b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error||'没装上')+'</div><div class="lg-key"><button type="button" class="lg-btn lg-retry">再试一次</button></div>';b.querySelector('.lg-retry').addEventListener('click',function(){openInstall(claw)});return}
+    // 进度条 + 已用时间 + 大概还要多久（按当前百分比的速度推；刚开始推不准，先写「通常 1–5 分钟」）
+    var pc=Math.max(0,Math.min(100,j.pct||0)),el=Math.round((j.elapsed||0)/1000),left=pc>=10&&pc<100?el*(100-pc)/pc:0;
+    var mmss=function(t){return Math.floor(t/60)+':'+('0'+t%60).slice(-2)};
+    var eta=pc<10?'通常 1–5 分钟':left<60?'预计不到 1 分钟':'预计还要约 '+Math.ceil(left/60)+' 分钟';
+    if(!b.querySelector('.inst-bar'))b.innerHTML='<div class="inst-bar"><i></i></div><div class="inst-meta"><span class="inst-pc"></span><span class="inst-eta"></span></div><div class="lg-st inst-st"></div><div class="inst-note">可以关掉这个窗口，安装在电脑上继续；再点 DeepSeek 卡片能回来看进度。</div>';
+    b.querySelector('.inst-bar i').style.width=pc+'%';
+    b.querySelector('.inst-pc').textContent=pc+'% · 已用 '+mmss(el);
+    b.querySelector('.inst-eta').textContent=eta;
+    b.querySelector('.inst-st').textContent=j.tail||'正在安装…';
   };
   var poll=function(){fetch('/api/claws/install').then(function(r){return r.json()}).then(function(j){if(j.claw===claw||j.status!=='none')paint(j)}).catch(function(){})};
   clearInterval(instTimer);

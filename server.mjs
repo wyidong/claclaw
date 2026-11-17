@@ -52,7 +52,7 @@ import { readBody, jsonBody } from './httpbody.mjs';
 import { makeSkins } from './skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
-import { INSTALLS, installStart, installState } from './install.mjs';
+import { INSTALLS, installStart, installState, installing } from './install.mjs';
 import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_TTL } from './peerqueue.mjs';
@@ -3245,6 +3245,7 @@ const handler = async (req, res) => {
       for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.id === 'claude') c.login = { can: true, ctok: claudeTokenPublic(req) }; else if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）；Claude 只有长期令牌这一项
       // 一个都没装：能在网页上一键装的（DeepSeek）标上 canInstall，网页显示它的卡片和「安装」按钮
       if (!list.some(c => c.installed)) for (const c of list) if (INSTALLS[c.id] && c.supported) c.canInstall = true;
+      const inst = installing(); for (const c of list) if (c.id === inst) c.installing = true;   // 正在装：卡片写「安装中」，点开看进度（不会重复装）
       for (const c of list) if (c.id === 'openclaw' && c.installed && c.supported && c.running === false) c.canStart = true;
       return sendJson(res, 200, list);
     }
