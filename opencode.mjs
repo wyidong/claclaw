@@ -10,8 +10,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { storeNow, opencodeInject } from './modelpick.mjs';
-import { AcpAgent, AcpRunner, optName, toolTarget } from './acp.mjs';
-import { HOME, tilde, oneLine, tms, findBin, runBin as run, WIN, listenPort } from './util.mjs';
+import { AcpAgent, AcpRunner, optName, toolTarget, listItem, trashPath } from './acp.mjs';
+import { HOME, oneLine, tms, findBin, runBin as run, WIN, listenPort } from './util.mjs';
 
 const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(HOME, '.local', 'share'), 'opencode');
 const DB = path.join(DATA_DIR, 'opencode.db');
@@ -33,7 +33,7 @@ export const opInstalled = () => !!opBin();   // 只认程序：卸载后留下�
 
 // 每次查询单独开一个只读连接，用完就关：不占着库，也不怕 opencode 升级时换了库文件
 function query(fn) {
-  if (!sqlite) throw new Error('当前 Node 没有 node:sqlite（需要 Node 22.13 以上），读不了 OpenCode 会话');
+  if (!sqlite) throw new Error(opUnsupportedReason());
   if (!fs.existsSync(DB)) return null;
   const db = new sqlite.DatabaseSync(DB, { readOnly: true });
   try { return fn(db); } finally { try { db.close(); } catch {} }
@@ -42,7 +42,7 @@ const parse = s => { try { return JSON.parse(s); } catch { return null; } };
 const modelOf = m => { const o = typeof m === 'string' ? parse(m) : m; return o?.id || o?.modelID || ''; };
 
 // 当前上下文大小：最后一条回复的输入量（输入 + 缓存读写）；最后一条是压缩摘要时用摘要长度（≈压缩后的大小）
-export function opCtx(id) {
+function opCtx(id) {
   if (!isOp(id) || !validSid(sidOf(id))) return null;
   try {
     const rows = query(db => db.prepare('select data from message where session_id = ? order by time_created desc, id desc limit 30').all(sidOf(id))) || [];
@@ -91,14 +91,7 @@ const titleOf = s => (s.title && !DEFAULT_TITLE.test(s.title) ? s.title : s.firs
 export function opSessionList({ busy = () => false, takeoverMin = 30 } = {}) {
   const rows = listRows();
   const held = heldSessions(rows, takeoverMin);
-  return rows.map(s => ({
-    id: OP_PREFIX + s.id,
-    title: titleOf(s),
-    cwd: s.directory, cwdShort: tilde(s.directory || ''), branch: modelOf(s.model),
-    lastModified: s.time_updated,
-    openInWeb: false, busyElsewhere: held.get(s.id) || null, unread: 0, webActive: 0,
-    claw: 'opencode', busy: busy(OP_PREFIX + s.id),
-  }));
+  return rows.map(s => listItem('opencode', OP_PREFIX + s.id, busy, { title: titleOf(s), cwd: s.directory, branch: modelOf(s.model), updated: s.time_updated, held: held.get(s.id) || null }));
 }
 export const opExists = id => isOp(id) && validSid(sidOf(id)) && !!query(db => db.prepare('select 1 from session where id = ?').get(sidOf(id)));
 
@@ -114,8 +107,6 @@ function etimeMs(s) {   // ps 的 etime：[[dd-]hh:]mm:ss
 }
 // Windows 上查不了「终端是不是正开着同一个会话」：认出 opencode 进程不难，难的是拿它的工作目录 ——
 // lsof -d cwd 没有等价物（要 NtQueryInformationProcess）。所以这里整个跳过，宁可不检测也不误判成占用。
-// 不检测 ≠ 没占用：对外用 opCanDetectHold 标明「无法检测」，别让界面说成「空闲，可打开」。
-export const opCanDetectHold = !WIN;
 let procCache = { at: 0, list: [] };
 function foreignProcs() {
   if (WIN) return [];
@@ -240,7 +231,7 @@ export const opShutdown = () => agent.stop();
 export const opAcpRunning = () => agent.running;
 
 // 可调选项（ACP configOptions）：model / effort / mode（build、plan）
-export const COMMANDS = [
+const COMMANDS = [
   { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
   { name: 'effort', description: '思考强度（不带参数：列出可选项）', hint: '<强度>', builtin: true },
   { name: 'mode', description: 'build（直接动手）/ plan（只出方案，不改文件）', hint: '<模式>', builtin: true },
@@ -254,7 +245,7 @@ export const opRunners = new Map();
 const OP_GIVE_UP = /free usage limit reached/i;
 export class OpRunner extends AcpRunner {
   static agent = agent; static prefix = OP_PREFIX; static runners = opRunners;
-  static label = 'OpenCode'; static group = 'OpenCode'; static permPrefix = 'op-'; static commands = COMMANDS;
+  static label = 'OpenCode'; static commands = COMMANDS;
   static cfgIds = { model: 'model', effort: 'effort', mode: 'mode' };
   static cfgNames = { model: '模型', effort: '思考强度', mode: '模式' };
   static waitArgs = true;   // opencode 先发一条只有工具名的 tool_call，参数在后面的 update 里
@@ -353,8 +344,7 @@ export async function opDelete(id, trashDir) {
   const json = await runBin(['export', sid], 60000);
   const start = json.indexOf('{');   // 前面可能有一行提示文字
   if (start < 0) throw new Error('导出失败，未删除');
-  fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
-  const file = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_opencode_' + sid + '.json');
+  const file = trashPath(trashDir, 'opencode', sid, '.json');
   fs.writeFileSync(file, json.slice(start), { mode: 0o600 });
   await runBin(['session', 'delete', sid], 60000);
   return file;

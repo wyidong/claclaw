@@ -12,8 +12,8 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { DATA } from './auth.mjs';
-import { AcpAgent, AcpRunner, flatOptions } from './acp.mjs';
-import { HOME, tilde, tms, sleep, findBin, binEnv, binCall } from './util.mjs';
+import { AcpAgent, AcpRunner, flatOptions, listItem, busyRename, trashPath } from './acp.mjs';
+import { HOME, tms, sleep, findBin, binEnv, binCall } from './util.mjs';
 
 const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh');
 const ROOT = path.join(DSH_HOME, 'sessions');
@@ -32,18 +32,21 @@ const sidOf = id => id.slice(DS_PREFIX.length);
 // ---------- 读会话文件 ----------
 // 文件是一段段独立的 zstd 帧接在一起；Node 的 zstd 只解第一帧，所以按帧头（魔数）切开逐帧解。
 // 魔数也可能碰巧出现在压缩数据里：切出来解不开就往后找下一个魔数再试。
+// 末尾正在写的半帧先不要；strict（改名前的严格读）：半帧 / 坏帧一律返回 null，避免在坏日志后面追加
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
-function unzstdAll(b) {
+function unzstdAll(b, strict = false) {
   const out = [];
   let pos = 0;
-  while (pos < b.length && b.indexOf(MAGIC, pos) === pos) {
-    let from = pos + 4, done = false;
-    for (;;) {
-      const nx = b.indexOf(MAGIC, from), stop = nx < 0 ? b.length : nx;
-      try { out.push(zlib.zstdDecompressSync(b.subarray(pos, stop))); pos = stop; done = true; break; }
-      catch { if (nx < 0) break; from = nx + 1; }
+  while (pos < b.length) {
+    let done = false;
+    if (b.indexOf(MAGIC, pos) === pos) {
+      for (let from = pos + 4; ;) {
+        const nx = b.indexOf(MAGIC, from), stop = nx < 0 ? b.length : nx;
+        try { out.push(zlib.zstdDecompressSync(b.subarray(pos, stop))); pos = stop; done = true; break; }
+        catch { if (nx < 0) break; from = nx + 1; }
+      }
     }
-    if (!done) break;   // 末尾正在写的半帧：先不要
+    if (!done) { if (strict) return null; break; }
   }
   return Buffer.concat(out).toString('utf8');
 }
@@ -103,14 +106,10 @@ export function dsSessionList({ busy = () => false } = {}) {
     if (!recs) continue;
     const s = summarize(recs);
     if (s.sub) continue;   // 子代理会话不列；刚新建、还没发过消息的也要列（不然新建完离开就找不到了）
-    out.push({
-      id: DS_PREFIX + sid,
+    out.push(listItem('deepseek', DS_PREFIX + sid, busy, {
       title: s.title || s.firstPrompt.slice(0, 60) || (s.hasUser ? '(无标题)' : '新会话'),
-      cwd: s.cwd, cwdShort: tilde(s.cwd), branch: s.model,
-      lastModified: recCache.get(f)?.mtime || s.createdAt,
-      openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-      claw: 'deepseek', busy: busy(DS_PREFIX + sid),
-    });
+      cwd: s.cwd, branch: s.model, updated: recCache.get(f)?.mtime || s.createdAt,
+    }));
   }
   return out.sort((a, b) => b.lastModified - a.lastModified);
 }
@@ -132,7 +131,6 @@ function readImage(att) {
   try { return { media_type: att.mediaType || 'image/png', data: fs.readFileSync(path.join(ATTACH, hex.slice(0, 2), hex)).toString('base64') }; }
   catch { return null; }
 }
-
 
 // 费用估算：只用 dsh 日志里 provider 上报的 usage 桶，乘 DeepSeek 公开价。
 // 缓存写入按未命中输入价；法定节假日、账号折扣/赠金不算，这是给用户“心里有数”的近似值。
@@ -178,10 +176,7 @@ function addUsage(recs, acc) {
 // 子代理是单独的会话文件（header.parentSession 指向父会话，可能多层），一起算进来
 // 当前上下文大小：最后一次请求的输入量（未命中 + 缓存读 + 缓存写）。最近的是压缩记录时，用摘要的输出长度近似压缩后的大小
 export function dsCtx(id) {
-  if (!isDs(id)) return null;
-  const sid = sidOf(id);
-  if (sid.includes('/') || sid.includes('..')) return null;
-  const f = scan().get(sid);
+  const f = isDs(id) && fileOf(sidOf(id));
   const recs = f ? readRecords(f) || [] : [];
   for (let i = recs.length - 1; i >= 0; i--) {
     const r = recs[i], u = r.data?.usage;
@@ -194,10 +189,7 @@ export function dsCtx(id) {
 }
 // 一个会话的全部记录（给会话解剖用）；找不到返回 null
 export function dsRecordsOf(id) {
-  if (!isDs(id)) return null;
-  const sid = sidOf(id);
-  if (sid.includes('/') || sid.includes('..')) return null;
-  const f = fileOf(sid);
+  const f = isDs(id) && fileOf(sidOf(id));
   return f ? readRecords(f) : null;
 }
 export function dsUsage(id) {
@@ -449,7 +441,7 @@ let compactQueue = Promise.resolve();
 
 // 在已经关掉 ACP 会话的前提下，用 dsh host 压缩一个会话。
 // 返回 { ok, text }；失败时抛出可读错误（不抛 token）。
-export function dsCompactSession(sid, opts = {}) {
+function dsCompactSession(sid, opts = {}) {
   const run = () => compactSessionNow(sid, opts);
   const p = compactQueue.then(run, run);
   compactQueue = p.then(() => {}, () => {});
@@ -484,15 +476,6 @@ async function compactSessionNow(sid, { log } = {}) {
   }
 }
 
-// 模型选项：value 是 JSON 字符串 ["provider","model"]
-const modelName = (cfg) => {
-  const m = cfg?.find(o => o.id === 'model');
-  if (!m) return '';
-  const hit = flatOptions(m).find(o => o.value === m.currentValue);
-  if (hit) return hit.name;
-  try { return JSON.parse(m.currentValue)[1]; } catch { return m.currentValue || ''; }
-};
-
 export const COMMANDS = [
   { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
   { name: 'effort', description: '思考强度：off / low / high / max', hint: '<强度>', builtin: true },
@@ -509,7 +492,7 @@ export const dsRunners = new Map();
 
 export class DsRunner extends AcpRunner {
   static agent = agent; static prefix = DS_PREFIX; static runners = dsRunners;
-  static label = 'DeepSeek'; static group = 'dsh'; static permPrefix = 'ds-'; static commands = COMMANDS;
+  static label = 'DeepSeek'; static group = 'dsh'; static commands = COMMANDS;
   static cfgIds = { model: 'model', effort: 'reasoning_effort' };
   static cfgNames = { model: '模型', effort: '思考强度' };
 
@@ -544,7 +527,14 @@ export class DsRunner extends AcpRunner {
   attachError(e) {
     return /already owned|write handle/i.test(e.message) ? new Error('这个会话正在 DeepSeek Harness 别处打开着（比如 dsh 网页版），先在那边关掉再试') : e;
   }
-  modelNameOf(cfg) { return modelName(cfg); }
+  // 模型选项：value 是 JSON 字符串 ["provider","model"]
+  modelNameOf(cfg) {
+    const m = cfg?.find(o => o.id === 'model');
+    if (!m) return '';
+    const hit = flatOptions(m).find(o => o.value === m.currentValue);
+    if (hit) return hit.name;
+    try { return JSON.parse(m.currentValue)[1]; } catch { return m.currentValue || ''; }
+  }
   // 模型选择：DeepSeek 官方的（deepseek-*）走 api.deepseek.com，和模型库里同地址、同 ID 的对上就归到「模型库」
   ownModel(o) {
     let prov = '', id = String(o.name || o.value);
@@ -781,25 +771,10 @@ function truncateUtf8(input, maxBytes) {
 }
 
 // 严格读：zstd 帧必须完整、每行必须是 JSON；半帧/坏帧一律拒绝，避免在坏日志后面追加
-function unzstdAllStrict(b) {
-  const out = [];
-  let pos = 0;
-  while (pos < b.length) {
-    if (b.indexOf(MAGIC, pos) !== pos) return null;
-    let from = pos + 4, done = false;
-    for (;;) {
-      const nx = b.indexOf(MAGIC, from), stop = nx < 0 ? b.length : nx;
-      try { out.push(zlib.zstdDecompressSync(b.subarray(pos, stop))); pos = stop; done = true; break; }
-      catch { if (nx < 0) break; from = nx + 1; }
-    }
-    if (!done) return null;
-  }
-  return Buffer.concat(out).toString('utf8');
-}
 function readRecordsStrict(file) {
   let buf;
   try { buf = fs.readFileSync(file); } catch (e) { throw Object.assign(new Error('读不了这个会话的记录：' + e.message), { code: 500 }); }
-  const text = unzstdAllStrict(buf);
+  const text = unzstdAll(buf, true);
   if (text === null) throw Object.assign(new Error('会话日志末尾不完整，改名取消'), { code: 409 });
   const recs = [];
   for (const line of text.split('\n')) {
@@ -812,12 +787,9 @@ function readRecordsStrict(file) {
 
 // 追加前先备份到 claclaw 回收站；写失败就恢复
 function backupSession(file, sid) {
-  const dir = path.join(DATA, 'trash');
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const base = new Date().toISOString().replace(/[:.]/g, '-') + '_dsh-rename_' + String(sid).replace(/[^A-Za-z0-9-]/g, '');
-  const dest = path.join(dir, base + '.jsonl.zstd');
+  const EXT = '.jsonl.zstd', dest = trashPath(path.join(DATA, 'trash'), 'dsh-rename', String(sid).replace(/[^A-Za-z0-9-]/g, ''), EXT);
   fs.copyFileSync(file, dest);
-  fs.writeFileSync(path.join(dir, base + '.json'), JSON.stringify({ kind: 'dsh-rename', sessionId: sid, from: file, at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  fs.writeFileSync(dest.slice(0, -EXT.length) + '.json', JSON.stringify({ kind: 'dsh-rename', sessionId: sid, from: file, at: new Date().toISOString() }, null, 2), { mode: 0o600 });
   return dest;
 }
 function appendFrame(file, frame) {
@@ -844,7 +816,7 @@ export async function dsRename(id, title) {
   const runner = dsRunners.get(id);
   if (runner && !runner.closed) {
     if (runner.subs.size) throw Object.assign(new Error('当前会话正在网页里打开着，先切到别的会话再改名'), { code: 409 });
-    if (runner.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
+    if (runner.busy) throw busyRename();
     runner.dispose();
     await agent.waitClosing(sid);   // 等 session/close 真正完成，再拿 dsh 的写入锁
   }

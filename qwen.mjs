@@ -11,13 +11,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { storeNow, qwenInject, qwenSettingsMerge } from './modelpick.mjs';
-import { AcpAgent, AcpRunner, stampTimes } from './acp.mjs';
-import { HOME, tilde, oneLine, findBin } from './util.mjs';
+import { AcpAgent, AcpLoadRunner, commandsWith, flatOptions, stampTimes, validSid, listItem, readDir, readLines, eachRec, fileRows, syncJsonConfig, notFound, busyRename, assertInside, toTrash } from './acp.mjs';
+import { HOME, oneLine, findBin } from './util.mjs';
 
 export const QW_PREFIX = 'qw:';
 export const isQw = id => typeof id === 'string' && id.startsWith(QW_PREFIX);
 const sidOf = id => id.slice(QW_PREFIX.length);
-const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 
 const QHOME = process.env.QWEN_HOME || path.join(HOME, '.qwen');
 const QDATA = process.env.QWEN_RUNTIME_DIR || QHOME;   // 会话记录放在这里（默认和设置同一个目录）
@@ -29,18 +28,8 @@ export const qwInstalled = () => !!qwBin();
 
 // ---------- 会话列表 ----------
 // 记录一行一条 JSON：user（provenance real_user 是用户打的字）/ assistant（带 model）/ tool_result / system；
-// system 里 subtype custom_title 是改过的名字。文件不大就整个读，大的读头尾各 512KB（名字、最后的模型都在尾部）
-const fileCache = new Map();   // 文件路径 → { key（大小:修改时间）, row }
-const READ_ALL = 4 << 20, PART = 512 << 10;
-function readLines(f, size) {
-  if (size <= READ_ALL) return fs.readFileSync(f, 'utf8').split('\n');
-  const fd = fs.openSync(f, 'r');
-  try {
-    const head = Buffer.alloc(PART), tail = Buffer.alloc(PART);
-    fs.readSync(fd, head, 0, PART, 0); fs.readSync(fd, tail, 0, PART, size - PART);
-    return [...head.toString('utf8').split('\n').slice(0, -1), ...tail.toString('utf8').split('\n').slice(1)];
-  } finally { fs.closeSync(fd); }
-}
+// system 里 subtype custom_title 是改过的名字。文件大的只读头尾（名字、最后的模型都在尾部）
+const fileCache = new Map();
 const textOf = msg => (msg?.parts || []).map(p => typeof p?.text === 'string' && !p.thought ? p.text : '').join('');
 const stripReminder = t => String(t || '').replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '\n').trim();
 function parseFile(f, st) {
@@ -57,45 +46,12 @@ function parseFile(f, st) {
   if (!validSid(sid)) return null;
   return { id: sid, title: oneLine(custom || first).slice(0, 100), cwd, model, ctx, updated: st.mtimeMs, file: f };
 }
-function listRows() {
-  const rows = [], seen = new Set();
-  let dirs = [];
-  try { dirs = fs.readdirSync(PROJECTS); } catch {}
-  for (const d of dirs) {
-    const chats = path.join(PROJECTS, d, 'chats');
-    let names = [];
-    try { names = fs.readdirSync(chats); } catch { continue; }
-    for (const n of names) {
-      if (!n.endsWith('.jsonl')) continue;
-      const f = path.join(chats, n);
-      let st; try { st = fs.statSync(f); } catch { continue; }
-      if (!st.isFile() || !st.size) continue;
-      seen.add(f);
-      const key = st.size + ':' + st.mtimeMs;
-      let c = fileCache.get(f);
-      if (c?.key !== key) { let row = null; try { row = parseFile(f, st); } catch {} c = { key, row }; fileCache.set(f, c); }
-      if (c.row) rows.push(c.row);
-    }
-  }
-  for (const f of fileCache.keys()) if (!seen.has(f)) fileCache.delete(f);
-  return rows.sort((a, b) => b.updated - a.updated);
-}
-export function qwSessionList({ busy = () => false } = {}) {
-  return listRows().map(s => ({
-    id: QW_PREFIX + s.id,
-    title: s.title || 'Qwen 会话',
-    cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
-    lastModified: s.updated,
-    openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'qwen', busy: busy(QW_PREFIX + s.id),
-  }));
-}
+const listRows = () => fileRows(fileCache, readDir(PROJECTS).flatMap(d => {
+  const chats = path.join(PROJECTS, d, 'chats');
+  return readDir(chats).filter(n => n.endsWith('.jsonl')).map(n => path.join(chats, n));
+}), parseFile);
+export const qwSessionList = ({ busy = () => false } = {}) => listRows().map(s => listItem('qwen', QW_PREFIX + s.id, busy, { ...s, title: s.title || 'Qwen 会话', branch: s.model }));
 // 消息时间（重放历史不带时间）：用户打的字（real_user）、回复（assistant 带文字）
-// 记录文件里一行行过（只解析含关键字的行，大文件也快）
-function eachRec(f, keys, fn) {
-  let txt; try { txt = fs.readFileSync(f, 'utf8'); } catch { return; }
-  for (const l of txt.split('\n')) { if (!l || !keys.some(k => l.includes(k))) continue; let o; try { o = JSON.parse(l); } catch { continue; } fn(o); }
-}
 function timesOf(f) {
   const recs = [];
   eachRec(f, ['"user"', '"assistant"'], o => {
@@ -109,23 +65,9 @@ export const qwInfo = id => isQw(id) ? listRows().find(s => s.id === sidOf(id)) 
 export const qwExists = id => !!qwInfo(id);
 
 // ---------- 模型库 → settings.json ----------
-// 内容没变就不写；settings.json 读不懂（手写坏了 / 带注释）就不动它，只记日志
 function syncSettings(log) {
   const inj = qwenInject(storeNow());
-  let text = '', cur = {};
-  try { text = fs.readFileSync(SETTINGS, 'utf8'); } catch {}
-  if (text.trim()) { try { cur = JSON.parse(text); } catch { log?.('qwen settings.json 不是标准 JSON，没有写入模型库'); return inj; } }
-  if (!text.trim() && !inj.list.length) return inj;
-  const next = qwenSettingsMerge(cur, inj);
-  if (JSON.stringify(next) !== JSON.stringify(cur)) {
-    try {
-      fs.mkdirSync(QHOME, { recursive: true });
-      const tmp = SETTINGS + '.claclaw-' + process.pid;
-      fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
-      fs.renameSync(tmp, SETTINGS);
-      log?.('qwen settings synced', inj.list.length, 'models');
-    } catch (e) { log?.('qwen settings write failed', e.message); }
-  }
+  syncJsonConfig(SETTINGS, { tag: 'qwen', count: inj.list.length, merge: cur => qwenSettingsMerge(cur, inj), log });
   return inj;
 }
 
@@ -144,44 +86,22 @@ export function qwModelsChanged(log) {
 export const qwShutdown = () => agent.stop();
 export const qwAcpRunning = () => agent.running;
 
-export const COMMANDS = [
-  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
-  { name: 'mode', description: '审批模式（不带参数：列出可选项）', hint: '<模式>', builtin: true },
-];
-
 // ---------- 打开的 Qwen 会话 ----------
-// 历史靠 session/load 重放：收下来记在 items 里，之后的新消息也记进去
 export const qwRunners = new Map();
 
-export class QwRunner extends AcpRunner {
-  static agent = agent; static prefix = QW_PREFIX; static runners = qwRunners;
-  static label = 'Qwen'; static group = 'Qwen'; static permPrefix = 'qw-'; static commands = COMMANDS;
-  static cfgIds = { model: 'model', mode: 'mode' };
-  static cfgNames = { model: '模型', mode: '模式' };
-  static ctxFromUsage = true; static titleFromAgent = true; static waitArgs = true;
+export class QwRunner extends AcpLoadRunner {
+  static agent = agent; static prefix = QW_PREFIX; static runners = qwRunners; static label = 'Qwen';
+  static commands = commandsWith('审批模式');
+  static waitArgs = true;
 
-  constructor(id, opts) { super(id, opts); this.items = []; }
-  get openMethod() { return 'session/load'; }
   ctxNow() { return this.ctx ?? qwInfo(this.id)?.ctx; }   // 刚打开还没新一轮：用会话记录里最后一次的输入量
-
-  async prepareAttach() {
-    if (!this.cwd) { const s = qwInfo(this.id); if (s) { this.cwd = s.cwd; this.info.cwd = s.cwd; this.title = this.title || s.title; this.model = this.model || s.model; } }
-    this.items = []; this.tools.clear(); this.replayOpen = null;
-    this.replaying = true;
-  }
-  attachDone(ok) {
-    this.replaying = false; this.replayOpen = null;
-    if (!ok) return;
-    for (const it of this.items) if (it.kind === 'user') it.text = stripReminder(it.text);
-    this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    const f = qwInfo(this.id)?.file; if (f) stampTimes(this.items, timesOf(f));
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Qwen 会话';
-  }
-  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+  sessionInfo() { return this.cwd ? null : qwInfo(this.id); }
+  cleanUser(text) { return stripReminder(text); }
+  afterReplay() { const f = qwInfo(this.id)?.file; if (f) stampTimes(this.items, timesOf(f)); }
 
   modelNameOf(cfg) {
     const o = cfg?.find(x => x.id === 'model');
-    const hit = (o?.options || []).flatMap(x => x.options || [x]).find(x => x.value === o.currentValue);
+    const hit = flatOptions(o).find(x => x.value === o.currentValue);
     return hit?.name || modelIdOf(o?.currentValue) || '';
   }
   // 模型库注入的条目：描述是「claclaw · 供应商名」，按供应商名 + 模型 ID 对回模型库
@@ -204,12 +124,9 @@ export const qwNewSession = (cwd, opts) => QwRunner.create(cwd, opts);
 // 删除：先把会话文件复制一份到 claclaw 回收站，再让 qwen 自己删（deleteSession）
 export async function qwDelete(id, trashDir, log) {
   const s = qwInfo(id);
-  if (!s?.file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  if (!fs.realpathSync(s.file).startsWith(fs.realpathSync(PROJECTS) + path.sep)) throw new Error('会话目录不对');
-  fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
-  const dest = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_qwen_' + s.id + '.jsonl');
-  fs.copyFileSync(s.file, dest);
-  fs.writeFileSync(dest + '.origin.json', JSON.stringify({ sessionId: id, from: s.file, cwd: s.cwd, deletedAt: new Date().toISOString() }, null, 2));
+  if (!s?.file) throw notFound();
+  assertInside(s.file, PROJECTS);
+  const dest = toTrash(trashDir, 'qwen', id, s, { ext: '.jsonl' });
   await agent.use(log);
   try {
     const r = await agent.rpc('deleteSession', { sessionId: s.id, cwd: s.cwd || HOME });   // 不带 cwd 它按自己进程的目录找，找不到
@@ -223,9 +140,8 @@ export async function qwDelete(id, trashDir, log) {
 // 改名：qwen 的扩展方法 renameSession（写一条 custom_title 记录）
 export async function qwRename(id, title, log) {
   const s = qwInfo(id);
-  if (!s) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  const r = qwRunners.get(id);
-  if (r?.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
+  if (!s) throw notFound();
+  if (qwRunners.get(id)?.busy) throw busyRename();
   await agent.use(log);
   try { await agent.rpc('renameSession', { sessionId: s.id, title, cwd: s.cwd || HOME }); } finally { agent.idleCheck(); }
   log?.('qwen renamed', s.id.slice(0, 12));

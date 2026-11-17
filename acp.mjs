@@ -1,12 +1,16 @@
-// ACP（Agent Client Protocol）共用底座：DeepSeek（dsh）、OpenCode、Kimi 都走它。
+// ACP（Agent Client Protocol）共用底座：DeepSeek（dsh）、OpenCode、Kimi、Qwen、Codex 等都走它。
 // - AcpAgent：一个 agent 程序的 ACP 进程（单例，多个会话共用；挂了下次用时再起；没会话接着 10 分钟后关）
 //   stdin/stdout 一行一条 JSON-RPC。收到的 session/update、权限请求按 sessionId 交给对应的 runner。
 // - AcpRunner：网页里打开的一个会话（接口和 Claude 的 Runner 对齐：send / interrupt / replyPermission / subscribe …）。
 //   各家只写差异：怎么接上会话、历史从哪读、模型名怎么显示、上下文大小从哪来、确认条怎么显示。
+// - AcpLoadRunner：历史靠 session/load 重放的会话（Kimi、Qwen、Codex、GLM …）
+// - 最后是各家适配共用的小工具：会话列表的一行、读会话记录文件、写配置、回收站、换走法
 import { autoCompactDue, autoCompactRun } from './autocompact.mjs';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
-import { storeNow, splitGroups } from './modelpick.mjs';
+import crypto from 'node:crypto';
+import { storeNow, splitGroups, STORE_GROUP } from './modelpick.mjs';
 import { HOME, tilde, oneLine, binEnv, binCall, readJson } from './util.mjs';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 export const flatOptions = opt => (opt?.options || []).flatMap(o => o.options ? o.options : [o]);
@@ -24,7 +28,7 @@ export const toolTarget = a => {
   return String(v).replace(/\s+/g, ' ').slice(0, 160);
 };
 // 「正在做什么」（会话列表 / 通知里的状态）
-export function toolLabel(name = '', kind = '') {
+function toolLabel(name = '', kind = '') {
   if (kind === 'execute' || /bash|pwsh|shell/i.test(name)) return '运行命令';
   if (kind === 'read' || /^read/i.test(name)) return '读文件';
   if (kind === 'edit' || /edit|write|patch|replace/i.test(name)) return '改文件';
@@ -35,7 +39,7 @@ export function toolLabel(name = '', kind = '') {
   return '用工具';
 }
 // 工具结束时的输出：文本内容；改文件给「改了 路径」；都没有时看 rawOutput
-export const toolOutput = u => {
+const toolOutput = u => {
   let out = (u.content || []).map(c => c.type === 'content' && c.content?.type === 'text' ? c.content.text : c.type === 'diff' ? '改了 ' + (c.path || '') : '').filter(Boolean).join('\n');
   if (!out && u.rawOutput) out = typeof u.rawOutput === 'string' ? u.rawOutput : String(u.rawOutput.output ?? u.rawOutput.error ?? u.rawOutput.stdout ?? '');
   return out.slice(0, 4000);
@@ -73,7 +77,7 @@ export function stampTimes(items, recs) {
 // 推理强度 / 权限：agent 在 configOptions 里用 category 标（thought_level / mode），没标的按 id 认。
 // 有没有、有哪几档都看 agent 和当前模型（Codex 只给它认识的模型推理强度；OpenCode 看模型）
 const CFG_KINDS = { effort: { cat: ['thought_level'], ids: ['reasoning_effort', 'effort', 'thinking'], name: '推理强度' }, mode: { cat: ['mode', '_permission'], ids: ['mode', 'permissionMode'], name: '权限' } };
-export const cfgFind = (cfg, kind) => Array.isArray(cfg) ? cfg.find(o => CFG_KINDS[kind].cat.includes(o.category)) || cfg.find(o => !o.category && CFG_KINDS[kind].ids.includes(o.id)) || null : null;
+const cfgFind = (cfg, kind) => Array.isArray(cfg) ? cfg.find(o => CFG_KINDS[kind].cat.includes(o.category)) || cfg.find(o => !o.category && CFG_KINDS[kind].ids.includes(o.id)) || null : null;
 export const cfgKindName = kind => CFG_KINDS[kind]?.name || kind;
 const EFFORT_ZH = {
   off: ['不思考', '最快，适合简单问题'], none: ['不思考', '最快，适合简单问题'], on: ['思考', '先想再回答'],
@@ -96,7 +100,7 @@ const MODE_ZH = {
   smart: ['智能判断', '自动评估风险，有风险的才问'], dontask: ['不询问', '要确认的操作直接拒绝，不问你'],
 };
 // 网页用的选项：{ id, current, items: [{ value, label, sub }] }
-export function cfgView(opt, kind, current = opt?.currentValue) {
+function cfgView(opt, kind, current = opt?.currentValue) {
   if (!opt) return null;
   const zh = kind === 'effort' ? EFFORT_ZH : MODE_ZH;
   const items = flatOptions(opt).map(o => { const v = String(o.value), z = zh[v.toLowerCase()]; return { value: v, label: z ? z[0] : String(o.name || v), sub: z ? z[1] : String(o.description || '') }; });
@@ -139,35 +143,26 @@ export class AcpAgent {
     if (this.ready) return this.ready;
     const bin = this.findBin();
     if (!bin) return Promise.reject(new Error(this.missing));
-    const gen = ++this.gen;
-    if (!this.exiting) return this.spawnNow(bin, log);
-    // 上一个进程刚 stop()（换模型重启、空闲关闭）还没退干净：等它退了再起新的。
-    // 同时来的几次 start 共用这一个 ready；中途又 stop() 了（gen 变了）就作废
-    const ready = this.exiting.then(() => {
-      if (this.gen !== gen || this.ready !== ready) throw new Error(this.name + ' 已停止');
-      this.ready = null;
-      return this.spawnNow(bin, log);
-    });
-    this.ready = ready;
-    ready.catch(() => {});
-    return ready;
+    ++this.gen;
+    // 上一个进程刚 stop()（换模型重启、空闲关闭）还没退干净：等它退了再起新的
+    return this.exiting ? this.after(this.exiting, () => this.spawnNow(bin, log)) : this.spawnNow(bin, log);
   }
   spawnNow(bin, log) {
     const prep = this.prepare?.(log) || {};
-    // prepare 是异步的（要跑外部命令同步配置，不能卡住事件循环）：等它完再起进程。
-    // 同时来的几次 start 共用这一个 ready；中途 stop() 了（gen 变了）就作废；prepare 出错了 ready 清掉，下次重来
-    if (typeof prep.then === 'function') {
-      const gen = this.gen;
-      const ready = prep.then(r => {
-        if (this.gen !== gen || this.ready !== ready) throw new Error(this.name + ' 已停止');
-        this.ready = null;
-        return this.spawnWith(bin, log, r || {});
-      }).catch(e => { if (this.ready === ready) this.ready = null; throw e; });
-      this.ready = ready;
-      ready.catch(() => {});
-      return ready;
-    }
-    return this.spawnWith(bin, log, prep);
+    // prepare 是异步的（要跑外部命令同步配置，不能卡住事件循环）：等它完再起进程
+    return typeof prep.then === 'function' ? this.after(prep, r => this.spawnWith(bin, log, r || {})) : this.spawnWith(bin, log, prep);
+  }
+  // 等 before 完再 run。同时来的几次 start 共用这一个 ready；中途 stop() 了（gen 变了）就作废；出错了 ready 清掉，下次重来
+  after(before, run) {
+    const gen = this.gen;
+    const ready = before.then(r => {
+      if (this.gen !== gen || this.ready !== ready) throw new Error(this.name + ' 已停止');
+      this.ready = null;
+      return run(r);
+    }).catch(e => { if (this.ready === ready) this.ready = null; throw e; });
+    this.ready = ready;
+    ready.catch(() => {});
+    return ready;
   }
   spawnWith(bin, log, prep) {
     this.sig = prep.sig || ''; this.stale = false;
@@ -333,14 +328,26 @@ export class AcpAgent {
 }
 
 // ---------- 打开的会话 ----------
-// 子类的静态字段：agent（AcpAgent）、prefix（'ds:' …）、runners（id → runner 的 Map）、label（'DeepSeek' …，模型分组名用 group）
+// 子类的静态字段：agent（AcpAgent）、prefix（'ds:' …）、runners（id → runner 的 Map）、label（'DeepSeek' …，模型分组名 group 默认同它）；
+// 可调选项 cfgIds / cfgNames / commands 默认是模型和模式
 // 子类可以覆盖的：history()、modelNameOf(cfg)、ownModel(o, store)、cleanName(name)、ctxNow()、beforePrompt()、afterPrompt()、
 // prepareAttach()、attachError(e)、permInfo(tc, known)、imageError
+const MODEL_CMD = { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true };
+// 输入框的命令：/model、（more）、/mode；modeWhat：/mode 的说明里怎么叫它
+export const commandsWith = (modeWhat = '权限模式', ...more) => [MODEL_CMD, ...more, { name: 'mode', description: modeWhat + '（不带参数：列出可选项）', hint: '<模式>', builtin: true }];
 export class AcpRunner {
-  constructor(id, { log, onActivity, onTurnDone, onAsk, info } = {}) {
+  static cfgIds = { model: 'model', mode: 'mode' };
+  static cfgNames = { model: '模型', mode: '模式' };
+  static commands = commandsWith();
+  // 确认请求 id 的前缀默认跟着 prefix（'km:' → 'km-'）
+  static get permPrefix() { return this.prefix.slice(0, -1) + '-'; }
+  static get group() { return this.label; }
+
+  constructor(id, opts = {}) {
+    const { log, onActivity, onTurnDone, onAsk, info } = opts;
     const C = this.constructor;
     this.id = id; this.sid = id.slice(C.prefix.length);
-    this.agent = C.agent;
+    this.agent = C.agent; this.opts = opts;   // opts：换走法后要在同一个目录重建会话时用
     this.log = log; this.onActivity = onActivity; this.onTurnDone = onTurnDone; this.onAsk = onAsk;
     this.cwd = info?.cwd || '';
     this.info = { sessionId: id, cwd: this.cwd };
@@ -432,13 +439,14 @@ export class AcpRunner {
   // 还没接上时用上次记下的清单（cached，网页随后再要一次真的），当前项按模型 ID / 名字对（对上不止一个就不打勾）；一次都没接过就只有当前模型名
   xmodels() {
     let opt = this.config?.find(o => o.id === 'model'), cached;
+    const store = storeNow();
     if (!opt) {
       const c = this.agent.cachedModels();
       if (!c) return { current: null, label: this.model || '', groups: null, ...this.optViews() };
-      const store = storeNow(), hits = this.model ? flatOptions(c).filter(o => this.ownModel(o, store).id === this.model || this.cleanName(this.modelNameOf([{ ...c, currentValue: o.value }])) === this.model) : [];
+      const hits = this.model ? flatOptions(c).filter(o => this.ownModel(o, store).id === this.model || this.cleanName(this.modelNameOf([{ ...c, currentValue: o.value }])) === this.model) : [];
       opt = { ...c, currentValue: hits.length === 1 ? hits[0].value : null }; cached = true;
     }
-    const store = storeNow(), list = flatOptions(opt);
+    const list = flatOptions(opt);
     const own = list.map(o => this.ownModel(o, store));
     const cur = list.find(o => o.value === opt.currentValue);
     return { current: opt.currentValue, label: cur ? this.cleanName(cur.name) : this.model, groups: splitGroups(store, this.constructor.group, own), cached, ...this.optViews() };
@@ -488,6 +496,15 @@ export class AcpRunner {
     const name = this.cleanName(hit.name || value);
     this.log?.(this.agent.name + ' model', this.sid.slice(0, 16), '→', name);
     return name;
+  }
+  // 一个进程只能用一家供应商（一个模型）的 agent 换走法：记进 route 文件、关掉进程（所有会话一起换），下次接上时按新走法起。
+  // share：所有会话共用的是什么（报错里说）
+  reroute(file, route, logLine, share) {
+    const C = this.constructor;
+    if ([...C.runners.values()].some(r => r !== this && r.busy)) throw new Error('有别的 ' + C.label + ' 会话正在回复，等它结束再换（所有 ' + C.label + ' 会话共用' + share + '）');
+    writeJsonAtomic(file, route);
+    this.log?.(this.agent.name + ' route →', logLine);
+    this.agent.stop();
   }
 
   emit(ev) {
@@ -831,4 +848,140 @@ export class AcpRunner {
     this.runners.set(id, runner);
     return runner;
   }
+}
+
+// ---------- 历史靠 session/load 重放的会话 ----------
+// 接上时 agent 把整段历史用 session/update 重放一遍，收下来记在 items 里，之后的新消息也记进去。
+// 子类可以覆盖：sessionInfo()（列表里那一行：目录、名字、模型；没有返回 null）、cleanUser(text)（去掉 agent 塞进用户消息的提示块）、
+// afterReplay()（重放不带时间：从记录文件对回去；不重放的从文件转）
+export class AcpLoadRunner extends AcpRunner {
+  static ctxFromUsage = true; static titleFromAgent = true;
+  constructor(id, opts) { super(id, opts); this.items = []; }
+  get openMethod() { return 'session/load'; }
+  sessionInfo() { return null; }
+  cleanUser(text) { return text; }
+  afterReplay() {}
+
+  async prepareAttach() {
+    const s = await this.sessionInfo();
+    if (s) {
+      if (!this.cwd) { this.cwd = s.cwd; this.info.cwd = s.cwd; }
+      this.title = localNames.get(this.id) || this.title || s.title;
+      this.model ||= s.model || '';
+    }
+    this.items = []; this.tools.clear(); this.replayOpen = null;
+    this.replaying = true;
+  }
+  attachDone(ok) {
+    this.replaying = false; this.replayOpen = null;
+    if (!ok) return;
+    for (const it of this.items) if (it.kind === 'user') it.text = this.cleanUser(it.text);
+    this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
+    this.afterReplay();
+    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || this.constructor.label + ' 会话';
+  }
+  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+}
+
+// ---------- 各家适配共用的小工具 ----------
+export const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
+export const notFound = () => Object.assign(new Error('找不到这个会话'), { code: 404 });
+export const busyRename = () => Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
+
+// 会话列表里的一行（和 Claude 会话同一种格式）
+export const listItem = (claw, id, busy, { title, cwd, branch = '', updated, held = null }) => ({
+  id, title, cwd, cwdShort: tilde(cwd || ''), branch,
+  lastModified: updated,
+  openInWeb: false, busyElsewhere: held, unread: 0, webActive: 0,
+  claw, busy: busy(id),
+});
+
+// 没有改名接口的 agent：改名记在 claclaw 这边（列表、标题都用它；agent 自己起的标题不再覆盖）
+export const localRename = (info, runners) => (id, title) => {
+  if (!info(id)) throw notFound();
+  localNames.set(id, title);
+  const r = runners.get(id); if (r) r.title = title;
+  return title;
+};
+
+// ---- 读会话记录文件 ----
+export const readDir = d => { try { return fs.readdirSync(d); } catch { return []; } };
+// 一行一条 JSON 的记录：不大就整个读，大的只读头尾各 512KB（第一句在头部，名字、最后的模型、用量在尾部）
+const READ_ALL = 4 << 20, PART = 512 << 10;
+export function readLines(f, size) {
+  if (size <= READ_ALL) return fs.readFileSync(f, 'utf8').split('\n');
+  const fd = fs.openSync(f, 'r');
+  try {
+    const head = Buffer.alloc(PART), tail = Buffer.alloc(PART);
+    fs.readSync(fd, head, 0, PART, 0); fs.readSync(fd, tail, 0, PART, size - PART);
+    return [...head.toString('utf8').split('\n').slice(0, -1), ...tail.toString('utf8').split('\n').slice(1)];
+  } finally { fs.closeSync(fd); }
+}
+// 记录文件里一行行过（只解析含关键字的行，大文件也快）
+export function eachRec(f, keys, fn) {
+  let txt; try { txt = fs.readFileSync(f, 'utf8'); } catch { return; }
+  for (const l of txt.split('\n')) { if (!l || !keys.some(k => l.includes(k))) continue; let o; try { o = JSON.parse(l); } catch { continue; } fn(o); }
+}
+// 一批会话文件 → 列表的行（parse(f, st) 解析一个文件，不算就返回 null）。
+// 每个文件按大小 + 修改时间缓存（cache：文件 → { key, row }），没变不重读；不在了的从缓存里删掉。新的在前
+export function fileRows(cache, files, parse) {
+  const rows = [], seen = new Set();
+  for (const f of files) {
+    let st; try { st = fs.statSync(f); } catch { continue; }
+    if (!st.isFile() || !st.size) continue;
+    seen.add(f);
+    const key = st.size + ':' + st.mtimeMs;
+    let c = cache.get(f);
+    if (c?.key !== key) { let row = null; try { row = parse(f, st); } catch {} c = { key, row }; cache.set(f, c); }
+    if (c.row) rows.push(c.row);
+  }
+  for (const f of cache.keys()) if (!seen.has(f)) cache.delete(f);
+  return rows.sort((a, b) => b.updated - a.updated);
+}
+
+// ---- 模型库 → agent 的配置 ----
+// 先写临时文件再改名：写到一半出错 / 被杀时不会只剩半截
+export function writeFileAtomic(file, text, mode = 0o600) {
+  const tmp = file + '.claclaw-' + process.pid;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(tmp, text, { mode }); fs.chmodSync(tmp, mode);
+    fs.renameSync(tmp, file);
+  } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; }
+}
+// 模型库写进 agent 自己的 JSON 配置（merge 只换 claclaw 的条目，用户自己的原样保留；key 会进文件，所以 600）：
+// 内容没变就不写；读不懂（手写坏了 / 带注释）就不动它，只记日志。count：模型库给了几个模型
+export function syncJsonConfig(file, { tag, count, merge, log }) {
+  const what = tag + ' ' + path.basename(file);
+  let text = '', cur = {};
+  try { text = fs.readFileSync(file, 'utf8'); } catch {}
+  if (text.trim()) { try { cur = JSON.parse(text); } catch { log?.(what + ' 不是标准 JSON，没有写入模型库'); return; } }
+  if (!text.trim() && !count) return;
+  const next = merge(cur);
+  if (JSON.stringify(next) === JSON.stringify(cur)) return;
+  try { writeFileAtomic(file, JSON.stringify(next, null, 2) + '\n'); log?.(what + ' synced', count, 'models'); }
+  catch (e) { log?.(what + ' write failed', e.message); }
+}
+// 进程签名：注入的环境变量（或模型库的样子）变了，进程就要重启
+export const envSig = x => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex').slice(0, 16);
+export const v1 = u => String(u).replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
+// 模型选择里模型库那一组（libModels 的结果）；note(x)：跟在说明后面的提示
+export const libGroup = (lib, note) => lib.length ? [{ name: STORE_GROUP, items: lib.map(x => ({ value: x.value, label: x.m.name || x.m.id, sub: x.p.name + ' · ' + x.m.id + note(x) })) }] : [];
+
+// ---- 删除：放进 claclaw 回收站 ----
+// 回收站里的文件名：<时间>_<claw>_<会话 id><后缀>
+export function trashPath(trashDir, claw, sid, ext = '') {
+  fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
+  return path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_' + claw + '_' + sid + ext);
+}
+// 会话记录（s.file，或 from 给的目录）复制一份 / 挪进回收站（move），旁边 .origin.json 记来历
+export function toTrash(trashDir, claw, id, s, { from = s.file, ext = '', move = false } = {}) {
+  const dest = trashPath(trashDir, claw, s.id, ext);
+  if (move) fs.renameSync(from, dest); else fs.copyFileSync(from, dest);
+  fs.writeFileSync(dest + '.origin.json', JSON.stringify({ sessionId: id, from, cwd: s.cwd, deletedAt: new Date().toISOString() }, null, 2));
+  return dest;
+}
+// 要动的文件得在 agent 自己的会话目录里（防软链接指到别处）
+export function assertInside(file, root) {
+  if (!fs.realpathSync(file).startsWith(fs.realpathSync(root) + path.sep)) throw new Error('会话目录不对');
 }

@@ -14,13 +14,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { storeNow, kimiInject, kimiConfigMerge } from './modelpick.mjs';
-import { AcpAgent, AcpRunner, toolTarget, stampTimes } from './acp.mjs';
-import { HOME, tilde, oneLine, tms, findBin, runBin as run } from './util.mjs';
+import { AcpAgent, AcpLoadRunner, commandsWith, toolTarget, stampTimes, validSid, listItem, readDir, eachRec, writeFileAtomic, trashPath, assertInside, busyRename } from './acp.mjs';
+import { HOME, oneLine, tms, findBin, runBin as run } from './util.mjs';
 
 export const KM_PREFIX = 'km:';
 export const isKm = id => typeof id === 'string' && id.startsWith(KM_PREFIX);
 const sidOf = id => id.slice(KM_PREFIX.length);
-const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 
 export const kmBin = () => findBin('kimi', [process.env.KIMI_CODE_HOME && path.join(process.env.KIMI_CODE_HOME, 'bin'), path.join(HOME, '.kimi-code', 'bin')]);
 export const kmInstalled = () => !!kmBin();
@@ -47,15 +46,11 @@ const KHOME = process.env.KIMI_CODE_HOME || path.join(HOME, '.kimi-code');
 function listSig() {
   const st = f => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
   const root = path.join(KHOME, 'sessions'), parts = [st(path.join(KHOME, 'session_index.jsonl')), st(root)];
-  let wds = [];
-  try { wds = fs.readdirSync(root); } catch {}
-  for (const wd of wds) {
+  for (const wd of readDir(root)) {
     if (wd === '.index-cache') continue;   // kimi 自己列会话时会重写它，算进去签名就永远对不上
     const d = path.join(root, wd);
     parts.push(wd, st(d));
-    let ss = [];
-    try { ss = fs.readdirSync(d); } catch {}
-    for (const x of ss) parts.push(x, st(path.join(d, x, 'state.json')));
+    for (const x of readDir(d)) parts.push(x, st(path.join(d, x, 'state.json')));
   }
   return parts.join(',');
 }
@@ -75,27 +70,13 @@ async function listRows() {
 const dropListCache = () => { listCache.sig = ''; };
 
 export async function kmSessionList({ busy = () => false } = {}) {
-  const rows = await listRows();
-  return rows.map(s => ({
-    id: KM_PREFIX + s.id,
-    title: s.title || 'Kimi 会话',
-    cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
-    lastModified: s.updated,
-    openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'kimi', busy: busy(KM_PREFIX + s.id),
-  }));
+  return (await listRows()).map(s => listItem('kimi', KM_PREFIX + s.id, busy, { ...s, title: s.title || 'Kimi 会话', branch: s.model }));
 }
 // 消息时间（重放历史不带时间）：sessions/<工作区>/<会话>/agents/main/wire.jsonl 里
 // turn.prompt / turn.steer（origin 是 user 的才是用户打的字）、content.part 的文字（回复）
-// 记录文件里一行行过（只解析含关键字的行，大文件也快）
-function eachRec(f, keys, fn) {
-  let txt; try { txt = fs.readFileSync(f, 'utf8'); } catch { return; }
-  for (const l of txt.split('\n')) { if (!l || !keys.some(k => l.includes(k))) continue; let o; try { o = JSON.parse(l); } catch { continue; } fn(o); }
-}
 function wireOf(sid) {
   const root = path.join(KHOME, 'sessions');
-  let dirs = []; try { dirs = fs.readdirSync(root); } catch {}
-  for (const d of dirs) for (const s of [sid, 'session_' + sid]) { const f = path.join(root, d, s, 'agents', 'main', 'wire.jsonl'); if (fs.existsSync(f)) return f; }
+  for (const d of readDir(root)) for (const s of [sid, 'session_' + sid]) { const f = path.join(root, d, s, 'agents', 'main', 'wire.jsonl'); if (fs.existsSync(f)) return f; }
   return '';
 }
 function timesOf(sid) {
@@ -120,15 +101,10 @@ function syncConfig(log) {
   try { cur = fs.readFileSync(CONFIG, 'utf8'); } catch {}
   const next = kimiConfigMerge(cur, inj);
   if (next !== cur && (cur || inj.tables)) {
-    // 先写临时文件再改名：写到一半出错 / 被杀时 config.toml 不会只剩半截；权限沿用原文件的（没有就 600）
-    const tmp = CONFIG + '.claclaw-' + process.pid;
-    try {
-      fs.mkdirSync(path.dirname(CONFIG), { recursive: true });
-      let mode = 0o600; try { mode = fs.statSync(CONFIG).mode & 0o777; } catch {}
-      fs.writeFileSync(tmp, next, { mode }); fs.chmodSync(tmp, mode);
-      fs.renameSync(tmp, CONFIG);
-      log?.('kimi config synced', inj.aliases.length, 'models');
-    } catch (e) { try { fs.unlinkSync(tmp); } catch {} log?.('kimi config write failed', e.message); }
+    // 权限沿用原文件的（没有就 600）
+    let mode = 0o600; try { mode = fs.statSync(CONFIG).mode & 0o777; } catch {}
+    try { writeFileAtomic(CONFIG, next, mode); log?.('kimi config synced', inj.aliases.length, 'models'); }
+    catch (e) { log?.('kimi config write failed', e.message); }
   }
   return inj;
 }
@@ -147,12 +123,6 @@ export function kmModelsChanged(log) {
 export const kmShutdown = () => agent.stop();
 export const kmAcpRunning = () => agent.running;
 
-export const COMMANDS = [
-  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
-  { name: 'thinking', description: '思考开关 / 强度（不带参数：列出可选项）', hint: '<选项>', builtin: true },
-  { name: 'mode', description: '审批模式（不带参数：列出可选项）', hint: '<模式>', builtin: true },
-];
-
 // kimi 的工具参数是流式的：in_progress 的 content 里是正在拼的参数 JSON，拼完整了才解析得出来
 const argsOf = u => { const t = u.content?.[0]?.content?.text; if (typeof t !== 'string' || t[0] !== '{') return null; try { return JSON.parse(t); } catch { return null; } };
 const stripReminder = t => String(t || '')
@@ -161,38 +131,24 @@ const stripReminder = t => String(t || '')
   .replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '\n').trim();
 
 // ---------- 打开的 Kimi 会话 ----------
-// 历史靠 session/load 重放：收下来记在 items 里，之后的新消息也记进去
 export const kmRunners = new Map();
 
-export class KmRunner extends AcpRunner {
-  static agent = agent; static prefix = KM_PREFIX; static runners = kmRunners;
-  static label = 'Kimi'; static group = 'Kimi'; static permPrefix = 'km-'; static commands = COMMANDS;
+export class KmRunner extends AcpLoadRunner {
+  static agent = agent; static prefix = KM_PREFIX; static runners = kmRunners; static label = 'Kimi';
+  static commands = commandsWith('审批模式', { name: 'thinking', description: '思考开关 / 强度（不带参数：列出可选项）', hint: '<选项>', builtin: true });
   static cfgIds = { model: 'model', thinking: 'thinking', mode: 'mode' };
   static cfgNames = { model: '模型', thinking: '思考', mode: '模式' };
-  static waitArgs = true; static ctxFromUsage = true; static titleFromAgent = true;
+  static waitArgs = true;
   static lockedRe = /in use by another/i;   // 刚关掉就重开：kimi 还没放开会话锁
   static onCreated() { dropListCache(); }
 
-  constructor(id, opts) { super(id, opts); this.items = []; }
-  get openMethod() { return 'session/load'; }
   get imageError() { return 'kimi 没有声明图片输入'; }
   ctxNow() { return this.ctx == null ? undefined : this.ctx; }
   streamedArgs(u) { return argsOf(u); }
 
-  async prepareAttach() {
-    if (!this.cwd) { const s = await kmInfo(this.id).catch(() => null); if (s) { this.cwd = s.cwd; this.info.cwd = s.cwd; this.title = this.title || s.title; this.model = this.model || s.model; } }
-    this.items = []; this.tools.clear(); this.replayOpen = null;
-    this.replaying = true;
-  }
-  attachDone(ok) {
-    this.replaying = false; this.replayOpen = null;
-    if (!ok) return;
-    for (const it of this.items) if (it.kind === 'user') it.text = stripReminder(it.text);
-    this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    stampTimes(this.items, timesOf(sidOf(this.id)));
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Kimi 会话';
-  }
-  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+  sessionInfo() { return this.cwd ? null : kmInfo(this.id).catch(() => null); }
+  cleanUser(text) { return stripReminder(text); }
+  afterReplay() { stampTimes(this.items, timesOf(this.sid)); }
   afterPrompt() { dropListCache(); }
 
   // 确认条：参数还没解析出来时，用 kimi 给的提示文字「Requesting approval to Running: echo hi」
@@ -218,8 +174,7 @@ export const kmNewSession = (cwd, opts) => KmRunner.create(cwd, opts);
 export async function kmDelete(id, trashDir, log) {
   const sid = sidOf(id);
   if (!validSid(sid) || !(await kmInfo(id))) throw new Error('找不到这个会话');
-  fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
-  const file = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_kimi_' + sid + '.zip');
+  const file = trashPath(trashDir, 'kimi', sid, '.zip');
   await runBin(['export', sid, '-o', file, '-y', '--no-include-global-log'], 120000);
   if (!fs.existsSync(file)) throw new Error('导出失败，未删除');
   await agent.use(log);
@@ -234,10 +189,9 @@ export async function kmRename(id, title, log) {
   const s = validSid(sid) ? await kmInfo(id).catch(() => null) : null;
   if (!s?.dir) throw new Error('找不到这个会话');
   const file = path.join(s.dir, 'state.json');
-  const root = path.join(KHOME, 'sessions');
-  if (!fs.realpathSync(file).startsWith(fs.realpathSync(root) + path.sep)) throw new Error('会话目录不对');
+  assertInside(file, path.join(KHOME, 'sessions'));
   const r = kmRunners.get(id);
-  if (r?.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
+  if (r?.busy) throw busyRename();
   if (r?.attached || agent.owners.has(sid)) {
     // 先让 kimi 放下这个会话，免得它拿内存里的旧标题写回去；runner 留着（网页里照常显示），下次发消息再 session/load 接上
     if (r) r.attached = false;
@@ -249,10 +203,7 @@ export async function kmRename(id, title, log) {
   await agent.waitClosing(sid);
   const meta = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (meta?.id && meta.id !== sid) throw new Error('会话记录对不上');
-  const next = { ...meta, title, titleKind: 'custom', isCustomTitle: true };
-  const tmp = file + '.claclaw-' + process.pid;
-  fs.writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
-  fs.renameSync(tmp, file);
+  writeFileAtomic(file, JSON.stringify({ ...meta, title, titleKind: 'custom', isCustomTitle: true }));
   dropListCache();
   log?.('kimi renamed', sid.slice(0, 16));
   return title;

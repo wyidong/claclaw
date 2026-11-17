@@ -10,8 +10,8 @@
 // 这台电脑上登不了 Qoder，这一块没跑过真机：记录格式按 Qoder 源码里的路径（projects/<目录>/<id>.jsonl）推断
 import fs from 'node:fs';
 import path from 'node:path';
-import { AcpAgent, AcpRunner, localNames, stampTimes, stripTags } from './acp.mjs';
-import { HOME, tilde, oneLine, findBin } from './util.mjs';
+import { AcpAgent, AcpLoadRunner, localNames, stripTags, listItem, localRename, syncJsonConfig, notFound, assertInside, toTrash } from './acp.mjs';
+import { HOME, findBin } from './util.mjs';
 import { storeNow, qoderInject, qoderSettingsMerge } from './modelpick.mjs';
 import { makeStore } from './cclike.mjs';
 
@@ -27,36 +27,17 @@ const store = makeStore({ root: QHOME, skip: n => /^agent-/.test(n) });
 export const qdBin = () => findBin('qodercli', [path.join(HOME, '.qoder', 'bin', 'qodercli')]);
 export const qdInstalled = () => !!qdBin() || fs.existsSync(store.PROJECTS);
 
-export function qdSessionList({ busy = () => false } = {}) {
-  return store.listRows().map(s => ({
-    id: QD_PREFIX + s.id,
-    title: localNames.get(QD_PREFIX + s.id) || s.title || 'Qoder 会话',
-    cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
-    lastModified: s.updated,
-    openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'qoder', busy: busy(QD_PREFIX + s.id),
-  }));
-}
+export const qdSessionList = ({ busy = () => false } = {}) => store.listRows().map(s => {
+  const id = QD_PREFIX + s.id;
+  return listItem('qoder', id, busy, { ...s, title: localNames.get(id) || s.title || 'Qoder 会话', branch: s.model });
+});
 export const qdInfo = id => isQd(id) ? store.info(sidOf(id)) : null;
 export const qdExists = id => !!qdInfo(id);
 
 // ---------- 模型库 → settings.json 的 customModels ----------
 function syncSettings(log) {
   const inj = qoderInject(storeNow());
-  let text = '', cur = {};
-  try { text = fs.readFileSync(SETTINGS, 'utf8'); } catch {}
-  if (text.trim()) { try { cur = JSON.parse(text); } catch { log?.('qoder settings.json 不是标准 JSON，没有写入模型库'); return inj; } }
-  if (!text.trim() && !inj.list.length) return inj;
-  const next = qoderSettingsMerge(cur, inj);
-  if (JSON.stringify(next) !== JSON.stringify(cur)) {
-    try {
-      fs.mkdirSync(QHOME, { recursive: true });
-      const tmp = SETTINGS + '.claclaw-' + process.pid;
-      fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
-      fs.renameSync(tmp, SETTINGS);
-      log?.('qoder settings synced', inj.list.length, 'models');
-    } catch (e) { log?.('qoder settings write failed', e.message); }
-  }
+  syncJsonConfig(SETTINGS, { tag: 'qoder', count: inj.list.length, merge: cur => qoderSettingsMerge(cur, inj), log });
   return inj;
 }
 
@@ -72,41 +53,15 @@ export function qdModelsChanged(log) { if (qdBin()) agent.modelsChanged(syncSett
 export const qdShutdown = () => agent.stop();
 export const qdAcpRunning = () => agent.running;
 
-export const COMMANDS = [
-  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
-  { name: 'mode', description: '权限模式（不带参数：列出可选项）', hint: '<模式>', builtin: true },
-];
-
 // ---------- 打开的 Qoder 会话 ----------
 export const qdRunners = new Map();
 
-export class QdRunner extends AcpRunner {
-  static agent = agent; static prefix = QD_PREFIX; static runners = qdRunners;
-  static label = 'Qoder'; static group = 'Qoder'; static permPrefix = 'qd-'; static commands = COMMANDS;
-  static cfgIds = { model: 'model', mode: 'mode' };
-  static cfgNames = { model: '模型', mode: '模式' };
-  static ctxFromUsage = true; static titleFromAgent = true;
+export class QdRunner extends AcpLoadRunner {
+  static agent = agent; static prefix = QD_PREFIX; static runners = qdRunners; static label = 'Qoder';
 
-  constructor(id, opts) { super(id, opts); this.items = []; }
-  get openMethod() { return 'session/load'; }
-
-  async prepareAttach() {
-    const s = qdInfo(this.id);
-    if (s) { if (!this.cwd) { this.cwd = s.cwd; this.info.cwd = s.cwd; } this.title = localNames.get(this.id) || this.title || s.title; this.model = this.model || s.model; }
-    this.items = []; this.tools.clear(); this.replayOpen = null;
-    this.replaying = true;
-  }
-  attachDone(ok) {
-    this.replaying = false; this.replayOpen = null;
-    if (!ok) return;
-    const f = qdInfo(this.id)?.file;
-    for (const it of this.items) if (it.kind === 'user') it.text = stripTags(it.text);
-    this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    if (!this.items.length && f) this.items = store.historyOf(f);
-    else if (f) stampTimes(this.items, store.timesOf(f));
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Qoder 会话';
-  }
-  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+  sessionInfo() { return qdInfo(this.id); }
+  cleanUser(text) { return stripTags(text); }
+  afterReplay() { this.items = store.afterReplay(this.items, qdInfo(this.id)?.file); }
 
   // 模型库写进去的条目 key 形如 claclaw-<供应商 id>/<模型 id>；按它对回模型库
   ownModel(o, store) {
@@ -121,12 +76,9 @@ export const qdNewSession = (cwd, opts) => QdRunner.create(cwd, opts);
 // 删除：先把记录文件复制一份到回收站，再让 Qoder 自己删（ACP session/delete）；它删不了就自己挪走文件
 export async function qdDelete(id, trashDir, log) {
   const s = qdInfo(id);
-  if (!s?.file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  if (!fs.realpathSync(s.file).startsWith(fs.realpathSync(store.PROJECTS) + path.sep)) throw new Error('会话目录不对');
-  fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
-  const dest = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_qoder_' + s.id + '.jsonl');
-  fs.copyFileSync(s.file, dest);
-  fs.writeFileSync(dest + '.origin.json', JSON.stringify({ sessionId: id, from: s.file, cwd: s.cwd, deletedAt: new Date().toISOString() }, null, 2));
+  if (!s?.file) throw notFound();
+  assertInside(s.file, store.PROJECTS);
+  const dest = toTrash(trashDir, 'qoder', id, s, { ext: '.jsonl' });
   try {
     await agent.use(log);
     try { await agent.rpc('session/delete', { sessionId: s.id, cwd: s.cwd || HOME }); } finally { agent.idleCheck(); }
@@ -135,9 +87,4 @@ export async function qdDelete(id, trashDir, log) {
   store.fileCache.delete(s.file); localNames.set(id, '');
   return dest;
 }
-export function qdRename(id, title) {
-  if (!qdInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  localNames.set(id, title);
-  const r = qdRunners.get(id); if (r) r.title = title;
-  return title;
-}
+export const qdRename = localRename(qdInfo, qdRunners);

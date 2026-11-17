@@ -10,8 +10,8 @@
 // 这台电脑上登不了 CodeBuddy，这一块没跑过真机：记录格式按 CodeBuddy 源码里的字段名（session_id / cwd / message）推断
 import fs from 'node:fs';
 import path from 'node:path';
-import { AcpAgent, AcpRunner, localNames, stampTimes, stripTags } from './acp.mjs';
-import { HOME, tilde, oneLine, findBin } from './util.mjs';
+import { AcpAgent, AcpLoadRunner, localNames, stripTags, listItem, localRename, syncJsonConfig, notFound, assertInside, toTrash } from './acp.mjs';
+import { HOME, findBin } from './util.mjs';
 import { storeNow, codebuddyInject, codebuddyMerge } from './modelpick.mjs';
 import { makeStore } from './cclike.mjs';
 
@@ -26,37 +26,17 @@ const store = makeStore({ root: CHOME });
 export const cbBin = () => findBin('codebuddy');
 export const cbInstalled = () => !!cbBin() || fs.existsSync(store.PROJECTS);
 
-export function cbSessionList({ busy = () => false } = {}) {
-  return store.listRows().map(s => ({
-    id: CB_PREFIX + s.id,
-    title: localNames.get(CB_PREFIX + s.id) || s.title || 'CodeBuddy 会话',
-    cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
-    lastModified: s.updated,
-    openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'codebuddy', busy: busy(CB_PREFIX + s.id),
-  }));
-}
+export const cbSessionList = ({ busy = () => false } = {}) => store.listRows().map(s => {
+  const id = CB_PREFIX + s.id;
+  return listItem('codebuddy', id, busy, { ...s, title: localNames.get(id) || s.title || 'CodeBuddy 会话', branch: s.model });
+});
 export const cbInfo = id => isCb(id) ? store.info(sidOf(id)) : null;
 export const cbExists = id => !!cbInfo(id);
 
 // ---------- 模型库 → models.json ----------
-// 内容没变就不写；models.json 读不懂就不动它，只记日志
 function syncModels(log) {
   const inj = codebuddyInject(storeNow());
-  let text = '', cur = {};
-  try { text = fs.readFileSync(MODELS, 'utf8'); } catch {}
-  if (text.trim()) { try { cur = JSON.parse(text); } catch { log?.('codebuddy models.json 不是标准 JSON，没有写入模型库'); return inj; } }
-  if (!text.trim() && !inj.models.length) return inj;
-  const next = codebuddyMerge(cur, inj);
-  if (JSON.stringify(next) !== JSON.stringify(cur)) {
-    try {
-      fs.mkdirSync(CHOME, { recursive: true });
-      const tmp = MODELS + '.claclaw-' + process.pid;
-      fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
-      fs.renameSync(tmp, MODELS);
-      log?.('codebuddy models.json synced', inj.models.length, 'models');
-    } catch (e) { log?.('codebuddy models.json write failed', e.message); }
-  }
+  syncJsonConfig(MODELS, { tag: 'codebuddy', count: inj.models.length, merge: cur => codebuddyMerge(cur, inj), log });
   return inj;
 }
 
@@ -72,41 +52,15 @@ export function cbModelsChanged(log) { if (cbBin()) agent.modelsChanged(syncMode
 export const cbShutdown = () => agent.stop();
 export const cbAcpRunning = () => agent.running;
 
-export const COMMANDS = [
-  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
-  { name: 'mode', description: '权限模式（不带参数：列出可选项）', hint: '<模式>', builtin: true },
-];
-
 // ---------- 打开的 CodeBuddy 会话 ----------
 export const cbRunners = new Map();
 
-export class CbRunner extends AcpRunner {
-  static agent = agent; static prefix = CB_PREFIX; static runners = cbRunners;
-  static label = 'CodeBuddy'; static group = 'CodeBuddy'; static permPrefix = 'cb-'; static commands = COMMANDS;
-  static cfgIds = { model: 'model', mode: 'mode' };
-  static cfgNames = { model: '模型', mode: '模式' };
-  static ctxFromUsage = true; static titleFromAgent = true;
+export class CbRunner extends AcpLoadRunner {
+  static agent = agent; static prefix = CB_PREFIX; static runners = cbRunners; static label = 'CodeBuddy';
 
-  constructor(id, opts) { super(id, opts); this.items = []; }
-  get openMethod() { return 'session/load'; }
-
-  async prepareAttach() {
-    const s = cbInfo(this.id);
-    if (s) { if (!this.cwd) { this.cwd = s.cwd; this.info.cwd = s.cwd; } this.title = localNames.get(this.id) || this.title || s.title; this.model = this.model || s.model; }
-    this.items = []; this.tools.clear(); this.replayOpen = null;
-    this.replaying = true;
-  }
-  attachDone(ok) {
-    this.replaying = false; this.replayOpen = null;
-    if (!ok) return;
-    const f = cbInfo(this.id)?.file;
-    for (const it of this.items) if (it.kind === 'user') it.text = stripTags(it.text);
-    this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    if (!this.items.length && f) this.items = store.historyOf(f);   // agent 没重放：从记录文件转
-    else if (f) stampTimes(this.items, store.timesOf(f));
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'CodeBuddy 会话';
-  }
-  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+  sessionInfo() { return cbInfo(this.id); }
+  cleanUser(text) { return stripTags(text); }
+  afterReplay() { this.items = store.afterReplay(this.items, cbInfo(this.id)?.file); }
 
   // 模型选项的 value 形如 custom-local:<模型 ID>（models.json 里的）或内置模型名；按模型 ID 对回模型库
   ownModel(o, store) {
@@ -121,21 +75,12 @@ export const cbNewSession = (cwd, opts) => CbRunner.create(cwd, opts);
 // 删除：会话文件（和它的子代理目录）挪进回收站
 export function cbDelete(id, trashDir) {
   const s = cbInfo(id);
-  if (!s?.file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  if (!fs.realpathSync(s.file).startsWith(fs.realpathSync(store.PROJECTS) + path.sep)) throw new Error('会话目录不对');
-  fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const dest = path.join(trashDir, stamp + '_codebuddy_' + s.id + '.jsonl');
-  fs.renameSync(s.file, dest);
+  if (!s?.file) throw notFound();
+  assertInside(s.file, store.PROJECTS);
+  const dest = toTrash(trashDir, 'codebuddy', id, s, { ext: '.jsonl', move: true });
   const sub = s.file.slice(0, -'.jsonl'.length);
-  if (fs.existsSync(sub)) fs.renameSync(sub, path.join(trashDir, stamp + '_codebuddy_' + s.id));
-  fs.writeFileSync(dest + '.origin.json', JSON.stringify({ sessionId: id, from: s.file, cwd: s.cwd, deletedAt: new Date().toISOString() }, null, 2));
+  if (fs.existsSync(sub)) fs.renameSync(sub, dest.slice(0, -'.jsonl'.length));
   store.fileCache.delete(s.file); localNames.set(id, '');
   return dest;
 }
-export function cbRename(id, title) {
-  if (!cbInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  localNames.set(id, title);
-  const r = cbRunners.get(id); if (r) r.title = title;
-  return title;
-}
+export const cbRename = localRename(cbInfo, cbRunners);
