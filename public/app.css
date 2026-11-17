@@ -948,6 +948,7 @@ html:not(.peer-on) #sPeer{display:none!important}   /* 没用过协同不显示�
 #delDlg,#keyDlg,#crDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #delDlg.on,#keyDlg.on,#crDlg.on{display:flex}
 #crIn{width:100%;box-sizing:border-box;min-height:180px;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);resize:vertical}
+#crDlg .cr-warn{color:var(--warn);font-size:13px}   /* 加入 = 在本机运行这台中继给的程序 */
 #newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #newDlg.on{display:flex}
 #newDlg,#delDlg,#keyDlg,#crDlg{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-items:flex-start}#newDlg>.dlg,#delDlg>.dlg,#keyDlg>.dlg,#crDlg>.dlg{margin:auto 0}   /* 弹框比屏幕高（手机键盘弹起、选项多）时能上下滚，不会把上面的「目录」挤出屏幕够不着；放得下时照样居中 */

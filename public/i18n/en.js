@@ -741,6 +741,7 @@ var I18N={dict:{
 "粘贴 clarelay 设备邀请码（clarelay-device1. 开头）":"Paste the clarelay device invite (starts with clarelay-device1.)",
 "已加入，等管理员批准或马上就连上":"Joined — connecting, or waiting for admin approval",
 "电脑端还没下载（连接时自动下载）":"Client not downloaded yet (downloads when connecting)",
+"加入后会从这台中继下载它的电脑端程序在本机运行，只加入你信任的中继。":"Joining downloads this relay's client program and runs it on this computer. Only join relays you trust.",
 "已经是最新":"Already up to date",
 "正在连接":"Connecting",
 "已移除":"Removed",
