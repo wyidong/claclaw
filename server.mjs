@@ -202,7 +202,7 @@ CHILD_ENV.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION = 'true';
 // ---------- Claude 长期令牌（`claude setup-token` 生成，一年有效）----------
 // 多个会话各自刷新 claude.ai 的 OAuth，会把刷新令牌换坏（「OAuth session expired and could not be refreshed」）。
 // 配了长期令牌，claclaw 起的所有 Claude 进程（会话、协同审查）都用它，不再刷新；没配照旧用 claude.ai 登录。
-// 只存在 data/claude-token.json（600）：不写日志、不返回网页（只给后 4 位）、不经协同发出；登录了 claclaw 的网页都能设置
+// 只存在 data/claude-token.json（600）：不写日志、不经协同发出；网页平时只拿后 4 位，完整的要再输一次 claclaw 密码才给（复制用，走 /api/models/key）；登录了 claclaw 的网页都能设置
 const CLAUDE_TOKEN_FILE = path.join(DATA, 'claude-token.json');
 const MODELS_FILE = path.join(DATA, 'models.json');   // 模型库（modelstore.mjs）
 function claudeToken() {
@@ -3153,7 +3153,8 @@ const handler = async (req, res) => {
       }
       clearFails(ip);
       let key;
-      if (body.id === 'tts:volc') { key = volcKey(); if (!key) return sendJson(res, 400, { error: '还没填豆包语音的 Key' }); }   // 语音管理里豆包的 Key，同一套核对
+      if (body.id === 'claude:token') { key = claudeToken()?.token; if (!key) return sendJson(res, 400, { error: '还没配置 Claude 长期令牌' }); }   // Claude 长期令牌：同一套核对
+      else if (body.id === 'tts:volc') { key = volcKey(); if (!key) return sendJson(res, 400, { error: '还没填豆包语音的 Key' }); }   // 语音管理里豆包的 Key，同一套核对
       else try { key = revealKey(loadStore(MODELS_FILE), String(body.id || '')); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
       log('models key shown', String(body.id).slice(0, 40), 'to', ip, 'via', via);
       return sendJson(res, 200, { key });

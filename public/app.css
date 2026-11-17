@@ -1510,6 +1510,8 @@ select.pe-in{text-align-last:right}
 .lg-btn{display:inline-block;padding:9px 16px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
 .lg-btn.ghost{background:var(--bg);color:var(--ink);border:var(--bw) solid var(--line)}
 .lg-code{font:700 28px/1.2 ui-monospace,Menlo,monospace;letter-spacing:2px;margin:8px 0;user-select:all;-webkit-user-select:all}
+.lg-code.lg-tokshow{font:400 13px/1.5 ui-monospace,Menlo,monospace;letter-spacing:0;word-break:break-all;padding:8px 10px;border-radius:8px;background:var(--code-bg)}   /* 复制不了时显示的完整令牌 */
+.lg-st .lg-copytok{padding:3px 12px;font-size:13px;margin-left:8px;vertical-align:baseline}
 .lg-st{margin-top:12px;color:var(--muted);font-size:13.5px;word-break:break-all;line-height:1.5}
 .lg-st.ok{color:var(--allow)}.lg-st.bad{color:#D33}
 .inst-bar{margin-top:14px;height:8px;border-radius:4px;background:var(--code-bg);overflow:hidden}

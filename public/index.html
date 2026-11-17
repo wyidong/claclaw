@@ -3271,7 +3271,8 @@ function mdlFetch(id){
   }).catch(function(e){if(mdlRemote&&mdlRemote.id===id){mdlRemote={id:id,err:'读取失败：'+e.message};mdlModelsUpd()}});
 }
 function mdlModelsUpd(){var p=mdlRemote&&mdlProv(mdlRemote.id),el=$('#mdModels');if(p&&el&&mdlSub==='p:'+p.id)el.innerHTML=mdlModelsHtml(p)}
-function mdlKeyUpd(){if(hostView==='voices'&&typeof renderVoices==='function'){renderVoices();return}var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
+function mdlKeyUpd(){if(!mdlKey&&$('#loginPane.on .lg-tokshow')&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok){openCtok(clawInfo.claude.login.ctok);return}   // 显示出来的令牌 1 分钟后藏起
+  if(mdlKey&&mdlKey.id==='claude:token'){if(mdlKey.show&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok)openCtok(clawInfo.claude.login.ctok,mdlKey.key);return}if(hostView==='voices'&&typeof renderVoices==='function'){renderVoices();return}var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
 function mdlRemember(id,k,show){clearTimeout(mdlKeyT);mdlKey={id:id,key:k,show:show};mdlKeyUpd();mdlKeyT=setTimeout(mdlForget,60000)}
 function mdlForget(){clearTimeout(mdlKeyT);if(!mdlKey)return;mdlKey=null;mdlKeyUpd()}
 function mdlCopyFail(){if(mdlKey){mdlKey.show=true;mdlKeyUpd()}toast('复制不了，已显示出来，长按选择')}
@@ -3334,9 +3335,9 @@ $('#clawModels').addEventListener('click',function(){openModels('claw')});
 var keyDlg=$('#keyDlg'),keyFor=null;   // {id,mode:'show'|'copy'}
 function keyAsk(id,mode){
   if(needAcct())return;
-  var p=id==='tts:volc'?{name:'豆包语音'}:mdlProv(id);if(!p)return;
+  var p=id==='tts:volc'?{name:'豆包语音'}:id==='claude:token'?{name:'Claude'}:mdlProv(id);if(!p)return;
   keyFor={id:id,mode:mode};
-  $('#keyTitle').textContent=(mode==='copy'?'复制':'查看')+' '+p.name+(p.label?' · '+p.label:'')+' 的 Key';
+  $('#keyTitle').textContent=id==='claude:token'?(mode==='copy'?'复制':'查看')+' Claude 长期令牌':(mode==='copy'?'复制':'查看')+' '+p.name+(p.label?' · '+p.label:'')+' 的 Key';
   $('#keyU').value='';$('#keyP').value='';$('#keyErr').textContent='';$('#keyGo').disabled=false;$('#keyGo').textContent=mode==='copy'?'复制':'查看';
   showDlg(keyDlg,true);($('#keyU').hidden?$('#keyP'):$('#keyU')).focus();
 }
@@ -6560,18 +6561,22 @@ $('#soundSel').addEventListener('change',function(e){
 // 设置页里的数据（提示音、会话设置、电脑合成的声音）进设置页再拉，启动时少几个请求
 function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
 // Claude 长期令牌：入口在 Claw 页 Claude Code 卡片右下角（Claude 不在 claclaw 里登录，只有这一项）；面板只显示「已配置 · 后 4 位 · 配置时间」；登录了 claclaw 的网页在哪都能设置 / 替换 / 清除
-function openCtok(j){
+// shown：复制不了时把完整令牌显示出来（输对密码后才有），长按选择
+function openCtok(j,shown){
   loginClaw='claude';
   var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>Claude 长期令牌</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
     +'<p class="lg-hint">所有 Claude 会话共用一个长期令牌（终端运行 claude setup-token 生成，一年有效）。</p>'
-    +'<div class="lg-st">'+esc(j.set?'已配置 · …'+j.last4+(j.at?' · '+new Date(j.at).toLocaleString('zh-CN',{hour12:false}):''):'未配置 · 用 claude.ai 登录')+'</div>'
+    +'<div class="lg-st">'+esc(j.set?'已配置 · …'+j.last4+(j.at?' · '+new Date(j.at).toLocaleString('zh-CN',{hour12:false}):''):'未配置 · 用 claude.ai 登录')+(j.set?' <button type="button" class="lg-btn ghost lg-copytok">复制</button>':'')+'</div>'
+    +(shown?'<div class="lg-code lg-tokshow">'+esc(shown)+'</div>':'')
     +'<div class="lg-key"><input type="password" class="lg-in" placeholder="sk-ant-oat01-…" autocomplete="off"><button type="button" class="lg-btn lg-save">'+(j.set?'换一个':'保存')+'</button></div>'
     +'<div class="lg-ft">'+(j.set?'<button type="button" class="lg-btn ghost lg-clear">清除长期令牌</button> ':'')+'<button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';
   p.classList.add('on');
   p.querySelector('.lg-x').addEventListener('click',closeLogin);p.querySelector('.lg-cancel').addEventListener('click',closeLogin);
   var inp=p.querySelector('.lg-in');
   if(inp){var go=function(){var v=inp.value.trim();if(v)postCtok({token:v},'正在验证令牌…')};p.querySelector('.lg-save').addEventListener('click',go);inp.addEventListener('keydown',function(e){if(e.key==='Enter')go()})}
+  // 复制：和模型库、语音的 Key 一样，先再输一次 claclaw 密码（密码框在这个面板下面一层，先关面板）
+  var cp=p.querySelector('.lg-copytok');if(cp)cp.addEventListener('click',function(){closeLogin();keyAsk('claude:token','copy')});
   var cl=p.querySelector('.lg-clear');if(cl)cl.addEventListener('click',function(){if(confirm('清除长期令牌？之后 Claude 会话恢复用 claude.ai 登录。'))postCtok({clear:true},'正在清除…')});
 }
 function postCtok(body,busy){
