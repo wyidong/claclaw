@@ -14,9 +14,17 @@ function npmCli() {
   return null;
 }
 
+// allowScripts：npm 从 11.19 起 install -g 默认不跑依赖的安装脚本（只给一句 warn），这里列出要放行的依赖：
+//   node-pty / koffi 挑预编译的原生模块，dsh-subprocess-local 给 node-pty 的 spawn-helper 补执行权限（Mac 上缺了跑不了命令）。
+//   dsh 新加了带安装脚本的依赖时，npm 输出里 `Run npm install -g --allow-scripts=…` 那句会列出来，照着补进来。
+//   旧版 npm 不认这个参数也照常安装（实测 npm 10；那时本来就跑全部脚本）。
 export const INSTALLS = {
-  deepseek: { label: 'DeepSeek Harness', pkg: '@deepseek-ai/dsh@latest', bin: 'dsh' },
+  deepseek: {
+    label: 'DeepSeek Harness', pkg: '@deepseek-ai/dsh@latest', bin: 'dsh',
+    allowScripts: ['@deepseek-ai/dsh-subprocess-local', 'node-pty', 'koffi', 'protobufjs', '@google/genai'],
+  },
 };
+const pkgArgs = s => [...(s.allowScripts?.length ? ['--allow-scripts=' + s.allowScripts.join(',')] : []), s.pkg];
 
 let job = null;
 const view = j => j && { claw: j.claw, label: j.label, status: j.status, tail: j.tail, error: j.error, startedAt: j.startedAt };
@@ -30,7 +38,7 @@ export function installStart(claw, { log, npmBin, spawnImpl = spawn, timeoutMs =
   const s = INSTALLS[claw];
   if (!s) throw new Error('这个 Claw 不能在这里安装');
   if (job?.status === 'running') return view(job);
-  const args = ['install', '-g', '--no-fund', '--no-audit', s.pkg];
+  const args = ['install', '-g', '--no-fund', '--no-audit', ...pkgArgs(s)];
   // 优先用当前 Node 自带的 npm-cli.js 直接跑（Windows 官方安装包的 npm.cmd 不是标准 shim，走 cmd.exe 又会被 Program Files 的空格坑）
   const cli = !npmBin && npmCli();
   const npm = npmBin || (!cli && findBin('npm'));
@@ -54,7 +62,7 @@ export function installStart(claw, { log, npmBin, spawnImpl = spawn, timeoutMs =
   p.on('exit', code => {
     if (code === 0) return done(true);
     // 没权限写全局目录（Mac / Linux 用系统自带的 Node 时常见）：说清楚怎么办
-    if (/EACCES|EPERM|permission denied/i.test(j.out)) return done(false, '没有权限安装到全局目录。请在电脑终端里运行：sudo npm install -g ' + s.pkg + '，装好回来刷新');
+    if (/EACCES|EPERM|permission denied/i.test(j.out)) return done(false, '没有权限安装到全局目录。请在电脑终端里运行：sudo npm install -g ' + pkgArgs(s).join(' ') + '，装好回来刷新');
     done(false, 'npm 安装失败（退出码 ' + code + '）：' + (lastLine(j.out.replace(/^npm (warn|notice).*$/gim, '')) || '没有输出'));
   });
   j.timer = setTimeout(() => { try { p.kill(); } catch {} done(false, '安装超过 ' + Math.round(timeoutMs / 60e3) + ' 分钟没完成，已停止（检查网络后再试）'); }, timeoutMs);

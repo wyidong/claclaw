@@ -52,13 +52,14 @@ test('安装：只能装列出来的；跑 npm install -g 固定的包；成功 
   assert.equal(j.status, 'running');
   assert.deepEqual(f.calls[0][1].slice(-1), ['@deepseek-ai/dsh@latest']);
   assert.ok(f.calls[0][1].includes('-g'));
+  assert.ok(f.calls[0][1].some(a => /^--allow-scripts=.*node-pty/.test(a)), 'npm 11.19+ 默认不跑依赖的安装脚本：要放行 node-pty 等');
   assert.equal(installStart('deepseek', { npmBin: '/usr/bin/npm', spawnImpl: fakeSpawn(0).impl }).status, 'running', '正在装：不重复起');
   await settle();
   assert.equal(installState().status, 'ok');
   f = fakeSpawn(243, 'npm error code EACCES\nnpm error syscall mkdir\n');
   installStart('deepseek', { npmBin: '/usr/bin/npm', spawnImpl: f.impl });
   await settle();
-  assert.match(installState().error, /sudo npm install -g @deepseek-ai\/dsh@latest/);
+  assert.match(installState().error, /sudo npm install -g --allow-scripts=\S+ @deepseek-ai\/dsh@latest，/);
   installStart('deepseek', { npmBin: '/usr/bin/npm', spawnImpl: fakeSpawn(1, 'npm warn x\nnpm error network ETIMEDOUT\n').impl });
   await settle();
   assert.equal(installState().status, 'fail');
