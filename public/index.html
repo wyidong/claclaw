@@ -33,7 +33,8 @@ window.__sc=(function(){
     if(YIN[z])on=false;   // 6 阴（脏）只用纯色深底，不铺图；6 阳（腑）才用图
     if(on&&ok[z]===true){r.style.setProperty('--sc-img','url("/sc-bg/'+z+'.jpg?v='+SCV+'")');r.classList.add('sc-img');return}
     r.classList.remove('sc-img');if(!on||ok[z]===false)return;
-    var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z){img(z);if(window.__scTop)window.__scTop()}};   // 图后到：状态栏 / 外壳顶栏跟着换im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg?v='+SCV;
+    var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z){img(z);if(window.__scTop)window.__scTop()}};
+    im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg?v='+SCV;   // 图后到：状态栏 / 外壳顶栏跟着换
   }
   function now(d){
     d=d||new Date();var x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
@@ -675,11 +676,11 @@ function cleanHtml(html){
 // 一行里的行内标签（已经被 esc 转义过）：认得的还原成清洗过的标签，没配对的结束标签照原样显示，行尾补齐没关的
 function mdTags(s,put){
   var st=[],unq=function(v){return v.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')};
-  s=s.replace(/&lt;(\/?)([a-z][a-z0-9]*)((?:\s+[a-z][a-z-]*(?:\s*=\s*(?:&quot;.*?&quot;|'[^']*'|[^\s&'"]+))?)*)\s*\/?&gt;/gi,function(m,cl,tag,attrs){
+  s=s.replace(/&lt;(\/?)([a-z][a-z0-9]*)((?:\s+[a-z][a-z-]*(?:\s*=\s*(?:&quot;(?:(?!&quot;).)*&quot;|'[^']*'|[^\s&'"]+))?)*)\s*\/?&gt;/gi,function(m,cl,tag,attrs){
     tag=tag.toLowerCase();if(!HTML_INLINE[tag])return m;
     if(tag==='br')return cl?m:put('<br>');
     if(cl){var k=st.lastIndexOf(tag);if(k<0)return m;var h='';while(st.length>k)h+='</'+st.pop()+'>';return put(h)}
-    var out='';attrs.replace(/([a-z][a-z-]*)\s*=\s*(?:&quot;(.*?)&quot;|'([^']*)'|([^\s&'"]+))/gi,function(_,n,a,b,c){
+    var out='';attrs.replace(/([a-z][a-z-]*)\s*=\s*(?:&quot;((?:(?!&quot;).)*)&quot;|'([^']*)'|([^\s&'"]+))/gi,function(_,n,a,b,c){
       var v=cleanAttr(tag,n,unq(a!=null?a:b!=null?b:c));if(v!=null)out+=' '+n.toLowerCase()+'="'+esc(v)+'"';return ''});
     st.push(tag);return put('<'+tag+out+'>');
   });
@@ -700,7 +701,7 @@ function mdInline(s){
   // 图片 ![说明](地址)：只自动加载本站（/ 开头）的；外链的渲染成普通链接、显示地址，点了才打开
   // （AI 回复里的图片可能带着会话数据，自动加载等于把它送出去）
   s=s.replace(/!\[([^\]\n]*)\]\(((?:https?:\/\/|\/(?!\/))[^\s)]+)\)/g,function(_,t,u){
-    if(/^\/(?!\/)/.test(u))return put('<img class="mdimg" src="'+u+'" alt="'+t+'" loading="lazy">');
+    if(/^\/(?!\/)/.test(u)&&u.indexOf('\\')<0)return put('<img class="mdimg" src="'+u+'" alt="'+t+'" loading="lazy">');
     return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>');
   });
   s=s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>'+COPY_BTN)});
@@ -1072,7 +1073,7 @@ function dsMarkHeavy(j){
   ts.forEach(function(t){t.heavy=t.nSteps>=mSteps*2+2||t.nTools>=mTools*2+4||t.durMs>=mDur*2+60000||t.out>=mOut*2+2000});
 }
 function dsMarks(t){
-  var m=[];if(t.queued)m.push('插话');if(t.images)m.push('图 ×'+t.images);if(t.interrupted)m.push('<u>被打断</u>');if(t.errors)m.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)m.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)m.push('重试 '+t.retries);var mi=t.mini;if(mi){if(mi.error)m.push('<u>出错</u>');if(mi.parts>1)m.push('分 '+mi.parts+' 段');if(mi.stop==='length')m.push('<i>没写完</i>');else if(mi.stop&&mi.stop!=='stop')m.push('<u>被拦下 '+mi.stop+'</u>')}if(t.compact)m.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)m.push('子代理 '+t.subagents);if(t.waitMs)m.push('等你 '+dsDur(t.waitMs));
+  var m=[];if(t.queued)m.push('插话');if(t.images)m.push('图 ×'+t.images);if(t.interrupted)m.push('<u>被打断</u>');if(t.errors)m.push('<u>工具出错 '+t.errors+'</u>');if(t.asks)m.push('<i>问了 '+t.asks+' 次权限</i>');if(t.retries)m.push('重试 '+t.retries);var mi=t.mini;if(mi){if(mi.error)m.push('<u>出错</u>');if(mi.parts>1)m.push('分 '+mi.parts+' 段');if(mi.stop==='length')m.push('<i>没写完</i>');else if(mi.stop&&mi.stop!=='stop')m.push('<u>被拦下 '+esc(mi.stop)+'</u>')}if(t.compact)m.push('压缩'+(t.compact.pre?' '+dsTk(t.compact.pre)+'→'+dsTk(t.compact.post):''));if(t.subagents)m.push('子代理 '+t.subagents);if(t.waitMs)m.push('等你 '+dsDur(t.waitMs));
   return m;
 }
 function dsLegend(o,s){
@@ -1956,7 +1957,7 @@ function syncSend(){
   $('#composer').classList.toggle('nosend',(kbSend()&&!d&&(document.activeElement===ta||(sendBtn.disabled&&!sugOn)))||(g&&sendBtn.disabled));
 }
 function setBusy(b){
-  if(b&&!busy){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
+  if(b&&(!busy||!workTimer)){workSince=Date.now();workLabel='思考中';clearInterval(workTimer);workTimer=setInterval(tickWork,1000)}
   if(!b){clearInterval(workTimer);workTimer=null;workSince=0;setTimeout(aiPlayMark,0)}
   busy=b;if(b&&!lastEvt)lastEvt=Date.now();
   $('#sessBtn .dot').classList.toggle('busy',b);tickWork();
@@ -2160,7 +2161,7 @@ function onEvent(m){
       if(outbox.sid!==m.id)outboxRestore();                       // 换了会话：不往别的会话发，放回输入框
       else if(lastUser&&(String(lastUser.text||'').replace(VIDEO_PENDING,'')===outbox.text||(outbox.video&&outbox.video.id&&String(lastUser.text||'').indexOf(outbox.video.id)>=0)))outboxDone();  // 其实已经送到了
       else if(m.busy)outboxRestore();                              // 会话正忙：放回输入框，等它忙完再发
-      else{busy=true;setDock('busy');addSys('刚才那条消息没送到，已自动重发');outboxShow();trySend()}
+      else{setBusy(true);addSys('刚才那条消息没送到，已自动重发');outboxShow();trySend()}
     }
     if(merged){stick=wasStick;if(stick)scrollDown();else feed.scrollTop=keepTop}else scrollDown(true);
     try{var sp0=JSON.parse(sessionStorage.getItem('claclaw.scroll')||'null');sessionStorage.removeItem('claclaw.scroll');   // 「更新客户端」前在看的位置：刷新后回到那里
@@ -2398,7 +2399,7 @@ $('#ctxBtn').addEventListener('click',function(){
   if(!ws||ws.readyState!==1){banner('连接已断开，恢复后再压缩');return}
   session.ctxAsk=true;ctxShow();
   outbox={text:'/compact',images:[],videoPending:'',filePending:'',videoFile:null,sid:session.id};
-  busy=true;setDock('busy');outboxShow();trySend();
+  setBusy(true);outboxShow();trySend();
 });
 (function(){
   var inp=$('#setCtxK');if(!inp)return;
@@ -2504,7 +2505,7 @@ function run(text){
   attachments.forEach(function(a){if(a.video)video={kind:a.video.kind||'video',id:a.video.id,name:a.video.name,file:a.video.file,url:a.url,size:a.video.size};else{images.push({media_type:a.media_type,data:a.data});if(a.orig)vidSave('img:'+imgKey(a.data),a.orig,a.orig.name,'image');URL.revokeObjectURL(a.url)}});
   attachments=[];renderAtts();   // 视频的预览地址留着：聊天区那条消息还要用
   ta.value='';ta.style.height='auto';ta.style.overflowY='hidden';
-  busy=true;setDock('busy');
+  setBusy(true);
   if(video&&video.id){outbox={text:text,images:images,video:video,sid:session.id};outboxShow();trySend()}   // 视频早就传过（放回输入框后重发）
   else if(video&&session.group){   // 群里：等视频 / 文件传完，和文字、图片作为一条一起发（成员被 @ 时附件已经在）
     var gel=addUser(text,images.map(function(i){return 'data:'+i.media_type+';base64,'+i.data}),{kind:video.kind,name:video.name,size:video.size,url:video.url,label:'上传 0%'});gel.classList.add('pending');
@@ -2535,8 +2536,9 @@ function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideo
 // clarelay 直连：路线变了更新宿主页那一行；变成直连时悄悄重连一次 ws，把实时连接搬到直连上（服务端重连后会补发全部状态）
 function crRouteText(){if(!CR)return '中转';var v=CR.via!=null?CR.via:(CR.route==='direct'?'direct':'relay');return {lan:'直连 · 局域网',internet:'直连 · 外网',tailscale:'直连 · Tailscale',direct:'直连',relay:'中转'}[v]||'中转'}
 var crLast=CR&&CR.route;
-// 「当前连接」：中转时在后面小字写上次没连上直连的原因和下次重试时间（clarelay.info() 是异步的）
+// 宿主页的 clarelay 那一行按 relaySt 重画；「当前连接」：中转时在后面小字写上次没连上直连的原因和下次重试时间（clarelay.info() 是异步的）
 function crPaint(){
+  var row=$('#hostBody .cr-row');if(row&&relaySt)row.outerHTML=crRow();
   var el=document.getElementById('crRoute');if(!el)return;
   el.textContent=crRouteText();
   if(!CR||CR.route==='direct'||!CR.info)return;
@@ -2942,7 +2944,6 @@ function crRow(){
   if(l.update&&!r.revoked)btns=pill('update','更新到 '+l.latest)+btns;
   return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">'+esc(r.name||'')+' · '+st+'<small>'+esc(String(r.url||'').replace(/^https:\/\//,''))+'</small>'+(lv?'<small>'+esc(lv)+'</small>':'')+(r.revoked||!r.online?err:'')+'</span><span class="cr-btns">'+btns+'</span></div>';
 }
-function crPaint(){var el=$('#hostBody .cr-row');if(el)el.outerHTML=crRow()}
 // 邀请码弹窗：clarelay 复制出来的 JSON（带换行）；旧的 clarelay-device1. 一行也认
 function crSubmit(e){
   e&&e.preventDefault();var v=$('#crIn').value.trim();
@@ -6903,7 +6904,7 @@ if(!DESKTOP.matches&&!wantPeer&&!new URLSearchParams(location.search).get('s')){
   else if(startOnClaw||!clawSel||view0!=='chat'||!localStorage.getItem(hk('session'))){mList=true;$('#app').classList.add('m-list');if(startOnClaw||(!clawSel&&listMode!=='recent'))mTab('claw');else if(listMode==='recent'){mTab('recent');openSheet()}else openSheet()}   // 会话列表走 HTTP，不用等 WebSocket 连上
 }
 (function(){var h=document.documentElement,off=function(){h.classList.remove('boot');window.__bootOff=performance.now()},w=120-performance.now();if(w>0)setTimeout(off,w);else off()})();   // 加载雾至少 120ms，连上后再至少 120ms 才变清楚，不一闪而过
-takePendingOpen().then(function(id){if(id)pendingOpen=id;connect()});
+takePendingOpen().then(function(id){if(id==='view:peer')wantPeer=true;else if(id)pendingOpen=id;connect()});   // 点协同通知冷启动：连上后走 openPeerView，不当会话 id 去 session.open
 })();
 </script>
 </body>
