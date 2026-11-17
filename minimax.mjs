@@ -10,17 +10,15 @@
 // 网页里 MiniMax 会话的 id = 'mm:' + mcode 会话 id（mvs_…）。
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { AcpAgent, AcpRunner, localNames, stampTimes, stripTags } from './acp.mjs';
-import { HOME, tilde, oneLine, findBin, binEnv, binCall } from './util.mjs';
+import { AcpAgent, AcpLoadRunner, localNames, stampTimes, stripTags, validSid, listItem, localRename, envSig, v1, notFound } from './acp.mjs';
+import { HOME, oneLine, findBin, binEnv, binCall } from './util.mjs';
 import { storeNow, envName } from './modelpick.mjs';
 
 export const MM_PREFIX = 'mm:';
 export const isMm = id => typeof id === 'string' && id.startsWith(MM_PREFIX);
 const sidOf = id => id.slice(MM_PREFIX.length);
-const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 
 const MHOME = process.env.MINIMAX_DATA_DIR || process.env.MAVIS_DATA_DIR || path.join(HOME, '.minimax');
 const DB = path.join(MHOME, 'v2', 'sqlite', 'runtime-state.sqlite');
@@ -54,14 +52,7 @@ function listRows() {
 export function mmSessionList({ busy = () => false } = {}) {
   let rows = [];
   try { rows = listRows(); } catch {}
-  return rows.map(s => ({
-    id: MM_PREFIX + s.id,
-    title: s.title || 'MiniMax 会话',
-    cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: '',
-    lastModified: s.updated,
-    openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'minimax', busy: busy(MM_PREFIX + s.id),
-  }));
+  return rows.map(s => listItem('minimax', MM_PREFIX + s.id, busy, { ...s, title: s.title || 'MiniMax 会话' }));
 }
 export const mmInfo = id => { if (!isMm(id)) return null; try { return listRows().find(s => s.id === sidOf(id)) || null; } catch { return null; } };
 export const mmExists = id => !!mmInfo(id);
@@ -93,8 +84,9 @@ function wanted(store) {
   }
   return out;
 }
+// 签名：模型库里给 mcode 的部分（连同 key）变了才要重新同步、重启
+const wantSig = want => want.length ? envSig(want.map(w => [w.name, w.format, w.base, w.models, w.image, w.context, w.p.key || ''])) : '';
 const mask = k => k ? k.slice(0, 4) + '****' + k.slice(-4) : '';
-const v1 = u => String(u).replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
 const execFileP = promisify(execFile);
 // 异步跑（每次最多 60 秒，一次同步要跑好几回）：同步跑会把整个 claclaw 卡住
 const mcode = async (args, env = {}, log) => {
@@ -106,8 +98,7 @@ const mcode = async (args, env = {}, log) => {
 let syncedSig = null;   // 上次完整同步成功时模型库的签名：没变就不再跑 mcode
 // 进程起来前同步一次：现有的 claclaw- 供应商和模型库对不上就删了重加；模型库里没了的删掉。只碰 claclaw- 开头的
 async function syncProviders(log) {
-  const want = wanted(storeNow());
-  const sig = want.length ? crypto.createHash('sha256').update(JSON.stringify(want.map(w => [w.name, w.format, w.base, w.models, w.image, w.context, w.p.key || '']))).digest('hex').slice(0, 16) : '';
+  const want = wanted(storeNow()), sig = wantSig(want);
   if (!mmBin()) return { env: {}, sig };
   if (syncedSig === sig) return { env: {}, sig };
   let cur = null;
@@ -149,47 +140,21 @@ const agent = new AcpAgent({
   rpcError: e => /authenticat|mcode login/i.test(e.message || '') ? 'MiniMax Code 没有可用的模型：在 claclaw 的「模型管理」里加一个模型，或在电脑终端运行 mcode login' : '',
 });
 export const mmShutdown = () => agent.stop();
-export function mmModelsChanged(log) {
-  if (!mmInstalled()) return;
-  const want = wanted(storeNow());
-  const sig = want.length ? crypto.createHash('sha256').update(JSON.stringify(want.map(w => [w.name, w.format, w.base, w.models, w.image, w.context, w.p.key || '']))).digest('hex').slice(0, 16) : '';
-  agent.modelsChanged(sig, log);
-}
+export function mmModelsChanged(log) { if (mmInstalled()) agent.modelsChanged(wantSig(wanted(storeNow())), log); }
 export const mmAcpRunning = () => agent.running;
-
-export const COMMANDS = [
-  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
-  { name: 'mode', description: '权限模式（不带参数：列出可选项）', hint: '<模式>', builtin: true },
-];
 
 // ---------- 打开的 MiniMax 会话 ----------
 export const mmRunners = new Map();
 
-export class MmRunner extends AcpRunner {
+export class MmRunner extends AcpLoadRunner {
   static agent = agent; static prefix = MM_PREFIX; static runners = mmRunners;
-  static label = 'MiniMax'; static group = 'MiniMax Code'; static permPrefix = 'mm-'; static commands = COMMANDS;
+  static label = 'MiniMax'; static group = 'MiniMax Code';
   static cfgIds = { model: 'model', mode: 'permissionMode' };
   static cfgNames = { model: '模型', mode: '权限' };
-  static ctxFromUsage = true; static titleFromAgent = true;
 
-  constructor(id, opts) { super(id, opts); this.items = []; }
-  get openMethod() { return 'session/load'; }
-
-  async prepareAttach() {
-    const s = mmInfo(this.id);
-    if (s) { if (!this.cwd) { this.cwd = s.cwd; this.info.cwd = s.cwd; } this.title = localNames.get(this.id) || this.title || s.title; }
-    this.items = []; this.tools.clear(); this.replayOpen = null;
-    this.replaying = true;
-  }
-  attachDone(ok) {
-    this.replaying = false; this.replayOpen = null;
-    if (!ok) return;
-    for (const it of this.items) if (it.kind === 'user') it.text = stripTags(it.text);
-    this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    stampTimes(this.items, timesOf(this.sid));
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'MiniMax 会话';
-  }
-  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+  sessionInfo() { return mmInfo(this.id); }
+  cleanUser(text) { return stripTags(text); }
+  afterReplay() { stampTimes(this.items, timesOf(this.sid)); }
 
   // 模型选项的 value 形如 m:<供应商>:<模型>:v:<变体>（供应商 custom_provider%3Aclaclaw-deepseek 是模型库写进去的）
   ownModel(o, store) {
@@ -208,7 +173,7 @@ export const mmNewSession = (cwd, opts) => MmRunner.create(cwd, opts);
 // 列表只列没归档的，所以就从 claclaw 里消失了；在 mcode 的 /sessions 里能恢复。
 // 协议：initialize（protocolVersion 1、desktopService.transportProtocolVersion 2）→ initialized → desktopService/transport 通知里发 request 帧，
 // 回来 response-start（status）/ stream-chunk（base64 的 JSON）/ stream-done 帧
-export function mmArchive(sid, { timeoutMs = 30000 } = {}) {
+function mmArchive(sid, { timeoutMs = 30000 } = {}) {
   const bin = mmBin();
   if (!bin) return Promise.reject(new Error('没找到 mcode'));
   return new Promise((resolve, reject) => {
@@ -250,12 +215,7 @@ export function mmArchive(sid, { timeoutMs = 30000 } = {}) {
   });
 }
 export async function mmDelete(id) {
-  if (!mmInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
+  if (!mmInfo(id)) throw notFound();
   await mmArchive(sidOf(id));
 }
-export function mmRename(id, title) {
-  if (!mmInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  localNames.set(id, title);
-  const r = mmRunners.get(id); if (r) r.title = title;
-  return title;
-}
+export const mmRename = localRename(mmInfo, mmRunners);

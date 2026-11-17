@@ -17,16 +17,14 @@
 // 没做「终端里正开着」的检测：同一个会话别在终端和网页里同时发消息。
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { AcpAgent, AcpRunner, stampTimes } from './acp.mjs';
-import { HOME, tilde, oneLine, findBin, readJson } from './util.mjs';
-import { DATA, writeJsonAtomic } from './auth.mjs';
-import { storeNow, STORE_GROUP } from './modelpick.mjs';
+import { AcpAgent, AcpLoadRunner, stampTimes, validSid, listItem, readDir, readLines, eachRec, fileRows, envSig, libGroup, notFound, busyRename } from './acp.mjs';
+import { HOME, oneLine, findBin, readJson } from './util.mjs';
+import { DATA } from './auth.mjs';
+import { storeNow, STORE_GROUP, LIB, libModels, routeNow, envName } from './modelpick.mjs';
 
 export const CX_PREFIX = 'cx:';
 export const isCx = id => typeof id === 'string' && id.startsWith(CX_PREFIX);
 const sidOf = id => id.slice(CX_PREFIX.length);
-const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 
 const CHOME = process.env.CODEX_HOME || path.join(HOME, '.codex');
 const SESSIONS = path.join(CHOME, 'sessions');
@@ -49,18 +47,8 @@ export const cxUnsupportedReason = () => '还没装 Codex 的 ACP 转接程序�
 // ---------- 会话列表 ----------
 // 记录一行一条 JSON：第一行 session_meta（id、cwd、source：cli / vscode / exec / {subagent}）；
 // event_msg 里 item_completed 的 UserMessage 是用户打的字，token_count 是用量；turn_context 带当时的模型。
-// 文件不大就整个读，大的读头尾各 512KB（第一句在头部，最后的模型、用量在尾部）
-const fileCache = new Map();   // 文件路径 → { key（大小:修改时间）, row }
-const READ_ALL = 4 << 20, PART = 512 << 10;
-function readLines(f, size) {
-  if (size <= READ_ALL) return fs.readFileSync(f, 'utf8').split('\n');
-  const fd = fs.openSync(f, 'r');
-  try {
-    const head = Buffer.alloc(PART), tail = Buffer.alloc(PART);
-    fs.readSync(fd, head, 0, PART, 0); fs.readSync(fd, tail, 0, PART, size - PART);
-    return [...head.toString('utf8').split('\n').slice(0, -1), ...tail.toString('utf8').split('\n').slice(1)];
-  } finally { fs.closeSync(fd); }
-}
+// 文件大的只读头尾（第一句在头部，最后的模型、用量在尾部）
+const fileCache = new Map();
 // 用户在终端 / IDE / 桌面版 / claclaw 里开的会话；codex exec（脚本跑的）和子代理不算
 const userSession = m => typeof m.source === 'string' && m.source !== 'exec' && m.thread_source !== 'subagent';
 function parseFile(f, st) {
@@ -97,42 +85,13 @@ function names() {
 // 年 / 月 / 日三层目录：按名字倒着走，新的在前
 const subdirs = d => { try { return fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory() && /^\d+$/.test(e.name)).map(e => path.join(d, e.name)); } catch { return []; } };
 function listRows() {
-  const rows = [], seen = new Set(), nm = names();
-  for (const y of subdirs(SESSIONS)) for (const mo of subdirs(y)) for (const d of subdirs(mo)) {
-    let files = [];
-    try { files = fs.readdirSync(d); } catch { continue; }
-    for (const n of files) {
-      if (!/^rollout-.*\.jsonl$/.test(n)) continue;
-      const f = path.join(d, n);
-      let st; try { st = fs.statSync(f); } catch { continue; }
-      if (!st.isFile() || !st.size) continue;
-      seen.add(f);
-      const key = st.size + ':' + st.mtimeMs;
-      let c = fileCache.get(f);
-      if (c?.key !== key) { let row = null; try { row = parseFile(f, st); } catch {} c = { key, row }; fileCache.set(f, c); }
-      if (c.row) rows.push({ ...c.row, title: nm.get(c.row.id) || c.row.first });
-    }
-  }
-  for (const f of fileCache.keys()) if (!seen.has(f)) fileCache.delete(f);
-  return rows.sort((a, b) => b.updated - a.updated);
+  const nm = names();
+  const files = subdirs(SESSIONS).flatMap(subdirs).flatMap(subdirs).flatMap(d => readDir(d).filter(n => /^rollout-.*\.jsonl$/.test(n)).map(n => path.join(d, n)));
+  return fileRows(fileCache, files, parseFile).map(r => ({ ...r, title: nm.get(r.id) || r.first }));
 }
-export function cxSessionList({ busy = () => false } = {}) {
-  return listRows().map(s => ({
-    id: CX_PREFIX + s.id,
-    title: s.title || 'Codex 会话',
-    cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
-    lastModified: s.updated,
-    openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'codex', busy: busy(CX_PREFIX + s.id),
-  }));
-}
+export const cxSessionList = ({ busy = () => false } = {}) => listRows().map(s => listItem('codex', CX_PREFIX + s.id, busy, { ...s, title: s.title || 'Codex 会话', branch: s.model }));
 // 消息时间（重放历史不带时间）：response_item 的 message（user / assistant）。新版 Codex 不再记 event_msg 的
 // user_message / agent_message，两种都记的旧版也有 response_item，只看它。<environment_context> 这类 Codex 自己塞的跳过
-// 记录文件里一行行过（只解析含关键字的行，大文件也快）
-function eachRec(f, keys, fn) {
-  let txt; try { txt = fs.readFileSync(f, 'utf8'); } catch { return; }
-  for (const l of txt.split('\n')) { if (!l || !keys.some(k => l.includes(k))) continue; let o; try { o = JSON.parse(l); } catch { continue; } fn(o); }
-}
 function timesOf(f) {
   const recs = [];
   eachRec(f, ['"response_item"'], o => {
@@ -150,8 +109,6 @@ export const cxExists = id => !!cxInfo(id);
 // ---------- 模型走法（见文件开头） ----------
 // 模型库里能给 Codex 用的：有 OpenAI 兼容地址的（Codex 只说 Responses 接口；DeepSeek 等已经支持）
 const ROUTE_FILE = path.join(DATA, 'codex-route.json');
-const LIB = 'lib:';   // 模型选择里模型库那组的 value：lib:<供应商 id>/<模型 id>
-const libModels = store => store.providers.filter(p => p.endpoints?.openai && p.models.length).flatMap(p => p.models.map(m => ({ p, m, value: LIB + p.id + '/' + m.id })));
 // Codex 自己能不能用：登录过（auth.json）、config.toml 指了服务商、或环境里有 key
 function ownUsable() {
   if (process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY || fs.existsSync(path.join(CHOME, 'auth.json'))) return true;
@@ -159,12 +116,7 @@ function ownUsable() {
 }
 // 模型库那条还在才算；Codex 自己用不了（没登录没配服务商）→ 模型库第一个，选过 Codex 自带也一样（不然所有 Codex 会话都打不开）；
 // 不然 Codex 自带
-function routeNow(store = storeNow()) {
-  const r = readJson(ROUTE_FILE, {}), lib = libModels(store);
-  const hit = r.provider && lib.find(x => x.p.id === r.provider && x.m.id === r.model);
-  if (hit) return hit;
-  return lib.length && !ownUsable() ? lib[0] : null;
-}
+const route = (store = storeNow()) => routeNow(readJson(ROUTE_FILE, {}), store, ['openai'], ownUsable);
 const OWN_LOGIN = 'Codex 自带的模型要先登录：在电脑终端运行 codex 登录（或在 ~/.codex/config.toml 配好服务商）';
 // codex-acp 自带的 Codex（codex-acp 不给 CODEX_PATH 时用的就是它）
 function codexJs() {
@@ -181,10 +133,10 @@ function appServerWrapper() {
   return WRAPPER;
 }
 function routeEnv() {
-  const hit = routeNow();
+  const hit = route();
   const env = { NO_BROWSER: '1' };
   if (hit) {
-    const pid = 'claclaw-' + hit.p.id, ek = 'CLACLAW_KEY_' + String(hit.p.id).toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    const pid = 'claclaw-' + hit.p.id, ek = envName(hit.p.id);
     if (hit.p.key) env[ek] = hit.p.key;
     env.MODEL_PROVIDER = pid;
     const prov = { name: hit.p.name, base_url: hit.p.endpoints.openai, env_key: ek, wire_api: 'responses' };
@@ -200,8 +152,7 @@ function routeEnv() {
       env.CLACLAW_CODEX_C3 = 'model=' + JSON.stringify(hit.m.id);
     }
   }
-  const sig = crypto.createHash('sha256').update(JSON.stringify(env)).digest('hex').slice(0, 16);
-  return { env, sig };
+  return { env, sig: envSig(env) };
 }
 
 // ---------- ACP 进程（底座见 acp.mjs） ----------
@@ -217,39 +168,15 @@ export const cxShutdown = () => agent.stop();
 export function cxModelsChanged(log) { if (cxSupported()) agent.modelsChanged(routeEnv().sig, log); }
 export const cxAcpRunning = () => agent.running;
 
-export const COMMANDS = [
-  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
-  { name: 'mode', description: '权限模式（不带参数：列出可选项）', hint: '<模式>', builtin: true },
-];
-
 // ---------- 打开的 Codex 会话 ----------
-// 历史靠 session/load 重放：收下来记在 items 里，之后的新消息也记进去
 export const cxRunners = new Map();
 
-export class CxRunner extends AcpRunner {
-  static agent = agent; static prefix = CX_PREFIX; static runners = cxRunners;
-  static label = 'Codex'; static group = 'Codex'; static permPrefix = 'cx-'; static commands = COMMANDS;
-  static cfgIds = { model: 'model', mode: 'mode' };
-  static cfgNames = { model: '模型', mode: '模式' };
-  static ctxFromUsage = true; static titleFromAgent = true;
+export class CxRunner extends AcpLoadRunner {
+  static agent = agent; static prefix = CX_PREFIX; static runners = cxRunners; static label = 'Codex';
 
-  constructor(id, opts) { super(id, opts); this.items = []; this.opts = opts; }
-  get openMethod() { return 'session/load'; }
   ctxNow() { return this.ctx ?? cxInfo(this.id)?.ctx; }   // 刚打开还没新一轮：用会话记录里最后一次的输入量
-
-  async prepareAttach() {
-    if (!this.cwd) { const s = cxInfo(this.id); if (s) { this.cwd = s.cwd; this.info.cwd = s.cwd; this.title = this.title || s.title; this.model = this.model || s.model; } }
-    this.items = []; this.tools.clear(); this.replayOpen = null;
-    this.replaying = true;
-  }
-  attachDone(ok) {
-    this.replaying = false; this.replayOpen = null;
-    if (!ok) return;
-    this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    const f = cxInfo(this.id)?.file; if (f) stampTimes(this.items, timesOf(f));
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Codex 会话';
-  }
-  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+  sessionInfo() { return this.cwd ? null : cxInfo(this.id); }
+  afterReplay() { const f = cxInfo(this.id)?.file; if (f) stampTimes(this.items, timesOf(f)); }
 
   // Codex 对不认识的模型（模型库的）、换过模型的旧会话会先吐一句英文警告当回复，不显示
   handle(u) {
@@ -259,29 +186,25 @@ export class CxRunner extends AcpRunner {
 
   // 模型选择：模型库一组（能给 Codex 用的）+ Codex 自带一组（Codex 的模型清单）；用着模型库时勾模型库那条
   xmodels() {
-    const base = super.xmodels(), store = storeNow(), lib = libModels(store), hit = routeNow(store);
-    const libGroup = lib.length ? [{ name: STORE_GROUP, items: lib.map(x => ({ value: x.value, label: x.m.name || x.m.id, sub: x.p.name + ' · ' + x.m.id + (hit ? '' : '（所有 Codex 会话一起换）') })) }] : [];
+    const base = super.xmodels(), store = storeNow(), lib = libModels(store), hit = route(store);
+    const libItems = libGroup(lib, () => hit ? '' : '（所有 Codex 会话一起换）');
     const usable = ownUsable();
     const own = (base.groups || []).filter(g => g.name !== STORE_GROUP).map(g => ({ ...g, items: g.items.map(it => !usable ? { ...it, disabled: true, sub: '要先在电脑上 codex 登录' } : hit ? { ...it, sub: (it.sub ? it.sub + ' · ' : '') + '用 Codex 自己的配置' } : it) }));
-    if (!base.groups && !libGroup.length) return base;
-    return { ...base, current: hit ? hit.value : base.current, label: hit ? (hit.m.name || hit.m.id) : base.label, groups: [...libGroup, ...own] };
+    if (!base.groups && !libItems.length) return base;
+    return { ...base, current: hit ? hit.value : base.current, label: hit ? (hit.m.name || hit.m.id) : base.label, groups: [...libItems, ...own] };
   }
   // 换到模型库的模型 / 从模型库换回 Codex 自带：记下走法，重启 codex-acp（所有 Codex 会话一起换），再接上。
   // 刚新建、还没发过消息的会话 Codex 还没存下来，新进程里接不上：在同一个目录重建一个，返回 { runner, label } 让网页换过去
   async pickModel(value) {
-    const hit = routeNow(), toLib = value.startsWith(LIB);
+    const hit = route(), toLib = value.startsWith(LIB);
     if (!toLib && !ownUsable()) throw new Error(OWN_LOGIN);
     if (!toLib && !hit) return super.pickModel(value);
     if (this.busy) throw new Error('这一轮结束后再换模型');
     if (toLib && hit?.value === value) return hit.m.name || hit.m.id;
     const next = toLib ? libModels(storeNow()).find(x => x.value === value) : null;
     if (toLib && !next) throw new Error('没有这个模型');
-    if ([...cxRunners.values()].some(r => r !== this && r.busy)) throw new Error('有别的 Codex 会话正在回复，等它结束再换（所有 Codex 会话共用一个模型服务商）');
     const empty = !cxInfo(this.id);
-    writeJsonAtomic(ROUTE_FILE, next ? { provider: next.p.id, model: next.m.id } : { own: true });
-    this.log?.('codex route →', next ? next.p.id + '/' + next.m.id : 'codex 自带');
-    agent.stop();
-    for (let i = 0; i < 50 && agent.running; i++) await new Promise(r => setTimeout(r, 100));   // 等旧进程退干净，再按新走法起
+    this.reroute(ROUTE_FILE, next ? { provider: next.p.id, model: next.m.id } : { own: true }, next ? next.p.id + '/' + next.m.id : 'codex 自带', '一个模型服务商');
     if (empty) {
       const r = await CxRunner.create(this.cwd || HOME, this.opts);
       return { runner: r, label: next ? next.m.name || next.m.id : await r.pickModel(value) };
@@ -298,7 +221,7 @@ export const cxNewSession = (cwd, opts) => CxRunner.create(cwd, opts);
 // 删除：ACP session/delete（Codex 归档到 ~/.codex/archived_sessions，能找回）
 export async function cxDelete(id, log) {
   const s = cxInfo(id);
-  if (!s) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
+  if (!s) throw notFound();
   await agent.use(log);
   try { await agent.rpc('session/delete', { sessionId: s.id }); } finally { agent.idleCheck(); }
   fileCache.delete(s.file);
@@ -307,9 +230,8 @@ export async function cxDelete(id, log) {
 // 改名：往 session_index.jsonl 追加一行（Codex 列表、终端里的 codex resume 都认它）
 export async function cxRename(id, title, log) {
   const s = cxInfo(id);
-  if (!s) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  const r = cxRunners.get(id);
-  if (r?.busy) throw Object.assign(new Error('这个会话还在回复，等它结束再改名'), { code: 409 });
+  if (!s) throw notFound();
+  if (cxRunners.get(id)?.busy) throw busyRename();
   fs.appendFileSync(INDEX, JSON.stringify({ id: s.id, thread_name: title, updated_at: new Date().toISOString() }) + '\n', { mode: 0o600 });
   log?.('codex renamed', s.id.slice(0, 13));
   return title;

@@ -10,16 +10,14 @@
 // 网页里 iFlow 会话的 id = 'if:' + 会话 id（UUID）。
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { AcpAgent, AcpRunner, localNames, stripTags, toolTarget } from './acp.mjs';
+import { AcpAgent, AcpLoadRunner, localNames, stripTags, toolTarget, validSid, listItem, localRename, readDir, fileRows, envSig, v1, libGroup, notFound, toTrash } from './acp.mjs';
 import { HOME, tilde, oneLine, findBin, readJson } from './util.mjs';
-import { DATA, writeJsonAtomic } from './auth.mjs';
+import { DATA } from './auth.mjs';
 import { storeNow, STORE_GROUP, LIB, libModels, routeNow } from './modelpick.mjs';
 
 export const IF_PREFIX = 'if:';
 export const isIf = id => typeof id === 'string' && id.startsWith(IF_PREFIX);
 const sidOf = id => id.slice(IF_PREFIX.length);
-const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 
 const IHOME = process.env.IFLOW_HOME || path.join(HOME, '.iflow');
 const SESSIONS = path.join(IHOME, 'acp', 'sessions');
@@ -38,34 +36,11 @@ function parseFile(f, st) {
   const first = (o.chatHistory || []).find(m => m?.role === 'user');
   return { id: sid, title: oneLine(stripTags(partsText(first))).slice(0, 100), cwd: String(o.cwd || ''), updated: Date.parse(o.lastActivity || o.createdAt) || st.mtimeMs, file: f };
 }
-function listRows() {
-  const rows = [], seen = new Set();
-  let names = [];
-  try { names = fs.readdirSync(SESSIONS); } catch {}
-  for (const n of names) {
-    if (!n.endsWith('.json')) continue;
-    const f = path.join(SESSIONS, n);
-    let st; try { st = fs.statSync(f); } catch { continue; }
-    if (!st.isFile() || !st.size) continue;
-    seen.add(f);
-    const key = st.size + ':' + st.mtimeMs;
-    let c = fileCache.get(f);
-    if (c?.key !== key) { let row = null; try { row = parseFile(f, st); } catch {} c = { key, row }; fileCache.set(f, c); }
-    if (c.row) rows.push({ ...c.row, title: localNames.get(IF_PREFIX + c.row.id) || c.row.title });
-  }
-  for (const f of fileCache.keys()) if (!seen.has(f)) fileCache.delete(f);
-  return rows.sort((a, b) => b.updated - a.updated);
-}
+const listRows = () => fileRows(fileCache, readDir(SESSIONS).filter(n => n.endsWith('.json')).map(n => path.join(SESSIONS, n)), parseFile)
+  .map(r => ({ ...r, title: localNames.get(IF_PREFIX + r.id) || r.title }));
 export function ifSessionList({ busy = () => false } = {}) {
   const hit = route();
-  return listRows().map(s => ({
-    id: IF_PREFIX + s.id,
-    title: s.title || 'iFlow 会话',
-    cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: hit ? hit.m.id : '',
-    lastModified: s.updated,
-    openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'iflow', busy: busy(IF_PREFIX + s.id),
-  }));
+  return listRows().map(s => listItem('iflow', IF_PREFIX + s.id, busy, { ...s, title: s.title || 'iFlow 会话', branch: hit ? hit.m.id : '' }));
 }
 export const ifInfo = id => isIf(id) ? listRows().find(s => s.id === sidOf(id)) || null : null;
 export const ifExists = id => !!ifInfo(id);
@@ -100,12 +75,10 @@ const FMTS = ['openai'];
 const ownUsable = () => { const s = readJson(SETTINGS, {}); return !!(s.selectedAuthType || s.apiKey); };
 const OWN_LOGIN = 'iFlow 自带的模型要先登录：在电脑终端运行 iflow 登录心流账号（或配好 ~/.iflow/settings.json）';
 const route = (store = storeNow()) => routeNow(readJson(ROUTE_FILE, {}), store, FMTS, ownUsable);
-const v1 = u => String(u).replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
 function routeEnv() {
   const hit = route(), env = {};
   if (hit) { env.IFLOW_selectedAuthType = 'openai-compatible'; env.IFLOW_apiKey = hit.p.key || 'none'; env.IFLOW_baseUrl = v1(hit.p.endpoints.openai); env.IFLOW_modelName = hit.m.id; }
-  const sig = crypto.createHash('sha256').update(JSON.stringify(env)).digest('hex').slice(0, 16);
-  return { env, sig };
+  return { env, sig: envSig(env) };
 }
 
 // ---------- ACP 进程（底座见 acp.mjs） ----------
@@ -119,35 +92,21 @@ export const ifShutdown = () => agent.stop();
 export function ifModelsChanged(log) { if (ifInstalled()) agent.modelsChanged(routeEnv().sig, log); }
 export const ifAcpRunning = () => agent.running;
 
-export const COMMANDS = [
-  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
-  { name: 'mode', description: '权限模式（不带参数：列出可选项）', hint: '<模式>', builtin: true },
-];
-
 // ---------- 打开的 iFlow 会话 ----------
 export const ifRunners = new Map();
 
-export class IfRunner extends AcpRunner {
-  static agent = agent; static prefix = IF_PREFIX; static runners = ifRunners;
-  static label = 'iFlow'; static group = 'iFlow'; static permPrefix = 'if-'; static commands = COMMANDS;
-  static cfgIds = { model: 'model', mode: 'mode' };
-  static cfgNames = { model: '模型', mode: '模式' };
-  static ctxFromUsage = true; static titleFromAgent = false;
+export class IfRunner extends AcpLoadRunner {
+  static agent = agent; static prefix = IF_PREFIX; static runners = ifRunners; static label = 'iFlow';
+  static titleFromAgent = false;
 
-  constructor(id, opts) { super(id, opts); this.items = []; this.opts = opts; }
-  get openMethod() { return 'session/load'; }
-
+  // session/load 不重放：历史从会话文件转（发完一轮文件里才有这一轮的记录，下次打开从文件读）
   async prepareAttach() {
     const s = ifInfo(this.id);
-    if (s) { if (!this.cwd) { this.cwd = s.cwd; this.info.cwd = s.cwd; } this.title = localNames.get(this.id) || this.title || s.title; this.items = historyOf(s.file); }
-    else this.items = [];
+    if (s) { if (!this.cwd) { this.cwd = s.cwd; this.info.cwd = s.cwd; } this.title = localNames.get(this.id) || this.title || s.title; }
+    this.items = s ? historyOf(s.file) : [];
     this.tools.clear();
   }
-  attachDone(ok) { if (ok && !this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'iFlow 会话'; }
-  beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
-  // 发完一轮：文件里才有这一轮的记录，下次打开从文件读
   metaLine() { const hit = route(); return tilde(this.cwd || '') + ((this.model || hit?.m.id) ? ' · ' + (this.model || hit.m.id) : ''); }
-
   // 模型 / 模式合成成选项：session/new 给 _meta.models 和 modes；session/load 什么都不给，用上次记下的清单
   // 接上后一律切到 default（iFlow 默认 yolo，什么都不问）
   cfgOf(r) {
@@ -168,11 +127,11 @@ export class IfRunner extends AcpRunner {
   }
   xmodels() {
     const base = super.xmodels(), store = storeNow(), lib = libModels(store, FMTS), hit = route(store);
-    const libGroup = lib.length ? [{ name: STORE_GROUP, items: lib.map(x => ({ value: x.value, label: x.m.name || x.m.id, sub: x.p.name + ' · ' + x.m.id + (hit?.value === x.value ? '' : '（会重启 iFlow，所有 iFlow 会话一起换）') })) }] : [];
+    const libItems = libGroup(lib, x => hit?.value === x.value ? '' : '（会重启 iFlow，所有 iFlow 会话一起换）');
     const usable = ownUsable();
     const own = (base.groups || []).filter(g => g.name !== STORE_GROUP).map(g => ({ ...g, items: g.items.filter(it => !hit || it.value !== hit.m.id).map(it => !usable ? { ...it, disabled: true, sub: '要先在电脑上登录 iFlow' } : hit ? { ...it, sub: (it.sub ? it.sub + ' · ' : '') + '用 iFlow 自己的登录（会重启 iFlow）' } : it) })).filter(g => g.items.length);
-    if (!base.groups && !libGroup.length) return base;
-    return { ...base, current: hit ? hit.value : base.current, label: hit ? (hit.m.name || hit.m.id) : base.label, groups: [...libGroup, ...own] };
+    if (!base.groups && !libItems.length) return base;
+    return { ...base, current: hit ? hit.value : base.current, label: hit ? (hit.m.name || hit.m.id) : base.label, groups: [...libItems, ...own] };
   }
   async pickModel(value) {
     const store = storeNow(), hit = route(store), toLib = value.startsWith(LIB);
@@ -182,12 +141,8 @@ export class IfRunner extends AcpRunner {
     if (toLib && hit?.value === value) return hit.m.name || hit.m.id;
     const next = toLib ? libModels(store, FMTS).find(x => x.value === value) : null;
     if (toLib && !next) throw new Error('没有这个模型');
-    if ([...ifRunners.values()].some(r => r !== this && r.busy)) throw new Error('有别的 iFlow 会话正在回复，等它结束再换（所有 iFlow 会话共用一个模型）');
     const empty = !ifInfo(this.id);
-    writeJsonAtomic(ROUTE_FILE, next ? { provider: next.p.id, model: next.m.id } : { own: true });
-    this.log?.('iflow route →', next ? next.p.id + '/' + next.m.id : 'iFlow 自带');
-    agent.stop();
-    for (let i = 0; i < 50 && agent.running; i++) await new Promise(r => setTimeout(r, 100));
+    this.reroute(ROUTE_FILE, next ? { provider: next.p.id, model: next.m.id } : { own: true }, next ? next.p.id + '/' + next.m.id : 'iFlow 自带', '一个模型');
     if (empty) {
       const r = await IfRunner.create(this.cwd || HOME, this.opts);
       return { runner: r, label: next ? next.m.name || next.m.id : await r.pickModel(value) };
@@ -202,17 +157,9 @@ export const ifNewSession = (cwd, opts) => IfRunner.create(cwd, opts);
 
 export function ifDelete(id, trashDir) {
   const s = ifInfo(id);
-  if (!s?.file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
-  const dest = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_iflow_' + s.id + '.json');
-  fs.renameSync(s.file, dest);
-  fs.writeFileSync(dest + '.origin.json', JSON.stringify({ sessionId: id, from: s.file, cwd: s.cwd, deletedAt: new Date().toISOString() }, null, 2));
+  if (!s?.file) throw notFound();
+  const dest = toTrash(trashDir, 'iflow', id, s, { ext: '.json', move: true });
   fileCache.delete(s.file); localNames.set(id, '');
   return dest;
 }
-export function ifRename(id, title) {
-  if (!ifInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
-  localNames.set(id, title);
-  const r = ifRunners.get(id); if (r) r.title = title;
-  return title;
-}
+export const ifRename = localRename(ifInfo, ifRunners);
