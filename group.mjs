@@ -6,9 +6,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { readJson, writeJsonAtomic } from './util.mjs';
 
 export const HOPS = 5, INLINE = 400, CUR_MAX = 1500, KEEP = 500, SNAP = 200, LOG_MAX = 4e6, ATT_MAX = 12 * 1024 * 1024, ATT_CHUNK = 512 * 1024;
-export const isSharedAv = av => typeof av === 'string' && av.length <= 120 && /^p\/[a-z0-9-]+\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp|gif|svg)$/.test(av);   // 仓库自带的预设头像：每台电脑都有
+const isSharedAv = av => typeof av === 'string' && av.length <= 120 && /^p\/[a-z0-9-]+\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp|gif|svg)$/.test(av);   // 仓库自带的预设头像：每台电脑都有
 export const isGroupId = id => /^gp:[0-9a-f]{8}$/.test(String(id || ''));
 export const toWire = id => 'gp-' + String(id).slice(3);   // 对方会把 from_session 里 [\w-] 以外的字符去掉
 export const fromWire = s => /^gp-[0-9a-f]{8}$/.test(String(s || '')) ? 'gp:' + String(s).slice(3) : null;
@@ -25,6 +26,14 @@ export function memberNames(members, taken = new Set()) {
 }
 const memberKey = m => (m.peerId ? m.peerId + '/' : '') + m.id;
 const memberRec = m => ({ key: memberKey(m), id: m.id, peerId: m.peerId || undefined, peerName: m.peerName || undefined, title: m.title || '', claw: m.claw || '' });
+// 选中的会话去重（同一个 key 只留第一个），每个经 rec 变成成员记录
+const uniqMembers = (list, rec) => {
+  const seen = new Set(), out = [];
+  for (const m of list || []) { if (!m?.id || seen.has(memberKey(m))) continue; seen.add(memberKey(m)); out.push(rec(m)); }
+  return out;
+};
+// 这个成员已经看过 seq 及之前的
+const markSeen = (g, key, seq) => { g.seen[key] = Math.max(g.seen[key] || 0, seq); };
 
 // 文字里 @ 了谁（key 列表，按出现顺序去重）；@全体 / @all = 全部。长名先匹配，短名不会误中长名的一部分
 export function parseMentions(text, members) {
@@ -47,9 +56,9 @@ const cut = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
 const pad = n => String(n).padStart(2, '0');
 const stamp = t => { const d = new Date(t); return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 // 群记录文件里的一条：「#序号 时间 谁：内容」，成员要前文自己去读
-export const logLine = (it, members, dir) => '#' + it.seq + ' ' + stamp(it.at || Date.now()) + ' ' + speaker(it, members) + '：' + withAtt(it, dir) + '\n';
+const logLine = (it, members, dir) => '#' + it.seq + ' ' + stamp(it.at || Date.now()) + ' ' + speaker(it, members) + '：' + withAtt(it, dir) + '\n';
 // 附件（图片 / 文件）：存在群记录目录的 files/<群>/<aid> 里；aid = 16 位十六进制 + 扩展名
-export const isAid = s => /^[0-9a-f]{16}(\.[a-z0-9]{1,8})?$/.test(String(s || ''));
+const isAid = s => /^[0-9a-f]{16}(\.[a-z0-9]{1,8})?$/.test(String(s || ''));
 const ATT_KIND = { image: '图片', video: '视频', file: '文件' };
 export const cleanAtt = a => Array.isArray(a) ? a.filter(x => x && isAid(x.aid)).slice(0, 10).map(x => ({ aid: x.aid, kind: ATT_KIND[x.kind] ? x.kind : 'file', name: String(x.name || '').replace(/[\r\n「」\]]/g, ' ').slice(0, 80), size: Number.isFinite(x.size) ? x.size : 0 })) : undefined;
 export const attKind = name => /\.(png|jpe?g|gif|webp)$/i.test(name || '') ? 'image' : /\.(mp4|mov|m4v|webm)$/i.test(name || '') ? 'video' : 'file';
@@ -128,11 +137,12 @@ export class Groups {
     for (const d of [dir, logDir]) { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); try { fs.chmodSync(d, 0o700); } catch {} }
     // 解散过的群（墓碑，留 30 天）：之后晚到的同步、消息、回复一律不收，镜像不会被「复活」
     this.goneFile = path.join(dir, 'gone.json');
-    try { this.gone = JSON.parse(fs.readFileSync(this.goneFile, 'utf8')) || {}; } catch { this.gone = {}; }
+    this.gone = readJson(this.goneFile, {});
     for (const [k, t] of Object.entries(this.gone)) if (Date.now() - t > 30 * 864e5) delete this.gone[k];
     for (const f of fs.readdirSync(dir)) {
       if (!/^[0-9a-f]{8}\.json$/.test(f)) continue;
-      try { const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); if (isGroupId(d.id)) this.map.set(d.id, new Group(this, d)); } catch {}
+      const d = readJson(path.join(dir, f), null);
+      if (isGroupId(d?.id)) this.map.set(d.id, new Group(this, d));
     }
     for (const g of this.map.values()) if (!fs.existsSync(this.logFile(g.id))) this.writeLog(g);
   }
@@ -186,15 +196,11 @@ export class Groups {
   }
   get(id) { return this.map.get(id) || null; }
   list() { return [...this.map.values()]; }
-  save(g) { if (g.closed) return; const f = path.join(this.dir, g.id.slice(3) + '.json'); fs.writeFileSync(f + '.tmp', JSON.stringify(g)); fs.renameSync(f + '.tmp', f); }
+  save(g) { if (!g.closed) writeJsonAtomic(path.join(this.dir, g.id.slice(3) + '.json'), g, 0); }
 
   // members：[{id, peerId?, peerName?, title, claw}]
   create({ name, members, host }) {
-    const seen = new Set(), ms = [];
-    for (const m of members || []) {
-      if (!m.id || seen.has(memberKey(m))) continue;
-      seen.add(memberKey(m)); ms.push(memberRec(m));
-    }
+    const ms = uniqMembers(members, memberRec);
     if (ms.length < 2) throw new Error('至少选 2 个会话');
     let id; do id = 'gp:' + crypto.randomBytes(4).toString('hex'); while (this.map.has(id));
     const g = new Group(this, { id, name: String(name || '').trim().slice(0, 40), members: memberNames(ms), host: ms.some(m => m.key === host) ? host : '' });
@@ -212,8 +218,7 @@ export class Groups {
     const notes = [];
     let list = null;
     if (Array.isArray(members)) {
-      const seen = new Set(); list = [];
-      for (const m of members) { if (!m?.id || seen.has(memberKey(m))) continue; seen.add(memberKey(m)); list.push(g.members.find(x => x.key === memberKey(m)) || memberRec(m)); }
+      list = uniqMembers(members, m => g.members.find(x => x.key === memberKey(m)) || memberRec(m));
       if (list.length < 2) throw new Error('群里至少要有 2 个会话');
     }
     if (typeof name === 'string' && name.trim().slice(0, 40) !== g.name) {
@@ -333,7 +338,7 @@ export class Groups {
       const early = fk && this.inflight.get(fk)?.answered;
       if (fk) this.inflight.delete(fk);
       if (g.closed) return;
-      if (early) { g.seen[key] = Math.max(g.seen[key] || 0, job.trigger); this.save(g); return; }   // 回复已经先到、贴过了
+      if (early) { markSeen(g, key, job.trigger); this.save(g); return; }   // 回复已经先到、贴过了
       if (r?.busy) {
         if (Date.now() - job.firstAt >= this.retryFor) { this.setStatus(g, key, ''); this.add(g, { kind: 'sys', text: '「' + m.name + '」一直在忙，这条没送到' }); return; }
         this.setStatus(g, key, r.offline ? '连不上，排队重试中' : '在忙，排队中');
@@ -342,14 +347,14 @@ export class Groups {
         continue;
       }
       if (r?.accepted) {
-        g.seen[key] = Math.max(g.seen[key] || 0, job.trigger);
+        markSeen(g, key, job.trigger);
         g.pending[r.msgId] = { key, depth: job.depth + 1, peerId: m.peerId, at: Date.now(), ...(r.msgId !== job.msgId ? { alt: job.msgId } : {}) };   // 对方回的编号和我们发的不同：两个都认
         this.save(g); this.setStatus(g, key, '已收到，回复稍后到');
         return;
       }
       this.setStatus(g, key, '');
       if (r?.ok) {
-        g.seen[key] = Math.max(g.seen[key] || 0, job.trigger);
+        markSeen(g, key, job.trigger);
         const att = cleanAtt(r.att);
         const it = this.add(g, { kind: 'gm', who: key, text: String(r.reply || (att?.length ? '' : '（这一轮没有文字回复）')).slice(0, 20000), att: att?.length ? att : undefined, depth: job.depth + 1 });
         g.seen[key] = it.seq; this.save(g);
@@ -453,7 +458,7 @@ export class Groups {
   // 镜像：给某个对方看的快照（collab 按对方的视角）
   snapshotFor(id, peerId) {
     const g = this.get(id);
-    return g && { id: toWire(id), name: g.name, title: g.title, created: g.created, av: g.av || undefined, avAt: g.avAt || undefined, members: g.membersView(peerId), items: g.items.slice(-SNAP).map(it => { const v = g.view(it, peerId); return v.text && v.text.length > 8000 ? { ...v, text: v.text.slice(0, 8000) + '…' } : v; }), status: Object.entries(g.status).map(([k, text]) => ({ name: g.members.find(m => m.key === k)?.name || '', text })) };
+    return g && { id: toWire(id), name: g.name, title: g.title, created: g.created, av: g.av || undefined, avAt: g.avAt || undefined, members: g.membersView(peerId), items: g.items.slice(-SNAP).map(it => { const v = g.view(it, peerId); return v.text && v.text.length > 8000 ? { ...v, text: v.text.slice(0, 8000) + '…' } : v; }), status: g.statusView() };
   }
   // 群头像（共用的那张）：只有仓库自带的预设图（p/…）各台电脑都有，选了它就同步给群里所有电脑；本机图 / 上传的只在本机，不走这里。
   // 主群记下 g.av 随快照发出去；镜像里换的先转给主群，由主群发给大家。收到别人换的：onAv 写进本机的头像设置
@@ -516,7 +521,7 @@ export class Groups {
     if (!g) return false;
     if (fromPeer && (g.mirror ? g.mirror.peerId !== fromPeer : !g.peers().includes(fromPeer))) return false;
     this.map.delete(id); g.closed = true;
-    this.gone[id] = Date.now(); try { fs.writeFileSync(this.goneFile, JSON.stringify(this.gone)); } catch {}
+    this.gone[id] = Date.now(); try { writeJsonAtomic(this.goneFile, this.gone, 0); } catch {}
     clearTimeout(this.syncT.get(id)); this.syncT.delete(id);
     try { fs.rmSync(path.join(this.dir, id.slice(3) + '.json'), { force: true }); fs.rmSync(this.logFile(id), { force: true }); fs.rmSync(this.attDir(id), { recursive: true, force: true }); } catch {}
     g.emit({ t: 'group.gone', id });

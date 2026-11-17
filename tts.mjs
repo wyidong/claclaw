@@ -8,12 +8,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { DATA, writeJsonAtomic } from './auth.mjs';
+import { DATA } from './auth.mjs';
+import { WIN, sleep, readJson, writeJsonAtomic } from './util.mjs';
 
 // ---------- 微软在线语音（Edge 的自然语音：晓伊、晓晓、云希…） ----------
 // 装了才有（tools/setup-edge-tts.sh，Windows 上 tools/setup-edge-tts.ps1：在 data/edge-tts 里建 Python 环境装 edge-tts）。常驻一个 Python 助手进程，一句约 2 秒。
 // 没装 / 没有 Python：声音列表里没有微软的，网页自动用浏览器自带的声音念
-const EDGE_PY = process.platform === 'win32'
+const EDGE_PY = WIN
   ? path.join(DATA, 'edge-tts', 'venv', 'Scripts', 'python.exe')
   : path.join(DATA, 'edge-tts', 'venv', 'bin', 'python');
 const EDGE_HELPER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tools', 'edge-tts-helper.py');
@@ -102,7 +103,7 @@ function volcSpeaker(id, sec = '') {
   if (v2 && sec) add.section_id = sec;
   return { sp, additions: Object.keys(add).length ? JSON.stringify(add) : null };
 }
-const volcCfg = () => { try { return JSON.parse(fs.readFileSync(VOLC_FILE, 'utf8')) || {}; } catch { return {}; } };
+const volcCfg = () => readJson(VOLC_FILE, {});
 // 完整的 Key：只给「查看 / 复制 Key」（先核对过 claclaw 密码）用
 export function volcKey() { return String(volcCfg().key || ''); }
 export function volcInfo() { const c = volcCfg(); return { set: !!c.key, tail: c.key ? String(c.key).slice(-4) : '', res: c.res || [] }; }
@@ -260,6 +261,13 @@ export function ttsCachePrune(now = Date.now()) {
 }
 setTimeout(ttsCachePrune, 30e3).unref?.();
 setInterval(ttsCachePrune, 6 * 3600e3).unref?.();
+// 语速：0.5～2.2 倍，认不出按 1
+const clampRate = rate => Math.min(2.2, Math.max(0.5, Number(rate) || 1));
+// 合成好的 mp3：Mac 上裁掉首尾静音（转成 AAC），裁不了就原样
+const trimMp3 = async (raw, text) => {
+  const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;
+  return trimmed ? { buf: trimmed, type: 'audio/mp4' } : { buf: raw, type: 'audio/mpeg' };
+};
 let running = 0;
 const waiters = [];
 const slot = () => running < 2 ? (running++, Promise.resolve()) : new Promise(ok => waiters.push(ok));
@@ -270,7 +278,7 @@ const release = () => { const w = waiters.shift(); if (w) w(); else running--; }
 // 改成浏览器自己取一条流：锁屏后 <audio> 照样往下读、往下放，跟听播客一样。
 // 服务端按顺序一句句合成（带 section_id，语气接得上），合成好的接着写进流；只比实际播放领先 STREAM_AHEAD 秒（停了不白花钱）。
 // 同一条流浏览器可能连着请求两次（先探一下再正式取）：合成结果存在任务里，重来的直接从头回放，不重复计费。
-export const STREAM_AHEAD = 45;
+const STREAM_AHEAD = 45;
 const jobs = new Map();
 // mp3 时长：数帧（MPEG1/2/2.5 Layer III）；开头的 ID3 标签跳过
 export function mp3Dur(buf) {
@@ -296,7 +304,7 @@ export function ttsJob({ parts, voice, rate, sec } = {}) {
   if (!parts.length) throw new Error('没有要念的文字');
   for (const [k, j] of jobs) if (Date.now() - j.at > 3 * 3600e3 || jobs.size > 8) { j.ac.abort(); jobs.delete(k); }
   const id = crypto.randomBytes(12).toString('base64url');
-  jobs.set(id, { parts, sp: voice.slice(5), rate: Math.min(2.2, Math.max(0.5, Number(rate) || 1)), sec: /^[\w-]{8,64}$/.test(String(sec || '')) ? String(sec) : '', at: Date.now(), bufs: [], durs: [], made: [], readers: 0, lastRead: Date.now(), t0: 0, done: false, error: '', ac: new AbortController() });
+  jobs.set(id, { parts, sp: voice.slice(5), rate: clampRate(rate), sec: /^[\w-]{8,64}$/.test(String(sec || '')) ? String(sec) : '', at: Date.now(), bufs: [], durs: [], made: [], readers: 0, lastRead: Date.now(), t0: 0, done: false, error: '', ac: new AbortController() });
   return id;
 }
 // 播到哪了：每句的时长（秒），网页拿它把 currentTime 换成「第几句」
@@ -310,7 +318,7 @@ function jobPart(j, i, synth) {
       const ahead = j.durs.reduce((a, b) => a + b, 0) - (j.t0 ? (Date.now() - j.t0) / 1000 : 0);
       if (!j.readers && Date.now() - j.lastRead > 20000) { j.ac.abort(); throw new Error('没人在听了'); }
       if (i === 0 || (j.readers && ahead < STREAM_AHEAD)) break;
-      await new Promise(r => setTimeout(r, 500));
+      await sleep(500);
     }
     const buf = await synth(j.parts[i], j.sp, j.rate, undefined, 30000, j.ac.signal, j.sec);
     j.bufs[i] = buf; j.durs[i] = mp3Dur(buf);
@@ -345,13 +353,11 @@ export async function ttsSynth(text, voice, rate, signal = null, sec = '') {
   if (!text) throw new Error('没有要念的文字');
   const voices = await ttsVoices();
   if (!voices.some(v => v.name === voice)) throw new Error('电脑上没有这个声音：' + voice);
-  const r = Math.min(2.2, Math.max(0.5, Number(rate) || 1));
+  const r = clampRate(rate);
   if (voice.startsWith('volc:')) {
     const key = crypto.createHash('sha1').update(voice + '|' + r + '|' + VOLC_TONE + '|' + text).digest('hex');
     { const hit = cache.get(key); if (hit) return hit; }
-    const raw = await volcSay(text, voice.slice(5), r, undefined, 30000, signal, sec);
-    const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;
-    const out = trimmed ? { buf: trimmed, type: 'audio/mp4' } : { buf: raw, type: 'audio/mpeg' };
+    const out = await trimMp3(await volcSay(text, voice.slice(5), r, undefined, 30000, signal, sec), text);
     cache.set(key, out);
     return out;
   }
@@ -360,19 +366,16 @@ export async function ttsSynth(text, voice, rate, signal = null, sec = '') {
     const res = await edgeCall({ op: 'say', text, voice: voice.slice(5), rate: (pct >= 0 ? '+' : '') + pct + '%' });
     const raw = Buffer.from(res.audio, 'base64');
     if (!raw.length) throw new Error('微软语音没有返回声音');
-    const trimmed = process.platform === 'darwin' ? await trimAudio(raw, 'mp3', text) : null;
-    const out = trimmed ? { buf: trimmed, type: 'audio/mp4' } : { buf: raw, type: 'audio/mpeg' };
-    return out;
+    return trimMp3(raw, text);
   }
-  const wpm = Math.round(Math.min(2.2, Math.max(0.5, Number(rate) || 1)) * 190);   // say 的语速是「每分钟词数」，190 约等于正常语速
+  const wpm = Math.round(r * 190);   // say 的语速是「每分钟词数」，190 约等于正常语速
   const key = crypto.createHash('sha1').update(voice + '|' + wpm + '|' + text).digest('hex');
   await slot();
   const file = path.join(os.tmpdir(), 'claclaw-tts-' + key + '.m4a');
   try {
     // 文字放在 -- 之后，开头是 - 也不会被当成参数
     await run('say', ['-v', voice, '-r', String(wpm), '--file-format=m4af', '--data-format=aac', '-o', file, '--', text]);
-    const out = { buf: (await trimAudio(fs.readFileSync(file), 'm4a', text)) || fs.readFileSync(file), type: 'audio/mp4' };
-    return out;
+    return { buf: (await trimAudio(fs.readFileSync(file), 'm4a', text)) || fs.readFileSync(file), type: 'audio/mp4' };
   } finally {
     release();
     fs.rm(file, { force: true }, () => {});

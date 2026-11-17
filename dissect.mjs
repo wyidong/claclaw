@@ -11,6 +11,13 @@ import { relPath } from './util.mjs';
 const BRIEF = 110, FILES_MAX = 30, WAIT_MS = 30 * 60e3;
 const snip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const num = (v) => (v == null || v === '' ? null : Number(v) || 0);
+// 消息内容里的文字：字符串原样；块数组取 text 块，空一行拼起来
+const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : '');
+const noReminders = (t) => t.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+// 一步的输出文字接上一段
+const addText = (s, t) => { s.text += (s.text ? '\n\n' : '') + t; s.chars += t.length; };
+// 一次工具调用（ms / size / err 等结果回来再填；at 是调用时刻，算完耗时就删掉）
+const newTool = (name, input, at) => ({ name: name || '?', brief: toolBrief(name, input), ms: 0, size: 0, err: false, at });
 
 // jsonl 一行用户记录 → 用户真正发的那句话；工具结果、系统注入、斜杠命令（/compact 等）及其输出、打断提示都不算（返回空）
 export function userTextOf(e) {
@@ -22,7 +29,7 @@ export function userTextOf(e) {
     if (c.some((x) => x && x.type === 'tool_result')) return '';
     for (const x of c) { if (x && x.type === 'text') t += (t ? '\n\n' : '') + (x.text || ''); else if (x && x.type === 'image') img = true; }
   }
-  t = t.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+  t = noReminders(t);
   if (sysLike(t)) return '';
   return t || (img ? '[图片]' : '');
 }
@@ -168,7 +175,7 @@ function claudeLine(st, e) {
       if (st.cur) st.cur.endAt = Math.max(st.cur.endAt, st.lastTs);
       return;
     }
-    const raw = typeof c === 'string' ? c : Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : '';
+    const raw = textOf(c);
     if (/^\[Request interrupted/.test(raw.trim())) { if (st.cur) { st.cur.interrupted = true; if (ts) st.lastTs = Math.max(st.lastTs, ts); st.cur.endAt = Math.max(st.cur.endAt, st.lastTs); } return; }
     const text = userTextOf(e);
     if (!text) { if (ts) st.lastTs = Math.max(st.lastTs, ts); return; }
@@ -179,8 +186,7 @@ function claudeLine(st, e) {
   if (t === 'attachment') {
     const a = e.attachment;
     if (a && a.type === 'queued_command' && a.prompt) {
-      const p = a.prompt, raw = typeof p === 'string' ? p : Array.isArray(p) ? p.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : '';
-      const text = raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+      const p = a.prompt, text = noReminders(textOf(p));
       if (text && !sysLike(text)) { const tr = startTurn(st, ts || st.lastTs, text, { queued: true }); if (Array.isArray(p)) tr.images = p.filter((x) => x && x.type === 'image').length; }
     }
     return;
@@ -201,8 +207,8 @@ function claudeLine(st, e) {
     if (m.model && !s.model) s.model = m.model;
     for (const b of Array.isArray(m.content) ? m.content : []) {
       if (!b) continue;
-      if (b.type === 'text') { s.text += (s.text ? '\n\n' : '') + (b.text || ''); s.chars += (b.text || '').length; }
-      else if (b.type === 'tool_use') { const tool = { name: b.name || '?', brief: toolBrief(b.name, b.input), ms: 0, size: 0, err: false, at: ts || st.lastTs }; s.tools.push(tool); if (b.id) st.pending.set(b.id, tool); }
+      if (b.type === 'text') addText(s, b.text || '');
+      else if (b.type === 'tool_use') { const tool = newTool(b.name, b.input, ts || st.lastTs); s.tools.push(tool); if (b.id) st.pending.set(b.id, tool); }
     }
     st.cur.endAt = Math.max(st.cur.endAt, st.lastTs);
     return;
@@ -225,7 +231,6 @@ function claudeLine(st, e) {
 export function dissectDs(recs) {
   const st = { turns: [], cur: null, step: null, stepId: null, lastTs: 0, pending: new Map() };
   let model = '', cwd = '';
-  const txt = (content) => (Array.isArray(content) ? content.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : typeof content === 'string' ? content : '');
   for (const r of recs || []) {
     if (!r || typeof r !== 'object') continue;
     const d = r.data || {}, ts = Number(r.time) || 0;
@@ -235,7 +240,7 @@ export function dissectDs(recs) {
       case 'request/header': { const m = d.header && d.header.config && d.header.config.model; if (m) model = m; break; }
       case 'user/message': {
         if (!d.source || d.source.kind !== 'user') break;
-        const text = txt(d.content); if (!text.trim()) break;
+        const text = textOf(d.content); if (!text.trim()) break;
         const tr = startTurn(st, ts, text, {});
         tr.images = Array.isArray(d.content) ? d.content.filter((x) => x && /image/.test(x.type || '')).length : 0;
         break;
@@ -248,10 +253,7 @@ export function dissectDs(recs) {
         const u = d.usage || {};
         s.inp = Number(u.inputTokens) || 0; s.cr = num(u.cacheReadTokens); s.cw = num(u.cacheWriteTokens);
         s.out = Number(u.outputTokens) || 0; s.think = Number(u.reasoningTokens) || 0;
-        for (const b of Array.isArray(d.message && d.message.content) ? d.message.content : []) {
-          if (!b) continue;
-          if (b.type === 'text') { s.text += (s.text ? '\n\n' : '') + (b.text || ''); s.chars += (b.text || '').length; }
-        }
+        for (const b of Array.isArray(d.message && d.message.content) ? d.message.content : []) if (b && b.type === 'text') addText(s, b.text || '');
         st.cur.steps.push(s); st.step = s;
         st.cur.endAt = Math.max(st.cur.endAt, ts);
         break;
@@ -259,7 +261,7 @@ export function dissectDs(recs) {
       case 'tool/call': {
         if (!st.step) break;
         let input = null; try { input = typeof d.arguments === 'string' ? JSON.parse(d.arguments) : d.arguments; } catch {}
-        const tool = { name: d.name || '?', brief: toolBrief(d.name, input), ms: 0, size: 0, err: false, at: ts };
+        const tool = newTool(d.name, input, ts);
         st.step.tools.push(tool); if (d.callId) st.pending.set(d.callId, tool);
         break;
       }
@@ -298,7 +300,6 @@ export function dissectDs(recs) {
 export function dissectKimi(recs, cwd) {
   const st = { turns: [], cur: null, step: null, lastTs: 0, pending: new Map() };
   let model = '', reqAt = 0;
-  const txt = (c) => (Array.isArray(c) ? c.filter((x) => x && x.type === 'text').map((x) => x.text || '').join('\n\n') : '');
   for (const r of recs || []) {
     if (!r || typeof r !== 'object') continue;
     const ts = Number(r.time) || 0;
@@ -307,7 +308,7 @@ export function dissectKimi(recs, cwd) {
     if (!ev) {
       if (r.type === 'turn.prompt') {
         if (r.origin && r.origin.kind && r.origin.kind !== 'user') continue;
-        const text = txt(r.input).replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+        const text = Array.isArray(r.input) ? noReminders(textOf(r.input)) : '';
         const images = Array.isArray(r.input) ? r.input.filter((x) => x && /image/.test(x.type || '')).length : 0;
         if (!text && !images) continue;
         const tr = startTurn(st, ts, text || '[图片]', {}); tr.images = images;
@@ -329,12 +330,12 @@ export function dissectKimi(recs, cwd) {
       }
       case 'content.part': {
         const p = ev.part || {};
-        if (st.step && p.type === 'text' && p.text) { st.step.text += (st.step.text ? '\n\n' : '') + p.text; st.step.chars += p.text.length; }
+        if (st.step && p.type === 'text' && p.text) addText(st.step, p.text);
         break;
       }
       case 'tool.call': {
         if (!st.step) break;
-        const tool = { name: ev.name || '?', brief: toolBrief(ev.name, ev.args), ms: 0, size: 0, err: false, at: ts };
+        const tool = newTool(ev.name, ev.args, ts);
         st.step.tools.push(tool); if (ev.toolCallId) st.pending.set(ev.toolCallId, tool);
         break;
       }

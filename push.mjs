@@ -1,23 +1,13 @@
 // 推送通知（Web Push）：iOS 16.4+ 从主屏幕打开的网页 App 才能收，且必须是 https。
 // 推送密钥（VAPID）首次使用时生成，订阅存在 data/push.json；都不进 git。
 // 推送内容只写「哪个会话 + 发生了什么」，不放对话内容 —— 它会经过苹果 / 浏览器厂商的推送服务器。
-import fs from 'node:fs';
 import path from 'node:path';
 import webpush from 'web-push';
 import { DATA } from './auth.mjs';
+import { readJson, writeJsonAtomic as writeJson, sleep } from './util.mjs';
 
 const VAPID_FILE = path.join(DATA, 'vapid.json');
 const SUBS_FILE = path.join(DATA, 'push.json');
-
-function readJson(file, fallback) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
-}
-function writeJson(file, obj) {
-  fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
-  const tmp = file + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, file);
-}
 
 function vapid() {
   let v = readJson(VAPID_FILE, null);
@@ -73,7 +63,7 @@ export async function sendAll(payload, log = () => {}) {
         return;
       } catch (e) {
         if (e.statusCode === 404 || e.statusCode === 410) { dead.push(sub.endpoint); return; }
-        if (!e.statusCode && n < 3) { await new Promise(r => setTimeout(r, 1500 * n)); continue; }
+        if (!e.statusCode && n < 3) { await sleep(1500 * n); continue; }
         log('push failed', e.statusCode || '', String(e.body || e.message).slice(0, 160));
         return;
       }

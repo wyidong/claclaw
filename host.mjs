@@ -14,11 +14,16 @@ import { mmBin } from './minimax.mjs';
 import { cbBin } from './codebuddy.mjs';
 import { qdBin } from './qoder.mjs';
 import { cpBin } from './copilot.mjs';
+import { HOME, readJson, classifyAddr } from './util.mjs';
 
 const run = (cmd, args, ms = 4000) => new Promise(ok => {
   execFile(cmd, args, { timeout: ms, env: { ...process.env, PATH: [path.dirname(process.execPath), process.env.PATH || '', '/usr/local/bin', '/opt/homebrew/bin'].join(':') } },
     (e, out) => ok(e ? '' : String(out).trim()));
 });
+
+// 各 Claw 的版本号：找到程序就跑 --version，输出里取 x.y.z…
+const binVer = find => { const b = find(); return b ? run(b, ['--version'], 8000) : Promise.resolve(''); };
+const semver = s => (String(s || '').match(/\d+\.\d+\.\d+\S*/) || [''])[0];
 
 // 过期了先给旧的、后台再刷新（kimi --version 一个就要近 1 秒，不让打开宿主页等它）
 const slow = { at: 0, data: null, p: null };
@@ -37,24 +42,17 @@ async function readSlow(root) {
     run('openclaw', ['--version'], 8000),
     run('git', ['-C', root, 'log', '-1', '--format=%h %ct']),
     run('opencode', ['--version'], 8000),
-    kmBin() ? run(kmBin(), ['--version'], 8000) : Promise.resolve(''),
-    qwBin() ? run(qwBin(), ['--version'], 8000) : Promise.resolve(''),
+    ...[kmBin, qwBin].map(binVer),
     Promise.resolve(cxVersion()),
-    ifBin() ? run(ifBin(), ['--version'], 8000) : Promise.resolve(''),
-    mmBin() ? run(mmBin(), ['--version'], 8000) : Promise.resolve(''),
-    cbBin() ? run(cbBin(), ['--version'], 8000) : Promise.resolve(''),
-    qdBin() ? run(qdBin(), ['--version'], 8000) : Promise.resolve(''),
-    cpBin() ? run(cpBin(), ['--version'], 8000) : Promise.resolve(''),
+    ...[ifBin, mmBin, cbBin, qdBin, cpBin].map(binVer),
   ]);
-  let dsh = '';
-  try { dsh = JSON.parse(fs.readFileSync('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json', 'utf8')).version; } catch {}
   const [hash, ct] = gitLine.split(' ');
   slow.data = {
     name: name || os.hostname(), os: (mac ? 'macOS ' : os.type() + ' ') + osVer, model,
-    claude: (claude.match(/\d+\.\d+\.\d+\S*/) || [''])[0],
+    claude: semver(claude),
     openclaw: (openclaw.match(/\d{4}\.\d+\.\d+\S*|\d+\.\d+\.\d+\S*/) || [''])[0],
-    dsh, opencode: (opencode.match(/\d+\.\d+\.\d+\S*/) || [''])[0], kimi: (kimi.match(/\d+\.\d+\.\d+\S*/) || [''])[0], qwen: (qwen.match(/\d+\.\d+\.\d+\S*/) || [''])[0], codex, commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
-    glm: glVersion(), ...Object.fromEntries([['iflow', iflow], ['minimax', mcode], ['codebuddy', codebuddy], ['qoder', qoder], ['copilot', copilot]].map(([k, v]) => [k, (String(v || '').match(/\d+\.\d+\.\d+\S*/) || [''])[0]])),
+    dsh: readJson('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json').version || '', opencode: semver(opencode), kimi: semver(kimi), qwen: semver(qwen), codex, commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
+    glm: glVersion(), iflow: semver(iflow), minimax: semver(mcode), codebuddy: semver(codebuddy), qoder: semver(qoder), copilot: semver(copilot),
   };
   slow.at = Date.now();
   return slow.data;
@@ -94,7 +92,7 @@ function addrs() {
       if (a.family !== 'IPv4' || a.internal) continue;
       // 只列有用的：Tailscale（手机就是走它连过来的）和本机网卡；虚拟机网桥、其它 VPN / 代理的虚拟网卡不列
       // Tailscale 的地址是 100.64/10 里的单个 /32；别的 VPN 也可能用这一段（比如 100.96.1.86/28），按掩码分开
-      if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) && a.netmask === '255.255.255.255') out.push({ ip: a.address, kind: 'Tailscale' });
+      if (classifyAddr(a.address) === 'tailscale' && a.netmask === '255.255.255.255') out.push({ ip: a.address, kind: 'Tailscale' });
       else if (/^en\d/.test(ifn) && a.address.startsWith('169.254.')) out.push({ ip: a.address, kind: '数据线直连', note: linkPeer(ifn) });
       else if (/^en\d/.test(ifn)) out.push({ ip: a.address, kind: '局域网' });
     }
@@ -129,7 +127,7 @@ function linkPeer(ifn) {
 // clarelay 设备网：只转发 https、没有虚拟 IP。本机网址由客户端状态文件里的 label + domain (+ port) 拼成
 // （只读这几项，文件里的密钥不碰）；在不在线从外面实际访问一次自己的网址：
 // 不在线时中继直接断开连接，在线时本机门卫解开 HTTPS 回 404——收到任何 HTTP 响应就算在线。结果缓存 60 秒。
-const CLARELAY_STATE = process.env.CLACLAW_CLARELAY_STATE || path.join(os.homedir(), '.clarelay-device.json');
+const CLARELAY_STATE = process.env.CLACLAW_CLARELAY_STATE || path.join(HOME, '.clarelay-device.json');
 const crl = { at: 0, p: null };
 function probeUrl(url, ms = 6000) {
   return new Promise(ok => {
@@ -140,9 +138,8 @@ function probeUrl(url, ms = 6000) {
     req.end();
   });
 }
-export function clarelayInfo() {
-  let st;
-  try { st = JSON.parse(fs.readFileSync(CLARELAY_STATE, 'utf8')); } catch { return Promise.resolve(null); }
+function clarelayInfo() {
+  const st = readJson(CLARELAY_STATE, null);
   if (!st?.label || !st?.domain) return Promise.resolve(null);
   const url = 'https://' + st.label + '.' + st.domain + (st.port && st.port !== 443 ? ':' + st.port : '');
   const status = st.revoked ? 'revoked' : st.status || 'pending';

@@ -3,13 +3,12 @@
 // 各 Claw 新建会话 / 切模型时从这里选（modelpick.mjs）。
 // key：列表接口只给「有没有 key + 后 4 位」，日志里不写；要看完整的 key 得再输一次 claclaw 用户名和密码（server.mjs /api/models/key）。
 // 改 key 只能整个替换；key 必填，不能清掉（不用了就删掉这一条）。
-import fs from 'node:fs';
-import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import crypto from 'node:crypto';
+import { readJson, writeJsonAtomic } from './util.mjs';
 
-export const FORMATS = ['anthropic', 'openai', 'gemini'];   // 一家可能同时有几种接口格式，每种一个地址
+const FORMATS = ['anthropic', 'openai', 'gemini'];   // 一家可能同时有几种接口格式，每种一个地址
 const MAX_PROVIDERS = 50, MAX_MODELS = 500, MAX_KEY = 1000;
 const PROVIDER_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const MODEL_ID = /^[A-Za-z0-9][\w.:/@+-]{0,119}$/;   // deepseek-v4-pro、gpt-5.1、Qwen/Qwen3-Coder、models/gemini-2.5-flash……
@@ -20,20 +19,13 @@ const str = (v, max) => String(v ?? '').trim().slice(0, max);
 export function emptyStore() { return { version: 1, providers: [] }; }
 
 export function loadStore(file) {
-  try {
-    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (!j || !Array.isArray(j.providers)) return emptyStore();
-    for (const p of j.providers) { const u = Object.values(p?.endpoints || {})[0]; if (u) p.name = providerName(u); }   // 供应商一律按主地址认
-    return { version: 1, providers: j.providers };
-  } catch { return emptyStore(); }
+  const j = readJson(file, null);
+  if (!Array.isArray(j?.providers)) return emptyStore();
+  for (const p of j.providers) { const u = Object.values(p?.endpoints || {})[0]; if (u) p.name = providerName(u); }   // 供应商一律按主地址认
+  return { version: 1, providers: j.providers };
 }
 
-export function saveStore(file, store) {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const tmp = file + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(store, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, file);
-}
+export const saveStore = (file, store) => writeJsonAtomic(file, store);
 
 // 给网页看的：去掉 key，只留后 4 位
 export function publicView(store) {
@@ -199,7 +191,7 @@ export function revealKey(store, id) {
 
 // 服务端发的请求按 HTTP(S)_PROXY / NO_PROXY 走代理（Node 自带的 fetch 不读这些变量，国外的接口直连会卡到超时）。
 // 只给「从接口读模型」用，不动全局：局域网协同、中继、本机设备客户端照旧直连。不跟随跳转（key 在请求头里，不能被带到别处）。
-export function envFetch(url, { headers = {}, signal } = {}) {
+function envFetch(url, { headers = {}, signal } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url), mod = u.protocol === 'http:' ? http : https;
     const q = mod.request(u, { headers, signal, agent: new mod.Agent({ proxyEnv: process.env }) }, r => {
@@ -218,20 +210,14 @@ export function envFetch(url, { headers = {}, signal } = {}) {
 export async function fetchModels(p, { timeout = 8000, fetchImpl = envFetch } = {}) {
   if (!p?.key) fail('先填 Key');
   const eps = p.endpoints || {}, tries = [];
-  if (eps.openai) {
-    const h = { authorization: 'Bearer ' + p.key };
-    tries.push(['OpenAI', eps.openai + '/models', h]);
-    if (!/\/v\d+[a-z]*$/i.test(eps.openai)) tries.push(['OpenAI', eps.openai + '/v1/models', h]);
-  }
+  // OpenAI 格式：<base>/models，base 没写到 /v1 这类版本号的再试 <base>/v1/models
+  const openai = base => { const h = { authorization: 'Bearer ' + p.key }; tries.push(['OpenAI', base + '/models', h]); if (!/\/v\d+[a-z]*$/i.test(base)) tries.push(['OpenAI', base + '/v1/models', h]); };
+  if (eps.openai) openai(eps.openai);
   if (eps.anthropic) tries.push(['Anthropic', eps.anthropic.replace(/\/v1$/, '') + '/v1/models?limit=1000', { 'x-api-key': p.key, 'anthropic-version': '2023-06-01' }]);
   // 只填了「…/anthropic」兼容地址（DeepSeek、Kimi、智谱等）：这些家的 Anthropic 兼容口没有模型列表（回 404），
   // 列表在同一域名的 OpenAI 格式口上，Key 通用，所以去掉 /anthropic 再按 OpenAI 格式试一次
   const anthBase = !eps.openai && eps.anthropic?.match(/^(https?:\/\/.+?)\/anthropic(?:\/v1)?\/?$/i)?.[1];
-  if (anthBase) {
-    const h = { authorization: 'Bearer ' + p.key };
-    tries.push(['OpenAI', anthBase + '/models', h]);
-    if (!/\/v\d+[a-z]*$/i.test(anthBase)) tries.push(['OpenAI', anthBase + '/v1/models', h]);
-  }
+  if (anthBase) openai(anthBase);
   if (eps.gemini) tries.push(['Gemini', (/\/v1(beta)?$/.test(eps.gemini) ? eps.gemini : eps.gemini + '/v1beta') + '/models?pageSize=1000', { 'x-goog-api-key': p.key }]);
   let last = '';
   for (const [fmt, url, headers] of tries) {

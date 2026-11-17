@@ -8,8 +8,8 @@
 // 环境变量：MINI_FORMAT（接口格式 openai | anthropic | gemini，默认 openai）、MINI_BASE_URL（openai 写到 /v1；anthropic 写到 /v1 之前；gemini 写到 /v1beta）、MINI_API_KEY、MINI_MODELS（逗号分隔）、MINI_MODEL、MINI_DIR（会话目录）、MINI_BUDGET（上下文预算 token）、MINI_MAX_OUT
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
+import { HOME, readJson, writeJsonAtomic, hash16 } from './util.mjs';
 
 const BASE = (process.env.MINI_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
 const KEY = process.env.MINI_API_KEY || 'none';
@@ -17,7 +17,7 @@ const FORMAT = ['anthropic', 'gemini'].includes(process.env.MINI_FORMAT) ? proce
 const hostOf = u => { try { return new URL(u).host; } catch { return ''; } };
 const MODELS = (process.env.MINI_MODELS || '').split(',').map(s => s.trim()).filter(Boolean);
 const DEFAULT_MODEL = process.env.MINI_MODEL || MODELS[0] || 'qwen3:1.7b';
-const DIR = process.env.MINI_DIR || path.join(os.homedir(), '.claclaw-mini', 'sessions');
+const DIR = process.env.MINI_DIR || path.join(HOME, '.claclaw-mini', 'sessions');
 const BUDGET = Math.max(2000, Number(process.env.MINI_BUDGET) || 6000);
 const MAX_OUT = Math.max(256, Number(process.env.MINI_MAX_OUT) || 4096);   // 一次回复的 token 上限：小模型偶尔停不下来
 
@@ -32,19 +32,17 @@ const sessions = new Map();   // id → { id, cwd, model, think, noOff, plain, t
 const file = id => path.join(DIR, id + '.json');
 const validId = id => /^[A-Za-z0-9_.-]{4,128}$/.test(id);
 function save(s) {
-  const o = { sessionId: s.id, cwd: s.cwd, model: s.model, think: s.think, noOff: s.noOff, plain: s.plain, title: s.title, from: s.from, messages: s.messages, updatedAt: new Date().toISOString() };
-  const tmp = file(s.id) + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(o), { mode: 0o600 });
-  fs.renameSync(tmp, file(s.id));
+  writeJsonAtomic(file(s.id), { sessionId: s.id, cwd: s.cwd, model: s.model, think: s.think, noOff: s.noOff, plain: s.plain, title: s.title, from: s.from, messages: s.messages, updatedAt: new Date().toISOString() }, 0);
 }
+// 内存里的会话：o 是会话文件里存的（新建时为空）
+const sessionOf = (id, cwd, o = {}) => ({ id, cwd: o.cwd || cwd || HOME, model: o.model || DEFAULT_MODEL, think: !!o.think, noOff: !!o.noOff, plain: !!o.plain, title: o.title || '', messages: Array.isArray(o.messages) ? o.messages : [], from: Number(o.from) || 0, abort: null });
 function open(id, cwd) {
   if (!validId(id)) throw new Error('会话 id 不对');
   let s = sessions.get(id);
   if (s) return s;
-  let o = null;
-  try { o = JSON.parse(fs.readFileSync(file(id), 'utf8')); } catch {}
+  const o = readJson(file(id), null);
   if (!o) throw new Error('找不到这个会话');
-  s = { id, cwd: o.cwd || cwd || os.homedir(), model: o.model || DEFAULT_MODEL, think: !!o.think, noOff: !!o.noOff, plain: !!o.plain, title: o.title || '', messages: Array.isArray(o.messages) ? o.messages : [], from: Number(o.from) || 0, abort: null };
+  s = sessionOf(id, cwd, o);
   sessions.set(id, s);
   return s;
 }
@@ -54,7 +52,7 @@ const MAX_IMGS = 6, IMG_TOK = 800;   // 发给模型的历史里最多带最近 
 const imgDir = id => path.join(DIR, id + '.files');
 function saveImg(id, mime, data) {
   const buf = Buffer.from(data, 'base64');
-  const name = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16) + '.' + EXT[mime];
+  const name = hash16(buf) + '.' + EXT[mime];
   fs.mkdirSync(imgDir(id), { recursive: true, mode: 0o700 });
   const f = path.join(imgDir(id), name);
   if (!fs.existsSync(f)) fs.writeFileSync(f, buf, { mode: 0o600 });
@@ -69,9 +67,8 @@ function readImg(id, im) {
   return d;
 }
 function create(cwd) {
-  const id = crypto.randomUUID();
-  const s = { id, cwd: cwd || os.homedir(), model: DEFAULT_MODEL, think: false, noOff: false, plain: false, title: '', messages: [], from: 0, abort: null };
-  sessions.set(id, s); save(s);
+  const s = sessionOf(crypto.randomUUID(), cwd);
+  sessions.set(s.id, s); save(s);
   return s;
 }
 const configOf = s => [

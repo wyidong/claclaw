@@ -49,7 +49,10 @@ function qoderLoggedIn() {
   if (Date.now() - qoderCache.at >= 60000) qoderCheck();
   return qoderCache.ok;
 }
-const iflowSettings = () => readJson(path.join(process.env.IFLOW_HOME || path.join(HOME, '.iflow'), 'settings.json'), {});
+const iflowDir = () => process.env.IFLOW_HOME || path.join(HOME, '.iflow');
+const iflowSettings = () => readJson(path.join(iflowDir(), 'settings.json'), {});
+// 模型库里有这几种接口格式的模型：不登录也能用
+const libHas = (...fmts) => () => libModels(storeNow(), fmts).length > 0;
 
 // DeepSeek Harness 的 key 存在 $DSH_HOME/.credentials.yaml：
 //   version: 1
@@ -57,7 +60,7 @@ const iflowSettings = () => readJson(path.join(process.env.IFLOW_HOME || path.jo
 //     DEEPSEEK_API_KEY: sk-…
 // 只改 DEEPSEEK_API_KEY 这一行（没有就加在 refs 下面），别的 refs（比如 ARK_API_KEY）原样留着
 const DSH_CRED = () => path.join(process.env.DSH_HOME || path.join(HOME, '.dsh'), '.credentials.yaml');
-export const DS_KEY_RE = /^sk-[A-Za-z0-9_-]{16,200}$/;
+const DS_KEY_RE = /^sk-[A-Za-z0-9_-]{16,200}$/;
 export function dsWriteKey(key, file = DSH_CRED()) {
   key = String(key || '').trim();
   if (!DS_KEY_RE.test(key)) throw new Error('这不像 DeepSeek 的 API key（应该以 sk- 开头）');
@@ -86,7 +89,7 @@ export function dsHasKey(file = DSH_CRED()) {
 }
 
 // 每个能登录的 Claw：label；cmd()：[程序, 参数]（程序找不到返回 null）；cwd；
-// steps：看到什么就自动输什么（终端界面型）；keyPrompt：要先填 key（看到这个提示就把 key 喂进去）；paste：要用户粘贴授权码的提示；
+// steps：看到什么就自动输什么（终端界面型）；keyPrompt：要先填 key（看到这个提示就把 key 喂进去）；
 // doneWhen(text)：进程不会自己退出的（CodeBuddy）怎么算成功；write(key)：不起命令、直接写文件的
 // loggedIn()：true / false / null（判断不了）；check()：现查一次（Promise，可省）；libOk()：模型库能顶上、不登录也能用
 // Codex：claclaw 实际起的是 codex-acp（它带着自己那份 Codex）。登录用它转发的 `codex-acp cli login --device-auth`，
@@ -119,41 +122,41 @@ export const SPECS = {
   minimax: {
     label: 'MiniMax Code', cmd: () => { const b = mmBin(); return b && [b, ['login', '--no-browser']]; },
     // 登录状态在 auth/<env>/<区域>/<client>/auth-state.json 的 status 里（没登完是 authorizing）
-    loggedIn: () => { const root = path.join(process.env.MINIMAX_DATA_DIR || path.join(HOME, '.minimax'), 'auth'); let ok = false; const walk = d => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { if (e.isDirectory()) walk(path.join(d, e.name)); else if (e.name === 'auth-state.json') { const st = String(readJson(path.join(d, e.name), {}).status || ''); if (st && !/authoriz(ing|e_pending)|unauth|signed_out|logged_out|expired|none|pending/i.test(st)) ok = true; } } }; walk(root); return ok; }, libOk: () => libModels(storeNow(), ['openai', 'anthropic']).length > 0,
+    loggedIn: () => { const root = path.join(process.env.MINIMAX_DATA_DIR || path.join(HOME, '.minimax'), 'auth'); let ok = false; const walk = d => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { if (e.isDirectory()) walk(path.join(d, e.name)); else if (e.name === 'auth-state.json') { const st = String(readJson(path.join(d, e.name), {}).status || ''); if (st && !/authoriz(ing|e_pending)|unauth|signed_out|logged_out|expired|none|pending/i.test(st)) ok = true; } } }; walk(root); return ok; }, libOk: libHas('openai', 'anthropic'),
     hint: '打开网址，登录 MiniMax 账号，把下面的一次性代码填进去',
   },
   kimi: {
     label: 'Kimi Code', cmd: () => { const b = kmBin(); return b && [b, ['login']]; },
-    loggedIn: () => exists(path.join(process.env.KIMI_CODE_HOME || path.join(HOME, '.kimi-code'), 'credentials.json')), libOk: () => libModels(storeNow(), ['openai', 'anthropic']).length > 0,
+    loggedIn: () => exists(path.join(process.env.KIMI_CODE_HOME || path.join(HOME, '.kimi-code'), 'credentials.json')), libOk: libHas('openai', 'anthropic'),
     hint: '打开网址，登录 Kimi 账号，把下面的一次性代码填进去',
   },
   codex: {
     label: 'Codex', cmd: () => codexLoginCmd(),
-    loggedIn: () => exists(path.join(process.env.CODEX_HOME || path.join(HOME, '.codex'), 'auth.json')), libOk: () => libModels(storeNow(), ['openai']).length > 0,
+    loggedIn: () => exists(path.join(process.env.CODEX_HOME || path.join(HOME, '.codex'), 'auth.json')), libOk: libHas('openai'),
     hint: '打开网址，登录 ChatGPT 账号，把下面的一次性代码填进去',
   },
   copilot: {
     // 默认是本机浏览器 + 127.0.0.1 回调，手机上用不了：强制设备码（github.com/login/device + 一次性代码）
     label: 'Copilot CLI', cmd: () => { const b = cpBin(); return b && [b, ['login', '--device-code']]; },
-    loggedIn: cpLoggedIn, libOk: () => libModels(storeNow(), ['openai', 'anthropic']).length > 0,
+    loggedIn: cpLoggedIn, libOk: libHas('openai', 'anthropic'),
     hint: '打开网址，登录 GitHub 账号，把下面的一次性代码填进去（要有 Copilot 订阅；只用模型库的模型可以不登录）',
   },
   glm: {
     label: 'GLM Agent', cmd: () => { const b = glBin(); return b && [b, ['--setup']]; },
     keyPrompt: /Z_AI_API_KEY/i, keyLabel: 'Z.AI 的 API key（z.ai → API Keys）',
-    loggedIn: () => !!process.env.Z_AI_API_KEY || exists(path.join(process.env.XDG_CONFIG_HOME || path.join(HOME, '.config'), 'glm-acp-agent', 'credentials.json')), libOk: () => libModels(storeNow(), ['openai']).length > 0,
+    loggedIn: () => !!process.env.Z_AI_API_KEY || exists(path.join(process.env.XDG_CONFIG_HOME || path.join(HOME, '.config'), 'glm-acp-agent', 'credentials.json')), libOk: libHas('openai'),
     hint: '填入 Z.AI 的 API key，claclaw 替你存进 glm-acp-agent',
   },
   iflow: {
     label: 'iFlow CLI', keyLabel: '心流平台的 API key（platform.iflow.cn）',
     write: key => {
-      const f = path.join(process.env.IFLOW_HOME || path.join(HOME, '.iflow'), 'settings.json');
+      const f = path.join(iflowDir(), 'settings.json');
       const s = readJson(f, {}); s.selectedAuthType = 'iflow'; s.apiKey = key;
       fs.mkdirSync(path.dirname(f), { recursive: true });
       const tmp = f + '.claclaw-' + process.pid; fs.writeFileSync(tmp, JSON.stringify(s, null, 2) + '\n', { mode: 0o600 }); fs.renameSync(tmp, f);
     },
-    loggedIn: () => { const s = iflowSettings(); return !!(s.selectedAuthType && s.selectedAuthType !== 'openai-compatible' ? (s.apiKey || exists(path.join(process.env.IFLOW_HOME || path.join(HOME, '.iflow'), 'oauth_creds.json'))) : s.apiKey); },
-    libOk: () => libModels(storeNow(), ['openai']).length > 0,
+    loggedIn: () => { const s = iflowSettings(); return !!(s.selectedAuthType && s.selectedAuthType !== 'openai-compatible' ? (s.apiKey || exists(path.join(iflowDir(), 'oauth_creds.json'))) : s.apiKey); },
+    libOk: libHas('openai'),
     hint: '填入心流平台的 API key，claclaw 写进 iFlow 的设置',
   },
 };
@@ -190,7 +193,6 @@ const view = j => ({ t: 'login.update', claw: j.claw, label: j.label, status: j.
 const writeIn = (p, s) => { if (!p || p.exitCode !== null || p.signalCode !== null || !p.stdin?.writable) return false; try { p.stdin.write(s); return true; } catch { return false; } };
 function push(j) { const s = JSON.stringify(view(j)); for (const w of j.subs) if (w.readyState === 1) w.send(s); }
 
-export function loginState(claw) { const j = jobs.get(claw); return j ? view(j) : null; }
 export function loginWatch(claw, ws) { const j = jobs.get(claw); if (j) { j.subs.add(ws); push(j); return true; } return false; }
 
 // 开始登录（已经在跑就接上看进度）。key：要先填 key 的 Claw 这里带上
@@ -224,9 +226,7 @@ export function loginStart(claw, ws, { key = '', log } = {}) {
     if (!j.url) { const urls = (j.text.match(URL_RE) || []).filter(u => !/docs\.|\/docs\b|vibex\.iflow|manage-apikey|github\.com(?!\/login\/device)|localhost|127\.0\.0\.1/i.test(u)); if (urls.length) j.url = urls[0].replace(/[.,;:!?]+$/, ''); }
     if (!j.code) { const m = j.text.match(CODE_RE); if (m) j.code = m[1]; }
     j.raw = tailOf(j.text);
-    j.tail = (j.url || j.code) && !j.prompt ? '等你在网页上完成授权…' : j.raw;   // 网址 / 代码已经给出去了：命令那边刷的「Waiting for auth…」不用再看，给一句明白话
-    // 要用户粘贴授权码的提示（Claude 那种）
-    if (s.paste && !j.prompt && s.paste.test(j.text)) { j.prompt = s.pasteLabel || '把网页上给的授权码粘到这里'; }
+    j.tail = j.url || j.code ? '等你在网页上完成授权…' : j.raw;   // 网址 / 代码已经给出去了：命令那边刷的「Waiting for auth…」不用再看，给一句明白话
     // 要 key 的：看到提示就把 key 喂进去（只一次）
     if (s.keyPrompt && j.key && !j.done.has('key') && s.keyPrompt.test(j.text)) { j.done.add('key'); writeIn(p, j.key + '\n'); j.tail = '已填入 key，等它保存…'; }
     // 终端界面型：按步骤自动输入（每步只一次）

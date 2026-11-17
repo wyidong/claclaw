@@ -5,20 +5,18 @@
 //   - 重发间隔 1、2、5、10 分钟，之后每 10 分钟一次，带抖动，最长 24 小时；每次带同一个 msg_id 和 sent_at
 //   - 收信去重保留 24 小时，落盘（重启后还认得）
 //   - sent_at：第一次发送的时间（ISO 8601，带时区）；收到时晚了 5 分钟以上，交给会话时注明「X 前发出」
-import fs from 'node:fs';
-import path from 'node:path';
+import { readJson, writeJsonAtomic } from './util.mjs';
 
 export const RETRY_STEPS = [60e3, 2 * 60e3, 5 * 60e3, 10 * 60e3];
 export const RETRY_EVERY = 10 * 60e3;
 export const RETRY_MAX_AGE = 24 * 3600e3;
 export const BUSY_RETRY = 60e3, BUSY_MAX = 5, BUSY_LATER = 2 * 60e3;
 export const SEEN_TTL = 24 * 3600e3;
-export const LATE_MS = 5 * 60e3;
+const LATE_MS = 5 * 60e3;
 
 // 一次发送的结果归类：ok 送到了 | offline 连不上（排队重发）| busy 对方忙（短间隔重试几次）| fail 对方明确拒绝（不重试）
 export function classify(res, err) {
-  if (err) return 'offline';   // 连接失败、超时、发出去后连接被掐：同一个 msg_id 重发，对方按编号去重，不会处理两遍
-  if (!res) return 'offline';
+  if (err || !res) return 'offline';   // 连接失败、超时、发出去后连接被掐：同一个 msg_id 重发，对方按编号去重，不会处理两遍
   if (res.ok) return 'ok';
   const s = Number(res.status) || 0;
   if (s === 502 || s === 503 || s === 504) return 'offline';
@@ -55,7 +53,7 @@ export function lateText(sentAt, now = Date.now()) {
 export class DiskMap {
   constructor(file, { ttl = 0, max = 2000 } = {}) {
     this.file = file; this.ttl = ttl; this.max = max;
-    try { this.m = new Map(Object.entries(JSON.parse(fs.readFileSync(file, 'utf8')) || {})); } catch { this.m = new Map(); }
+    this.m = new Map(Object.entries(readJson(file, {})));
     this.prune();
   }
   prune(now = Date.now()) {
@@ -67,12 +65,5 @@ export class DiskMap {
   set(k, v) { this.m.delete(k); this.m.set(k, v); this.prune(); this.save(); }
   delete(k) { if (this.m.delete(k)) this.save(); }
   values() { return [...this.m.values()]; }
-  save() {
-    try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true, mode: 0o700 });
-      const tmp = this.file + '.' + process.pid + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(Object.fromEntries(this.m)), { mode: 0o600 });
-      fs.renameSync(tmp, this.file);
-    } catch {}
-  }
+  save() { try { writeJsonAtomic(this.file, Object.fromEntries(this.m), 0); } catch {} }
 }

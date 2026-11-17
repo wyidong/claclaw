@@ -4,8 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-
-const HOME = os.homedir();
+import { HOME, WIN } from './util.mjs';
 
 // 敏感位置：读、搜、写都要确认；它们的上级目录（整个家目录、整个工作区……）也要确认，免得一把搜进去
 export function sensitiveRoots(dataDir) {
@@ -21,7 +20,6 @@ const SENSITIVE_NAME = /(^|\/)(\.env(\.[^/]*)?|id_(rsa|dsa|ecdsa|ed25519)[^/]*|[
 // 不统一的话 ~\.ssh\id_rsa、proj\.env、data\peer.json 全都判不出敏感（反斜杠被 [^/]* 吃掉）。
 // 统一成小写的 / 分隔再比（Windows 文件名不分大小写）；其他系统原样返回，行为不变 ——
 // macOS 的文件名里可以有反斜杠，不能跟着转。
-const WIN = process.platform === 'win32';
 const norm = p => WIN ? String(p || '').replace(/\\/g, '/').toLowerCase() : String(p || '');
 const NHOME = norm(HOME);
 const isRoot = p => p === '/' || (WIN && /^[a-z]:\/?$/.test(p));
@@ -270,7 +268,7 @@ function unquoted(s, keepDq = false) {
   return out;
 }
 // 按 && || ; | & 换行切成一段段命令（引号里的不算）
-export function segments(cmd) {
+function segments(cmd) {
   const s = String(cmd || ''), out = [];
   let last = 0;
   for (const m of unquoted(s).matchAll(/&&|\|\||[;|&\n]/g)) { out.push(s.slice(last, m.index)); last = m.index + m[0].length; }
@@ -397,8 +395,7 @@ export function peerInstructed(name, input, text) {
   }
   if (input.file_path || input.notebook_path) return has(base(input.file_path || input.notebook_path));
   if (input.url) { try { return has(new URL(input.url).hostname); } catch { return false; } }
-  if (input.query) return true;
-  return true;   // 认不出来的工具：按对方点名算，照样问
+  return true;   // 搜索（query）、认不出来的工具：按对方点名算，照样问
 }
 
 // 删除、覆盖、重置、强推、杀进程、发布这类做了收不回来的：不管是谁的主意都要确认
@@ -426,7 +423,7 @@ export function peerIntent(text) { return INTENT_WORDS.test(String(text || ''));
 // 读环境变量：Claude 进程的环境里有 CLAUDE_CODE_OAUTH_TOKEN（长期令牌）等钥匙，回复会传回对方，
 // 按「读敏感内容」算——一律确认，不交给小模型审查（对方点名要 printenv 也一样）
 const ENV_CMDS = new Set(['env', 'printenv', 'set', 'export', 'declare', 'typeset', 'compgen', 'launchctl']);
-export function readsEnv(cmd) {
+function readsEnv(cmd) {
   const s = String(cmd || '');
   if (/process\.env|os\.environ|getenv|\/environ\b|\$ENV\b|\bENV\[|CLAUDE_CODE_OAUTH_TOKEN/.test(s)) return true;
   for (const m of unquoted(s, true).matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)) if (!SAFE_VARS.has(m[1])) return true;
@@ -442,7 +439,7 @@ export function readsEnv(cmd) {
 // 「本轮同类都允许」按什么算同类：每段命令的命令名（git / npm 这类再带上子命令，node / python 带上脚本），
 // 复合命令（&& ; | …）按所有段的命令名一起算——允许过 `cd ~ && ls` 不等于允许 `cd x && rm -rf y`，允许过 git commit 不等于允许 git push
 const SUB_CMDS = new Set(['git', 'npm', 'npx', 'pnpm', 'yarn', 'bun', 'deno', 'docker', 'kubectl', 'brew', 'pip', 'pip3', 'cargo', 'go', 'gh', 'make', 'node', 'python', 'python3', 'bash', 'sh', 'zsh']);
-export function bashKey(cmd) {
+function bashKey(cmd) {
   const heads = segments(cmd).map(seg => {
     const w = words(seg).filter((a, i, all) => !all.slice(0, i + 1).every(x => /^[A-Za-z_][A-Za-z0-9_]*=/.test(x)));   // 去掉开头的 FOO=1
     const c = String(w[0] || '');

@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readJson, writeJsonAtomic } from './util.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const vendorRoot = () => process.env.CLACLAW_VENDOR || path.join(ROOT, 'vendor');
@@ -33,7 +34,6 @@ const VER_RE = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$/;
 const MAX_FILE = 8 * 1024 * 1024, TIMEOUT = 30e3;
 const sha256 = b => crypto.createHash('sha256').update(b).digest('hex');
 const libOf = id => { const L = LIBS[id]; if (!L) throw new Error('不认识的第三方库：' + id); return L; };
-const readJson = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const DIR_RE = /^[0-9A-Za-z][0-9A-Za-z._-]*$/;
 
 // 版本比较：a 比 b 新返回 true（按点分的数字比，非数字部分按字符串）
@@ -70,7 +70,7 @@ export function fileVersion(id, bytes) {
 
 // 当前版本：vendor/<库>/current.json = { version, dir, from, at, sha256, signed }
 function current(id) {
-  const L = libOf(id), c = readJson(path.join(vendorRoot(), id, 'current.json'));
+  const L = libOf(id), c = readJson(path.join(vendorRoot(), id, 'current.json'), null);
   if (!c || typeof c.dir !== 'string' || !DIR_RE.test(c.dir)) return null;
   const dir = path.join(vendorRoot(), id, c.dir);
   if (!fs.existsSync(path.join(dir, L.main))) return null;
@@ -170,9 +170,7 @@ function put(id, bytes, version, { from, signed, log, allowDowngrade = false }) 
     fs.rmSync(dest, { recursive: true, force: true });
     fs.renameSync(tmp, dest);
   } catch (e) { fs.rmSync(tmp, { recursive: true, force: true }); throw e; }
-  const meta = { version, dir: dirName, from, at: Date.now(), signed, sha256: hash };
-  const cj = path.join(top, 'current.json'), t2 = cj + '.tmp';
-  fs.writeFileSync(t2, JSON.stringify(meta, null, 2)); fs.renameSync(t2, cj);
+  writeJsonAtomic(path.join(top, 'current.json'), { version, dir: dirName, from, at: Date.now(), signed, sha256: hash });
   // 留当前和上一个版本，更早的删掉
   for (const e of fs.readdirSync(top, { withFileTypes: true })) {
     if (!e.isDirectory() || e.name === dirName || e.name === cur?.dir) continue;

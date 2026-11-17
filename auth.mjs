@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { readJson, writeJsonAtomic } from './util.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const DATA = process.env.CLACLAW_DATA ? path.resolve(process.env.CLACLAW_DATA) : path.join(ROOT, 'data');
@@ -26,20 +27,11 @@ function check(password, rec) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function readJson(file, fallback) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
-}
-// 原子写：先写临时文件再 rename，掉电/崩溃不会写出半截 JSON。
-// 导出给 server.mjs / peer.mjs 等处统一使用。
-export function writeJsonAtomic(file, obj) {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const tmp = file + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, file);
-}
+// 原子写在 util.mjs；这里照旧导出（server.mjs 等从这里拿）
+export { writeJsonAtomic };
 
 // 每次都从磁盘读：命令行脚本改了密码，服务不用重启就生效
-export function loadAuth() {
+function loadAuth() {
   const a = readJson(AUTH_FILE, null);
   return a?.master ? a : null;
 }

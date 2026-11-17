@@ -4,8 +4,8 @@
 // - dsh / OpenClaw：它们自己已经配了供应商；按「同一个接口地址（host）+ 同一个模型 ID」把它们的模型对上模型库里的那一条
 // 选择框的数据统一成 { current, label, groups: [{ name, items: [{ value, label, sub, disabled }] }] }，模型库的组排在前面
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { DATA } from './auth.mjs';
+import { hash16 } from './util.mjs';
 import { loadStore, displayName } from './modelstore.mjs';
 
 export const MODELS_FILE = path.join(DATA, 'models.json');
@@ -56,8 +56,7 @@ export function opencodeInject(store) {
   }
   if (!Object.keys(provider).length) return { content: null, env: {}, sig: '' };
   const content = JSON.stringify({ provider });
-  const sig = crypto.createHash('sha256').update(content + '\n' + JSON.stringify(env)).digest('hex').slice(0, 16);
-  return { content, env, sig };
+  return { content, env, sig: hash16(content + '\n' + JSON.stringify(env)) };
 }
 
 // 把一个 Claw 自己的模型清单分成「模型库」和「<Claw> 自带」两组。
@@ -103,7 +102,7 @@ export function kimiInject(store) {
     }
   }
   const tables = out.join('\n');
-  const sig = tables ? crypto.createHash('sha256').update(tables + '\n' + JSON.stringify(env)).digest('hex').slice(0, 16) : '';
+  const sig = tables ? hash16(tables + '\n' + JSON.stringify(env)) : '';
   return { tables, aliases, env, sig };
 }
 
@@ -156,7 +155,7 @@ export function qwenInject(store) {
     }
   }
   const body = JSON.stringify(entries);
-  const sig = list.length ? crypto.createHash('sha256').update(body + '\n' + JSON.stringify(env)).digest('hex').slice(0, 16) : '';
+  const sig = list.length ? hash16(body + '\n' + JSON.stringify(env)) : '';
   return { entries, list, env, sig };
 }
 // 把 settings.json（已解析的对象）里原来 claclaw 写的条目换成新的，用户自己的原样不动。
@@ -200,7 +199,7 @@ export function routeNow(route, store, fmts, ownUsable, perProvider = false) {
 // id 就是传给接口的模型名（CodeBuddy 没有单独的字段），所以靠 vendor 带「claclaw ·」认出哪些是 claclaw 写的；
 // availableModels 里加上我们的，用户自己的保留
 const chatUrl = base => String(base).replace(/\/+$/, '').replace(/\/chat\/completions$/, '').replace(/\/v1$/, '') + '/v1/chat/completions';
-export const CB_VENDOR = 'claclaw · ';
+const CB_VENDOR = 'claclaw · ';
 export function codebuddyInject(store) {
   const models = [];
   for (const p of store.providers) {
@@ -213,7 +212,7 @@ export function codebuddyInject(store) {
       });
     }
   }
-  const sig = models.length ? crypto.createHash('sha256').update(JSON.stringify(models)).digest('hex').slice(0, 16) : '';
+  const sig = models.length ? hash16(JSON.stringify(models)) : '';
   return { models, sig };
 }
 export function codebuddyMerge(cur, inj) {
@@ -246,7 +245,7 @@ export function qoderInject(store) {
       });
     }
   }
-  const sig = list.length ? crypto.createHash('sha256').update(JSON.stringify(list)).digest('hex').slice(0, 16) : '';
+  const sig = list.length ? hash16(JSON.stringify(list)) : '';
   return { list, sig };
 }
 export function qoderSettingsMerge(cur, inj) {

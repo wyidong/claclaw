@@ -1,13 +1,12 @@
-// 收视频：网页把原文件传上来存到 data/uploads/，发消息时由服务器用 ffmpeg 按时间均匀截帧当图片交给 AI，
-// 同时告诉 AI 原文件路径（需要更细的画面、声音，AI 可以自己用 ffmpeg 处理原文件）。
+// 收视频 / 文件：网页把原文件传上来存到 data/uploads/，发消息时告诉 AI 原文件路径和时长（要看画面、听声音，AI 自己用 ffmpeg 处理原文件）；
+// 聊天区用的缩略图、播放原文件也在这里。
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { findBin as bin } from './util.mjs';
 
-export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
-export const VIDEO_FRAMES = 12;
+const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
 export const KEEP_DAYS_DEFAULT = 60;
 const EXT = { 'video/quicktime': 'mov', 'video/mp4': 'mp4', 'video/x-m4v': 'm4v', 'video/webm': 'webm', 'video/3gpp': '3gp' };
 const ID_RE = /^(v[0-9a-f]{16}\.(mov|mp4|m4v|webm|3gp)|f[0-9a-f]{16}\.[a-z0-9]{1,8})$/;   // v = 视频，f = 其他文件
@@ -45,26 +44,6 @@ export function videoFile(dir, id) {
   if (typeof id !== 'string' || !ID_RE.test(id)) return null;
   const f = path.join(dir, id);
   return fs.existsSync(f) ? f : null;
-}
-
-// 截帧：时长内均匀取点（约每秒一帧，最多 VIDEO_FRAMES 帧），长边压到 1280 内的 JPEG
-export async function videoFrames(file, maxFrames = VIDEO_FRAMES) {
-  const ffprobe = bin('ffprobe'), ffmpeg = bin('ffmpeg');
-  if (!ffprobe || !ffmpeg) return { dur: 0, frames: [], error: '这台电脑没装 ffmpeg，没法截帧' };
-  let dur = 0;
-  try { dur = parseFloat(String(await run(ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file])).trim()); } catch {}
-  if (!(dur > 0)) return { dur: 0, frames: [], error: '读不出视频时长' };
-  const n = Math.min(maxFrames, Math.max(2, Math.ceil(dur)));
-  const frames = [];
-  const scale = "scale='if(gt(iw,ih),min(1280,iw),-2)':'if(gt(iw,ih),-2,min(1280,ih))'";
-  for (let i = 0; i < n; i++) {
-    const t = Math.min(Math.max(0, dur - 0.05), dur * (i + 0.5) / n);
-    try {
-      const buf = await run(ffmpeg, ['-v', 'error', '-ss', t.toFixed(2), '-i', file, '-frames:v', '1', '-vf', scale, '-q:v', '4', '-f', 'image2', '-c:v', 'mjpeg', 'pipe:1'], { encoding: 'buffer' });
-      if (buf?.length) frames.push({ media_type: 'image/jpeg', data: buf.toString('base64'), t });
-    } catch {}
-  }
-  return { dur, frames, error: frames.length ? '' : '截帧失败' };
 }
 
 // 播放原文件（手机本地没存时用）：支持 Range，iPhone 播视频必须

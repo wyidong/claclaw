@@ -6,20 +6,18 @@
 // 卸载也只删带标记的，用户自己的同名技能不碰。
 // 另外每次启动写 ~/.claclaw/local.json（本机地址 + 令牌）和 ~/.claclaw/bin/ 下的命令，技能里的命令靠它们找到 claclaw。
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WIN } from './util.mjs';
+import { WIN, HOME, readJson, writeJsonAtomic } from './util.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(ROOT, 'skills');
-const HOME = os.homedir();
 export const CLACLAW_HOME = process.env.CLACLAW_HOME || path.join(HOME, '.claclaw');
 const MARK = '.claclaw-skill';
 
 // 安装位置：claude 一处，其余 Claw 共用一处
-export const TARGETS = {
+const TARGETS = {
   claude: { dir: path.join(HOME, '.claude', 'skills'), claws: ['claude', 'opencode'], label: 'Claude Code' },
   agents: { dir: path.join(HOME, '.agents', 'skills'), claws: ['deepseek', 'opencode', 'kimi', 'qwen', 'codex', 'openclaw'], label: 'DeepSeek、OpenCode、Kimi、Qwen、Codex、OpenClaw' },
 };
@@ -36,7 +34,7 @@ const versionOf = name => {
   walk(path.join(SRC, name));
   return h.digest('hex').slice(0, 16);
 };
-const markOf = dest => { try { return JSON.parse(fs.readFileSync(path.join(dest, MARK), 'utf8')); } catch { return null; } };
+const markOf = dest => readJson(path.join(dest, MARK), null);
 
 // 某个技能在某个位置的状态：none 没装 / ours 我们装的 / foreign 用户自己的同名技能
 export function stateAt(name, target) {
@@ -98,9 +96,7 @@ export function setupLocal(port, log) {
   try {
     localToken = crypto.randomBytes(24).toString('base64url');
     fs.mkdirSync(path.join(CLACLAW_HOME, 'bin'), { recursive: true, mode: 0o700 });
-    const f = path.join(CLACLAW_HOME, 'local.json');
-    fs.writeFileSync(f + '.tmp', JSON.stringify({ url: 'http://127.0.0.1:' + port, token: localToken, pid: process.pid }), { mode: 0o600 });
-    fs.renameSync(f + '.tmp', f);
+    writeJsonAtomic(path.join(CLACLAW_HOME, 'local.json'), { url: 'http://127.0.0.1:' + port, token: localToken, pid: process.pid }, 0);
     // 命令入口：用 claclaw 自己的 node 跑仓库里的脚本（AI 的终端里不一定有 node）
     for (const s of catalog()) {
       const js = path.join(SRC, s.name, s.name.replace(/^claclaw-/, '') + '.mjs');

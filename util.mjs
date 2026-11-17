@@ -1,7 +1,9 @@
-// 各模块共用的小工具：路径显示、文字压成一行、时间统一成毫秒、找命令、跑命令
+// 各模块共用的小工具：路径显示、文字压成一行、时间统一成毫秒、找命令、跑命令、读写 JSON、地址分类
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
+import crypto from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 
 export const HOME = os.homedir();
@@ -75,6 +77,46 @@ export const runBin = (bin, args, ms, { maxBuffer = 64 * 1024 * 1024, missing = 
 });
 // 读 JSON 文件：没有、读不了、内容是 null 都返回 fallback
 export const readJson = (file, fallback = {}) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')) ?? fallback; } catch { return fallback; } };
+// 原子写 JSON：先写临时文件再改名，掉电 / 崩溃不会写出半截；目录 700、文件 600。space：缩进（0 = 紧凑）
+export function writeJsonAtomic(file, obj, space = 2) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = file + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, space), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+// sha256 的前 16 位十六进制：内容指纹（配置变了没有、按内容取文件名）
+export const hash16 = x => crypto.createHash('sha256').update(x).digest('hex').slice(0, 16);
+
+// ---------- 地址分类 ----------
+// 对方地址是内网 → lan；Tailscale（100.64/10）→ tailscale；其余 → wan；空 → ''
+export function classifyAddr(a, ifs) {   // ifs：测试用，替代本机网卡表
+  a = String(a || '').replace(/^::ffff:/, '').split('%')[0];
+  if (net.isIPv4(a)) {
+    const [x, y] = a.split('.').map(Number);
+    if (x === 10 || x === 127 || (x === 172 && y >= 16 && y < 32) || (x === 192 && y === 168) || (x === 169 && y === 254)) return 'lan';
+    if (x === 100 && y >= 64 && y < 128) return 'tailscale';
+    return 'wan';
+  }
+  if (/^fd7a:115c:a1e0:/i.test(a)) return 'tailscale';   // Tailscale 的 IPv6 段
+  if (/^(fe80|fc|fd)/i.test(a)) return 'lan';
+  if (net.isIPv6(a) && localV6Prefixes(ifs).has(v6Prefix(a))) return 'lan';   // 公网 IPv6 但和本机网卡同一个 /64：同一个局域网（路由器发的同一段）
+  return a ? 'wan' : '';
+}
+// IPv6 前 64 位（展开 ::，统一小写），比较是不是同一段
+function v6Prefix(a) {
+  const [h, t = ''] = a.toLowerCase().split('::');
+  const hs = h ? h.split(':') : [], ts = t ? t.split(':') : [];
+  const full = a.includes('::') ? [...hs, ...Array(8 - hs.length - ts.length).fill('0'), ...ts] : hs;
+  return full.slice(0, 4).map(x => parseInt(x, 16) || 0).join(':');
+}
+let v6Cache = null;
+function localV6Prefixes(ifs) {
+  if (!ifs && v6Cache && Date.now() - v6Cache.at < 60e3) return v6Cache.set;
+  const set = new Set();
+  for (const list of Object.values(ifs || os.networkInterfaces())) for (const x of list || []) if (x.family === 'IPv6' && !x.internal && !/^(fe80|fc|fd)/i.test(x.address)) set.add(v6Prefix(x.address.split('%')[0]));
+  if (!ifs) v6Cache = { at: Date.now(), set };
+  return set;
+}
 
 // ---------- Windows：用 ACL 收紧目录 ----------
 // Node 在 Windows 上的 mode 0o600 / 0o700 基本是空操作（只映射「只读」这一位），

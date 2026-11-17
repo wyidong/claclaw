@@ -20,9 +20,11 @@ import https from 'node:https';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
 import net from 'node:net';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { DATA, writeJsonAtomic } from './auth.mjs';
-import { classifyAddr } from './peerrtc.mjs';
+import dns from 'node:dns';
+import { spawn, execFileSync } from 'node:child_process';
+import { DATA } from './auth.mjs';
+import { readJson, writeJsonAtomic, classifyAddr } from './util.mjs';
+import { peerReply } from './peerrtc.mjs';
 import { libDir, libImport } from './vendor.mjs';
 
 const FILE = path.join(DATA, 'peer.json');
@@ -30,10 +32,9 @@ export const PEER_BASE = '/claclaw-peer';
 const DEFAULTS = { enabled: false, port: 8788, dir: '', sessions: [], name: '', peers: [] };
 
 // 协同对方的配色：预设组数，和页面上的 .pc0 … .pc6 对应（每组都配好了浅色、深色模式下的底色和字色）
-export const PEER_COLORS = 7;
+const PEER_COLORS = 7;
 export function loadPeer() {
-  let c = {};
-  try { c = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+  const c = readJson(FILE, {});
   const out = { ...DEFAULTS, ...c, peers: Array.isArray(c.peers) ? c.peers : [], last: c.last && typeof c.last === 'object' ? c.last : {} };
   // 每个已配对的对方一个固定编号（①②③…），会话列表里用编号 + 颜色标「最近和谁通信」
   let n = Math.max(0, ...out.peers.map(p => p.no || 0));
@@ -97,7 +98,7 @@ export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + '
 // ---------- 我们的全部协同地址 ----------
 // 同一个路径 /claclaw-peer 拼在不同网络的地址上：局域网（名字、IP）、Tailscale、
 // clarelay 子域名（https，门卫对 /claclaw-peer 放行）、旧的中继隧道。邀请、配对、每次请求（x-claclaw-addrs）都带上，对方按 局域网 → Tailscale → 打洞直连 → 中继 试
-export function tailscaleIps() {
+function tailscaleIps() {
   const out = [];
   for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (a.family === 'IPv4' && !a.internal && classifyAddr(a.address) === 'tailscale') out.push(a.address);
   return [...new Set(out)];
@@ -130,7 +131,7 @@ export function addrKind(url) {
   return k || 'lan';
 }
 export const ADDRS_HEADER = 'x-claclaw-addrs';
-export const addrsHeaderValue = c => ourAddrs(c).join(' ') || 'none';
+const addrsHeaderValue = c => ourAddrs(c).join(' ') || 'none';
 // 收到的地址表：只认 http(s)://…/claclaw-peer（可带 #pin… 的旧中继），最多 10 个；none = 清空；不合格的整份忽略（null）
 export const parseAddrsHeader = v => {
   const s = String(v ?? '').trim();
@@ -141,7 +142,6 @@ export const parseAddrsHeader = v => {
 
 // ---------- 配对申请（只放内存：重启就作废，本来就只有 5 分钟） ----------
 export const PAIR_TTL = 5 * 60 * 1000;
-export const PAIR_CODE_LEN = 2;                 // 两位数字，好口传；防猜靠下面的「输错后冷却」
 const PAIR_MIN_INTERVAL = 10 * 1000;            // 同一个 IP 10 秒内只能申请一次
 const PAIR_GLOBAL_MAX = 30;                     // 全局：每小时最多 30 次申请
 const PAIR_GLOBAL_WINDOW = 60 * 60 * 1000;
@@ -176,7 +176,7 @@ export function addPending(name, ip, inbox) {
   for (const p of list) if (p.ip === ip) pending.delete(p.id);   // 同一台电脑只保留最新一条
   pairLimit.set(ip, now);
   pairGlobal.push(now);
-  const code = String(10 + crypto.randomInt(90));
+  const code = String(10 + crypto.randomInt(90));   // 两位数字，好口传；防猜靠上面的「输错后冷却」
   const p = { id: newId(), name, ip, inbox, code, expiresAt: now + PAIR_TTL, tries: 0, approved: false };
   pending.set(p.id, p);
   return p;
@@ -252,12 +252,7 @@ async function callRelay(base, sub, { token, body, ms, extra = {} }) {
   let r;
   try { r = await mod.relayRequest(addr, { method: body ? 'POST' : 'GET', headers, body: body || undefined, timeout: ms }); }
   catch (e) { throw Object.assign(new Error('连不上对方（中继）：' + (e.code || e.message)), { connect: /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN|ETIMEDOUT/.test(String(e.code || e.message)) }); }
-  const ok = r.status >= 200 && r.status < 300;
-  let j; try { j = r.json(); } catch { j = { ok, reply: r.text() }; }
-  if (!j || typeof j !== 'object') j = { ok, reply: String(j ?? '') };
-  if (!ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + r.status; }
-  j.status = r.status;
-  return j;
+  return peerReply(r.status, r.text());
 }
 export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000, connectMs = 0, headers: extra = {} } = {}) {
   if (!base) return Promise.reject(Object.assign(new Error('没有对方的地址'), { connect: true }));
@@ -296,11 +291,7 @@ export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000, connectM
       res.on('data', c => chunks.push(c));
       res.on('end', () => {
         if (done) return; done = true; clearTimeout(t);
-        const text = Buffer.concat(chunks).toString('utf8'), ok = res.statusCode >= 200 && res.statusCode < 300;
-        let j; try { j = JSON.parse(text); } catch { j = { ok, reply: text }; }
-        if (!ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + res.statusCode; }
-        j.status = res.statusCode;
-        resolve(j);
+        resolve(peerReply(res.statusCode, Buffer.concat(chunks).toString('utf8')));
       });
       res.on('error', e => fail('对方的回复中断了：' + e.message, false));
     });
@@ -317,14 +308,12 @@ export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000, connectM
 // ---------- 按名字找：Bonjour（mDNS）----------
 // 开着协同时在局域网里广播「我是 claclaw 协同」（dns-sd -R），附近的 claclaw 一问就能列出来（dns-sd -B / -L）；
 // 地址优先用「电脑名.local」，路由器换了 IP 也不用重新配对；名字查不到（有的网络屏蔽广播）再退回 IP。
-import { spawn, execFileSync } from 'node:child_process';
-import dns from 'node:dns';
 
 const SVC = '_claclaw._tcp';
 let localHost = null;
 // 电脑名（用来拼「电脑名.local」）：macOS 问 scutil，其他系统用主机名（Windows 自带 mDNS，一般也答得上 .local）。
 // 名字解析不了也不要紧：配对时名字地址当主、IP 地址当备，peerCall 连不上名字会自动退回 IP 并记住（见下面「请求已配对的对方」）。
-export function localHostName() {
+function localHostName() {
   if (localHost !== null) return localHost;
   try {
     localHost = process.platform === 'darwin'
@@ -334,7 +323,7 @@ export function localHostName() {
   return localHost;
 }
 export const ourBaseName = c => { const h = localHostName(); return h ? 'http://' + h + '.local:' + c.port + PEER_BASE : ''; };
-export const instanceId = c => { if (!c.instanceId) { c.instanceId = newId(); savePeer(c); } return c.instanceId; };
+const instanceId = c => { if (!c.instanceId) { c.instanceId = newId(); savePeer(c); } return c.instanceId; };
 
 let advert = null, advertKey = '';
 export function applyAdvert(c, log) {
@@ -385,7 +374,7 @@ export async function discover(c) {
 // 请求已配对的对方：路有局域网（名字地址、IP 地址）、直连（打洞，见 peerrtc.mjs）、中继（主 → 备），各自独立；
 // 按各条路最近的表现排序，最好的先走（见下面「各条路的表现」）；某条路 5 分钟内送不到就排到最后，过了再按表现排。
 // 只在「连都没连上」时换路；已经送到对方的请求出错不重发（不然同一条消息会送两遍）。
-export const isRelayAddr = u => /^https:|#.*\bkey=/.test(String(u || ''));
+const isRelayAddr = u => /^https:|#.*\bkey=/.test(String(u || ''));
 export const peerRoute = new Map();   // 对方 id → { via: 'lan' | 'direct' | 'relay', rel: 'main' | 'backup'（有主备中继时走的是哪台）, at, ms }：最近一次实际走的路（协同页标「局域网 / 直连 / 中继」）
 // 对方的中继地址（主 → 备）：relays 数组；兼容旧的单个 relay 字段、以及配对时 inbox 本身就是中继地址的
 export const peerRelays = p => [...new Set([...(Array.isArray(p.relays) ? p.relays : []), p.relay, p.inbox, p.inboxAlt, ...(Array.isArray(p.addrs) ? p.addrs : [])].filter(u => u && isRelayAddr(u)))];
@@ -397,9 +386,10 @@ export const ourRelays = c => (Array.isArray(c.relays) && c.relays.length ? c.re
 // 收到时：none = 对方没有中继，清空记的；有合格地址就按它替换；空值、没有合格地址一律忽略、保留原值
 export const RELAYS_HEADER = 'x-claclaw-relays';
 // 每个对方可以指定一台中继做主（relayFirst = 中继的 host:port）：告诉它我们的中继时排第一，我们找它时也先走它的这台
-const relayHost = u => { try { return new URL(u).host; } catch { return ''; } };
-export const preferRelay = (list, host) => host ? [...list.filter(u => relayHost(u) === host), ...list.filter(u => relayHost(u) !== host)] : list;
-export const relaysHeaderValue = (c, p) => preferRelay(ourRelays(c), p?.relayFirst).join(' ') || 'none';
+const hostOfUrl = u => { try { return new URL(u).host; } catch { return '?'; } };
+const preferRelay = (list, host) => host ? [...list.filter(u => hostOfUrl(u) === host), ...list.filter(u => hostOfUrl(u) !== host)] : list;
+// 每次请求对方都带上的两个同步头：我们的中继地址（按这个对方的主中继排好）、我们的全部协同地址
+const syncHeaders = (c, p) => ({ [RELAYS_HEADER]: preferRelay(ourRelays(c), p?.relayFirst).join(' ') || 'none', [ADDRS_HEADER]: addrsHeaderValue(c) });
 // 中继地址：自签证书的带 #pin=证书指纹（&key=…）；域名 + 正式证书的只带 #key=…（clarelay 9d35b61 起）
 export const RELAY_ADDR = /^https:\/\/\S+#(?:pin=sha256\/\/|key=)\S+$/;
 export const parseRelaysHeader = v => {
@@ -434,8 +424,7 @@ export async function probeRelay(p) {   // 返回每个中继的结果（主 →
 // 送不到（connect 错误）再按顺序换下一条。时间来自后台定时探测（见 server.mjs 的 peerProbeAll）和便宜的请求。
 export const DIRECT = 'direct:';
 const chanStats = new Map();   // 对方 id → Map(路 → { ok, ms, at, fails })
-const hostOfUrl = u => { try { return new URL(u).host; } catch { return '?'; } };
-export const chanKey = url => url === DIRECT ? 'direct' : addrKind(url) + ' ' + hostOfUrl(url);
+const chanKey = url => url === DIRECT ? 'direct' : addrKind(url) + ' ' + hostOfUrl(url);
 export function noteChan(pid, url, ok, ms) {
   let m = chanStats.get(pid); if (!m) chanStats.set(pid, m = new Map());
   const k = chanKey(url), o = m.get(k) || { ok: false, ms: 0, at: 0, fails: 0 };
@@ -478,9 +467,9 @@ export async function peerCall(c, p, sub, opts = {}) {
     try {
       let j;
       if (url === DIRECT) {
-        const h = { [RELAYS_HEADER]: relaysHeaderValue(c, p), [ADDRS_HEADER]: addrsHeaderValue(c) }; if (p.theirToken) h.authorization = 'Bearer ' + p.theirToken;
+        const h = syncHeaders(c, p); if (p.theirToken) h.authorization = 'Bearer ' + p.theirToken;
         j = await conn.call(PEER_BASE + sub, { headers: h, body: opts.body, ms: opts.ms });
-      } else j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p), [ADDRS_HEADER]: addrsHeaderValue(c) }, connectMs: viaRelay ? 0 : 3000 });
+      } else j = await callPeer(url, sub, { token: p.theirToken, ...opts, headers: syncHeaders(c, p), connectMs: viaRelay ? 0 : 3000 });
       // 中继自己回的「对方隧道没连着这台中继」（502，请求根本没转给对方）：和连不上一样，换下一条路再试
       if (viaRelay && j?.status === 502 && /隧道没连着中继/.test(String(j.error || ''))) throw Object.assign(new Error('对方没连着这台中继'), { connect: true, code: 'TUNNEL_OFFLINE' });
       const ms = Date.now() - t0;
@@ -502,7 +491,7 @@ export async function peerCall(c, p, sub, opts = {}) {
 export async function probeChan(c, p, url, ms = 8000) {
   const t0 = Date.now();
   try {
-    const j = await callPeer(url, '/ping', { token: p.theirToken, ms, connectMs: isRelayAddr(url) ? 0 : 3000, headers: { [RELAYS_HEADER]: relaysHeaderValue(c, p), [ADDRS_HEADER]: addrsHeaderValue(c) } });
+    const j = await callPeer(url, '/ping', { token: p.theirToken, ms, connectMs: isRelayAddr(url) ? 0 : 3000, headers: syncHeaders(c, p) });
     if (isRelayAddr(url) && j?.status === 502) throw new Error(j.error || '中继 502');
     noteChan(p.id, url, true, Date.now() - t0); return { ok: true, ms: Date.now() - t0 };
   } catch (e) { noteChan(p.id, url, false); return { ok: false, error: e.message }; }

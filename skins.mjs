@@ -8,14 +8,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { writeJsonAtomic } from './auth.mjs';
+import { readJson, writeJsonAtomic, hash16 } from './util.mjs';
 
 const REF = /^(?:p\/[a-z0-9-]+\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp|gif|svg)|l\/[a-z0-9-]+\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp|gif)|u\/[a-f0-9]{16}\.(?:png|jpe?g|webp))$/;
 const IMG = /\.(png|jpe?g|webp|gif)$/i;
 const TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml' };
 const LOCAL_NAMES = { qq: '经典 QQ', 'qq-oicq': '初代 OICQ', 'qq-2019': 'QQ 20 周年重绘' };   // 本机组的显示名和顺序（没列的按目录名排在后面）
-export const NAME_MAX = 40;
-export const UPLOAD_MAX = 1536 * 1024;
+const NAME_MAX = 40, UPLOAD_MAX = 1536 * 1024;
 
 export function makeSkins(DATA, ROOT, { soundOk = () => true } = {}) {
   const FILE = path.join(DATA, 'skins.json');
@@ -24,11 +23,12 @@ export function makeSkins(DATA, ROOT, { soundOk = () => true } = {}) {
   const UP = path.join(LOCAL, 'up');
   let cache = null;
   // 预设图改过名：index.json 的 moved（旧引用 → 新引用），读 skins.json 时顺手换掉并存回
-  const moved = () => { try { const m = JSON.parse(fs.readFileSync(path.join(REPO, 'index.json'), 'utf8')).moved; return m && typeof m === 'object' ? m : {}; } catch { return {}; } };
+  const repoIndex = () => readJson(path.join(REPO, 'index.json'), null);
+  const moved = () => { const m = repoIndex()?.moved; return m && typeof m === 'object' ? m : {}; };
   const all = () => {
     if (!cache) {
-      try { cache = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { cache = {}; }
-      if (!cache || typeof cache !== 'object' || Array.isArray(cache)) cache = {};
+      cache = readJson(FILE, {});
+      if (typeof cache !== 'object' || Array.isArray(cache)) cache = {};
       const mv = moved(); let n = 0;
       for (const v of Object.values(cache)) if (v && typeof v.av === 'string' && typeof mv[v.av] === 'string') { v.av = mv[v.av]; n++; }
       if (n) try { writeJsonAtomic(FILE, cache); } catch {}
@@ -48,8 +48,7 @@ export function makeSkins(DATA, ROOT, { soundOk = () => true } = {}) {
   const typeOf = (f) => TYPES[path.extname(f).slice(1).toLowerCase()] || 'application/octet-stream';
   // 选头像的页面要的清单：仓库预设 + 本机有的（每个子目录一组）+ 预设网名
   const index = () => {
-    let base = { groups: [], names: [] };
-    try { base = JSON.parse(fs.readFileSync(path.join(REPO, 'index.json'), 'utf8')); } catch {}
+    const base = repoIndex() || { groups: [], names: [] };
     const groups = (base.groups || []).map(g => ({ id: g.id, name: g.name, base: 'p/' + g.id, items: g.items || [], ...(g.titles && typeof g.titles === 'object' ? { titles: g.titles } : {}) }));   // titles：每张图的名字（比如西游记角色），选头像时悬停 / 长按看得到
     let dirs = [];
     try { dirs = fs.readdirSync(LOCAL, { withFileTypes: true }).filter(d => d.isDirectory() && d.name !== 'up' && /^[a-z0-9-]+$/.test(d.name)).map(d => d.name).sort(); } catch {}
@@ -96,7 +95,7 @@ export function makeSkins(DATA, ROOT, { soundOk = () => true } = {}) {
     const magic = { png: buf.subarray(0, 4).toString('hex') === '89504e47', jpeg: buf[0] === 0xff && buf[1] === 0xd8, webp: buf.subarray(0, 4).toString() === 'RIFF' && buf.subarray(8, 12).toString() === 'WEBP' };
     if (!magic[mt[1]]) throw Object.assign(new Error('图片内容和格式对不上'), { code: 400 });
     const ext = mt[1] === 'jpeg' ? 'jpg' : mt[1];
-    const name = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16) + '.' + ext;
+    const name = hash16(buf) + '.' + ext;
     fs.mkdirSync(UP, { recursive: true, mode: 0o700 });
     const f = path.join(UP, name);
     if (!fs.existsSync(f)) fs.writeFileSync(f, buf, { mode: 0o600 });

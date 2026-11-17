@@ -2,35 +2,29 @@
 // 以本机后端身份（gateway-client / backend）用共享令牌连接；令牌只在服务端从 ~/.openclaw/openclaw.json 读，不发给网页。
 // 网页里 OpenClaw 会话的 id = 'oc:' + sessionKey（例如 oc:agent:main:main），和 Claude 会话的 UUID 区分开。
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { WebSocket } from 'ws';
 import { storeNow, splitGroups, hostOf } from './modelpick.mjs';
-import { tms } from './util.mjs';
+import { tms, HOME, readJson } from './util.mjs';
 
-const CFG = path.join(os.homedir(), '.openclaw', 'openclaw.json');
-export const OC_PREFIX = 'oc:';
+const OC_DIR = path.join(HOME, '.openclaw'), CFG = path.join(OC_DIR, 'openclaw.json');
+const OC_PREFIX = 'oc:';
 export const isOc = id => typeof id === 'string' && id.startsWith(OC_PREFIX);
 const keyOf = id => id.slice(OC_PREFIX.length);
 
 function config() {
-  try {
-    const c = JSON.parse(fs.readFileSync(CFG, 'utf8'));
-    return { port: c.gateway?.port || 18789, token: c.gateway?.auth?.token || '' };
-  } catch { return null; }
+  const c = readJson(CFG, null);
+  return c && { port: c.gateway?.port || 18789, token: c.gateway?.auth?.token || '' };
 }
 
 // OpenClaw 各供应商的接口地址（openclaw.json 的 models.providers，再补 main 代理自己的 models.json）：拿来和模型库对上
 function ocProviderBases() {
   const out = {};
-  for (const f of [CFG, path.join(os.homedir(), '.openclaw', 'agents', 'main', 'agent', 'models.json')]) {
-    try {
-      const j = JSON.parse(fs.readFileSync(f, 'utf8'));
-      const ps = j.models?.providers || j.providers || {};
-      for (const [k, v] of Object.entries(ps)) if (!out[k] && v?.baseUrl) out[k] = v.baseUrl;
-    } catch {}
+  for (const f of [CFG, path.join(OC_DIR, 'agents', 'main', 'agent', 'models.json')]) {
+    const j = readJson(f);
+    for (const [k, v] of Object.entries(j.models?.providers || j.providers || {})) if (!out[k] && v?.baseUrl) out[k] = v.baseUrl;
   }
   return out;
 }
@@ -86,6 +80,9 @@ export async function call(method, params, log) { return rawCall(await connect(l
 
 // 当前上下文大小：网关记的这个会话的 totalTokens（不是最新的就算不知道）
 const ocCtxOf = si => (si && si.totalTokensFresh !== false && Number(si.totalTokens)) || null;
+// 会话用的模型：供应商/模型；标题栏只显示模型那段
+const ocModelOf = si => [si?.modelProvider, si?.model].filter(Boolean).join('/');
+const shortModel = m => m ? m.split('/').pop() : '';
 
 // ---------- 会话列表 ----------
 export async function ocSessionList(log) {
@@ -170,7 +167,7 @@ export class OcRunner {
     this.total = h.totalMessages || 0;
     this.nextOffset = h.nextOffset;
     this.title = h.sessionInfo?.displayName || h.sessionInfo?.label || (h.sessionInfo?.isMain ? '主会话' : this.key);
-    this.model = [h.sessionInfo?.modelProvider, h.sessionInfo?.model].filter(Boolean).join('/');
+    this.model = ocModelOf(h.sessionInfo);
     this.ctx = ocCtxOf(h.sessionInfo);
     // 斜杠命令（/model、/status……）：网关自己的命令清单，取一次缓存起来
     this.commands = await ocCommands(this.log);
@@ -187,7 +184,7 @@ export class OcRunner {
     this.emit({ t: 'xmodels', ...this.xmodels() });
   }
   xmodels() {
-    if (!this.ocModels) return { current: null, label: this.model ? this.model.split('/').pop() : '', groups: null };
+    if (!this.ocModels) return { current: null, label: shortModel(this.model), groups: null };
     const store = storeNow(), bases = ocProviderBases();
     const own = this.ocModels.map(m => ({ value: m.provider + '/' + m.id, label: m.name || m.id, sub: m.provider, id: m.id, base: bases[m.provider] || '' }));
     const have = new Set(own.map(o => o.value)), extra = [];
@@ -196,7 +193,7 @@ export class OcRunner {
       if (oc && have.has(oc + '/' + m.id)) continue;
       extra.push({ value: (oc || p.id) + '/' + m.id, label: m.name || m.id, sub: oc ? 'OpenClaw 还没放行这个模型' : 'OpenClaw 里没有这个供应商', disabled: true });
     }
-    return { current: this.model || null, label: this.model ? this.model.split('/').pop() : '', groups: splitGroups(store, 'OpenClaw', own, extra) };
+    return { current: this.model || null, label: shortModel(this.model), groups: splitGroups(store, 'OpenClaw', own, extra) };
   }
   async pickModel(value) {
     if (this.busy) throw new Error('这一轮结束后再换模型');
@@ -272,7 +269,7 @@ export class OcRunner {
   async refreshMeta() {
     try {
       const h = await call('chat.history', { sessionKey: this.key, limit: 1 }, this.log);
-      const model = [h.sessionInfo?.modelProvider, h.sessionInfo?.model].filter(Boolean).join('/');
+      const model = ocModelOf(h.sessionInfo);
       if (model && model !== this.model) { this.model = model; this.emit({ t: 'session.meta', cwdShort: 'OpenClaw · ' + model }); if (this.ocModels) this.emit({ t: 'xmodels', ...this.xmodels() }); }
       // 上下文大小（标题栏的压缩提示）；刚发过 /compact 的这一轮算压缩
       const c = ocCtxOf(h.sessionInfo), compacted = this.compactAsked;
@@ -346,8 +343,8 @@ export async function ocStartGateway(env, log) {
   if (!cfg) throw new Error('没找到 OpenClaw 的配置（~/.openclaw/openclaw.json）');
   if (await ocGatewayUp(log)) return { status: 'up' };
   if (Date.now() - ocStartAt < 90e3) return { status: 'starting' };   // 刚拉过，还在起
-  let args = null, cwd = path.join(os.homedir(), '.openclaw'), out = path.join(os.homedir(), 'Library', 'Logs', 'openclaw', 'gateway.log');
-  const plist = path.join(os.homedir(), 'Library', 'LaunchAgents', 'ai.openclaw.gateway.plist');
+  let args = null, cwd = OC_DIR, out = path.join(HOME, 'Library', 'Logs', 'openclaw', 'gateway.log');
+  const plist = path.join(HOME, 'Library', 'LaunchAgents', 'ai.openclaw.gateway.plist');
   if (process.platform === 'darwin' && fs.existsSync(plist)) {
     try {
       const j = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', plist], { timeout: 5000 }).toString());
@@ -361,7 +358,7 @@ export async function ocStartGateway(env, log) {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const fd = fs.openSync(out, 'a');
   try {
-    const ch = spawn(args[0], args.slice(1), { cwd: fs.existsSync(cwd) ? cwd : os.homedir(), env, detached: true, stdio: ['ignore', fd, fd] });
+    const ch = spawn(args[0], args.slice(1), { cwd: fs.existsSync(cwd) ? cwd : HOME, env, detached: true, stdio: ['ignore', fd, fd] });
     ch.on('error', e => { ocStartAt = 0; log?.('openclaw gateway start failed', e.message); });
     ch.unref();
   } finally { fs.closeSync(fd); }

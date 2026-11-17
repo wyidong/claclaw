@@ -10,8 +10,7 @@
 //   ping{n} → pong{n}（量来回时间、发现断线）
 import http from 'node:http';
 import crypto from 'node:crypto';
-import net from 'node:net';
-import os from 'node:os';
+import { classifyAddr } from './util.mjs';
 
 export const RTC_ICE = ['stun:stun.miwifi.com:3478', 'stun:stun.chat.bilibili.com:3478', 'stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'];
 const CHUNK = 16 * 1024, MAX_BODY = 32 << 20;
@@ -27,34 +26,17 @@ export async function rtcLib() {
   return ndc;
 }
 
-// 打通的是哪条路：对方地址是内网 → lan；Tailscale（100.64/10）→ tailscale；其余 → wan
-export function classifyAddr(a, ifs) {   // ifs：测试用，替代本机网卡表
-  a = String(a || '').replace(/^::ffff:/, '').split('%')[0];
-  if (net.isIPv4(a)) {
-    const [x, y] = a.split('.').map(Number);
-    if (x === 10 || x === 127 || (x === 172 && y >= 16 && y < 32) || (x === 192 && y === 168) || (x === 169 && y === 254)) return 'lan';
-    if (x === 100 && y >= 64 && y < 128) return 'tailscale';
-    return 'wan';
-  }
-  if (/^fd7a:115c:a1e0:/i.test(a)) return 'tailscale';   // Tailscale 的 IPv6 段
-  if (/^(fe80|fc|fd)/i.test(a)) return 'lan';
-  if (net.isIPv6(a) && localV6Prefixes(ifs).has(v6Prefix(a))) return 'lan';   // 公网 IPv6 但和本机网卡同一个 /64：同一个局域网（路由器发的同一段）
-  return a ? 'wan' : '';
-}
-// IPv6 前 64 位（展开 ::，统一小写），比较是不是同一段
-function v6Prefix(a) {
-  const [h, t = ''] = a.toLowerCase().split('::');
-  const hs = h ? h.split(':') : [], ts = t ? t.split(':') : [];
-  const full = a.includes('::') ? [...hs, ...Array(8 - hs.length - ts.length).fill('0'), ...ts] : hs;
-  return full.slice(0, 4).map(x => parseInt(x, 16) || 0).join(':');
-}
-let v6Cache = null;
-function localV6Prefixes(ifs) {
-  if (!ifs && v6Cache && Date.now() - v6Cache.at < 60e3) return v6Cache.set;
-  const set = new Set();
-  for (const list of Object.values(ifs || os.networkInterfaces())) for (const x of list || []) if (x.family === 'IPv6' && !x.internal && !/^(fe80|fc|fd)/i.test(x.address)) set.add(v6Prefix(x.address.split('%')[0]));
-  if (!ifs) v6Cache = { at: Date.now(), set };
-  return set;
+// 打通的是哪条路（lan / tailscale / wan）：classifyAddr 在 util.mjs，这里照旧导出
+export { classifyAddr };
+// 对方回的 HTTP 响应（状态码 + 正文）→ 统一的结果对象：JSON 对象原样（带 status），非 2xx 补 ok:false 和 error；不是 JSON 的正文放进 reply。
+// 直连、局域网、中继三条路都按这个来
+export function peerReply(status, text) {
+  const ok = status >= 200 && status < 300;
+  let j; try { j = JSON.parse(text); } catch { j = { ok, reply: text }; }
+  if (!j || typeof j !== 'object') j = { ok, reply: String(j ?? '') };
+  if (!ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + status; }
+  j.status = status;
+  return j;
 }
 
 let cfg = { target: () => '', log: () => {}, ice: RTC_ICE, base: '/claclaw-peer' };
@@ -177,14 +159,7 @@ class Conn {
         c.t = setTimeout(() => { if (this.calls.delete(id)) { this.send({ t: 'cancel', id }); c.fail(new Error('对方超时没有回复'), false); } }, Math.max(0, ms - 8000));
       }, Math.min(ms, 8000));
       c.fail = (e, connect) => { clearTimeout(c.t); reject(Object.assign(e, { connect })); };
-      c.done = () => {
-        clearTimeout(c.t);
-        const text = Buffer.concat(c.chunks).toString('utf8'), ok = c.status >= 200 && c.status < 300;
-        let j; try { j = JSON.parse(text); } catch { j = { ok, reply: text }; }
-        if (!j || typeof j !== 'object') j = { ok, reply: String(j ?? '') };
-        if (!ok) { j.ok = false; if (!j.error) j.error = 'HTTP ' + c.status; }
-        j.status = c.status; resolve(j);
-      };
+      c.done = () => { clearTimeout(c.t); resolve(peerReply(c.status, Buffer.concat(c.chunks).toString('utf8'))); };
       this.calls.set(id, c);
       const data = body == null ? null : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
       const h = { ...headers }; if (data) h['content-type'] = 'application/json';

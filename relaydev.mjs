@@ -17,11 +17,12 @@ import http from 'node:http';
 import tls from 'node:tls';
 import { execFileSync, spawn } from 'node:child_process';
 import { libImport, libInstall, libFetch, libInfo, libDir, newerVersion, releaseKeyOk } from './vendor.mjs';
+import { HOME, WIN as IS_WIN, sleep, readJson, writeJsonAtomic } from './util.mjs';
 
-const IS_WIN = process.platform === 'win32', IS_MAC = process.platform === 'darwin';
-const PLIST = () => path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.clarelay.device.plist');
-const STARTUP_VBS = () => path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'clarelay-device.vbs');
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const IS_MAC = process.platform === 'darwin';
+const PLIST = path.join(HOME, 'Library', 'LaunchAgents', 'com.clarelay.device.plist');
+const STARTUP_VBS = path.join(process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'clarelay-device.vbs');
+const STANDALONE_STATE = path.join(HOME, '.clarelay-device.json');   // 单独安装的电脑端用的身份文件
 // 设备列表里显示的名字：macOS 用「电脑名称」（os.hostname() 常常是 192.168.x.x 这种 DHCP 名），别的系统用主机名
 function deviceName() {
   if (IS_MAC) { try { const n = execFileSync('scutil', ['--get', 'ComputerName'], { encoding: 'utf8', timeout: 3000 }).trim(); if (n) return n; } catch {} }
@@ -77,12 +78,12 @@ export function helloKey(st, { timeout = 20e3, connect = tls.connect } = {}) {
 
 export function relayStatePath(DATA) {
   if (process.env.CLACLAW_CLARELAY_STATE) return process.env.CLACLAW_CLARELAY_STATE;
-  return process.env.CLACLAW_DATA ? path.join(DATA, 'clarelay-device.json') : path.join(os.homedir(), '.clarelay-device.json');
+  return process.env.CLACLAW_DATA ? path.join(DATA, 'clarelay-device.json') : STANDALONE_STATE;
 }
 
 // 单独安装的电脑端开着的本机接口（127.0.0.1:8792，令牌在 .local.json）还在不在回话
 function externalAlive(localFile) {
-  let lt; try { lt = JSON.parse(fs.readFileSync(localFile, 'utf8')); } catch { return Promise.resolve(false); }
+  const lt = readJson(localFile, null);
   let u; try { u = new URL(lt.url); } catch { return Promise.resolve(false); }
   return new Promise(ok => {
     const r = http.get({ host: '127.0.0.1', port: Number(u.port) || 8792, path: '/status', headers: { authorization: 'Bearer ' + lt.token }, timeout: 1500 }, res => { res.resume(); ok(res.statusCode === 200); });
@@ -104,23 +105,23 @@ function externalAlive(localFile) {
  */
 export function makeRelayDev(o) {
   const STATE = relayStatePath(o.DATA), LOCAL = STATE.replace(/\.json$/, '') + '.local.json';
-  const isolated = STATE !== path.join(os.homedir(), '.clarelay-device.json') && !process.env.CLACLAW_CLARELAY_STATE;
+  const isolated = STATE !== STANDALONE_STATE && !process.env.CLACLAW_CLARELAY_STATE;
   const log = (...a) => o.log('clarelay', ...a);
   let dev = null, starting = null, lastErr = '', retry = null, retryN = 0;
   let latest = null, checking = null;   // 下载地址上的最新版本 { version, at }（6 小时查一次）
-  const readState = () => { try { return JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch { return null; } };
+  const readState = () => readJson(STATE, null);
 
   // 电脑端代码：已下载就直接用；没下载就从中继下载（加入时按邀请码，之后按身份文件）
   // 发布公钥：按圈子域名记在数据目录（加入时从邀请码记下，以后只认它；邀请码带公钥之前就加入的老电脑从中继取一次）
   const KEYS = path.join(o.DATA, 'clarelay-release-keys.json');
-  const readKeys = () => { try { return JSON.parse(fs.readFileSync(KEYS, 'utf8')) || {}; } catch { return {}; } };
+  const readKeys = () => readJson(KEYS, {});
   const keyOf = domain => releaseKeyOk(readKeys()[domain]?.key);
   function saveKey(domain, key, via) {
     const all = readKeys();
     if (!domain || !key || all[domain]?.key === key) return;
     const old = all[domain]?.key;
     all[domain] = { key, via, at: Date.now() };
-    fs.writeFileSync(KEYS + '.tmp', JSON.stringify(all, null, 2), { mode: 0o600 }); fs.renameSync(KEYS + '.tmp', KEYS);
+    writeJsonAtomic(KEYS, all);
     log((old ? '换了' : '记下') + ' ' + domain + ' 的发布公钥 …' + key.slice(-8, -1) + '（' + via + '）');
   }
   // 这个圈子的发布公钥：记下的 → 身份文件里电脑端自己记的（加入时从邀请码、或 hello 记的）→ 老电脑连一次控制连接从 hello 取
@@ -173,19 +174,23 @@ export function makeRelayDev(o) {
   async function stopExternal() {
     const none = { found: false, commit() {}, restore() {} };
     if (isolated) return none;
-    if (IS_MAC && fs.existsSync(PLIST())) {
+    // 停了等它的本机接口不再回话（最多 5 秒）；还在就恢复原样、报错
+    const waitGone = async (restore, msg) => {
+      for (let i = 0; i < 10 && await externalAlive(LOCAL); i++) await sleep(500);
+      if (await externalAlive(LOCAL)) { restore(); throw new Error(msg); }
+    };
+    if (IS_MAC && fs.existsSync(PLIST)) {
       const uid = process.getuid();
       try { execFileSync('launchctl', ['bootout', 'gui/' + uid + '/com.clarelay.device'], { stdio: 'ignore' }); } catch {}
       log('停掉单独安装的电脑端（launchd com.clarelay.device）');
-      const restore = () => { try { execFileSync('launchctl', ['bootstrap', 'gui/' + uid, PLIST()], { stdio: 'ignore' }); log('已恢复单独安装的电脑端'); } catch (e) { log('恢复单独安装的电脑端失败：', e.message); } };
-      for (let i = 0; i < 10 && await externalAlive(LOCAL); i++) await sleep(500);
-      if (await externalAlive(LOCAL)) { restore(); throw new Error('本机还有一个单独运行的 clarelay 电脑端停不掉（127.0.0.1:8792 还在回话），先手动停掉它'); }
-      return { found: true, restore, commit() { try { fs.unlinkSync(PLIST()); } catch {} try { fs.unlinkSync(LOCAL); } catch {} log('已去掉单独安装的电脑端的开机自启（身份文件保留）'); } };
+      const restore = () => { try { execFileSync('launchctl', ['bootstrap', 'gui/' + uid, PLIST], { stdio: 'ignore' }); log('已恢复单独安装的电脑端'); } catch (e) { log('恢复单独安装的电脑端失败：', e.message); } };
+      await waitGone(restore, '本机还有一个单独运行的 clarelay 电脑端停不掉（127.0.0.1:8792 还在回话），先手动停掉它');
+      return { found: true, restore, commit() { try { fs.unlinkSync(PLIST); } catch {} try { fs.unlinkSync(LOCAL); } catch {} log('已去掉单独安装的电脑端的开机自启（身份文件保留）'); } };
     }
-    if (IS_WIN && (fs.existsSync(STARTUP_VBS()) || await externalAlive(LOCAL))) {
-      const vbs = STARTUP_VBS(), bak = vbs + '.claclaw-bak', had = fs.existsSync(vbs);
+    if (IS_WIN && (fs.existsSync(STARTUP_VBS) || await externalAlive(LOCAL))) {
+      const vbs = STARTUP_VBS, bak = vbs + '.claclaw-bak', had = fs.existsSync(vbs);
       if (had) fs.renameSync(vbs, bak);
-      let port = 8792; try { port = Number(new URL(JSON.parse(fs.readFileSync(LOCAL, 'utf8')).url).port) || 8792; } catch {}
+      let port = 8792; try { port = Number(new URL(readJson(LOCAL, null).url).port) || 8792; } catch {}
       // 守护脚本 wscript（命令行里有 clarelay-device.vbs）、它起的 node（命令行里有 device\agent.mjs，clarelay 0.4.0 起是 client\agent.mjs，0.5.2 起是单文件 clarelay.mjs）、占着本机接口端口的进程；不碰自己
       const ps = `$ids = @(Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'wscript.exe' -and $_.CommandLine -like '*clarelay-device.vbs*') -or ($_.Name -eq 'node.exe' -and ($_.CommandLine -like '*device\\agent.mjs*' -or $_.CommandLine -like '*device/agent.mjs*' -or $_.CommandLine -like '*client\\agent.mjs*' -or $_.CommandLine -like '*client/agent.mjs*' -or $_.CommandLine -like '*clarelay.mjs*')) } | ForEach-Object { $_.ProcessId })
 $ids += @(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { $_.OwningProcess })
@@ -196,8 +201,7 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
         try { if (had) { fs.renameSync(bak, vbs); spawn('wscript.exe', [vbs], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); log('已恢复单独安装的电脑端'); } }
         catch (e) { log('恢复单独安装的电脑端失败：', e.message); }
       };
-      for (let i = 0; i < 10 && await externalAlive(LOCAL); i++) await sleep(500);
-      if (await externalAlive(LOCAL)) { restore(); throw new Error('本机还有一个单独运行的 clarelay 电脑端停不掉（本机接口还在回话），先手动停掉它'); }
+      await waitGone(restore, '本机还有一个单独运行的 clarelay 电脑端停不掉（本机接口还在回话），先手动停掉它');
       return { found: true, restore, commit() { try { fs.unlinkSync(bak); } catch {} try { fs.unlinkSync(LOCAL); } catch {} log('已去掉单独安装的电脑端的开机自启（身份文件保留）'); } };
     }
     // 没装自启、但手动开着一份：不替它做主，提示先停掉
@@ -291,7 +295,7 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
     async remove() {
       clearTimeout(retry); await stop();
       const dm = stateDomain(readState()), all = readKeys();   // 退出圈子：记下的发布公钥也删掉，再加入以新邀请码里的为准
-      if (dm && all[dm]) { delete all[dm]; try { fs.writeFileSync(KEYS, JSON.stringify(all, null, 2), { mode: 0o600 }); } catch {} }
+      if (dm && all[dm]) { delete all[dm]; try { writeJsonAtomic(KEYS, all); } catch {} }
       try { fs.unlinkSync(STATE); } catch {} o.setOff(false); lastErr = ''; log('已移除本机身份文件'); return info(); },
     stop: async () => { clearTimeout(retry); await stop(); },
   };

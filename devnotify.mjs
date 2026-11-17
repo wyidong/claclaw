@@ -2,10 +2,10 @@
 // claclaw 把「来了新消息 / 已读 / 全量未读」报给它，由中继推到外壳（主屏幕 App）、算角标。
 // 设备掉线时客户端会暂存、重连补发；claclaw 照常报，同时按设置决定自己的 Web Push 要不要兜底。
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { HOME } from './util.mjs';
 
-const FILE = process.env.CLACLAW_CLARELAY_LOCAL || path.join(os.homedir(), '.clarelay-device.local.json');
+const FILE = process.env.CLACLAW_CLARELAY_LOCAL || path.join(HOME, '.clarelay-device.local.json');
 let conf = null, confAt = 0;
 let status = { online: false, ok: false };   // ok = 本机接口通；online = 设备连着中继
 let log = () => {};

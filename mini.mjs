@@ -7,14 +7,13 @@
 // 网页里 Mini 会话的 id = 'mi:' + 会话 id（UUID）。
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { AcpAgent, AcpRunner, localNames } from './acp.mjs';
-import { HOME, tilde, oneLine, readJson } from './util.mjs';
-import { DATA, writeJsonAtomic } from './auth.mjs';
+import { tilde, oneLine, readJson, writeJsonAtomic, hash16, sleep } from './util.mjs';
+import { DATA } from './auth.mjs';
 import { storeNow, STORE_GROUP, LIB, libModels, hostOf } from './modelpick.mjs';
 
-export const MI_PREFIX = 'mi:';
+const MI_PREFIX = 'mi:';
 export const isMi = id => typeof id === 'string' && id.startsWith(MI_PREFIX);
 const sidOf = id => id.slice(MI_PREFIX.length);
 const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
@@ -99,8 +98,7 @@ function routeEnv() {
     env.MINI_MODEL = hit.m.id;
   }
   if (process.env.CLACLAW_MINI_BUDGET) env.MINI_BUDGET = process.env.CLACLAW_MINI_BUDGET;
-  const sig = crypto.createHash('sha256').update(JSON.stringify(env)).digest('hex').slice(0, 16);
-  return { env, sig };
+  return { env, sig: hash16(JSON.stringify(env)) };
 }
 
 // ---------- ACP 进程（底座见 acp.mjs） ----------
@@ -179,7 +177,7 @@ export class MiRunner extends AcpRunner {
     writeJsonAtomic(ROUTE_FILE, { provider: next.p.id });
     this.log?.('mini route →', next.p.id);
     agent.stop();
-    for (let i = 0; i < 50 && agent.running; i++) await new Promise(r => setTimeout(r, 100));
+    for (let i = 0; i < 50 && agent.running; i++) await sleep(100);
     await this.attach();
     return super.pickModel(next.m.id);
   }

@@ -4,10 +4,10 @@
 //                                                           下载、验签、装上（已是这份就不动，不降级）；
 //                                                           公钥默认用加入 clarelay 时记下的（数据目录 clarelay-release-keys.json，按域名）
 //   node tools/vendor.mjs install <库> --src <本机文件>       从本机文件装（开发用，比如 ../clarelay/dist/clarelay.mjs；不验签，标成「未签名」）
-import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { LIBS, libInfo, libInstall, libInstallFile, vendorRoot, releaseKeyOk } from '../vendor.mjs';
+import { DATA } from '../auth.mjs';
+import { readJson } from '../util.mjs';
 
 const [cmd, id, src] = process.argv.slice(2);
 const die = m => { console.error(m); process.exit(1); };
@@ -28,8 +28,7 @@ try {
     const ki = process.argv.indexOf('--key');
     if (ki > 0) k = releaseKeyOk(process.argv[ki + 1]) || die('--key 后面的发布公钥格式不对（Ed25519 SPKI DER 的 base64）');
     else {
-      const DATA = process.env.CLACLAW_DATA ? path.resolve(process.env.CLACLAW_DATA) : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
-      try { k = releaseKeyOk(JSON.parse(fs.readFileSync(path.join(DATA, 'clarelay-release-keys.json'), 'utf8'))[new URL(src).hostname]?.key); } catch {}
+      try { k = releaseKeyOk(readJson(path.join(DATA, 'clarelay-release-keys.json'))[new URL(src).hostname]?.key); } catch {}
       if (!k) die('没有记下这个域名的发布公钥：用 --key 给（公钥在设备邀请码里）');
     }
     r = await libInstall(id, src, { log, pubkeys: [k] });

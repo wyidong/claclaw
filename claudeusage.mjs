@@ -1,15 +1,13 @@
 // Claude 订阅的用量（5 小时窗口、周窗口）：每轮回复时 Claude Code 发来 rate_limit_event，里面 unifiedWindows 带两个窗口的用量（0～1）和重置时间。
 // 整个账号共用，记最新一份到 data/claude-usage.json，会话设置里显示；用模型库 Key 的会话没有这个事件。
-import fs from 'node:fs';
 import path from 'node:path';
-import { writeJsonAtomic } from './auth.mjs';
+import { readJson, writeJsonAtomic } from './util.mjs';
 
 const WINS = ['five_hour', 'seven_day'];
 
 export function makeClaudeUsage(DATA) {
   const file = path.join(DATA, 'claude-usage.json');
-  let cur = null, saveT = null;
-  try { cur = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+  let cur = readJson(file, null), saveT = null;
   function win(w) {
     const u = Number(w?.utilization), r = Number(w?.resetsAt);
     return Number.isFinite(u) ? { used: Math.max(0, Math.min(1, u)), resetsAt: Number.isFinite(r) && r > 0 ? r * 1000 : null } : null;
