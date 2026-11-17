@@ -2388,11 +2388,17 @@ const inPath = name => !!findBin(name);
 // 新建会话时填的目录：~ 展开成家目录；不是绝对路径返回 null
 const resolveDir = d => { d = String(d || '').trim(); if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1); return path.isAbsolute(d) ? path.resolve(d) : null; };
 const isDir = d => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
+// Claude 算装了：跑过会话（有 ~/.claude/projects）、登录过（~/.claude.json / ~/.claude/.credentials.json）、在 claclaw 里填了长期令牌，或者电脑上有 claude 命令。
+// claclaw 用自带的 Claude Agent SDK 跑 Claude，不需要另装；新电脑上还没跑过会话也照样能用，不能只看 projects 目录
+function claudeInstalled() {
+  const C = path.join(HOME, '.claude');
+  return isDir(path.join(C, 'projects')) || fs.existsSync(path.join(HOME, '.claude.json')) || fs.existsSync(path.join(C, '.credentials.json')) || !!claudeToken() || !!findBin('claude');
+}
 function detectClaws() {
   // 有些 Claw 要新一点的 Node 才读得了它的会话（DeepSeek 要 zstd，OpenCode 要 node:sqlite）。
   // 这种情况不是「即将支持」，而是「这台机器的 Node 版本不够」，要把原因说清楚。
   return [
-    { id: 'claude', installed: fs.existsSync(path.join(HOME, '.claude', 'projects')), supported: true },
+    { id: 'claude', installed: claudeInstalled(), supported: true },
     ...CLAWS.map(c => { const ok = c.supported(); return { id: c.id, installed: c.installed(), supported: ok, reason: ok ? undefined : c.reason?.() }; }),
   ];
 }
