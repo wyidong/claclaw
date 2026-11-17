@@ -53,6 +53,7 @@ import { makeSkins } from './skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginWatch, loginUnsubscribe } from './login.mjs';
 import { INSTALLS, installStart, installState, installing } from './install.mjs';
+import { claudeExe, claudeRunnable } from './claudebin.mjs';
 import { findUserPath, openLocal, previewType, READ_MAX } from './localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './peerguard.mjs';
 import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_TTL } from './peerqueue.mjs';
@@ -224,7 +225,7 @@ async function probeClaudeToken(tok) {
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), 60_000);
   const clean = s => String(s || '').split(tok).join('…').slice(0, 200);
   try {
-    const q = query({ prompt: 'Reply with OK only.', options: { model: 'haiku', tools: [], maxTurns: 1, persistSession: false, settingSources: [],
+    const q = query({ prompt: 'Reply with OK only.', options: { model: 'haiku', tools: [], maxTurns: 1, persistSession: false, settingSources: [], ...claudeExe(),
       cwd: os.tmpdir(), abortController: ac, env: { ...CHILD_ENV, CLAUDE_CODE_OAUTH_TOKEN: tok } } });
     for await (const m of q) if (m.type === 'result') return m.is_error ? clean(m.result || m.subtype) || '验证失败' : '';
     return '没拿到验证结果';
@@ -1865,6 +1866,7 @@ class Runner {
     this.q = query({
       prompt: inbox,
       options: {
+        ...claudeExe(),   // SDK 自带的 Claude Code 程序缺了：改用电脑上的 claude 命令（见 claudebin.mjs）
         ...(this.isNew ? { sessionId: this.id, ...(this.info.customTitle ? { title: this.info.customTitle } : {}) } : { resume: this.id }),
         cwd: this.cwd,
         permissionMode: this.mode,
@@ -2390,6 +2392,7 @@ const resolveDir = d => { d = String(d || '').trim(); if (d === '~' || d.startsW
 const isDir = d => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
 // Claude 算装了：跑过会话（有 ~/.claude/projects）、登录过（~/.claude.json / ~/.claude/.credentials.json）、在 claclaw 里填了长期令牌，或者电脑上有 claude 命令。
 // claclaw 用自带的 Claude Agent SDK 跑 Claude，不需要另装；新电脑上还没跑过会话也照样能用，不能只看 projects 目录
+const CLAUDE_MISSING = '缺 Claude Code 程序：在 claclaw 目录重新运行 npm install（不要加 --omit=optional），或者装好 Claude Code（claude 命令）';
 function claudeInstalled() {
   const C = path.join(HOME, '.claude');
   return isDir(path.join(C, 'projects')) || fs.existsSync(path.join(HOME, '.claude.json')) || fs.existsSync(path.join(C, '.credentials.json')) || !!claudeToken() || !!findBin('claude');
@@ -2398,7 +2401,7 @@ function detectClaws() {
   // 有些 Claw 要新一点的 Node 才读得了它的会话（DeepSeek 要 zstd，OpenCode 要 node:sqlite）。
   // 这种情况不是「即将支持」，而是「这台机器的 Node 版本不够」，要把原因说清楚。
   return [
-    { id: 'claude', installed: claudeInstalled(), supported: true },
+    { id: 'claude', installed: claudeInstalled(), ...(claudeRunnable() ? { supported: true } : { supported: false, reason: CLAUDE_MISSING }) },
     ...CLAWS.map(c => { const ok = c.supported(); return { id: c.id, installed: c.installed(), supported: ok, reason: ok ? undefined : c.reason?.() }; }),
   ];
 }

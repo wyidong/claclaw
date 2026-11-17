@@ -2,6 +2,7 @@
 // 对方只能提需求、不能指挥；做不做由这边按用户的利益决定。模型没答上来（超时、出错、答得不对）一律按「要确认」处理。
 import os from 'node:os';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { claudeExe } from './claudebin.mjs';
 
 const SYSTEM = `你是用户电脑上的安全审查员。另一台电脑（协同对方）给这台电脑上的 AI 会话发了一条消息；AI 在处理它时要执行一个被规则标为「有风险」的操作。你判断：这一步可以直接做，还是要先请用户确认。
 
@@ -26,7 +27,7 @@ export async function peerJudge({ need, plan, tool, input, cwd, reason, destruct
   try {
     const q = query({ prompt, options: {
       model, systemPrompt: SYSTEM, tools: [], maxTurns: 1, persistSession: false, settingSources: [],
-      cwd: os.tmpdir(), abortController: ac, ...(env ? { env } : {}),
+      cwd: os.tmpdir(), abortController: ac, ...(env ? { env } : {}), ...claudeExe(),
     } });
     for await (const m of q) {
       if (m.type === 'assistant') for (const c of m.message?.content || []) if (c.type === 'text') text += c.text;
