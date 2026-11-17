@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // 改 claclaw 网页登录的「最近一次设置」账号（只保留最后一组；初始账号一直有效）
 // 用户名、密码各自可以留空（传 ""），但至少给一个。
-//   node passwd.mjs <用户名> <密码>
-//   node passwd.mjs "" <密码>        只要密码
-//   node passwd.mjs <用户名> ""      只要用户名
-//   node passwd.mjs --show           只看现在设置了什么，不显示密码
+//   node src/passwd.mjs <用户名> <密码>
+//   node src/passwd.mjs "" <密码>        只要密码
+//   node src/passwd.mjs <用户名> ""      只要用户名
+//   node src/passwd.mjs --show           只看现在设置了什么，不显示密码
 import { setLastSet, authSummary, describeCredential } from './auth.mjs';
 
 const args = process.argv.slice(2);
