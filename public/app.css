@@ -585,9 +585,6 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .s-item[aria-current="true"]{border-color:var(--accent)}
 .s-item .t{font-weight:600}
 /* 最近活跃：标题行 = 标题（截断）+ 最右边的目录名 */
-.s-row.rec .s-item .t{display:flex;align-items:baseline;gap:8px}
-.s-row.rec .rtt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.s-row.rec .rdir{flex:0 1 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--muted)}
 /* 每个已配对的对方一个随机背景色（按对方 id 定，固定不变）；会话列表里最近和谁通信也用这个颜色 */
 .pc0{--pbg:var(--pc0b);--pfg:var(--pc0f)}.pc1{--pbg:var(--pc1b);--pfg:var(--pc1f)}.pc2{--pbg:var(--pc2b);--pfg:var(--pc2f)}.pc3{--pbg:var(--pc3b);--pfg:var(--pc3f)}.pc4{--pbg:var(--pc4b);--pfg:var(--pc4f)}.pc5{--pbg:var(--pc5b);--pfg:var(--pc5f)}.pc6{--pbg:var(--pc6b);--pfg:var(--pc6f)}
 .ptint .pe-peer-name>span{background:var(--pbg);color:var(--pfg);border-radius:6px;padding:1px 6px}   /* 只给名字加底色，和会话列表里这个对方的名字标签一样 */
@@ -832,7 +829,6 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #sList .s-grp .gn{flex:0 1 auto;min-width:0;font-weight:650;color:var(--ink);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sList .s-gpath{margin:-2px 2px 4px 30px;font-size:11.5px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 #sList .s-grp .gc{flex:none;font-size:12px;margin-left:auto;padding-left:8px}
-#sList .s-grp.recent .gn{font-family:var(--sans)}
 /* 状态和「多久前」共用行尾一个固定宽度的位置：干活时显示状态，不干活时显示冷却时间；
    左边的分支 / 目录太长就截断，所以状态变化不会让这一行重新排版或换行 */
 #sList .s-item .m{flex-wrap:nowrap;align-items:baseline}
@@ -910,7 +906,6 @@ body.ro #composer,body.ro #atts,body.ro #cfgBtn,body.ro #cfgGo{display:none!impo
 #setPane .set-foot #logout:hover{background:var(--del-bg)}
 #setPane .set-foot .ver{text-align:center;padding:0}
 
-#sList .s-rempty{padding:2px 10px 8px 24px;font-size:12px}
 /* ════ 公共 · 未读红点、会话行按钮、右键菜单 ════ */
 /* 未读红点 */
 .s-row.unread .s-item .t::before{content:'';display:inline-block;width:8px;height:8px;margin:0 6px 2px 0;border-radius:50%;background:#F23C3C;vertical-align:middle}
@@ -1772,8 +1767,6 @@ select.pe-in{text-align-last:right}
   .s-new{display:none}   /* 新建在列表顶部的 ⊕，每行不再单独放 */
   .s-ren{right:4px}.s-row.two .s-ren,.s-row.three .s-ren{right:36px}.s-row.pn .s-ren{right:4px}
   .s-del{right:4px}
-  .s-row.rec .s-item .t{padding-right:0}
-  .s-row.rec:hover .rdir,.s-row.rec:focus-within .rdir{visibility:hidden}   /* 鼠标移上去：目录让位给「编辑」 */
 
   /* 聊天区标题：像微信，只有名字加粗，没有框 */
   header{min-height:56px;border-bottom:var(--bw) solid var(--strip-line);background:var(--strip)}

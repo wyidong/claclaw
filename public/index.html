@@ -994,7 +994,7 @@ function openFile(id,name,size){
 // 点聊天里的文件路径：电脑上直接开的（本机网页）由服务器用默认 App 打开；别的设备把文件读回来，在页面里预览
 function showDlg(d,on){d.classList.toggle('on',on);d.setAttribute('aria-hidden',String(!on))}   // 弹窗 / 面板开关
 function needLogin(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r}   // 登录过期：回登录页
-function postJson(u,body){return fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})}
+function postJson(u,body,signal){return fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:signal})}
 function httpErr(r){return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status))},function(){throw new Error('HTTP '+r.status)})}
 function openPath(p){
   postJson('/api/fs/open',{path:p,cwd:(session&&session.cwd)||''}).then(function(r){return r.ok?r.json():httpErr(r)}).then(function(j){
@@ -1149,7 +1149,7 @@ function showSession(restore){
 }
 function showTurn(i){
   var j=dissData;if(!j||!j.turns||!j.turns[i-1])return;
-  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},t=j.turns[i-1],multi=dsMulti(s);
+  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},t=j.turns[i-1];
   if(!dissEl.classList.contains('t'))dissScroll=b.scrollTop;
   dissTurn=i;dissEl.classList.add('t');
   dissEl.querySelector('.ds-n').textContent='第 '+i+' 轮 / '+j.turns.length;
@@ -2143,7 +2143,7 @@ function onEvent(m){
     if(m.cwdShort&&!m.group)dirLine(m);
     }
     if(!SOLO)lsSet(hk('session'),m.id);
-    if(!SOLO&&typeof soloAlive==='function'&&soloAlive(m.id))setTimeout(function(){soloLeave(m.id)},0);   // 这个会话开在弹出窗口里（比如刷新后又打开了上次的会话）：主窗口让出来
+    if(!SOLO&&soloAlive(m.id))setTimeout(function(){soloLeave(m.id)},0);   // 这个会话开在弹出窗口里（比如刷新后又打开了上次的会话）：主窗口让出来
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
     commands=m.commands||[];syncCmdMenu();   // 输入框里已经有「/」时，弹层立刻换成这个会话的命令
@@ -2416,8 +2416,8 @@ function soloSkinLoad(id){
   }).catch(function(){});
 }
 function setHeader(){
-  if(typeof ttsMuteShow==='function'){ttsMuteShow();try{if(tts)ttsShowStop()}catch(_){}}
-  if(typeof notifBall==='function'){notifBall();if(session&&!notifLoaded)notifLoad()}   // 通知圆球：第一次打开会话时取一次各会话的开关
+  ttsMuteShow();try{if(tts)ttsShowStop()}catch(_){}
+  notifBall();if(session&&!notifLoaded)notifLoad();   // 通知圆球：第一次打开会话时取一次各会话的开关
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   // 弹出窗口：换过头像 / 网名的会话，左上角用头像 + 网名；头像上不放水印，第二行模型名左边放个小 Claw 图标
@@ -2625,7 +2625,6 @@ function setMode(key,announce){
 }
 // 设置变化记一行「已切换为 模型 · 推理强度 · 权限」；连续改（中间没有别的消息）只更新这一行
 function cfgNote(extra){
-  if(typeof cfg==='undefined')return;
   var ml=MODES.find(function(x){return x.key===mode})||MODES[0];
   var parts=[];if(claudeSess()&&(cfg.models||cfg.model)){parts.push(curModelLabel()+(cfg.pick==='default'?'（默认）':''));if(cfg.effort)parts.push('推理强度 '+effortLabel(cfg.effort))}
   parts.push('权限 '+ml.label);
@@ -2748,25 +2747,25 @@ function usePace(w,k){
 // 要不要露出来：用得比平均快，或者已经用到 80% 以上（不看进度，快用完了总要知道）
 function useHot(w,k){var pc=usePace(w,k);return !!(pc&&pc.over||w&&!w.stale&&w.used>=0.8&&(!w.resetsAt||w.resetsAt>Date.now()))}
 // 工作中那一行右边：用超了（比平均快）或到了 80% 才出现，点了打开会话设置看详情
-var useFetchAt=0,USE_PREVIEW=false;   // true = 预览：不管超没超都显示（超了的变色）
+var useFetchAt=0;
 function renderWorkUse(){
   var el=$('#workUse');if(!el)return;
   var u=claudeUse,on=busy&&claudeSess()&&!cfg.lib&&!xcfg;
   if(on&&!u&&Date.now()-useFetchAt>60000){useFetchAt=Date.now();fetch('/api/claude-usage').then(function(r){return r.json()}).then(function(j){if(!claudeUse)claudeUse=j.usage||null;renderWorkUse()}).catch(function(){})}
   var parts=[],tips=[];
   if(on&&u)[['five_hour','5h','5 小时','小时'],['seven_day','周','本周','天']].forEach(function(r){
-    var w=u[r[0]],pc=usePace(w,r[0]),hot=useHot(w,r[0]);if(!hot&&!(USE_PREVIEW&&pc))return;
-    parts.push('<span'+(hot?' class="over"':'')+'>'+r[1]+' '+Math.round(w.used*100)+'%</span>');tips.push(r[2]+'已用 '+Math.round(w.used*100)+'%'+(pc?'，第 '+pc.n+' '+r[3]+'平均可用到 '+Math.round(pc.allow*100)+'%':''));
+    var w=u[r[0]],pc=usePace(w,r[0]),hot=useHot(w,r[0]);if(!hot)return;
+    parts.push('<span class="over">'+r[1]+' '+Math.round(w.used*100)+'%</span>');tips.push(r[2]+'已用 '+Math.round(w.used*100)+'%'+(pc?'，第 '+pc.n+' '+r[3]+'平均可用到 '+Math.round(pc.allow*100)+'%':''));
   });
   el.hidden=!parts.length;el.innerHTML=parts.join(' · ');el.title=tips.join('；');
 }
 function renderCfgUse(){
-  var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&['five_hour','seven_day'].some(function(k){return USE_PREVIEW?!!u[k]:useHot(u[k],k)});   // 和「思考中」右边一样：超过平均进度或用到 80% 才显示
+  var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&['five_hour','seven_day'].some(function(k){return useHot(u[k],k)});   // 和「思考中」右边一样：超过平均进度或用到 80% 才显示
   sec.hidden=!show;if(!show)return;
   $('#cfgUseNote').textContent=u.at?'上次回复时 · '+ago(u.at):'';
   $('#cfgUse').innerHTML=[['five_hour','5 小时',0],['seven_day','本周',1]].map(function(r){
-    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100),pc=usePace(w,r[0]);var hot=useHot(w,r[0]);if(!USE_PREVIEW&&!hot)return '';   // 没超、也没到 80% 的那条不显示
-    return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80||pc&&pc.over?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i>'+(pc?'<em class="pace" style="left:'+Math.round(pc.allow*100)+'%" title="到现在为止平均可用 '+Math.round(pc.allow*100)+'%"></em>':'')+'</span><span class="cu-pct'+(hot?' over':'')+'">'+p+'%</span>'+
+    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100),pc=usePace(w,r[0]);if(!useHot(w,r[0]))return '';   // 没超、也没到 80% 的那条不显示
+    return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80||pc&&pc.over?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i>'+(pc?'<em class="pace" style="left:'+Math.round(pc.allow*100)+'%" title="到现在为止平均可用 '+Math.round(pc.allow*100)+'%"></em>':'')+'</span><span class="cu-pct over">'+p+'%</span>'+
       '<small>'+esc(w.stale?'已过重置时间，下次回复后更新':cuReset(w.resetsAt,r[2]))+'</small>';
   }).join('');
 }
@@ -2890,7 +2889,7 @@ function mTab(t){
   $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railClaw').classList.toggle('on',t==='claw');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
   $('.sheet-p').scrollTop=0;
-  if(typeof showClawSel==='function')showClawSel();
+  showClawSel();
 }
 // ---------- 宿主页 ----------
 var hostTimer=null;
@@ -3019,7 +3018,7 @@ var skillsSt=null,skillMsg={};
 function loadSkills(){
   fetch('/api/skills').then(function(r){return r.json()}).then(function(j){
     if(!Array.isArray(j))return;skillsSt=j;
-    if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
+    renderSkills();
   }).catch(function(){});
 }
 function skillsSum(){if(!skillsSt)return '';var n=0;skillsSt.forEach(function(s){if(s.targets.some(function(t){return t.state!=='none'}))n++});return n?'已装 '+n+' 个':skillsSt.length+' 个可装'}
@@ -3027,7 +3026,7 @@ function skillPost(op,name,target){
   postJson('/api/skills/'+op,{name:name,target:target}).then(function(r){return r.json()}).then(function(j){
     if(!Array.isArray(j)){skillMsg={err:j.error||'操作失败'};toast(j.error||'操作失败')}
     else{skillsSt=j;skillMsg={ok:op==='install'?'已安装':'已卸载'};toast(skillMsg.ok)}
-    if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
+    renderSkills();
   }).catch(function(e){toast(e.message)});
 }
 // ---------- 设置 › 语音管理：按平台列声音，勾选哪些进「声音」列表、起别名；豆包在这里填 / 换 Key ----------
@@ -3159,7 +3158,6 @@ function openModels(from){
 }
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
 function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');return a.join(' · ')}
-function mdlField(id,label,val,attrs,wide,mono){return '<div class="h-row'+(wide?' pe-urlrow':'')+'"><span class="k">'+label+'</span><input id="'+id+'" class="pe-in'+(wide?' left mono':mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}
 function mdlIn(id,val,attrs,mono,label){   // Key 详情的输入行：上面一行小标题，下面无框输入（点进去小标题变主题色）
   var sec=/type="password"/.test(attrs||'');attrs=(attrs||'').replace(/\s*type="password"/,'');
   return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+esc(label||'')+'</label><textarea id="'+id+'" rows="1" class="md-in'+(mono?' mono':'')+(sec?' md-secret':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" '+attrs+'>'+esc(val==null?'':String(val))+'</textarea></div>'}
@@ -3209,7 +3207,6 @@ function renderModels(){
     var tpl=pm[1]?mdlProv(pm[2]):null,p=!pm[1]&&pm[2]?mdlProv(pm[2]):null;   // tpl：照着它再加一个同家的 Key
     if(pm[2]&&!p&&!tpl){mdlSub='';return renderModels()}
     var src=p||tpl,eps=src?mdlEps0(src):[],needKey=!p||!p.hasKey;
-    var keyIn=function(lbl,ph){return mdlField('mdKey',lbl,'','type="password" maxlength="1000" placeholder="'+ph+'"',false,true)};
     h+=pgHd('data-act="mdl-back"','返回模型管理',p?p.name+(p.label?' · '+p.label:''):tpl?'再加一个 '+tpl.name+' 的 Key':'添加 Key')+errBox;
     var f0=eps[0]?eps[0][0]:'openai';
     // 默认只露三个框：Key、接口地址（格式按地址自动判断）、备注；其他收进「更多」
@@ -3272,7 +3269,7 @@ function mdlFetch(id){
 }
 function mdlModelsUpd(){var p=mdlRemote&&mdlProv(mdlRemote.id),el=$('#mdModels');if(p&&el&&mdlSub==='p:'+p.id)el.innerHTML=mdlModelsHtml(p)}
 function mdlKeyUpd(){if(!mdlKey&&$('#loginPane.on .lg-tokshow')&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok){openCtok(clawInfo.claude.login.ctok);return}   // 显示出来的令牌 1 分钟后藏起
-  if(mdlKey&&mdlKey.id==='claude:token'){if(mdlKey.show&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok)openCtok(clawInfo.claude.login.ctok,mdlKey.key);return}if(hostView==='voices'&&typeof renderVoices==='function'){renderVoices();return}var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
+  if(mdlKey&&mdlKey.id==='claude:token'){if(mdlKey.show&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok)openCtok(clawInfo.claude.login.ctok,mdlKey.key);return}if(hostView==='voices'){renderVoices();return}var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
 function mdlRemember(id,k,show){clearTimeout(mdlKeyT);mdlKey={id:id,key:k,show:show};mdlKeyUpd();mdlKeyT=setTimeout(mdlForget,60000)}
 function mdlForget(){clearTimeout(mdlKeyT);if(!mdlKey)return;mdlKey=null;mdlKeyUpd()}
 function mdlCopyFail(){if(mdlKey){mdlKey.show=true;mdlKeyUpd()}toast('复制不了，已显示出来，长按选择')}
@@ -3605,20 +3602,12 @@ function peerPendingHtml(c){
 // 对方的配色组：服务端配对时从 7 组预设里随机分好（color）；老版本服务端没给就按 id 算一个
 function peerPc(p){var c=p&&p.color;if(!(c>=0&&c<7)){var h=0,id=String(p&&p.id||'');for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0;c=h%7}return 'pc'+c}
 function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div class="pe-err">'+esc(peerMsg.err)+'</div>':'')+(peerMsg.ok?'<div class="pe-ok">'+esc(peerMsg.ok)+'</div>':'')}
-// 会话池摘要：加入了几个会话、分布在几个目录
 function poolTitle(id){var s=poolInfo(id);return s?(s.title||'(无标题)'):shortId(id)}
 var CLAW_NAMES={claude:'Claude Code'};CLAW_T.forEach(function(c){CLAW_NAMES[c.id]=c.long});
 function peNormCfg(c){if(c&&c.dir&&c.dir.indexOf('|')<0)c.dir='claude|'+c.dir;return c}   // 旧配置只存了目录（没有「Claw|」前缀）：初次载入、每次操作后服务端回的配置都要转
 function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':(s.cwd||''))}   // OpenClaw 没有目录，全部归一组
 function peDirLabel(k){var i=k.indexOf('|'),cl=k.slice(0,i),d=k.slice(i+1).replace(/^\/(Users|home)\/[^\/]+/,'~');return cl==='claude'?(d||'(未知目录)'):CLAW_NAMES[cl]+(d?' · '+d:'')}
 function poolCwd(id){var s=poolInfo(id);return s?peDirKey(s):clawOf(id)+'|'}
-function poolDir(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?String(s.cwd||'').split('/').pop():''}
-function poolSumText(){
-  var ids=(peerCfg&&peerCfg.sessions)||[];if(!ids.length)return '还没加入会话';
-  var dirs={};ids.forEach(function(id){dirs[poolDir(id)]=1});
-  return '已加入 '+ids.length+' 个会话（'+Object.keys(dirs).length+' 个目录）：'+ids.map(function(id){return poolTitle(id)+'（'+poolDir(id)+'）'}).join('、')+'。改完点「保存」。';
-}
-function paintPoolSum(){var el=$('#pePoolSum');if(el)el.textContent=poolSumText()}
 // ---------- 协同页：主页 + 子页面 ----------
 // 主页：状态、配对申请、已配对（一行一个，点进详情）、三个入口（添加对方 / 协同会话 / 本机与网络）、复制邀请
 // 子页面：p:<对方 id> 对方详情 | add 添加对方 | pool 协同会话 | net 本机与网络
@@ -4208,14 +4197,12 @@ function liveLastPrompt(id,text){
   it.lastPrompt=text;
   document.querySelectorAll('#sList .s-row').forEach(function(r){
     if(r.dataset.id!==id)return;
-    var box=r.closest('.s-gbox'),h=box&&box.previousElementSibling;
-    if(h&&h.classList.contains('recent'))return;   // 最近活跃那组显示目录，不换
     var c=r.querySelector('.cwd');if(c){c.textContent=text;c.classList.add('lp')}
   });
 }
 // 点会话行：打开（别处占着的先确认接管）
 function rowOpen(s,row,b,bz){
-  if(!SOLO&&typeof soloAlive==='function'&&soloAlive(s.id)){soloFocus(s.id);return}   // 已经弹出去了：提到前面，不在主窗口再开一份
+  if(!SOLO&&soloAlive(s.id)){soloFocus(s.id);return}   // 已经弹出去了：提到前面，不在主窗口再开一份
   closeSheet();
   if(bz&&NOT_CLAUDE.test(s.id)){   // 其他 Claw：还是要先接管才能打开；Claude 的直接只读打开（输入框处有说明和「接管」）
     if(!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
@@ -4738,19 +4725,15 @@ function drawList(arr,claw){
     listResort=false;
     order.forEach(function(g){flat.push({grp:g});g.items.forEach(function(s){flat.push(s)})});
     flat.forEach(function(s){
-      var inRecent=false;
-      if(s.empty){var em=document.createElement('div');em.className='s-empty s-rempty';em.textContent=s.empty;cur.appendChild(em);return}
-      if(s.recent&&s.s){inRecent=true;s=s.s}
       if(s.grp){
         var g=s.grp,h=document.createElement('button');h.type='button';h.className='s-grp';
         var box=document.createElement('div');box.className='s-gbox';
         h.innerHTML=FOLDER_IC+'<span class="gn"></span><span class="gc"></span>';
         // 组标题只显示最后一级目录名；展开后在组里第一行显示完整路径
-        var last=g.recent?g.label:(g.label.split('/').pop()||g.label);
+        var last=g.label.split('/').pop()||g.label;
         h.querySelector('.gn').textContent=last;h.title=g.label;h.dataset.path=g.label;
-        if(!g.recent&&last!==g.label){var gp=document.createElement('div');gp.className='s-gpath';gp.textContent=g.label;box.appendChild(gp)}
-        h.querySelector('.gc').textContent=g.recent?'':g.items.length+' 个会话';
-        if(g.recent)h.classList.add('recent');
+        if(last!==g.label){var gp=document.createElement('div');gp.className='s-gpath';gp.textContent=g.label;box.appendChild(gp)}
+        h.querySelector('.gc').textContent=g.items.length+' 个会话';
         var shut=!!folded[g.key];
         h.setAttribute('aria-expanded',String(!shut));box.hidden=shut;
         h.addEventListener('click',function(){
@@ -4777,18 +4760,9 @@ function drawList(arr,claw){
         b.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);
       }
       // 目录已经在分组标题里了，只显示分支；非 git 目录没有分支：显示最后一条用户消息（放不下就截断）
-      // 「最近活跃」：目录名放在标题行最右边（电脑上鼠标移上去换成「编辑」），下面一行始终是最后一条消息；分支不显示，去目录组里看
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
-      if(inRecent){
-        row.classList.add('rec');
-        var tt0=b.querySelector('.t'),tw=document.createElement('span');tw.className='rtt';
-        while(tt0.firstChild)tw.appendChild(tt0.firstChild);if(!tw.childNodes.length)tw.textContent=s.title;
-        var rd=document.createElement('span');rd.className='rdir';rd.title=s.cwd||'';
-        rd.textContent=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~';
-        tt0.appendChild(tw);tt0.appendChild(rd);
-      }
-      b.querySelector('.cwd').textContent=inRecent?(s.lastPrompt||''):(s.branch||s.lastPrompt||'');
-      b.querySelector('.cwd').classList.toggle('lp',inRecent?!!s.lastPrompt:(!s.branch&&!!s.lastPrompt));
+      b.querySelector('.cwd').textContent=s.branch||s.lastPrompt||'';
+      b.querySelector('.cwd').classList.toggle('lp',!s.branch&&!!s.lastPrompt);
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);if(!s.unsent&&s.lastModified)b.dataset.lm=s.lastModified;
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
       // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
@@ -4808,9 +4782,8 @@ function drawList(arr,claw){
         row.appendChild(nw);
       }
       // 正在别处打开的会话、当前正在用的会话不给删（服务端也会拒绝）
-      var noDel=bz||(session&&s.id===session.id)||inRecent;   // 最近活跃里不给删：去它所在的目录组里删
-      if(!s.cwd&&noDel){}                      // 只有改名：默认位置
-      else if(noDel)row.classList.add('pn');   // 改名 + 新建
+      var noDel=bz||(session&&s.id===session.id);
+      if(noDel&&s.cwd)row.classList.add('pn');   // 改名 + 新建（没有目录时只有改名：默认位置）
       if(!noDel){
         row.classList.add(s.cwd?'three':'two'); // 删除 + 改名（+ 新建）
         var d=document.createElement('button');d.type='button';d.className='s-del';d.setAttribute('aria-label','删除会话');
@@ -4841,8 +4814,8 @@ function renderActivity(){
 // 干活的标记往上呼应：目录（组标题）里有会话在干活 → 目录绿点闪烁；当前 Claw 有任意会话在干活 → 底部「会话」图标轻闪
 function syncWorkMarks(){
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
-    var h=box.previousElementSibling;   // 「最近活跃」不是目录，不亮
-    if(h&&!h.classList.contains('recent'))h.classList.toggle('working',!!box.querySelector('.s-row.working'));
+    var h=box.previousElementSibling;
+    if(h)h.classList.toggle('working',!!box.querySelector('.s-row.working'));
   });
   var cc=curClaw()||'claude';
   var busyAny=Object.keys(activity).some(function(id){return activity[id]&&clawOf(id)===cc})||!!document.querySelector('#sList .s-row.working');
@@ -4884,8 +4857,8 @@ function renderUnread(){
   document.querySelectorAll('#sList .s-row.wx .wx-bd').forEach(function(bd){var n=unread[bd.closest('.s-row').dataset.id]||0;bd.textContent=n>1?(n>99?'99+':String(n)):'';bd.classList.toggle('num',n>1)});
   // 目录（组标题）：组里有未读的会话就亮红点，折叠着也看得到是哪个目录要处理
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
-    var h=box.previousElementSibling;   // 「最近活跃」是特殊的组，不亮红点
-    if(h&&!h.classList.contains('recent'))h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
+    var h=box.previousElementSibling;
+    if(h)h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
   });
   // 手机底栏：当前 Claw 的未读亮在「会话」上，别的 Claw 的未读亮在「Claw」上，Claw 页里对应的卡片也亮
   var otherClaw=Object.keys(byClaw).some(function(c){return c!==clawSel});
@@ -5103,7 +5076,7 @@ document.addEventListener('visibilitychange',function(){
   takePendingOpen().then(function(id){if(id==='view:peer')openPeerView();else if(id)openFromNotice(id)});   // 从后台回来：消息可能丢了，以这条记录为准
 });
 function openFromNotice(id){
-  if(!SOLO&&typeof soloAlive==='function'&&soloAlive(id)){soloFocus(id);return}
+  if(!SOLO&&soloAlive(id)){soloFocus(id);return}
   if(session&&session.id===id&&!mList){if(shellOpen===id){clog('shell open 已在这个会话');shellOpen=null}return}
   pendingOpen=id;
   if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);$('#where').textContent='';goChat()}
@@ -5484,16 +5457,16 @@ function ttsProgEnd(x){if(x&&x.prog&&x.pi>=x.prog.n-1)x.prog.done=true}
 function ttsResumeAt(src){return ttsProg&&ttsProg.src===src&&!ttsProg.done&&ttsProg.at>0?ttsProg.at:null}
 // 合成是要钱的（豆包按字数计费）：只提前合成正在念的这句 + 后面两句，念完一句再多合成一句；停了就把还没合成完的取消掉
 var SRV_AHEAD=3;
-// 带 sec 的（豆包同一段朗读）：等前一句合成完再发，豆包才接得上前面的语气
 function srvFetch(it){
-  if(!it.p&&it.stream){it.ac=window.AbortController?new AbortController():null;
-    it.p=fetch('/api/tts/job',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({parts:it.parts,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec}),signal:it.ac?it.ac.signal:undefined})
+  if(it.p)return it.p;
+  it.ac=window.AbortController?new AbortController():null;var sig=it.ac?it.ac.signal:undefined;
+  if(it.stream){
+    it.p=postJson('/api/tts/job',{parts:it.parts,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec},sig)
       .then(function(r){return r.json().then(function(j){if(!r.ok||!j.id)throw new Error('朗读任务没建成：'+(j.error||r.status));return j})})
       .then(function(j){it.ac=null;it.job=j.id;it.url='/api/tts/stream?id='+encodeURIComponent(j.id);return it})}
-  if(!it.p){it.ac=window.AbortController?new AbortController():null;var pv=it.prev&&srvFetch(it.prev);it.prev=null;
-    it.p=(pv?pv.catch(function(){}):Promise.resolve()).then(function(){return fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec||undefined}),signal:it.ac?it.ac.signal:undefined})})
+  else it.p=postJson('/api/tts',{text:it.text,voice:it.voice,rate:it.rate||tts.rate},sig)
     .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
-    .then(function(b){it.ac=null;it.url=URL.createObjectURL(b);return it})}
+    .then(function(b){it.ac=null;it.url=URL.createObjectURL(b);return it});
   return it.p;
 }
 function srvFree(it){if(!it)return;if(it.ac){try{it.ac.abort()}catch(_){}it.ac=null}if(it.url){if(!it.stream)URL.revokeObjectURL(it.url);it.url=null}}
@@ -5530,9 +5503,8 @@ function srvNext(){
 // 豆包、不止一段：整段做成一条连续的流（见 /api/tts/stream），锁屏也能念完；进度按每段时长换算
 function srvSay(parts,voice,base,prog,rate){
   if(/^volc:/.test(voice)&&parts.length>1){srvQ.push({stream:true,parts:parts.slice(),text:parts.join(''),voice:voice,rate:rate||ttsR(),base:base||0,pi:base||0,prog:prog,sec:'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10)});srvNext();return}
-  srvSay1(parts,voice,base,prog,rate);
+  var r=rate||ttsR();parts.forEach(function(p,k){srvQ.push({text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog})});srvNext();
 }
-function srvSay1(parts,voice,base,prog,rate){var r=rate||ttsR(),sec=/^volc:/.test(voice)&&parts.length>1?'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10):'',pv=null;parts.forEach(function(p,k){var it={text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog,sec:sec,prev:sec?pv:null};pv=it;srvQ.push(it)});srvNext()}
 function srvStop(){srvGen++;srvNow=null;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause();if(/\/api\/tts\/stream/.test(a.src)){a.removeAttribute('src');a.load()}}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
 // P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
 function srvInterrupt(text,voice){
@@ -5996,7 +5968,6 @@ function ttsModeSet(mode){
   tts.mode=mode;tts.on=mode!=='off';
   try{localStorage.setItem('claclaw.ttsMode',mode);localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
   if(tts.on){tts.unlocked=false;tts.srvUnlocked=false;ttsUnlock()}else ttsStop();
-  if(narration&&narration.reset)narration.reset();
   ttsSync();
 }
 function ttsSync(){
@@ -6063,7 +6034,7 @@ $('#ttsMute').addEventListener('click',function(e){
   if(!session||this.classList.contains('lock'))return;
   var me=this;me.classList.add('lock');setTimeout(function(){me.classList.remove('lock')},400);   // 防连击：边框闪一下就消失
   if(ttsMuted[session.id])delete ttsMuted[session.id];
-  else{ttsMuted[session.id]=1;if(ttsSpeaking())ttsStop();if(narration&&narration.onUserStop)narration.onUserStop()}
+  else{ttsMuted[session.id]=1;if(ttsSpeaking())ttsStop();narration.onUserStop()}
   try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
   ttsMuteShow();ttsShowStop();
 });
@@ -6139,7 +6110,7 @@ $('#setTtsRate').addEventListener('change',function(e){
 $('#ttsStop').addEventListener('click',function(){
   if(ttsLongFired($('#ttsStop')))return;
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
-  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;if(narration&&narration.onUserStop)narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
+  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   // 浏览器自带的声音不用先念一个空格解锁：这次点击里马上就开念；Edge 上那个空格会把第一句打断
   tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
@@ -6204,10 +6175,10 @@ var ttsDbgAt=0,ttsDbgLast='';
 function ttsDbg(m){if(m===ttsDbgLast&&Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();ttsDbgLast=m;postJson('/api/tts/log',{m:String(m).slice(0,200)}).catch(function(){})}
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){
-    if(narration&&narration.onHidden)narration.onHidden();
+    narration.onHidden();
     if(!ttsSrvVoice())ttsStop();else tts.srvUnlocked=false;
   }
-  else{ttsWake();ttsPickVoice();if(narration&&narration.onVisible)narration.onVisible()}
+  else{ttsWake();ttsPickVoice();narration.onVisible()}
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
 
 // 点麦克风、或正在语音输入时不解锁：解锁会放一小段静音，iPhone 一放声音就把刚开的语音识别打断（aborted）
@@ -6294,9 +6265,6 @@ $('#setAcctGo').addEventListener('click',function(){peerFromList='';openAcct()})
 $('#sAcct').addEventListener('click',function(){peerFromList=listTab();openAcct()});
 acLoad();
 // 主题子页：设置里「主题 ›」、列表顶栏的调色板、Claw 页背景里「更新客户端」左边的圈都进这里；选了立刻换，背后还是原来那个下拉框（#setTheme / #setScImg）
-var TH_C={'':'linear-gradient(135deg,#fff 50%,#161B21 50%)',light:'#FFFFFF',dark:'#161B21',ziwei:'#5B21B6'};
-(function(){var ZC=['6AAE65','3F7A3B','5E6C79','B8C4CF','D9B44A','8A6D1E','8E2A20','E06A5A','4A78B5','1F3F6E','8E4519','E8894A'];
-  TH_C.shichen='conic-gradient('+ZC.map(function(c){return '#'+c}).join(',')+',#'+ZC[0]+')';ZC.forEach(function(c,i){TH_C['shichen@'+i]='#'+c})})();
 function thSub(){var sel=$('#setTheme'),o=sel.options[sel.selectedIndex],el=$('#setThemeSub');if(el)el.textContent=o?o.textContent:''}
 // 经络图版本表：先用本机存的立刻画，再去服务器取最新的，变了就重画（换了图地址跟着变，手机重新取）
 var scMer=(function(){try{return JSON.parse(localStorage.getItem('claclaw.scMer'))||{}}catch(e){return {}}})();
@@ -6364,7 +6332,6 @@ thSub();
 (function(){
   var balls=[$('#ctxBtn'),$('#notifBtn'),$('#ttsMute')],ncAt=0,tilt=null,asked=false,raf=0,lastT=0,drag=null;
   balls.forEach(function(b){b._o=0;b._v=0});
-  function fixed(b){return false}   // 喇叭不再有长按选声音，三个球都能拖
   function on(){return !DESKTOP.matches}
   function vis(){return balls.filter(function(b){return !b.hidden&&b.offsetParent})}
   function put(b){b.style.transform=b._o?'translateX('+b._o.toFixed(1)+'px)':''}
@@ -6386,14 +6353,14 @@ thSub();
     var it=items();if(!on()||!it.length){lastT=0;return}
     var a=acc(),moving=!!drag||!!tilt;
     it.forEach(function(o){
-      var b=o.b;if(b===drag||fixed(b)){b._v=0;return}
+      var b=o.b;if(b===drag){b._v=0;return}
       b._v+=a*dt;b._v*=Math.pow(.25,dt);if(Math.abs(b._v)<4&&!a)b._v=0;
       b._o+=b._v*dt;clamp(o);if(b._v)moving=true;
     });
     for(var i=0;i+1<it.length;i++){   // 两个球相撞：推开、交换速度
       var L=it[i],R=it[i+1],ov=(L.n+L.b._o+L.w+4)-(R.n+R.b._o);
       if(ov>0){
-        if(L.b===drag||fixed(L.b))R.b._o+=ov;else if(R.b===drag||fixed(R.b))L.b._o-=ov;else{L.b._o-=ov/2;R.b._o+=ov/2}
+        if(L.b===drag)R.b._o+=ov;else if(R.b===drag)L.b._o-=ov;else{L.b._o-=ov/2;R.b._o+=ov/2}
         var v=L.b._v;L.b._v=R.b._v*.8;R.b._v=v*.8;
       }
     }
@@ -6426,7 +6393,7 @@ thSub();
   if(pref()==='on'&&on())ask(true);
   balls.forEach(function(b){
     var sx=0,so=0,px=0,pt=0,moved=false,id=null,lp=0,lpd=false;
-    b.addEventListener('pointerdown',function(e){if(!on()||e.button||fixed(b))return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false;lpd=false;
+    b.addEventListener('pointerdown',function(e){if(!on()||e.button)return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false;lpd=false;
       clearTimeout(lp);lp=setTimeout(function(){lpd=true;b._nc=true;try{b.setPointerCapture(id)}catch(_){}toast(live?'松手关闭重力滚动':'松手开启重力滚动')},550)});   // 长按不动：松手时开关重力滚动（iOS 要在 touchend 里请求授权才弹框）
     b.addEventListener('pointermove',function(e){
       if(e.pointerId!==id)return;var dx=e.clientX-sx;
@@ -6490,9 +6457,8 @@ document.addEventListener('keydown',function(e){
 
 var pushBtn=$('#pushBtn'),pushTip=$('#pushTip');
 function pushUI(on){pushBtn.dataset.on=on?'1':'';$('#pushSub').textContent=on?'回复完、要确认时提醒':'关着'}
-var swReg=null;
 if('serviceWorker' in navigator&&window.isSecureContext){
-  navigator.serviceWorker.register('/sw.js').then(function(r){swReg=r}).catch(function(e){console.warn('sw',e)});
+  navigator.serviceWorker.register('/sw.js').catch(function(e){console.warn('sw',e)});
   // 点通知 → Service Worker 发来要打开的地址（/?s=会话ID）
   navigator.serviceWorker.addEventListener('message',function(e){
     var d=e.data||{};if(d.t!=='open')return;
