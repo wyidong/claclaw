@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { libImport, libInstall, libCheck, libInfo, libDir } from './vendor.mjs';
+import { libImport, libInstall, libCheck, libInfo, libDir, newerVersion } from './vendor.mjs';
 
 const IS_WIN = process.platform === 'win32', IS_MAC = process.platform === 'darwin';
 const PLIST = () => path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.clarelay.device.plist');
@@ -37,18 +37,6 @@ export function inviteBase(v) {
   return '';
 }
 const stateBase = st => st ? hostBase(st.domain, st.port) : '';
-// 版本比较：a 比 b 新返回 true（按点分的数字比，非数字部分按字符串）
-export function newerVersion(a, b) {
-  const x = String(a || '').split(/[.+-]/), y = String(b || '').split(/[.+-]/);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const p = x[i] ?? '', q = y[i] ?? '';
-    if (p === q) continue;
-    if (/^\d+$/.test(p) && /^\d+$/.test(q)) return Number(p) > Number(q);
-    return p > q;
-  }
-  return false;
-}
-
 export function relayStatePath(DATA) {
   if (process.env.CLACLAW_CLARELAY_STATE) return process.env.CLACLAW_CLARELAY_STATE;
   return process.env.CLACLAW_DATA ? path.join(DATA, 'clarelay-device.json') : path.join(os.homedir(), '.clarelay-device.json');

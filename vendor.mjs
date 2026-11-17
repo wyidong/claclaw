@@ -1,7 +1,10 @@
 // 第三方库：运行时下载到 vendor/<库>/<版本>-<哈希前 8 位>/，不进 claclaw 版本库（vendor/ 里只提交 README.md 和 .gitignore）。
-// - 下载：先拿清单（版本 + 每个文件的 sha256），逐个下载、核对，全部对上才写成新的版本目录，最后改 vendor/<库>/current.json 指过去。
-// - 只从 https 下载（按系统 CA 校验证书、不跟跳转）；本机 127.0.0.1 / localhost 可以用 http（测试）。
-// - 清单和文件来自同一个地址：sha256 只防下载不完整、被截断，不防下载地址本身被人改了。下载地址必须是用户自己信得过的（clarelay：自己加入的那台中继）。
+// - 清单要有发布方的签名：清单 = { lib, version, files: { 文件名: sha256 }, doc }，签名 = 发布方私钥对清单原始字节的 Ed25519 签名（base64）。
+//   公钥写死在下面 LIBS 里（随 claclaw 版本库发布）；私钥只在发布方自己电脑上，不进任何仓库、不经协同。
+//   先验签，再逐个下载文件核对 sha256：下载地址（中继）只负责存文件，它被改了 / 出事了也塞不进别的代码。
+// - 不降级：已装的是签过名的版本时，只装更新的版本（防止被换回有漏洞的旧版）；同一版本重新签发的照常装。
+// - 只从 https 下载（按系统 CA 校验证书、不跟跳转）；本机 127.0.0.1 / localhost 可以用 http（测试）。下载地址也只用自己加入的那台中继。
+// - 全部核对上才写成新的版本目录，最后改 vendor/<库>/current.json 指过去。
 // - 每个版本一个目录：已经加载进内存的旧版本照常跑；换新版的地方重新 import 新目录（路径不同，不会拿到缓存里的旧模块）。
 // - 保留当前和上一个版本（回退用），更早的删掉。
 import fs from 'node:fs';
@@ -16,8 +19,11 @@ export const vendorRoot = () => process.env.CLACLAW_VENDOR || path.join(ROOT, 'v
 export const LIBS = {
   clarelay: {
     name: 'clarelay 电脑端',
-    manifest: '/_relay/client/manifest.json',   // { version, files: { 文件名: sha256 }, doc }
+    manifest: '/_relay/client/manifest.json',   // { lib: 'clarelay', version, files: { 文件名: sha256 }, doc }
+    sig: '/_relay/client/manifest.sig',          // 清单原始字节的 Ed25519 签名（base64）
     file: f => '/_relay/client/' + encodeURIComponent(f),
+    // clarelay 发布公钥（SPKI DER base64；可以多个，换钥匙时新旧并存）。空 = 还没配，不下载
+    pubkeys: [],
     need: ['agent.mjs', 'common.mjs', 'tunnel.mjs'],
   },
 };
@@ -28,6 +34,27 @@ const MAX_MANIFEST = 64 * 1024, MAX_FILE = 4 * 1024 * 1024, MAX_FILES = 40, TIME
 const sha256 = b => crypto.createHash('sha256').update(b).digest('hex');
 const libOf = id => { const L = LIBS[id]; if (!L) throw new Error('不认识的第三方库：' + id); return L; };
 const readJson = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+
+// 版本比较：a 比 b 新返回 true（按点分的数字比，非数字部分按字符串）
+export function newerVersion(a, b) {
+  const x = String(a || '').split(/[.+-]/), y = String(b || '').split(/[.+-]/);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const p = x[i] ?? '', q = y[i] ?? '';
+    if (p === q) continue;
+    if (/^\d+$/.test(p) && /^\d+$/.test(q)) return Number(p) > Number(q);
+    return p > q;
+  }
+  return false;
+}
+// 清单签名：任一公钥验得过就算
+export function verifySig(bytes, sigB64, pubkeys) {
+  let sig; try { sig = Buffer.from(String(sigB64 || '').trim(), 'base64'); } catch { return false; }
+  if (sig.length !== 64) return false;
+  for (const k of pubkeys || []) {
+    try { if (crypto.verify(null, bytes, crypto.createPublicKey({ key: Buffer.from(k, 'base64'), format: 'der', type: 'spki' }), sig)) return true; } catch {}
+  }
+  return false;
+}
 
 // 当前版本：vendor/<库>/current.json = { version, dir, from, at, files: { 文件名: sha256 } }
 function current(id) {
@@ -41,7 +68,7 @@ function current(id) {
 /** 装好的版本：{ id, name, installed, version, from, at }；没装 installed: false */
 export function libInfo(id) {
   const L = libOf(id), c = current(id);
-  return c ? { id, name: L.name, installed: true, version: String(c.version || ''), from: c.from || '', at: c.at || 0 } : { id, name: L.name, installed: false, version: '' };
+  return c ? { id, name: L.name, installed: true, version: String(c.version || ''), from: c.from || '', at: c.at || 0, signed: c.signed !== false } : { id, name: L.name, installed: false, version: '' };
 }
 /** 装好的版本目录（没装返回 ''）：库里的文件按这个目录 import */
 export const libDir = id => current(id)?.path || '';
@@ -70,10 +97,23 @@ async function get(url, max, fetchImpl) {
   return Buffer.concat(chunks);
 }
 
-/** 读下载地址上的清单：{ version, files, doc } */
-export async function libCheck(id, base, { fetchImpl = fetch } = {}) {
-  const L = libOf(id), origin = baseOf(base);
-  let m; try { m = JSON.parse((await get(origin + L.manifest, MAX_MANIFEST, fetchImpl)).toString('utf8')); } catch (e) { throw new Error(L.name + '：读不到清单（' + e.message + '）'); }
+/**
+ * 读下载地址上的清单并验签：{ version, files, doc }
+ * @param {object} [o]
+ * @param {string[]} [o.pubkeys]  测试用：替换 LIBS 里的公钥
+ * @param {boolean} [o.unsigned]  不验签（只给命令行 --src 从本机目录装用）
+ */
+export async function libCheck(id, base, { fetchImpl = fetch, pubkeys, unsigned = false } = {}) {
+  const L = libOf(id), origin = baseOf(base), keys = pubkeys || L.pubkeys;
+  if (!unsigned && !keys?.length) throw new Error(L.name + '：claclaw 里还没配它的发布公钥，不能下载');
+  let raw, m;
+  try { raw = await get(origin + L.manifest, MAX_MANIFEST, fetchImpl); } catch (e) { throw new Error(L.name + '：读不到清单（' + e.message + '）'); }
+  if (!unsigned) {
+    let sig; try { sig = (await get(origin + L.sig, 1024, fetchImpl)).toString('utf8'); } catch (e) { throw new Error(L.name + '：读不到清单签名（' + e.message + '）'); }
+    if (!verifySig(raw, sig, keys)) throw new Error(L.name + '：清单签名不对（不是发布方签的），没装');
+  }
+  try { m = JSON.parse(raw.toString('utf8')); } catch { throw new Error(L.name + '：清单不是 JSON'); }
+  if (!unsigned && m?.lib !== id) throw new Error(L.name + '：清单不是给 ' + id + ' 的');
   if (!m || !VER_RE.test(String(m.version || ''))) throw new Error(L.name + '：清单里的版本号不对');
   const files = m.files && typeof m.files === 'object' && !Array.isArray(m.files) ? m.files : null;
   const names = files ? Object.keys(files) : [];
@@ -88,17 +128,18 @@ const locks = new Map();
  * 从 base 下载库 id 的最新版本，装好后切过去。已经是这个版本（文件哈希一样）就不重下。
  * @returns {Promise<{ info: object, changed: boolean }>}
  */
-export function libInstall(id, base, { log = () => {}, fetchImpl = fetch } = {}) {
-  const p = (locks.get(id) || Promise.resolve()).then(() => installNow(id, base, { log, fetchImpl }));   // 同一个库一次只装一个
+export function libInstall(id, base, { log = () => {}, fetchImpl = fetch, pubkeys, unsigned = false, allowDowngrade = false } = {}) {
+  const p = (locks.get(id) || Promise.resolve()).then(() => installNow(id, base, { log, fetchImpl, pubkeys, unsigned, allowDowngrade }));   // 同一个库一次只装一个
   const tail = p.then(() => {}, () => {});
   locks.set(id, tail);
   tail.then(() => { if (locks.get(id) === tail) locks.delete(id); });
   return p;
 }
-async function installNow(id, base, { log, fetchImpl }) {
+async function installNow(id, base, { log, fetchImpl, pubkeys, unsigned, allowDowngrade }) {
   const L = libOf(id), origin = baseOf(base);
-  const m = await libCheck(id, origin, { fetchImpl });
+  const m = await libCheck(id, origin, { fetchImpl, pubkeys, unsigned });
   const cur = current(id);
+  if (cur && cur.signed !== false && !allowDowngrade && m.version !== cur.version && !newerVersion(m.version, cur.version)) throw new Error(L.name + '：已装 ' + cur.version + '，下载地址上是更旧的 ' + m.version + '，不降级');
   const tag = sha256(JSON.stringify(Object.entries(m.files).sort())).slice(0, 8);
   const dirName = m.version.replace(/[^0-9A-Za-z.-]/g, '_') + '-' + tag;
   if (cur?.dir === dirName) return { info: libInfo(id), changed: false };
@@ -114,7 +155,7 @@ async function installNow(id, base, { log, fetchImpl }) {
     const dest = path.join(top, dirName);
     fs.rmSync(dest, { recursive: true, force: true });
     fs.renameSync(tmp, dest);
-    const meta = { version: m.version, dir: dirName, from: origin, at: Date.now(), files: m.files, ...(m.doc ? { doc: m.doc } : {}) };
+    const meta = { version: m.version, dir: dirName, from: origin, at: Date.now(), signed: !unsigned, files: m.files, ...(m.doc ? { doc: m.doc } : {}) };
     const cj = path.join(top, 'current.json'), t2 = cj + '.tmp';
     fs.writeFileSync(t2, JSON.stringify(meta, null, 2)); fs.renameSync(t2, cj);
     // 留当前和上一个版本，更早的删掉

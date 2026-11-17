@@ -18,7 +18,7 @@ import { z } from 'zod';
 import * as push from './push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured, useDevice } from './devnotify.mjs';
 import { makeRelayDev } from './relaydev.mjs';
-import { libDir, libImport, libInstall } from './vendor.mjs';
+import { libDir, libImport } from './vendor.mjs';
 import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './kimi.mjs';
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './qwen.mjs';
 import { isCx, CxRunner, cxRunners, cxSessionList, cxNewSession, cxShutdown, cxAcpRunning, cxInfo, cxExists, cxDelete, cxInstalled, cxSupported, cxUnsupportedReason, cxRename, cxModelsChanged } from './codex.mjs';
@@ -1750,33 +1750,19 @@ setInterval(() => {
 
 // ---------- 跨网络：经 clarelay 中继 ----------
 // 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
-// clarelay 是独立项目：协同中继用的 tunnel.mjs 是第三方库（vendor.mjs），和内置电脑端同一份，从 clarelay 中继下载到 vendor/clarelay/。
-// 没下载过：加入了 clarelay 的按身份文件里的中继下载（relaydev）；没加入的按中继邀请码里的地址下载（只认正式证书的 https 中继）。
+// clarelay 是独立项目：协同中继用的 tunnel.mjs 是第三方库（vendor.mjs），和内置电脑端同一份。
+// 只在加入 clarelay 时从加入的那台中继下载（relaydev，验发布签名）；别人给的中继邀请码只用来连接，不用来下载代码。
 let clarelay = null, clarelayDir = '';
 const relayTuns = new Map();
 const relayRetryFails = new Map();   // 邀请码 → 连续登记失败次数（决定下次重试等多久）   // 邀请码 → { to, t, state: { status, error } }   status: connecting | online | offline | error
 // 中继邀请码（主 → 备）：兼容旧的单个 relayInvite
 const relayInvitesOf = c => (Array.isArray(c.relayInvites) ? c.relayInvites : c.relayInvite ? [c.relayInvite] : []).filter(Boolean);
 const relayHostOf = inv => { try { return new URL(clarelay.parseInvite(inv).relay).host; } catch { return '?'; } };
-async function loadClarelay(invites = []) {
+async function loadClarelay() {
   const d = libDir('clarelay');
   if (clarelay && clarelayDir === d) return clarelay;
-  if (!d) {
-    // 还没下载：按中继邀请码里的地址试着下载（带证书指纹的自签中继不行：下载只认正式证书）
-    for (const b of invites.map(relayInviteBase).filter(Boolean)) {
-      try { await libInstall('clarelay', b, { log }); break; } catch (e) { log('relay: 下载 clarelay 没成', new URL(b).host, e.message); }
-    }
-  }
-  try { const m = await libImport('clarelay', 'tunnel.mjs'); if (m) { clarelay = m; clarelayDir = libDir('clarelay'); } } catch (e) { log('relay: 加载 clarelay 出错', e.message); }
+  try { const m = await libImport('clarelay', 'tunnel.mjs'); if (m) { clarelay = m; clarelayDir = d; } } catch (e) { log('relay: 加载 clarelay 出错', e.message); }
   return clarelay;
-}
-// 中继邀请码（clarelay1.<base64url JSON {r, p, k}>）里的中继地址：不带指纹（正式证书）的 https 才拿来下载
-function relayInviteBase(inv) {
-  try {
-    const m = /clarelay1\.([A-Za-z0-9_-]+)/.exec(String(inv).replace(/\s+/g, ''));
-    const j = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8'));
-    return j.p || !/^https:\/\//.test(j.r || '') ? '' : new URL(j.r).origin;
-  } catch { return ''; }
 }
 // 电脑端代码刚下载 / 换了新版：协同中继的隧道换用新的 tunnel.mjs 重连
 function reloadRelayTunnels() {
@@ -1792,12 +1778,12 @@ async function applyRelayNow(c) {
   const to = (ourBase(c) || '').replace(new RegExp(PEER_BASE + '$'), '');   // 隧道转给本机的协同收件服务（局域网 IP + 协同端口）
   const invites = c.enabled && to ? relayInvitesOf(c) : [];
   for (const [inv, r] of relayTuns) if (!invites.includes(inv) || r.to !== to) { clearTimeout(r.retry); try { r.t?.stop(); } catch {} relayTuns.delete(inv); }
-  const mod = invites.length ? await loadClarelay(invites) : null;
+  const mod = invites.length ? await loadClarelay() : null;
   for (const inv of invites) {
     if (relayTuns.has(inv)) continue;
     const cur = { to, state: { status: 'connecting' } };
     relayTuns.set(inv, cur);
-    if (!mod) { cur.state = { status: 'error', error: '还没下载 clarelay（第三方库）：在宿主页加入 clarelay，或用正式证书的中继邀请码' }; continue; }
+    if (!mod) { cur.state = { status: 'error', error: '还没下载 clarelay（第三方库）：先在宿主页加入 clarelay，电脑端代码从加入的中继下载' }; continue; }
     try {
       const t = await mod.startTunnel({
         invite: inv, to, state: path.join(DATA, 'relay-tunnel.json'), log,
@@ -3575,8 +3561,8 @@ const handler = async (req, res) => {
         const inv = (add.match(/clarelay1\.[A-Za-z0-9_-]+/) || [''])[0];
         if (!inv && /^https?:\/\/\S+\/claclaw-peer(#\S*)?$/.test(add.trim())) return sendJson(res, 400, { error: '这是某台电脑的协同地址（https://…/claclaw-peer#…），不是中继邀请码：这里只收中继服务给的邀请码（clarelay1. 开头）。对方的协同地址配对后会自动同步，不用填；还没配对就到「添加对方」里用它申请配对' });
         if (!inv) return sendJson(res, 400, { error: '这不是中继邀请码（应该以 clarelay1. 开头）' });
-        const mod = await loadClarelay([inv]);   // 还没下载 clarelay：按这个邀请码里的中继下载
-        if (!mod) return sendJson(res, 400, { error: '还没下载 clarelay（第三方库）：先在宿主页加入 clarelay；或者这个中继用的是自签证书（带指纹），不能从它下载' });
+        const mod = await loadClarelay();
+        if (!mod) return sendJson(res, 400, { error: '还没下载 clarelay（第三方库）：先在宿主页加入 clarelay，电脑端代码从加入的中继下载' });
         if (!mod.isInvite(inv)) return sendJson(res, 400, { error: '这不是中继邀请码（应该以 clarelay1. 开头）' });
         const list = relayInvitesOf(c);
         if (list.some(x => relayHostOf(x) === relayHostOf(inv))) c.relayInvites = list.map(x => relayHostOf(x) === relayHostOf(inv) ? inv : x);   // 同一台中继换了口令：原位替换
