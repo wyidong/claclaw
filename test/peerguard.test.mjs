@@ -41,7 +41,24 @@ test('其他工具：联网和未知工具要确认，同类按 key 合并', () 
   assert.ok(risk('WebFetch', { url: 'http://x' }));
   assert.ok(risk('mcp__claclaw__peer_send', {}));
   assert.equal(risk('TodoWrite', {}), null);
-  assert.equal(risk('Bash', { command: 'rm a' }).key, risk('Bash', { command: 'rm -rf b' }).key);
+  assert.equal(risk('Bash', { command: 'node a.mjs' }).key, risk('Bash', { command: 'node  a.mjs --x' }).key);
+});
+test('「本轮同类都允许」：删除 / 强推这类没有同类 key；git / npm 按子命令、复合命令按所有段的命令名分', () => {
+  const key = c => risk('Bash', { command: c }).key;
+  // 收不回来的：key 是 null，不会被「同类」放行，也不给这个按钮
+  for (const c of ['rm a', 'rm -rf b', 'git push -f', 'git push origin main', 'cd x&&rm -rf y', 'git commit -m x', 'kill 1'])
+    assert.equal(key(c), null, c);
+  // 允许过 git commit / cd ~&&ls / npm test，不等于允许 git push -f / cd x&&rm -rf y / npm run deploy
+  assert.equal(key('git remote add a b'), 'bash:git remote');
+  assert.equal(key('git config user.name x'), 'bash:git config');
+  assert.notEqual(key('cd ~&&ls'), key('cd x && node y.js'));
+  assert.equal(key('cd ~&&ls'), 'bash:cd ; ls');
+  assert.equal(key('npm test'), 'bash:npm test');
+  assert.notEqual(key('npm test'), key('npm run build'));
+  assert.notEqual(key('npm run build'), key('npm run lint'));
+  assert.equal(key('FOO=1 npm run build'), 'bash:npm run build');
+  assert.equal(key('git -C d remote add a b'), 'bash:git remote');
+  assert.equal(key('curl http://x'), key('curl -s http://y'));   // 同一个命令、不同参数仍算同类
 });
 test('进项目目录不算碰敏感，之后每段照样检查', () => {
   for (const c of ['cd ' + proj + ' && git pull', 'cd ' + proj + ' && git log -1 --format=%h', 'cd ' + path.join(H, 'w') + ' && ls'])
@@ -70,7 +87,7 @@ test('常规维护：本仓库干净时 npm check / test / restart 直接放行'
   assert.ok(bashRisk('cd ' + data + ' && npm test', proj, roots, o));
   assert.ok(bashRisk('npm test', proj, roots, { repos: [proj], clean: () => false }));
   assert.ok(bashRisk('npm test', proj, roots));
-  assert.equal(risk('Bash', { command: 'npm test' }).key, 'bash:npm');
+  assert.equal(risk('Bash', { command: 'npm test' }).key, 'bash:npm test');
   assert.equal(peerRisk('Bash', { command: 'npm test' }, proj, roots, o), null);
 });
 test('git pull / fetch 只认 origin', () => {

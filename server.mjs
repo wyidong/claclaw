@@ -1304,7 +1304,7 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
     const timer = setTimeout(() => end(504, { ok: false, error: '30 分钟内没等到回复', partial: (cur || reply).trim() }), 30 * 60 * 1000);   // 对方早已拿到 202，这里只是兜底
     r.subscribe(sub);
     // 对方发来的、或本机会话在处理对方消息时转过来的、群里不是用户本人说的（成员转来的、跨电脑来的）：这一轮有风险的操作要用户确认
-    if (r instanceof Runner && !group?.asUser && (!local || group || runners.get(fromId)?.peerTurn)) { r.peerTurn = { from: from || '对方', allowed: new Set(), text }; r.lastSaid = ''; }
+    if ((r instanceof Runner || r instanceof AcpRunner) && !group?.asUser && (!local || group || runnerOf(fromId)?.peerTurn)) { r.peerTurn = { from: from || '对方', allowed: new Set(), text }; r.lastSaid = ''; }
     r.send(msg);
     r.emit({ t: 'user', text: msg, images: [] });
   });
@@ -1815,6 +1815,32 @@ async function applyRelayNow(c) {
 }
 const relayList = c => relayInvitesOf(c).map((inv, i) => ({ i, host: clarelay ? relayHostOf(inv) : '', primary: i === 0, ...(relayTuns.get(inv)?.state || { status: c.enabled ? 'connecting' : 'off' }) }));
 
+// 协同消息触发的那一轮，一个工具调用要不要请用户确认（Claude 的 Runner 和 ACP 会话共用）。
+// 返回 null = 不用为协同而问（照会话自己的权限模式走）；否则返回确认条的 { title, description, peerKey }
+async function peerReview(pt, { id, tool, input, cwd, plan }) {
+  const risk = peerRisk(tool, input, cwd, PEER_ROOTS, PEER_OPTS);
+  if (!risk) return null;
+  // 删除 / 强推这类收不回来的：不吃「本轮同类都允许」，先判断它
+  const des = destructive(tool, input);
+  if (!des && risk.key && pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', id.slice(0, 8), tool, risk.reason); return null; }
+  // 规则只负责标出「有风险」；要不要打扰用户，交给小模型看需求 + 这一步来判断（peerjudge.mjs）。
+  // 读敏感内容不交给它：这一轮的回复会传回对方，读到的钥匙等于交出去，一律确认。
+  let why = '';
+  if (risk.key !== 'read-sensitive') {
+    const t0 = Date.now();
+    const j = await peerJudge({ need: pt.text, plan: plan || '', tool, input, cwd, reason: risk.reason, destructive: des, env: childEnv() });
+    log('peer-guard judge', j.allow ? 'allow' : 'ask', id.slice(0, 8), tool, risk.reason, '·', j.why, (Date.now() - t0) + 'ms');
+    if (j.allow) return null;
+    why = j.why;
+  }
+  log('peer-guard ask', id.slice(0, 8), 'from', pt.from, tool, risk.reason, '@', cwd);
+  return {
+    title: (des ? '⚠ ' : '') + '处理对方（' + pt.from + '）的消息时要' + risk.reason + '，允许吗？' + (why ? '（审查：' + why + '）' : ''),
+    description: why ? '审查意见：' + why : '这一轮是协同消息触发的，有风险的操作要你确认', peerKey: des ? undefined : risk.key || undefined,
+  };
+}
+AcpRunner.peerReview = peerReview;   // ACP 会话（acp.mjs）处理协同消息时也走这一套
+
 class Runner {
   constructor(info, mode, allowedModes, opts = {}) {
     this.id = info.sessionId;
@@ -2123,25 +2149,9 @@ class Runner {
     // Bash 按命令实际在哪个目录跑来判断：hook 的 cwd 跟着会话里的 cd 走，而 cd 过之后 Claude Code 会把多余的
     // 「cd 当前目录 &&」去掉——只看会话起始目录（this.cwd），`npm run restart` 就会被当成在仓库外跑。改 / 读文件的「项目目录」仍按会话目录算
     const cwd = inp.tool_name === 'Bash' && inp.cwd ? inp.cwd : this.cwd;
-    const risk = peerRisk(inp.tool_name, inp.tool_input, cwd, PEER_ROOTS, PEER_OPTS);
-    if (!risk) return {};
-    if (pt.allowed.has(risk.key)) { log('peer-guard allow(turn)', this.id.slice(0, 8), inp.tool_name, risk.reason); return {}; }
-    // 规则只负责标出「有风险」；要不要打扰用户，交给小模型看需求 + 这一步来判断（peerjudge.mjs）。
-    // 读敏感内容不交给它：这一轮的回复会传回对方，读到的钥匙等于交出去，一律确认。
-    const des = destructive(inp.tool_name, inp.tool_input);
-    let why = '';
-    if (risk.key !== 'read-sensitive') {
-      const t0 = Date.now();
-      const j = await peerJudge({ need: pt.text, plan: this.lastSaid || '', tool: inp.tool_name, input: inp.tool_input, cwd, reason: risk.reason, destructive: des, env: childEnv() });
-      log('peer-guard judge', j.allow ? 'allow' : 'ask', this.id.slice(0, 8), inp.tool_name, risk.reason, '·', j.why, (Date.now() - t0) + 'ms');
-      if (j.allow) return {};
-      why = j.why;
-    }
-    log('peer-guard ask', this.id.slice(0, 8), 'from', pt.from, inp.tool_name, risk.reason, '@', cwd);
-    const res = await this.askPermission(inp.tool_name, inp.tool_input, {
-      toolUseID, signal: o?.signal, title: (des ? '⚠ ' : '') + '处理对方（' + pt.from + '）的消息时要' + risk.reason + '，允许吗？' + (why ? '（审查：' + why + '）' : ''),
-      description: why ? '审查意见：' + why : '这一轮是协同消息触发的，有风险的操作要你确认', peerKey: risk.key,
-    });
+    const ask = await peerReview(pt, { id: this.id, tool: inp.tool_name, input: inp.tool_input, cwd, plan: this.lastSaid });
+    if (!ask) return {};
+    const res = await this.askPermission(inp.tool_name, inp.tool_input, { toolUseID, signal: o?.signal, ...ask });
     const ok = res.behavior === 'allow';
     log('peer-guard', ok ? 'allowed' : 'denied', this.id.slice(0, 8), inp.tool_name);
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: ok ? 'allow' : 'deny',

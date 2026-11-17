@@ -131,6 +131,7 @@ export class AcpAgent {
     // 新 runner 刚登记的 owners 会被旧 runner 的 finally 删掉（回复不显示），所以要等它关完再接上
     this.closing = new Map();
     this.closedAt = new Map();  // sid → 我们最后一次关掉它的时间（刚关掉又打开时，锁可能还没放开）
+    this.closeMs = 10000;       // session/close 最多等多久（agent 不回也要把 closing / owners 清掉，不然之后接上永远在等、进程也不空闲关）
   }
   get running() { return !!this.proc; }
 
@@ -232,12 +233,16 @@ export class AcpAgent {
     if (!p || !p.stdin || p.stdin.destroyed || !p.stdin.writable) return false;
     try { p.stdin.write(JSON.stringify(msg) + '\n'); return true; } catch { return false; }
   }
-  rpc(method, params) {
+  // ms：最多等多久（不给就一直等：session/prompt 一轮可以跑很久）；超时就当失败，不再等它的应答
+  rpc(method, params, ms = 0) {
     if (!this.proc) return Promise.reject(new Error(this.name + ' 没在运行'));
     return new Promise((res, rej) => {
       const id = ++this.rid;
-      this.pending.set(id, { res, rej });
-      if (!this.send({ jsonrpc: '2.0', id, method, params })) { this.pending.delete(id); rej(new Error(this.name + ' 没在运行')); }
+      let t = null;
+      const done = f => v => { clearTimeout(t); f(v); };
+      this.pending.set(id, { res: done(res), rej: done(rej) });
+      if (!this.send({ jsonrpc: '2.0', id, method, params })) { this.pending.delete(id); rej(new Error(this.name + ' 没在运行')); return; }
+      if (ms) { t = setTimeout(() => { if (this.pending.delete(id)) rej(new Error(method + ' ' + Math.round(ms / 1000) + ' 秒没有应答')); }, ms); t.unref?.(); }
     });
   }
   notify(method, params) { this.send({ jsonrpc: '2.0', method, params }); }
@@ -299,7 +304,14 @@ export class AcpAgent {
     this.stale = true;
     if (!this.owners.size) { log?.(this.name + ' acp restart: models changed'); this.idleCheck(); }
   }
-  async waitClosing(sid) { const p = this.closing.get(sid); if (p) { try { await p; } catch {} } }
+  // 有上限（session/close 自己超时之后再多等 5 秒）：关闭卡住时别让之后的接上 / 新建永远等下去
+  async waitClosing(sid) {
+    const p = this.closing.get(sid);
+    if (!p) return;
+    let t;
+    await Promise.race([p.catch(() => {}), new Promise(res => { t = setTimeout(res, this.closeMs + 5000); t.unref?.(); })]);
+    clearTimeout(t);
+  }
   // runner 不再接着这个会话：只在「现在登记的还是它」时才删，免得删掉新 runner 的登记
   release(sid, runner) { if (this.owners.get(sid) === runner) this.owners.delete(sid); this.idleCheck(); }
 }
@@ -329,7 +341,15 @@ export class AcpRunner {
     this.items = null;          // 历史靠 ACP 重放的（Kimi）：网页条目记在这里
     this.replaying = false;
     this.ctx = null; this.ctxSent = undefined; this.compactAsked = false;
+    this.turnSeq = 0; this.turnId = 0;   // 每一轮的编号：finish 只收当前这一轮的（agent 崩了时 onAcpDead 和 prompt 的 catch 都会来收尾）
+    this.turnPeer = null; this.peerNext = null; this.peerMode = null; this.modeRestoring = null;
   }
+
+  // 协同消息触发的这一轮（server.mjs 在 send 前设上，和 Claude 的 Runner 一样写 r.peerTurn = …）：
+  // 设的值跟着下一次 send 走（回复中发来的排进队列，轮到它时才算）；读到的是正在跑的这一轮的
+  get peerTurn() { return this.turnPeer; }
+  set peerTurn(v) { this.peerNext = v || null; }
+  staleTurn(turn) { return turn !== undefined && turn !== this.turnId; }
 
   // ---- 子类按需覆盖 ----
   history() { return this.items ? { items: this.items, total: this.items.length } : { items: [], total: 0 }; }
@@ -572,15 +592,45 @@ export class AcpRunner {
       title: null, displayName: info.name, description: '', target: info.target,
       reason: info.reason || '', canAlways: opts.some(o => o.kind === 'allow_always'), defaultToNo: false,
     };
-    this.pending.set(requestId, { rpcId, opts, req });
-    this.emit(req);
-    this.onAsk?.(this, '等你确认：' + info.ask);
+    const show = (peerKey) => {
+      this.pending.set(requestId, { rpcId, opts, req, peerKey });
+      this.emit(req);
+      this.onAsk?.(this, '等你确认：' + info.ask);
+    };
+    const pt = this.turnPeer, review = AcpRunner.peerReview;
+    if (!pt || !review) return show();
+    // 协同消息触发的这一轮：和 Claude 会话一样先过 peerguard → peerjudge（server.mjs 的 peerReview），要问的才弹确认
+    const t = this.peerTool(tc, info);
+    review(pt, { id: this.id, tool: t.name, input: t.input, cwd: this.cwd || HOME, plan: this.lastText })
+      .catch(e => ({ title: '处理对方（' + pt.from + '）的消息时要' + info.ask + '，允许吗？', description: '审查出错：' + (e?.message || e) }))
+      .then(ask => {
+        if (this.closed || this.turnPeer !== pt) return this.agent.answer(rpcId, { outcome: { outcome: 'cancelled' } });   // 等审查时这一轮已经结束了
+        if (!ask) {
+          // 审查放行：会话原来的模式本来就不问（这一轮临时换成了「每次询问」）就直接允许，否则照常问
+          const o = this.peerMode && (opts.find(x => x.kind === 'allow_once') || opts.find(x => x.kind === 'allow_always'));
+          return o ? this.agent.answer(rpcId, { outcome: { outcome: 'selected', optionId: o.optionId } }) : show();
+        }
+        Object.assign(req, { title: ask.title, description: ask.description, canAlways: !!ask.peerKey, alwaysLabel: ask.peerKey ? '本轮同类都允许' : undefined });
+        show(ask.peerKey);
+      });
+  }
+  // peerguard 认的是 Claude 的工具名和参数：ACP 的工具调用按种类换过去（认不出来的照原名，按未知工具审查）
+  peerTool(tc, info) {
+    const raw = info.raw || {}, str = v => typeof v === 'string' && v ? v : undefined;
+    const file = str(raw.file_path) || str(raw.filePath) || str(raw.path) || str(raw.file) || str(tc.locations?.[0]?.path);
+    if (info.name === 'Bash') return { name: 'Bash', input: { command: Array.isArray(raw.command) ? raw.command.join(' ') : str(raw.command) || info.target } };
+    if (info.name === 'Edit') return { name: 'Edit', input: { file_path: file } };
+    if (tc.kind === 'read' && file) return { name: 'Read', input: { file_path: file } };
+    if (tc.kind === 'fetch') return { name: 'WebFetch', input: raw };
+    return { name: info.name, input: raw };
   }
   replyPermission(requestId, decision) {
     const p = this.pending.get(requestId);
     if (!p) return;
     this.pending.delete(requestId);
-    const kind = decision === 'allow' ? 'allow_once' : decision === 'allow_session' ? 'allow_always' : 'reject_once';
+    // 协同确认里的「本轮同类都允许」：只记在这一轮，对 agent 只答允许这一次（不能变成它那边永久允许）
+    if (decision === 'allow_session' && p.peerKey) this.turnPeer?.allowed.add(p.peerKey);
+    const kind = decision === 'allow' || (decision === 'allow_session' && p.peerKey) ? 'allow_once' : decision === 'allow_session' ? 'allow_always' : 'reject_once';
     const opt = p.opts.find(o => o.kind === kind) || (kind === 'reject_once' && p.opts.find(o => o.kind === 'reject_always'));
     this.agent.answer(p.rpcId, opt ? { outcome: { outcome: 'selected', optionId: opt.optionId } } : { outcome: { outcome: 'cancelled' } });
     this.emit({ t: 'perm.done', requestId, toolUseID: p.req.toolUseID, decision });
@@ -591,20 +641,25 @@ export class AcpRunner {
     const names = Object.keys(this.constructor.cfgIds).join('|');
     const cmdRe = new RegExp('^\\/(' + names + ')(?:\\s+(.*))?$');
     if (!this.busy && /^\/compact\s*$/.test(String(text))) this.compactAsked = true;
+    const pt = this.peerNext; this.peerNext = null;
     if (this.busy) {
       // ACP 不支持插话：先排队。命令不排队（等这一轮结束再发），最多排 10 条
       if (new RegExp('^\\/(' + names + ')\\b').test(text) || this.queue.length >= 10) return false;
-      this.queue.push({ text, images });
+      this.queue.push({ text, images, pt });
       return 'queued';
     }
     const cmd = text.match(cmdRe);
     this.lastText = '';
+    const turn = this.turnId = ++this.turnSeq;
+    this.turnPeer = pt;
     this.setBusy(true);
     (async () => {
       try {
         await this.attach();
-        if (cmd) return this.finish(await this.command(cmd[1], (cmd[2] || '').trim()));
+        if (cmd) return this.finish({ ...await this.command(cmd[1], (cmd[2] || '').trim()), turn });
         if (images.length && !this.agent.caps.promptCapabilities?.image) throw new Error(this.imageError);
+        if (this.modeRestoring) await this.modeRestoring;   // 上一轮（协同）临时换的模式还在换回来：等它，免得和这一轮的切换打架
+        if (pt && !this.staleTurn(turn)) await this.peerAskMode();
         this.beforePrompt(text, images);
         const prompt = [
           ...images.map(i => ({ type: 'image', mimeType: i.media_type, data: i.data })),
@@ -612,16 +667,49 @@ export class AcpRunner {
         ];
         const r = await this.agent.rpc('session/prompt', { sessionId: this.sid, prompt });
         this.afterPrompt();
-        this.finish({ reason: r?.stopReason || 'end_turn' });
+        this.finish({ reason: r?.stopReason || 'end_turn', turn });
       } catch (e) {
-        this.finish({ error: e.message });
+        this.finish({ error: e.message, turn });
       }
     })();
     return true;
   }
+  // 协同消息触发的这一轮：会话的权限模式是「全部自动」这类不问的，agent 根本不会来要确认，审查就拦不住——
+  // 这一轮临时换成「每次询问」（askModes 里第一个有的），结束后换回来；审查放行的操作照原模式直接允许（见 askPermission）。
+  // 没有模式可选、或者没有「每次询问」（OpenCode 只有 build / plan）的，只能按 agent 自己的确认走
+  static askModes = ['default', 'read-only'];
+  static peerReview = null;   // server.mjs 设上：协同消息那一轮的工具审查（peerguard → peerjudge），和 Claude 会话共用
+  async peerAskMode() {
+    const opt = cfgFind(this.config, 'mode'), C = this.constructor;
+    if (!opt) return;
+    const key = v => String(v ?? '').split('#').pop().toLowerCase();
+    const cur = key(opt.currentValue);
+    if (C.askModes.includes(cur) || cur === 'plan' || cur === 'dontask') return;
+    const ask = flatOptions(opt).find(o => C.askModes.includes(key(o.value)));
+    if (!ask) { this.log?.(this.agent.name + ' peer turn: no ask mode', this.sid.slice(0, 16), cur); return; }
+    try { this.setConfig(await this.applyCfg(opt, ask.value)); }
+    catch (e) { throw new Error('处理对方的消息要先切到「每次询问」模式，切换失败：' + (e?.message || e)); }
+    this.peerMode = { from: opt.currentValue, to: ask.value };
+    this.log?.(this.agent.name + ' peer turn mode', this.sid.slice(0, 16), cur, '→', key(ask.value));
+    this.emit({ t: 'sys', text: '处理对方的消息：这一轮临时切到「每次询问」，结束后换回来' });
+  }
+  restorePeerMode() {
+    const m = this.peerMode;
+    if (!m) return;
+    this.peerMode = null;
+    const opt = cfgFind(this.config, 'mode');
+    if (!opt || String(opt.currentValue) !== String(m.to) || !this.attached) return;   // 中途被改过了：不动
+    const p = this.applyCfg(opt, m.from).then(cfg => this.setConfig(cfg))
+      .catch(e => this.log?.(this.agent.name + ' restore mode failed', this.sid.slice(0, 16), e?.message || e))
+      .finally(() => { if (this.modeRestoring === p) this.modeRestoring = null; });
+    this.modeRestoring = p;
+  }
   onFinish() {}
-  finish({ reason, error, text } = {}) {
-    if (this.closed) return;
+  // turn：send 里那一轮的编号。不是当前这一轮的（已经收过尾、又开了新的一轮）就不管；不带编号的（本地命令、断线）收当前这一轮
+  finish({ reason, error, text, turn } = {}) {
+    if (this.closed || this.staleTurn(turn)) return;
+    this.turnId = 0; this.turnPeer = null;
+    this.restorePeerMode();
     this.closeText();
     for (const [id, t] of this.tools) if (t.finished || !t.started) this.tools.delete(id);
     if (text) this.emit({ t: 'ai.full', text });
@@ -651,6 +739,9 @@ export class AcpRunner {
     const text = q.map(x => x.text).filter(Boolean).join('\n\n');
     const images = q.flatMap(x => x.images || []);
     if (!text && !images.length) return false;
+    // 排着的里面有协同消息：合成的这一轮按协同处理（来源、需求合在一起）
+    const pts = q.map(x => x.pt).filter(Boolean);
+    if (pts.length) this.peerNext = { from: [...new Set(pts.map(x => x.from))].join('、'), allowed: new Set(), text: pts.map(x => x.text).join('\n\n') };
     if (!this.send(text, images)) return false;
     this.emit({ t: 'queue.sent' });
     return true;
@@ -699,7 +790,7 @@ export class AcpRunner {
     if (this.attached) {
       this.attached = false;
       // 记下这次关闭：等它关完，同一个会话才能再接上
-      const p = ag.rpc('session/close', { sessionId: this.sid }).catch(() => {}).finally(() => {
+      const p = ag.rpc('session/close', { sessionId: this.sid }, ag.closeMs).catch(() => {}).finally(() => {
         ag.closedAt.set(this.sid, Date.now());
         if (ag.owners.get(this.sid) === this) ag.owners.delete(this.sid);
         ag.closing.delete(this.sid);

@@ -140,6 +140,7 @@ export const cpRunners = new Map();
 export class CpRunner extends AcpRunner {
   static agent = agent; static prefix = CP_PREFIX; static runners = cpRunners;
   static label = 'Copilot'; static group = 'Copilot'; static permPrefix = 'cp-'; static commands = COMMANDS;
+  static askModes = ['agent'];   // 协同消息那一轮临时切到的「每次询问」：…#agent（见 acp.mjs peerAskMode）
   static cfgIds = { model: 'model', mode: 'mode' };
   static cfgNames = { model: '模型', mode: '模式' };
   static ctxFromUsage = true; static titleFromAgent = true;

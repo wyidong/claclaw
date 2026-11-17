@@ -295,7 +295,8 @@ export class OpRunner extends AcpRunner {
   beforePrompt() { touch(this.sid); this.watchRetry(); }
   onFinish() { touch(this.sid); this.unwatchRetry(); }
   finish(o = {}) {   // 自动停掉的（免费额度用完之类）：按出错收尾（opencode 被 cancel 后 stopReason 照样回 end_turn，不能按 cancelled 认）
-    if (this.stopWhy && !o.error) o = { error: this.stopWhy };
+    if (this.staleTurn(o.turn)) return;   // 已经收过尾的那一轮又来收尾：不管（也别清掉新一轮的 stopWhy）
+    if (this.stopWhy && !o.error) o = { error: this.stopWhy, turn: o.turn };
     this.stopWhy = '';
     return super.finish(o);
   }
