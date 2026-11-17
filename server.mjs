@@ -738,15 +738,11 @@ async function handleLocal(req, res, url) {
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
   if (url.pathname === '/api/local/peer/result') return sendJson(res, 200, await waitJob(q.get('job') || '', wait));
-  if (url.pathname === '/api/local/peer/whoami') {
+  if (url.pathname === '/api/local/peer/whoami' || url.pathname === '/api/local/peer/list') {
     const f = await resolveFrom(q.get('from') || '', q.get('cwd') || '');
     if (!f.id) return sendJson(res, 200, { ok: false, error: f.error });
+    if (url.pathname === '/api/local/peer/list') return sendJson(res, 200, await peerListCore({ fromId: f.id, to: q.get('to') || '' }));
     return sendJson(res, 200, { ok: true, id: f.id, claw: clawOfId(f.id), title: sessionName(f.id, ''), pool: loadPeer().sessions.includes(f.id) });
-  }
-  if (url.pathname === '/api/local/peer/list') {
-    const f = await resolveFrom(q.get('from') || '', q.get('cwd') || '');
-    if (!f.id) return sendJson(res, 200, { ok: false, error: f.error });
-    return sendJson(res, 200, await peerListCore({ fromId: f.id, to: q.get('to') || '' }));
   }
   if (url.pathname === '/api/local/peer/send' && req.method === 'POST') {
     let b = await jsonBody(req, 64 * 1024);
@@ -759,13 +755,15 @@ async function handleLocal(req, res, url) {
   return sendJson(res, 404, { ok: false, error: 'not found' });
 }
 // 别的 Claw 的会话列表也标上协同：加入了协同（紫框）、最近和哪个对方通信（名字底色）
-function peerMark(list) {
+// peerTags：给会话 id 算这两个标记（Claude 的会话列表也用）
+function peerTags() {
   const pc = loadPeer(), on = new Set(pc.enabled ? pc.sessions : []);
-  return list.map(x => {
-    const l = pc.last?.[x.id], p = l && pc.peers.find(y => y.id === l.peer);
-    return { ...x, peer: on.has(x.id) || undefined, peerLast: p ? { id: p.id, no: p.no, color: p.color, name: p.name, at: l.at } : undefined };
-  });
+  return id => {
+    const l = pc.last?.[id], p = l && pc.peers.find(y => y.id === l.peer);
+    return { peer: on.has(id) || undefined, peerLast: p ? { id: p.id, no: p.no, color: p.color, name: p.name, at: l.at } : undefined };
+  };
 }
+function peerMark(list) { const tag = peerTags(); return list.map(x => ({ ...x, ...tag(x.id) })); }
 // 拉起别的 Claw 的会话进程（c.make 有 await）：同一个会话同时打开（连点、网页打开 + 协同消息）共用一次，
 // 否则各建一个 runner、后 set 的顶掉先 set 的，先建的那个没人管。返回 [runner, 是不是这次新建的]
 const clawMaking = new Map();   // 会话 id → 正在建的 Promise
@@ -1823,15 +1821,6 @@ class Runner {
   }
 }
 
-// ---------- HTTP ----------
-
-// 网页里新建的会话是 SDK 起的（entrypoint=sdk-ts），listSessions({ includeProgrammatic: false })
-// 会把它们和探针、脚本跑出来的会话一起滤掉。记下网页自己建的会话 id，列表里单独补回来。
-// 同时记下新建时继承的权限模式：这种会话从没在 VS Code / 终端用过，originalMode() 找不到东西，
-// 不记的话关掉再打开就掉回 default
-// 文件格式 { id: { mode } }；旧版是 id 数组，读的时候兼容
-const WEB_SESSIONS = path.join(DATA, 'web-sessions.json');
-
 // ---------- 本机提示音 ----------
 // Edge / Chrome 在 Mac 上弹的网页通知常常不带声音。claclaw 就跑在这台电脑上，
 // 所以推送时可以顺便用系统直接响一声（macOS 用 afplay 放系统声音；Windows 用 PowerShell 的 SoundPlayer 放 C:\Windows\Media 里的 wav）。
@@ -2105,6 +2094,12 @@ function localSound(force = false, id = null, urgent = false) {
   execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(New-Object Media.SoundPlayer $env:CLACLAW_WAV).PlaySync()'],
     { env: { ...process.env, CLACLAW_WAV: file }, windowsHide: true, timeout: 15000 }, () => {});
 }
+// 网页里新建的会话是 SDK 起的（entrypoint=sdk-ts），listSessions({ includeProgrammatic: false })
+// 会把它们和探针、脚本跑出来的会话一起滤掉。记下网页自己建的会话 id，列表里单独补回来。
+// 同时记下新建时继承的权限模式：这种会话从没在 VS Code / 终端用过，originalMode() 找不到东西，
+// 不记的话关掉再打开就掉回 default
+// 文件格式 { id: { mode } }；旧版是 id 数组，读的时候兼容
+const WEB_SESSIONS = path.join(DATA, 'web-sessions.json');
 function webSessions() {
   try {
     const o = JSON.parse(fs.readFileSync(WEB_SESSIONS, 'utf8'));
@@ -2159,8 +2154,7 @@ async function sessionList(limit = 80) {   // 各 Claw 列表默认 80 个；「
   const seen = new Set(normal.map(s => s.sessionId));
   const list = normal.concat(all.filter(s => ours.has(s.sessionId) && !seen.has(s.sessionId)));
   const unread = unreadMap();
-  const pc = loadPeer(), peerOn = new Set(pc.enabled ? pc.sessions : []);
-  const peerLastOf = id => { const l = pc.last[id], p = l && pc.peers.find(x => x.id === l.peer); return p ? { id: p.id, no: p.no, color: p.color, name: p.name, at: l.at } : undefined; };
+  const tag = peerTags();
   return list.filter(resumable).map(s => {
     const ours = runners.has(s.sessionId);
     const elsewhere = ours ? null : takeoverInfo(s.sessionId, jsonlPathOf(s), live);
@@ -2177,8 +2171,7 @@ async function sessionList(limit = 80) {   // 各 Claw 列表默认 80 个；「
       busyElsewhere: elsewhere,
       unread: unread[s.sessionId] || 0,
       webActive: webActive[s.sessionId] || 0,
-      peer: peerOn.has(s.sessionId) || undefined,   // 加入了 claclaw 协同（列表里用浅紫色边框标出来）
-      peerLast: peerLastOf(s.sessionId),             // 最近一次和哪个对方通信：{no, name, at}
+      ...tag(s.sessionId),   // 加入了 claclaw 协同（浅紫色边框）、最近一次和哪个对方通信：{no, name, at}
     };
   }).concat(
     // 网页里新建、还没发过消息的会话：没有会话文件，listSessions 看不到，也列出来
@@ -2469,6 +2462,8 @@ async function handleRename(req, res) {
   sendJson(res, 200, { ok: true, title });
 }
 
+// ---------- HTTP ----------
+
 const handler = async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
@@ -2583,8 +2578,7 @@ const handler = async (req, res) => {
       if (!f) return sendJson(res, 404, { error: 'not found' });
       // 文件按附件名显示；网页类型（html/svg）一律当下载，免得在 claclaw 的源下执行
       const nm = url.searchParams.get('name') || '';
-      if (url.searchParams.get('dl') === '1') { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
-      if (/\.(html?|svg|xhtml|xml)$/i.test(f)) { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
+      if (url.searchParams.get('dl') === '1' || /\.(html?|svg|xhtml|xml)$/i.test(f)) { res.setHeader('content-disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(nm || path.basename(f))); return serveVideo(req, res, f); }
       if (url.searchParams.get('thumb') === '1') return serveVideo(req, res, await imageThumb(f), nm);   // 聊天里的小图
       return serveVideo(req, res, f, nm);
     }
