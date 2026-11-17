@@ -3906,12 +3906,14 @@ function curClaw(){return clawSel||(DESKTOP.matches?'claude':null)}   // 电脑�
 var chatsIcon=document.querySelector('#mtabs [data-tab="chats"] .ti');
 function syncChatsTab(){
   var tb=document.querySelector('#mtabs [data-tab="chats"]');if(!tb)return;
-  var k=curClaw()||'';if(tb.dataset.k===k&&tb.dataset.k!==undefined)return;
+  var k=curClaw()||'';
+  // 电脑左栏同一个按钮；一个 Claw 都没有（新装的电脑）：显示 claclaw 的 logo，不显示 Claude 的
+  var rc=$('#railCur'),rk=noClaw?'-':k;if(rc&&rc.dataset.k!==rk){rc.dataset.k=rk;rc.innerHTML=noClaw?'<img class="tile" src="/icons/icon-192.png?v=11" alt="">':k?clawIcon(k):chatsIcon.outerHTML;rc.title=noClaw?'claclaw：还没有 Claw，先装一个':(k?CLAW_NAMES[k]+' ':'')+'会话';rc.setAttribute('aria-label',rc.title)}
+  if(tb.dataset.k===k&&tb.dataset.k!==undefined)return;
   var old=tb.querySelector('.ti,.tlogo'),n;
   if(k){n=document.createElement('span');n.className='tlogo';n.innerHTML=clawIcon(k)}else n=chatsIcon;
   if(old!==n)old.replaceWith(n);
   tb.dataset.k=k;tb.classList.toggle('logo',!!k);tb.setAttribute('aria-label',(k?CLAW_NAMES[k]+' ':'')+'会话');
-  var rc=$('#railCur');if(rc&&rc.dataset.k!==k){rc.dataset.k=k;rc.innerHTML=k?clawIcon(k):chatsIcon.outerHTML;rc.title=(k?CLAW_NAMES[k]+' ':'')+'会话';rc.setAttribute('aria-label',rc.title)}   // 电脑左栏同一个按钮
 }
 function showClawSel(){
   syncChatsTab();
@@ -3932,6 +3934,7 @@ if(Date.now()-clawsAt<3000)return;clawsAt=Date.now();
 fetch('/api/claws').then(function(r){return r.json()}).then(function(list){try{localStorage.setItem(hk('claws'),JSON.stringify(list))}catch(_){}applyClaws(list)}).catch(function(){});
 }
 // 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部、再少几个），服务器的结果到了再更新
+var noClaw=false;   // 一个能用的 Claw 都没有
 var clawInfo={};   // /api/claws 的结果，按 id 存（登录情况在 .login 里）
 var clawStarting={};   // 正在临时启动的 Claw（startClaw）：id → 开始时间
 function applyClaws(list){
@@ -3965,6 +3968,8 @@ function applyClaws(list){
     if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
   });
   document.querySelector('.claw-none').hidden=any;
+  // 一个能用的 Claw 都没有（新装的电脑）：Claw 入口亮红点，提示先装一个
+  noClaw=!ok.length;$('#railClaw').classList.toggle('need',noClaw);var mct=$('#mtabs [data-tab="claw"]');if(mct)mct.classList.toggle('need',noClaw);
   document.querySelectorAll('.claw-g').forEach(function(g){g.hidden=!g.querySelector('.claw-card:not([hidden])')});clawDsFit();   // 整组都没装就不显示组名
   // 列表页正显示着「还没登录」的提示、现在登上了：重新加载列表
   if(clawSel&&$('#sList .login-need')&&!(clawInfo[clawSel]&&clawInfo[clawSel].login&&clawInfo[clawSel].login.need))openSheet(true);
@@ -4069,7 +4074,7 @@ function openInstall(claw){
 }
 document.querySelectorAll('#rail .rclaw').forEach(function(b){b.addEventListener('click',function(){pickClaw(b.dataset.claw)})});
 $('#rclawMore').addEventListener('click',function(){$('#rclaws').classList.toggle('open');renderRailClaws()});
-$('#railCur').addEventListener('click',function(){pickClaw(curClaw()||'claude')});
+$('#railCur').addEventListener('click',function(){if(noClaw){mTab('claw');return}pickClaw(curClaw()||'claude')});
 $('#railClaw').addEventListener('click',function(){mTab('claw')});
 document.querySelectorAll('#mtabs button').forEach(function(b){b.addEventListener('click',function(){
   var t=b.dataset.tab;

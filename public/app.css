@@ -1137,7 +1137,7 @@ html.solo.has-skin #hdAct{grid-column:2/-1}   /* 弹出窗口有头像：头像�
   #mtabs .ti{display:block;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   #mtabs .ti .f{fill:currentColor;fill-opacity:0;transition:fill-opacity .15s}
   #mtabs button.on .ti .f{fill-opacity:.22}
-  #mtabs button.dot::after{content:'';position:absolute;top:3px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:#F23C3C}
+  #mtabs button.dot::after,#mtabs button.need::after{content:'';position:absolute;top:3px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:#F23C3C}
   #mtabs button.logo.dot::after{top:4px;left:calc(50% + 11px);box-shadow:0 0 0 2px var(--surface)}   /* 大 logo：红点挂在右上角 */
   /* 这个 Claw 有任意会话在干活：「会话」图标跟着轻闪，和列表里目录的绿点呼应 */
   #mtabs button.busy .tlogo{animation:wbreath 2.4s ease-in-out infinite}
@@ -1707,7 +1707,7 @@ select.pe-in{text-align-last:right}
   #railCur img.tile{border-radius:22.5%}
   #railCur.on{background:var(--user-bg)}
   #railCur.busy :is(svg,img),#railClaw.busy svg{animation:wbreath 2.4s ease-in-out infinite}
-  #railCur.dot::after,#railClaw.dot::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
+  #railCur.dot::after,#railClaw.dot::after,#railClaw.need::after{content:'';position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#F23C3C;box-shadow:0 0 0 2px var(--code-bg)}
   /* Claw 页：像模型管理一样占满列表 + 聊天区，卡片按宽度排几列 */
   #app.claw-on #sheet{grid-column:2 / -1;z-index:6}
   #app.claw-on :is(header,#banner,#feed,#workBar,#dock,#sheetGrip){visibility:hidden}   /* 只藏不拆：标题栏高度（--hd-h）还要用 */

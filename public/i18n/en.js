@@ -467,6 +467,7 @@ var I18N={dict:{
 "找会话":"Finding sessions",
 "技能":"Skills",
 "Claw（切换 Claw、模型管理）":"Claw (switch Claw, model management)",
+"claclaw：还没有 Claw，先装一个":"claclaw: no Claw yet, install one first",
 "拖动调整输入区高度（双击恢复）":"Drag to resize the input (double-click to reset)",
 "技能是给 AI 用的说明和命令，用到时自动安装；除 Claude Code 外各 Agent 共用一份。":"Skills are instructions and commands for the AI, installed on this computer. Usually nothing to do: claclaw installs them automatically when a feature needs them. Agents other than Claude Code share one copy, so installing for one covers all.",
 "技能是给 AI 用的说明书和命令，装在这台电脑上。平时不用管：用到相关功能时 claclaw 会自动装好。":"Skills are instructions and commands for the AI, installed on this computer. Usually nothing to do: claclaw installs them automatically when a feature needs them.",
