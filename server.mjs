@@ -3175,8 +3175,7 @@ const handler = async (req, res) => {
           try { fs.mkdirSync(TRASH, { recursive: true, mode: 0o700 }); fs.writeFileSync(f, JSON.stringify(r.removed, null, 2), { mode: 0o600 }); trimTrash(); } catch (e) { log('models trash failed', e.message); }
         }
         saveStore(MODELS_FILE, store);
-        for (const c of CLAWS) c.modelsChanged?.(log);
-        for (const c of CLAWS) for (const r of c.runners.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
+        modelsChangedAll();
         log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : body.op === 'models-add' ? r.saved : '');
         return sendJson(res, 200, { ...modelsPublic(store), saved: r.saved || null });
       }
@@ -3672,6 +3671,34 @@ function appCss() {
   return cssC;
 }
 
+// Claw 登录时填的 key（目前是 DeepSeek）：顺手登记进模型库，再从接口读模型列表填上。
+// 同一个 key 已经在库里就不动；以前这样自动加过（fromLogin）的、这次换了 key：原地换掉，不再多加一条
+const LOGIN_LIB = { deepseek: { openai: 'https://api.deepseek.com', anthropic: 'https://api.deepseek.com/anthropic' } };
+function modelsChangedAll() {
+  for (const c of CLAWS) c.modelsChanged?.(log);
+  for (const c of CLAWS) for (const r of c.runners.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
+}
+async function loginKeyToLib(claw, key) {
+  const eps = LOGIN_LIB[claw]; key = String(key || '').trim();
+  if (!eps || !key) return;
+  try {
+    let store = loadStore(MODELS_FILE);
+    if (store.providers.some(p => p.key === key)) return;
+    const old = store.providers.find(p => p.fromLogin === claw);
+    const r = modelOp(store, { op: 'provider-save', ...(old ? { orig: old.id, label: old.label } : {}), endpoints: eps, key });
+    const p = store.providers.find(x => x.id === r.saved);
+    p.fromLogin = claw;
+    saveStore(MODELS_FILE, store);
+    log('models', old ? 'login key replaced' : 'login key added', claw, p.id);
+    let models = [];
+    try { models = await fetchModels(p); } catch (e) { log('models fetch', p.id, 'failed:', e.message); }
+    store = loadStore(MODELS_FILE);
+    const q = store.providers.find(x => x.id === p.id);
+    if (q && models.some(x => !q.models.some(m => m.id === x.id))) { try { modelOp(store, { op: 'models-add', provider: q.id, models }); saveStore(MODELS_FILE, store); log('models', 'models-add', q.id, models.length); } catch (e) { log('models add failed', e.message); } }
+    modelsChangedAll();
+  } catch (e) { log('login key → models failed', e.message); }
+}
+
 // ---------- WebSocket ----------
 
 // 没有认证期间至少挡住跨站：手机上随便哪个网页都能 new WebSocket('ws://100.x:8787')，
@@ -3734,7 +3761,7 @@ wss.on('connection', (ws, req) => {
       }
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       // 各 Claw 的登录（见 login.mjs）：在电脑上起登录命令，网址 / 代码推给这个连接
-      if (m.t === 'login.start') { try { loginStart(String(m.claw || ''), ws, { key: typeof m.key === 'string' ? m.key : '', log }); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
+      if (m.t === 'login.start') { try { const lj = loginStart(String(m.claw || ''), ws, { key: typeof m.key === 'string' ? m.key : '', log }); if (lj?.status === 'ok' && m.key) loginKeyToLib(lj.claw, m.key); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
       if (m.t === 'login.input') { try { loginInput(String(m.claw || ''), String(m.text || '')); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
       if (m.t === 'login.cancel') { loginCancel(String(m.claw || ''), log); return; }
       if (m.t === 'login.watch') { if (!loginWatch(String(m.claw || ''), ws)) send({ t: 'login.update', claw: m.claw, status: 'none' }); return; }
