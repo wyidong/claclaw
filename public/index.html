@@ -3807,12 +3807,6 @@ function poolPaint(){
   var l=$('#pePoolList');if(l)l.innerHTML=poolListHtml(peerCfg);
   document.querySelectorAll('.pe-seg button').forEach(function(b){var k=b.dataset.claw,n=(peerCfg.sessions||[]).filter(function(id){return clawOf(id)===k}).length;b.outerHTML=clawSegBtn(k,n,k===peerPoolClaw)});
 }
-// 公网直连为什么没列出
-function peerWanText(w){
-  if(w.state==='off')return '没列出：要先在「网络 › clarelay」连上中继，才能探测';
-  if(w.state==='err')return '没列出：探测出错'+(w.why?'（'+esc(w.why)+'）':'');
-  return '没列出：clarelay 从外面回连 '+esc((w.ip||'公网 IP')+':'+(w.port||''))+' 不通'+(w.why?'（'+esc(w.why==='timeout'?'超时':w.why)+'）':'')+'。一般是在路由器后面、没做端口转发；不影响打洞直连和中继';
-}
 // 「本机与网络」入口上的一句话：我们有哪几类协同地址（加入了 clarelay 就有子域名，不用中继邀请码）＋其他中继的状态
 function peerNetSum(c){
   var k={};(c.addrs||[]).forEach(function(a){if(a.kind==='relay'&&/#/.test(a.url))return;k[a.kind]=1});
@@ -3836,8 +3830,7 @@ function peerNetHtml(c){
       return order.map(function(k){return peColRow(k,by[k].map(function(u){return peUrl(u)}).join(''))}).join('');
     })()+
     (c.local?peColRow('打洞直连','<small>不用地址：配对后两边自动打洞'+(c.stun?'（STUN 用 clarelay 的，第三方备用）':'（STUN 用第三方的）')+'</small>'):'')+
-    (c.local&&c.wan&&c.wan.state!=='ok'?peColRow('公网直连','<small>'+peerWanText(c.wan)+'</small>'):'')+
-    '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 公网直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。公网直连要 clarelay 从外面回连本机协同端口通了才列出。</div></div>';
+    '</div><div class="pe-note">地址不含密码，拿到也要你给配对码才能配上。对方按 局域网 → Tailscale → 打洞直连 → 中继 依次试，哪条通走哪条；地址变了每次通信会自动告诉对方。明文 http 只在内网用：跨网络走中继或打洞直连（都加密），不走公网 IP 直连。</div></div>';
   if(c.local)h+='<div><div class="h-h">其他中继（别人提供的）</div><div class="h-card">'+
     (c.relayList||[]).map(function(r){
       return '<div class="h-row pe-relay"><span class="k"><span class="pe-rl1"><em class="pe-route'+(r.primary?' rl':'')+'">'+(r.primary?'主':'备')+'</em><span class="pe-mono">'+esc(r.host||'')+'</span></span>'+
