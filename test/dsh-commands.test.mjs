@@ -147,3 +147,29 @@ test('没人看着的会话压缩后不急着 resume，等下次打开再接', a
   assert.equal(r.attached, false);
   assert.equal(r.busy, false);
 });
+
+test('确认条：dsh 的确认请求只带 toolCallId，按前面 tool_call 记下的工具名和命令补全', () => {
+  const { r, events } = runner();
+  const answers = [];
+  r.agent = { answer: (id, res) => answers.push([id, res]) };
+  const cmd = "for c in curl ss; do command -v $c || echo MISSING; done";
+  r.handle({ sessionUpdate: 'tool_call', toolCallId: 'call_1', title: 'bash', kind: 'other', status: 'pending', rawInput: { command: cmd } });   // dsh-acp：kind 一律 other，title = 工具名
+  r.askPermission(7, { toolCall: { toolCallId: 'call_1' }, options: [{ optionId: 'allow-once', kind: 'allow_once' }, { optionId: 'reject-once', kind: 'reject_once' }] });
+  const req = events.find(e => e.t === 'perm.request');
+  assert.equal(req.name, 'Bash');
+  assert.equal(req.target, cmd);
+  assert.equal(req.toolUseID, 'call_1');
+  // 改文件的工具（dsh 的 edit / patch）：按 Edit 显示，参数里的路径当内容
+  r.handle({ sessionUpdate: 'tool_call', toolCallId: 'call_2', title: 'edit', kind: 'other', status: 'pending', rawInput: { path: '/tmp/a.txt', old: 'x', new: 'y' } });
+  r.askPermission(8, { toolCall: { toolCallId: 'call_2' }, options: [] });
+  const req2 = events.filter(e => e.t === 'perm.request')[1];
+  assert.equal(req2.name, 'Edit');
+  assert.match(req2.target, /\/tmp\/a\.txt/);
+  // 请求自己带了 title / rawInput（没有前面的卡片）也照用
+  r.askPermission(9, { toolCall: { toolCallId: 'call_3', title: 'bash', rawInput: { command: 'ls' } }, options: [] });
+  const req3 = events.filter(e => e.t === 'perm.request')[2];
+  assert.equal(req3.name, 'Bash');
+  assert.equal(req3.target, 'ls');
+  r.replyPermission('ds-7', 'allow');
+  assert.deepEqual(answers[0], [7, { outcome: { outcome: 'selected', optionId: 'allow-once' } }]);
+});

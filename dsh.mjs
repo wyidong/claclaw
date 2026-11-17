@@ -544,10 +544,10 @@ export class DsRunner extends AcpRunner {
     try { [prov, id] = JSON.parse(o.value); } catch {}
     return { value: o.value, label: String(o.name || id), sub: prov, id, base: /^deepseek/.test(prov) ? 'https://api.deepseek.com' : '' };
   }
-  // dsh 的确认条：工具名当标题
-  permInfo(tc) {
-    const name = tc.title || '操作';
-    return { name, target: toolTarget(tc.rawInput), reason: '', ask: name, raw: tc.rawInput && typeof tc.rawInput === 'object' ? tc.rawInput : {} };
+  // dsh 的确认请求只带 toolCallId（dsh-acp 的 approval/request：toolCall: { toolCallId }），工具名、参数都在前面的 tool_call 里：
+  // 按记下的卡片补全（bash 按 Bash 显示整条命令）；请求自己带了 title / rawInput 的照用
+  permInfo(tc, known) {
+    return super.permInfo(tc, known ? { ...known, name: known.name || tc.title } : { name: tc.title || '' });
   }
 
   setBusy(on) {
