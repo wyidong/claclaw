@@ -6332,6 +6332,7 @@ function renderTheme(){
   var sel=$('#setTheme'),cur=sel.value,h=pgHd('data-act="th-back"',peerFromList?'返回':'返回设置','主题');
   [].forEach.call(sel.children,function(g){
     var os=g.tagName==='OPTGROUP'?[].slice.call(g.children):[g];
+    if(os[0]&&/^shichen@/.test(os[0].value)&&!/^shichen/.test(cur))return;   // 十二时辰的 12 个单选主题：选了子午流注或其中一个时才列出来，平时不占地方
     h+='<div class="claw-g"><div class="claw-h">'+esc(g.label||'')+'</div><div class="claw-grid">'+os.map(function(o){return thCard(o.value,o.textContent,cur)}).join('')+'</div></div>';
   });
   if(document.documentElement.getAttribute('data-theme')==='shichen'){
