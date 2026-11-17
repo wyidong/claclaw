@@ -980,6 +980,7 @@ var I18N={dict:{
 "等你在网页上完成授权…":"Waiting for you to finish authorizing in the browser…",
 "等待中…":"Waiting…",
 "✓ 登录完成":"✓ Signed in",
+"✓ 登录完成，正在开第一个会话…":"✓ Signed in, opening your first chat…",
 "没有正在进行的登录":"No sign-in in progress",
 "1. 在手机上打开这个网址，完成授权":"1. Open this link on your phone and authorize",
 "2. 网页问你要代码时填这个":"2. Enter this code when the page asks for it",

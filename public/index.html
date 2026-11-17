@@ -2100,6 +2100,7 @@ function onEvent(m){
   if(narration)narration.onEvent(m);   // 过程播报：只读事件，不改现有逻辑
   switch(m.t){
   case 'session.opened':
+    if(autoHi&&m.isNew&&m.claw===autoHi){autoHi=null;setTimeout(function(){if(session&&session.id===m.id&&!busy)run('hi')},300)}   // 第一次用：替用户发第一句
     var sameSess=!!(session&&session.id===m.id)&&!m.compacted,wasStick=stick;
     if(feedOwner&&feedOwner!==m.id)saveFeed(feedOwner);   // 电脑端直接切会话：把当前会话画好的内容留着（只存确实属于它的）
     var keepDone=m.compacted&&session&&session.id===m.id?(session.ctxAsk?(m.ctx||-1):session.ctxDone||0):0;   // DeepSeek 压缩完会整页重开：接着显示压缩结果
@@ -3935,6 +3936,9 @@ fetch('/api/claws').then(function(r){return r.json()}).then(function(list){try{l
 }
 // 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部、再少几个），服务器的结果到了再更新
 var noClaw=false;   // 一个能用的 Claw 都没有
+var okClaws=[];   // 能用的 Claw
+// 第一次用：唯一能用的 Claw 还没登录，在这里登录（填 key）成功后，自动在 ~ 开第一个会话、替用户发一句 hi，马上就能看到回复
+var loginFirst=null,autoHi=null;
 var clawInfo={};   // /api/claws 的结果，按 id 存（登录情况在 .login 里）
 var clawStarting={};   // 正在临时启动的 Claw（startClaw）：id → 开始时间
 function applyClaws(list){
@@ -3969,7 +3973,7 @@ function applyClaws(list){
   });
   document.querySelector('.claw-none').hidden=any;
   // 一个能用的 Claw 都没有（新装的电脑）：Claw 入口亮红点，提示先装一个
-  noClaw=!ok.length;$('#railClaw').classList.toggle('need',noClaw);var mct=$('#mtabs [data-tab="claw"]');if(mct)mct.classList.toggle('need',noClaw);syncSuggestion();
+  noClaw=!ok.length;okClaws=ok;$('#railClaw').classList.toggle('need',noClaw);var mct=$('#mtabs [data-tab="claw"]');if(mct)mct.classList.toggle('need',noClaw);syncSuggestion();
   document.querySelectorAll('.claw-g').forEach(function(g){g.hidden=!g.querySelector('.claw-card:not([hidden])')});clawDsFit();   // 整组都没装就不显示组名
   // 列表页正显示着「还没登录」的提示、现在登上了：重新加载列表
   if(clawSel&&$('#sList .login-need')&&!(clawInfo[clawSel]&&clawInfo[clawSel].login&&clawInfo[clawSel].login.need))openSheet(true);
@@ -3985,6 +3989,7 @@ function openLogin(claw){
   var info=clawInfo[claw]||{},lg=info.login||{},nm=CLAW_NAMES[claw]||claw;
   if(lg.ctok)return openCtok(lg.ctok);
   loginClaw=claw;
+  loginFirst=okClaws.length===1&&okClaws[0]===claw&&lg.loggedIn!==true?claw:null;
   var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc((lg.loggedIn===true?'重新登录 ':'登录 ')+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
     +(lg.hint?'<p class="lg-hint">'+esc(lg.hint)+'</p>':'')
@@ -4009,13 +4014,19 @@ function loginEvent(m){
     if(m.url)h+='<div class="lg-sec"><div class="lg-lb">1. 在手机上打开这个网址，完成授权</div><div class="lg-key"><a class="lg-btn lg-open" href="'+esc(m.url)+'" target="_blank" rel="noopener">打开网址</a><button type="button" class="lg-btn ghost lg-copy" data-v="'+esc(m.url)+'">复制链接</button></div></div>';
     if(m.code)h+='<div class="lg-sec"><div class="lg-lb">'+(m.url?'2. ':'')+'网页问你要代码时填这个</div><div class="lg-code">'+esc(m.code)+'</div><button type="button" class="lg-btn ghost lg-copy" data-v="'+esc(m.code)+'">复制代码</button></div>';
     if(m.prompt)h+='<div class="lg-sec"><div class="lg-lb">'+esc(m.prompt)+'</div><div class="lg-key"><input class="lg-in" autocomplete="off"><button type="button" class="lg-btn lg-send">发送</button></div></div>';
-    h+='<div class="lg-st'+(m.status==='ok'?' ok':m.status==='fail'?' bad':'')+'">'+(m.status==='ok'?'✓ 登录完成':m.status==='fail'?'✗ '+esc(m.error||'没成功'):esc(m.tail||'等待中…'))+'</div>';
+    h+='<div class="lg-st'+(m.status==='ok'?' ok':m.status==='fail'?' bad':'')+'">'+(m.status==='ok'?(loginFirst===m.claw?'✓ 登录完成，正在开第一个会话…':'✓ 登录完成'):m.status==='fail'?'✗ '+esc(m.error||'没成功'):esc(m.tail||'等待中…'))+'</div>';
   }
   b.innerHTML=h;
   b.querySelectorAll('.lg-copy').forEach(function(x){x.addEventListener('click',function(){copyText(x.dataset.v)})});
   var sd=b.querySelector('.lg-send');if(sd)sd.addEventListener('click',function(){var v=b.querySelector('.lg-in').value.trim();if(v)wsSend({t:'login.input',claw:m.claw,text:v})});
   if(m.status==='ok'||m.status==='fail'||m.status==='none')p.querySelector('.lg-cancel').textContent='关闭';
   if(m.status==='ok'){clawsAt=0;loadClaws()}   // 重新查一遍登录情况：卡片、列表页跟着更新
+  if(m.status==='ok'&&loginFirst===m.claw)firstChat(m.claw);
+}
+// 第一个会话：在 ~ 新建，开好后替用户发 hi（session.opened 里接着发）
+function firstChat(claw){
+  loginFirst=null;autoHi=claw;setTimeout(function(){if(autoHi===claw)autoHi=null},60000);
+  setTimeout(function(){closeLogin();pickClaw(claw);closeSheet();wsSend({t:'session.new',claw:claw,cwd:'~'})},800);
 }
 function pickClaw(id){
   if(curClaw()!==id){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
