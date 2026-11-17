@@ -418,10 +418,17 @@ window.__sc=(function(){
       <div id="setBody">
       <h2>设置</h2>
       <div class="set-sec">
-        <div class="set-h">宿主</div>
+        <div class="set-h">外观</div>
         <div class="set-card">
-          <button type="button" class="set-item" id="setHost"><span class="lb"><span id="setHostName">宿主</span><small>电脑状态、版本、Claw、协同</small></span><span class="chev" aria-hidden="true"></span></button>
-          <button type="button" class="set-item" id="setAcctGo" hidden><span class="lb"><span>登录账号</span><small id="setAcctSub">手机、其他电脑登录用的用户名和密码</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setThemeGo"><span class="lb">主题<small id="setThemeSub"></small></span><span class="chev" aria-hidden="true"></span></button>
+          <div hidden><select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">子午流注</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option></optgroup></select></div>
+          <label class="set-item"><span class="lb">边框粗细<small>卡片框、分隔线、顶栏和底部菜单的线</small></span>
+            <select id="setLineW"><option value="none">无</option><option value="xs">特细</option><option value="">细（默认）</option><option value="md">标准</option><option value="lg">粗</option><option value="xl">特粗</option></select></label>
+          <label class="set-item"><span class="lb">线条深浅<small>线条和底色的反差</small></span>
+            <select id="setLineC"><option value="lt">淡</option><option value="">标准（默认）</option><option value="dk">深</option><option value="dk2">更深</option></select></label>
+          <div hidden><select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></div>
+          <label class="set-item"><span class="lb">语言 / Language<small>切换后页面会刷新</small></span>
+            <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
         </div>
       </div>
       <div class="set-sec">
@@ -429,7 +436,7 @@ window.__sc=(function(){
         <div class="set-card">
           <button type="button" class="set-item" id="setTts"><span class="lb">自动朗读<small id="setTtsSub">朗读当前会话的新回复</small></span><span class="sw" aria-hidden="true"></span></button>
           <label class="set-item"><span class="lb">播报范围<small id="setTtsModeSub">只念回复</small></span>
-            <select id="setTtsMode"><option value="off">关（不朗读）</option><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
+            <select id="setTtsMode"><option value="reply">只念回复</option><option value="steps">关键节点 + 回复</option><option value="brief">只念关键节点</option></select></label>
           <label class="set-item"><span class="lb">声音<small id="setTtsVoiceSub">选了会试听一句</small></span>
             <select id="setTtsVoice"></select></label>
           <button type="button" class="set-item" id="setVoices"><span class="lb">语音管理<small id="setVoicesSub">本机、微软免费；豆包要填 API Key</small></span><span class="chev" aria-hidden="true"></span></button>
@@ -445,20 +452,10 @@ window.__sc=(function(){
           <label class="set-item"><span class="lb">自动压缩上下文<small>回复完超过就自动压缩</small></span>
             <select id="setAutoCompact"><option value="0">从不</option><option value="100">100k</option><option value="150">150k</option><option value="200">200k</option><option value="300">300k</option></select></label>
           <button type="button" class="set-item" id="setEnterSend" hidden><span class="lb">键盘回车键发送<small>开：回车发送；关：回车换行</small></span><span class="sw" aria-hidden="true"></span></button>
-        </div>
-      </div>
-      <div class="set-sec">
-        <div class="set-h">外观</div>
-        <div class="set-card">
-          <label class="set-item"><span class="lb">语言 / Language<small>切换后页面会刷新</small></span>
-            <select id="setLang"><option value="">中文</option><option value="en">English</option></select></label>
-          <button type="button" class="set-item" id="setThemeGo"><span class="lb">主题<small id="setThemeSub"></small></span><span class="chev" aria-hidden="true"></span></button>
-          <div hidden><select id="setTheme"><optgroup label="自动切换"><option value="">跟随系统</option><option value="shichen">子午流注</option></optgroup><optgroup label="固定主题"><option value="light">阳白明亮</option><option value="dark">阴黑暗沉</option><option value="ziwei">九紫离火</option></optgroup><optgroup label="十二时辰"><option value="shichen@2">寅 · 太阴肺 ✋</option><option value="shichen@3">卯 · 阳明大肠 ✋</option><option value="shichen@4">辰 · 阳明胃 🦶</option><option value="shichen@5">巳 · 太阴脾 🦶</option><option value="shichen@6">午 · 少阴心 ✋</option><option value="shichen@7">未 · 太阳小肠 ✋</option><option value="shichen@8">申 · 太阳膀胱 🦶</option><option value="shichen@9">酉 · 少阴肾 🦶</option><option value="shichen@10">戌 · 厥阴心包 ✋</option><option value="shichen@11">亥 · 少阳三焦 ✋</option><option value="shichen@0">子 · 少阳胆 🦶</option><option value="shichen@1">丑 · 厥阴肝 🦶</option></optgroup></select></div>
-          <label class="set-item"><span class="lb">边框粗细<small>卡片框、分隔线、顶栏和底部菜单的线</small></span>
-            <select id="setLineW"><option value="none">无</option><option value="xs">特细</option><option value="">细（默认）</option><option value="md">标准</option><option value="lg">粗</option><option value="xl">特粗</option></select></label>
-          <label class="set-item"><span class="lb">线条深浅<small>线条和底色的反差</small></span>
-            <select id="setLineC"><option value="lt">淡</option><option value="">标准（默认）</option><option value="dk">深</option><option value="dk2">更深</option></select></label>
-          <div hidden><select id="setScImg"><option value="">纯色</option><option value="1">图片</option></select></div>
+          <label class="set-item"><span class="lb">空闲关闭<small>无人查看且空闲多久后关闭</small></span>
+            <select id="setIdle"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="240">4 小时</option></select></label>
+          <label class="set-item"><span class="lb">接管等待<small>终端 / VS Code 会话闲置多久后可接管</small></span>
+            <select id="setTake"><option value="0">随时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select></label>
         </div>
       </div>
       <div class="set-sec">
@@ -470,15 +467,6 @@ window.__sc=(function(){
             <select id="setVidCap"><option value="512">500MB</option><option value="1024">1GB</option><option value="2048">2GB</option><option value="5120">5GB</option></select></label>
           <label class="set-item"><span class="lb">电脑上保留<small>原文件存在电脑上，换设备也能取回</small></span>
             <select id="setUpKeep"><option value="7">7 天</option><option value="30">1 个月</option><option value="60">2 个月</option><option value="180">6 个月</option><option value="365">1 年</option></select></label>
-        </div>
-      </div>
-      <div class="set-sec">
-        <div class="set-h">会话</div>
-        <div class="set-card">
-          <label class="set-item"><span class="lb">空闲关闭<small>无人查看且空闲多久后关闭</small></span>
-            <select id="setIdle"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="240">4 小时</option></select></label>
-          <label class="set-item"><span class="lb">接管等待<small>终端 / VS Code 会话闲置多久后可接管</small></span>
-            <select id="setTake"><option value="0">随时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select></label>
         </div>
       </div>
       <div class="set-sec">
@@ -496,6 +484,13 @@ window.__sc=(function(){
         <div class="set-card">
           <button type="button" class="set-item" id="soundBtn" hidden><span class="lb">推送时电脑响一声<small>运行 claclaw 的那台电脑</small></span><span class="sw" aria-hidden="true"></span></button>
           <label class="set-item" id="soundPick" hidden><span class="lb">提示音<small>选了试听</small></span><select id="soundSel"></select></label>
+        </div>
+      </div>
+      <div class="set-sec">
+        <div class="set-h">宿主</div>
+        <div class="set-card">
+          <button type="button" class="set-item" id="setHost"><span class="lb"><span id="setHostName">宿主</span><small>电脑状态、版本、Claw、协同</small></span><span class="chev" aria-hidden="true"></span></button>
+          <button type="button" class="set-item" id="setAcctGo" hidden><span class="lb"><span>登录账号</span><small id="setAcctSub">手机、其他电脑登录用的用户名和密码</small></span><span class="chev" aria-hidden="true"></span></button>
         </div>
       </div>
       <div class="set-foot">
@@ -6012,9 +6007,9 @@ function ttsModeSet(mode){
 }
 function ttsSync(){
   $('#setTts').dataset.on=tts.on?'1':'';$('#setTtsRate').value=String(tts.rate);ttsRateLabel();
-  var sel=$('#setTtsMode');if(sel)sel.value=tts.mode;
-  // 朗读关着时，声音和语速用不上：一起收起来
-  $('#setTtsVoice').closest('.set-item').hidden=!tts.on;$('#setTtsRate').closest('.set-item').hidden=!tts.on;
+  var sel=$('#setTtsMode');if(sel)sel.value=tts.on?tts.mode:tts.lastMode;   // 播报范围里没有「关」：关就关上面的「自动朗读」
+  // 朗读关着时，播报范围、声音、语音管理、语速都用不上：一起收起来
+  ['#setTtsMode','#setTtsVoice','#setVoices','#setTtsRate'].forEach(function(q){var e=$(q);(e.closest('.set-item')||e).hidden=!tts.on});
   $('#sVoice').hidden=!tts.on;   // 列表顶栏的语音管理图标：朗读没开就不显示
   var label={off:'不朗读',reply:'只念回复',steps:'念关键节点和回复',brief:'只念关键节点'};
   $('#setTtsSub').textContent=!ttsOk()?'这个浏览器不支持朗读':tts.on?'开着：'+label[tts.mode]+'；锁屏后停':'关着';
