@@ -544,6 +544,8 @@ function clawT(id){id=String(id||'');for(var i=0;i<CLAW_T.length;i++)if(id.index
 function clawById(k){for(var i=0;i<CLAW_T.length;i++)if(CLAW_T[i].id===k)return CLAW_T[i];return null}
 function clawOf(id){var c=clawT(id);return c?c.id:'claude'}
 function hk(k){return 'claclaw.'+k}
+function lsPut(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k)}catch(_){}}   // v 为空就删掉
+function lsObj(k){try{return JSON.parse(localStorage.getItem(k)||'{}')||{}}catch(_){return {}}}
 function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(_){return false}}   // 配额满 / 隐私模式会抛错：存不上就算了，别让后面的流程中断
 var DESKTOP=window.matchMedia('(min-width:1000px)');
 // 弹出窗口（电脑上标题栏「弹出」开的独立小窗，地址带 ?s=会话&solo=1）：只显示这一个会话，不记成「上次打开的会话」、刷新还是它
@@ -1437,7 +1439,7 @@ function gmSay(btn,w,text,from){return ttsWith(w.sid,function(){gmSay0(btn,w.nam
 function gmSay0(btn,name,text,from){
   var again=gmPlaying===btn&&ttsSpeaking()&&from==null;
   ttsStop();ttsHush=false;if(again)return;
-  tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+  ttsTapUnlock();
   var src=(name?name+' 说：':'')+text;
   if(from==null){from=ttsResumeAt(src);if(from!=null)toast('接着第 '+(from+1)+' 句念（长按播放键可选从哪句开始）')}
   ttsManual=true;ttsSay(src,true,from||0);
@@ -3079,7 +3081,7 @@ function vcAct(act,a){
     var id=a.dataset.id,t='你好，这是我的声音，听听合不合适。';ttsStop();ttsManual=true;
     if(/^srv:/.test(id)){tts.srvUnlocked=false;srvUnlock(true);srvSay([t],id.slice(4),0,null,tts.rate);return}
     var v=ttsVoices().find(function(x){return x.voiceURI===id});if(!v||!ttsOk())return;
-    var u=new SpeechSynthesisUtterance(t);u.lang=v.lang||'zh-CN';u.rate=tts.rate;u.voice=v;speechSynthesis.speak(u);return;
+    devSpeak(t,tts.rate,v,v.lang);return;
   }
   if(act==='vc-key-show'||act==='vc-key-copy'){keyUse('tts:volc',act==='vc-key-copy'?'copy':'show');return}
   if(act==='vc-key-edit'){vcKeyEdit=true;renderVoices();var i=$('#vcKey');if(i)i.focus();return}
@@ -3952,7 +3954,7 @@ function applyClaws(list){
     }else if(lb)lb.hidden=true;
     if((!c.supported||down)&&clawSel===c.id)clawSel=null;
     if(c.installed&&c.supported&&!down)ok.push(c.id);
-    if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
+    if(!c.installed&&clawSel===c.id){clawSel=null;lsPut(hk('claw'));}
   });
   document.querySelector('.claw-none').hidden=any;
   // 一个能用的 Claw 都没有（新装的电脑）：Claw 入口亮红点，提示先装一个
@@ -4161,7 +4163,7 @@ $('#hostBack').addEventListener('click',function(){if(hostFromClaw){hostFromClaw
       g.classList.remove('drag');document.body.classList.remove('col-drag');lsSet('claclaw.listW',String(w))};
     g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);
   });
-  g.addEventListener('dblclick',function(){apply(DEF);try{localStorage.removeItem('claclaw.listW')}catch(_){}});
+  g.addEventListener('dblclick',function(){apply(DEF);lsPut('claclaw.listW');});
   addEventListener('resize',function(){var cur=parseInt(getComputedStyle(app).getPropertyValue('--listW'))||0;if(cur)apply(cur)});
 })();
 // 电脑：输入区可以拖它的顶边调高低——最高占聊天区（消息 + 输入）的一半，最低留一行字 + 底下那排按钮；双击顶边恢复默认 190px
@@ -4181,7 +4183,7 @@ $('#hostBack').addEventListener('click',function(){if(hostFromClaw){hostFromClaw
       g.classList.remove('drag');document.body.classList.remove('row-drag');lsSet('claclaw.compH',String(h))};
     g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);
   });
-  g.addEventListener('dblclick',function(){app.style.removeProperty('--compH');try{localStorage.removeItem('claclaw.compH')}catch(_){}});
+  g.addEventListener('dblclick',function(){app.style.removeProperty('--compH');lsPut('claclaw.compH');});
   addEventListener('resize',function(){var cur=parseInt(app.style.getPropertyValue('--compH'))||0;if(cur&&on())apply(cur)});
 })();
 // 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
@@ -4995,7 +4997,7 @@ function ctxMenu(x,y,items){
 }
 document.addEventListener('mousedown',function(e){if(ctxEl&&!ctxEl.contains(e.target))ctxClose()},true);
 document.addEventListener('scroll',ctxClose,true);window.addEventListener('blur',ctxClose);
-function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
+function foldedGroups(){return lsObj('claclaw.folded')}
 function closeSheet(){showDlg(sheet,false)}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
 // 电脑上会话列表常驻，点标题栏不用做什么（留给拖选复制）；手机上点标题栏回会话列表，刚选了字就不跳
@@ -5207,7 +5209,8 @@ var bdT=0;function bdLater(){cancelAnimationFrame(bdT);bdT=requestAnimationFrame
 new MutationObserver(bdLater).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-sc','class']});
 new MutationObserver(bdLater).observe(document.getElementById('app'),{attributes:true,attributeFilter:['class']});
 DESKTOP.addEventListener('change',bdLater);bdLater();
-window.__scTop=function(){var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});postTheme()};
+function scMeta(){var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb})}   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
+window.__scTop=function(){scMeta();postTheme()};
 function scTopVar(){return DESKTOP.matches?'--sc-out':document.documentElement.classList.contains('sc-img')?'--bg':'--strip'}   // 流变时辰的状态栏 / 外壳顶栏色：电脑和外圈同色；手机有图时用淡底，没图时和顶栏（= 底部菜单）同色
 function scVar(k){return getComputedStyle(document.documentElement).getPropertyValue(k).trim()}
 function scTick(force){
@@ -5215,10 +5218,9 @@ function scTick(force){
   if(!on){if(scName){window.__sc.clear();scName=''}return}
   var n=window.__sc.now().name;if(n===scName&&!force)return;
   scName=window.__sc.apply();
-  var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
+  scMeta();
   var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=document.documentElement.classList.contains('sc-dark')?'dark':'light';   // 6 阴是深色
   if(!force)postTheme();
-  var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='子午流注';
 }
 setInterval(function(){scTick(false)},60000);
 DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(){if(scName)scTick(true)});   // 窗口在手机 / 电脑宽度之间变：标题栏颜色跟着换
@@ -5314,12 +5316,12 @@ function ttsModeAllows(pri){
 }
 // 单个会话不播报：全局朗读开着时，标题栏的喇叭可以关掉这个会话的自动播报（只影响自动念；点浮动的播放键照样能念）
 // 会话单独的声音：{ 会话 id: 声音 id }（和「声音」下拉框的值一样）；没设的会话用设置里的默认声音
-var ttsSessV={};try{ttsSessV=JSON.parse(localStorage.getItem('claclaw.ttsSessVoice')||'{}')||{}}catch(_){}
+var ttsSessV=lsObj('claclaw.ttsSessVoice');
 // ttsAs：替谁念（群里成员的回复用成员自己会话设的声音、语速；没设的用全局）。只在 ttsWith 里临时设
 var ttsAs='';function ttsWith(sid,fn){var o=ttsAs;ttsAs=sid||'';try{return fn()}finally{ttsAs=o}}
 function ttsW(){var id=ttsAs||(session&&session.id),o=id&&ttsSessV[id];return o||tts.want}
 // 会话单独的语速：{ 会话 id: 倍数 }；没设的用设置里的语速
-var ttsSessR={};try{ttsSessR=JSON.parse(localStorage.getItem('claclaw.ttsSessRate')||'{}')||{}}catch(_){}
+var ttsSessR=lsObj('claclaw.ttsSessRate');
 function ttsR(sid){var r=+ttsSessR[sid||ttsAs||(session&&session.id)];return r>0?r:tts.rate}
 function ttsSessCustom(sid){return !!(ttsSessV[sid]||ttsSessR[sid])}
 function ttsDevVoice(){var w=ttsW();return ttsVoices().find(function(v){return v.voiceURI===w})||tts.voice}
@@ -5399,7 +5401,7 @@ function ttsSrvVoice(){
   return ttsWantSrv()&&on?on.name:'';
 }
 // 语音管理里的设置：{ 声音 id: { off:1, alias:'别名' } }；声音 id 和「声音」下拉框的值一样（srv:… / 设备声音的 voiceURI）。默认全开
-var vcCfg={};try{vcCfg=JSON.parse(localStorage.getItem('claclaw.ttsVoices')||'{}')||{}}catch(_){}
+var vcCfg=lsObj('claclaw.ttsVoices');
 // 默认只勾几个常用的（不然下拉框、长按喇叭的列表一长串）：豆包 Vivi / Vivi 四川话 / 小何 / 云舟 / 小天、微软 晓晓 / 晓伊 / 云希，加上正在用的默认声音；其他到语音管理里自己勾
 var VC_REC=['srv:volc:zh_female_vv_uranus_bigtts','srv:volc:zh_female_vv_uranus_bigtts@sichuan','srv:volc:zh_female_xiaohe_uranus_bigtts','srv:volc:zh_male_m191_uranus_bigtts','srv:volc:zh_male_taocheng_uranus_bigtts','srv:edge:zh-CN-XiaoxiaoNeural','srv:edge:zh-CN-XiaoyiNeural','srv:edge:zh-CN-YunxiNeural'];
 function vcOff(id){var c=vcCfg[id];if(c&&c.off)return true;if(c&&c.on)return false;return !(id===tts.want||VC_REC.indexOf(id)>=0)}
@@ -5407,11 +5409,15 @@ function vcSetOn(id,on){var c=vcCfg[id]||{};if(on){c.on=1;delete c.off}else{c.of
 function vcAlias(id){return vcCfg[id]&&vcCfg[id].alias||''}
 function vcSet(id,k,v){var c=vcCfg[id]||{};if(v)c[k]=v;else delete c[k];if(Object.keys(c).length)vcCfg[id]=c;else delete vcCfg[id];vcSave()}
 function vcSave(){lsSet('claclaw.ttsVoices',JSON.stringify(vcCfg));ttsPickVoice()}
-function ttsPickVoice(){
+// 「声音」列表里的：只放勾选的；全关了就当没设（不能一个都没有）
+function ttsLists(){
   var vs0=ttsVoices(),srv0=tts.srv||[];
-  // 列表里只放勾选的；全关了就当没设（不能一个都没有）
   var vs=vs0.filter(function(v){return !vcOff(v.voiceURI)}),srv=srv0.filter(function(v){return !vcOff('srv:'+v.name)});
   if(!vs.length&&!srv.length){vs=vs0;srv=srv0}
+  return {vs:vs,srv:srv};
+}
+function ttsPickVoice(){
+  var L=ttsLists(),vs=L.vs,srv=L.srv;
   // 正在用的那个被关掉了：换成列表里的第一个
   if(tts.want&&vcOff(tts.want)){var nx=srv[0]?'srv:'+srv[0].name:vs[0]?vs[0].voiceURI:'';if(nx&&nx!==tts.want){tts.want=nx;lsSet('claclaw.ttsVoice',nx)}}
   tts.voice=vs.find(function(v){return v.voiceURI===tts.want})||vs[0]||null;
@@ -5535,38 +5541,35 @@ function srvKeepIdle(on,now){
   if(!srvIdleT)srvIdleT=setTimeout(off,8000);
 }
 // iPhone：<audio> 第一次播放要由点击触发；点一下时两个都放一小段静音，之后就能自己播
-function SILENT_WAV(){
-  var n=800,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
+// n 个采样的静音 WAV（8kHz 单声道 8 位无符号，静音是 128）
+function silentWav(n){
+  var b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
   w(0,'RIFF');d.setUint32(4,36+n,true);w(8,'WAVEfmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
   d.setUint32(24,8000,true);d.setUint32(28,8000,true);d.setUint16(32,1,true);d.setUint16(34,8,true);w(36,'data');d.setUint32(40,n,true);
   for(var i=0;i<n;i++)b[44+i]=128;
-  var str='';for(var j=0;j<b.length;j++)str+=String.fromCharCode(b[j]);return 'data:audio/wav;base64,'+btoa(str);
+  return b;
 }
-var SILENT_SRC=SILENT_WAV();
-// 保活用的长静音（秒）：走 Blob 而不是 data: URI —— 10 秒的 8kHz 单声道有 8 万字节，
-// base64 塞进字符串要 10 万多字符，没必要。内容同样是 8 位无符号静音（128）。
-function SILENT_BLOB(sec){
-  var r=8000,n=r*sec,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
-  w(0,'RIFF');d.setUint32(4,36+n,true);w(8,'WAVEfmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
-  d.setUint32(24,r,true);d.setUint32(28,r,true);d.setUint16(32,1,true);d.setUint16(34,8,true);w(36,'data');d.setUint32(40,n,true);
-  for(var i=0;i<n;i++)b[44+i]=128;
-  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
-}
+var SILENT_SRC=(function(){var b=silentWav(800),str='';for(var j=0;j<b.length;j++)str+=String.fromCharCode(b[j]);return 'data:audio/wav;base64,'+btoa(str)})();
+// 保活用的长静音（秒）：走 Blob 而不是 data: URI —— 10 秒有 8 万字节，base64 塞进字符串要 10 万多字符，没必要
+function SILENT_BLOB(sec){return URL.createObjectURL(new Blob([silentWav(8000*sec)],{type:'audio/wav'}))}
 function srvUnlock(force){
   if(tts.srvUnlocked&&!force)return;
   if(srvPlaying())return;
   tts.srvUnlocked=true;
   srvEls.forEach(function(a){try{if(a===srvCur||srvQ.some(function(x){return x.resumeEl===a}))return;a.src=SILENT_SRC;var p=a.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}});
 }
-function ttsText(src){
+// 朗读前去掉 Markdown 记号：代码块、表格、图片、链接地址都不念
+function ttsStrip(src){
   return String(src||'')
     .replace(/```[\s\S]*?```/g,'，代码略，')
     .replace(/^\s*\|.*\|\s*$/gm,'').replace(/^\s*[-:| ]{3,}\s*$/gm,'')
     .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
     .replace(/https?:\/\/\S+/g,'链接')
     .replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|~~/g,'')
-    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'')
-    .replace(/\n{2,}/g,'。\n').replace(/\s+/g,' ').trim();
+    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'');
+}
+function ttsText(src){
+  return ttsStrip(src).replace(/\n{2,}/g,'。\n').replace(/\s+/g,' ').trim();
 }
 // 边写边念：文字每出来完整的一句（句末标点或换行）就交去念，不等整段写完。
 // 代码块没写完时不切（等它写完整块念成「代码略」）；太短的碎句先攒着，和下一句一起念。
@@ -5595,13 +5598,7 @@ var TTS_MIN=40,TTS_MAX=220,TTS_BIG_MAX=400;
 function ttsBig(){return /^volc:/.test(ttsSrvVoice()||'')}
 // 文字的段落（换行分开；去掉 Markdown 记号，同 ttsText），没有句末标点的补个句号，念的时候段与段之间有停顿
 function ttsParas(src){
-  return String(src||'')
-    .replace(/```[\s\S]*?```/g,'，代码略，')
-    .replace(/^\s*\|.*\|\s*$/gm,'').replace(/^\s*[-:| ]{3,}\s*$/gm,'')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
-    .replace(/https?:\/\/\S+/g,'链接')
-    .replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|~~/g,'')
-    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'')
+  return ttsStrip(src)
     .split(/\n+/).map(function(p){p=p.replace(/\s+/g,' ').trim().replace(/^[，,]+|[，,]+$/g,'');if(p&&!/[。！？!?；;：:…」”"’）)]$/.test(p))p+='。';return p}).filter(function(p){return /[^\s。，,]/.test(p)});
 }
 // 太长的一段：按句子切成 ceil(长度/上限) 份，每份差不多长
@@ -5902,7 +5899,7 @@ var narration=(function(){
 function ttsPreview(text){
   ttsStop();ttsManual=true;
   var sv=ttsSrvVoice();if(sv){srvUnlock();srvSay([text],sv,0,null,tts.rate);return}
-  if(!ttsOk())return;var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u);
+  if(!ttsOk())return;devSpeak(text,tts.rate,tts.voice);
 }
 var TTS_IC={
   say:'<svg viewBox="0 0 24 24"><path d="M8.5 6v12l9.5-6z" fill="currentColor" stroke="none"/></svg>',
@@ -5999,7 +5996,7 @@ function soloLeave(id){
   if(next){wsSend({t:'session.open',id:next.id,mode:mode});return}
   wsSend({t:'session.leave'});if(feedOwner===session.id)saveFeed(session.id);feedOwner=null;session=null;setBusy(false);
   feed.innerHTML='';$('#nm').textContent='选择会话';$('#sid').textContent='';$('#where').textContent='';setHeader();
-  try{localStorage.removeItem(hk('session'))}catch(_){}
+  lsPut(hk('session'));
   refreshList();
 }
 if(soloCh){
@@ -6032,14 +6029,14 @@ $('#ttsMute').addEventListener('click',function(e){
 });
 // 可选的声音（和设置里「声音」下拉框一样：语音管理里勾上的，带别名）
 function ttsChoices(){
-  var vs0=ttsVoices(),srv0=tts.srv||[];
-  var vs=vs0.filter(function(v){return !vcOff(v.voiceURI)}),srv=srv0.filter(function(v){return !vcOff('srv:'+v.name)});
-  if(!vs.length&&!srv.length){vs=vs0;srv=srv0}
+  var L=ttsLists(),vs=L.vs,srv=L.srv;
   return srv.map(function(v){return {id:'srv:'+v.name,label:vcAlias('srv:'+v.name)||srvLabel(v)}}).concat(vs.map(function(v){return {id:v.voiceURI,label:vcAlias(v.voiceURI)||ttsLabel(v)}}));
 }
 // 用当前会话的声音、语速念一句（选完声音 / 调完语速试听）
-function ttsSessSay(t){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);ttsStop();ttsManual=true;var sv=ttsSrvVoice();if(sv)srvSay([t],sv);else if(ttsOk()){var u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=ttsR();var dv=ttsDevVoice();if(dv)u.voice=dv;speechSynthesis.speak(u)}}
-function ttsSessRateSave(){var ks=Object.keys(ttsSessR);if(ks.length>300)delete ttsSessR[ks[0]];lsSet('claclaw.ttsSessRate',JSON.stringify(ttsSessR))}
+function devSpeak(t,rate,voice,lang){var u=new SpeechSynthesisUtterance(t);u.lang=lang||'zh-CN';u.rate=rate;if(voice)u.voice=voice;speechSynthesis.speak(u)}   // 用这台设备自带的语音念一句（试听）
+function ttsTapUnlock(){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true)}   // 这次点击就是 iPhone 要的「用户手势」：顺手解锁朗读
+function ttsSessSay(t){ttsTapUnlock();ttsStop();ttsManual=true;var sv=ttsSrvVoice();if(sv)srvSay([t],sv);else if(ttsOk())devSpeak(t,ttsR(),ttsDevVoice())}
+function ttsSessSave(o,k){var ks=Object.keys(o);if(ks.length>300)delete o[ks[0]];lsSet('claclaw.'+k,JSON.stringify(o))}   // 各会话的声音 / 语速：最多记 300 个
 // 这个会话的声音和语速：放在会话设置里（标题栏右边 › →「朗读」）；长按 / 双击喇叭直接打开会话设置并滚到这一栏
 function renderCfgTts(){
   var sel=$('#cfgVoice');if(!sel||!session)return;
@@ -6057,18 +6054,17 @@ function cfgRateUi(){if(!session)return;var own=+ttsSessR[session.id]>0,r=+$('#c
 $('#cfgVoice').addEventListener('change',function(e){
   if(!session)return;var sid=session.id,v=e.target.value,lab=e.target.options[e.target.selectedIndex].textContent;
   if(v)ttsSessV[sid]=v;else delete ttsSessV[sid];
-  var ks=Object.keys(ttsSessV);if(ks.length>300)delete ttsSessV[ks[0]];
-  lsSet('claclaw.ttsSessVoice',JSON.stringify(ttsSessV));
+  ttsSessSave(ttsSessV,'ttsSessVoice');
   ttsMuteShow(true);toast(v?'这个会话改用「'+lab+'」':'这个会话跟随默认声音');
   ttsSessSay('以后这个会话用这个声音念。');
 });
 $('#cfgRate').addEventListener('input',function(){$('#cfgRateV').textContent=(+this.value).toFixed(2)+' 倍'});
 $('#cfgRate').addEventListener('change',function(){
-  if(!session)return;ttsSessR[session.id]=+this.value;ttsSessRateSave();cfgRateUi();ttsMuteShow(true);
+  if(!session)return;ttsSessR[session.id]=+this.value;ttsSessSave(ttsSessR,'ttsSessRate');cfgRateUi();ttsMuteShow(true);
   ttsSessSay('现在是这个语速，听听合不合适。');
 });
 $('#cfgRateD').addEventListener('click',function(){
-  if(!session)return;delete ttsSessR[session.id];ttsSessRateSave();$('#cfgRate').value=String(tts.rate);cfgRateUi();ttsMuteShow(true);toast('这个会话跟随默认语速');
+  if(!session)return;delete ttsSessR[session.id];ttsSessSave(ttsSessR,'ttsSessRate');$('#cfgRate').value=String(tts.rate);cfgRateUi();ttsMuteShow(true);toast('这个会话跟随默认语速');
 });
 (function(){
   var b=$('#setEnterSend');
@@ -6105,7 +6101,7 @@ $('#ttsStop').addEventListener('click',function(){
   if(ttsSpeaking()){ttsStop();ttsHush=!!busy;narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   // 浏览器自带的声音不用先念一个空格解锁：这次点击里马上就开念；Edge 上那个空格会把第一句打断
-  tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+  ttsTapUnlock();
   ttsDbg('tap say '+(ttsSrvVoice()||'want='+(tts.want||'-'))+' srv='+(tts.srv?tts.srv.length:'-')+(DESKTOP.matches?' desk':' mob'));
   var src=ttsLastReply(),at=ttsResumeAt(src);
   if(at!=null)toast('接着第 '+(at+1)+' 句念（长按播放键可选从哪句开始）');
@@ -6116,7 +6112,7 @@ ttsLongPress($('#ttsStop'),function(){
   var src=ttsLastReply();
   ttsPickFrom(src,function(i){
     ttsStop();ttsHush=false;
-    tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+    ttsTapUnlock();
     ttsDbg('tap say from '+i);ttsManual=true;ttsSay(src,true,i);ttsShowStop();
   });
 });
@@ -6184,8 +6180,7 @@ ttsSync();
 (function(){
   var k=$('#setVidKeep'),c=$('#setVidCap');k.value=String(vidKeepDays());c.value=String(vidCapMB());
   if(!k.value)k.value='60';if(!c.value)c.value='2048';
-  k.addEventListener('change',function(){lsSet('claclaw.vidKeep',k.value);vidPrune().then(showVidUse,function(){})});
-  c.addEventListener('change',function(){lsSet('claclaw.vidCap',c.value);vidPrune().then(showVidUse,function(){})});
+  [[k,'vidKeep'],[c,'vidCap']].forEach(function(x){x[0].addEventListener('change',function(){lsSet('claclaw.'+x[1],x[0].value);vidPrune().then(showVidUse,function(){})})});
 })();
 function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$('#vidUse').textContent='图片原图、视频、文件存在本机：'+u.n+' 个，'+(u.size/1048576).toFixed(1)+'MB'}).catch(function(){})}
 (function(){
@@ -6195,20 +6190,20 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   sel.addEventListener('change',function(){
     var m=/^shichen@(\d+)$/.exec(sel.value),v=m?'shichen':sel.value;
     window.__scZ=m?+m[1]:null;
-    try{if(v)localStorage.setItem('claclaw.theme',v);else localStorage.removeItem('claclaw.theme');if(m)localStorage.setItem('claclaw.scZ',m[1]);else localStorage.removeItem('claclaw.scZ')}catch(_){}
+    lsPut('claclaw.theme',v);lsPut('claclaw.scZ',m&&m[1]);
     applyTheme(v);
   });
   var lg=$('#setLang');try{lg.value=localStorage.getItem('claclaw.lang')==='en'?'en':''}catch(_){}
   lg.addEventListener('change',function(){
-    try{if(lg.value)localStorage.setItem('claclaw.lang',lg.value);else localStorage.removeItem('claclaw.lang')}catch(_){}
+    lsPut('claclaw.lang',lg.value);
     setTimeout(function(){$("#railReload").click()},350);   // 等设置同步到电脑（300ms 防抖）再刷新，刷新后停在设置页
   });
   ['lineW','lineC'].forEach(function(k){var e=$('#set'+k[0].toUpperCase()+k.slice(1));try{e.value=localStorage.getItem('claclaw.'+k)||''}catch(_){}
-    e.addEventListener('change',function(){try{if(e.value)localStorage.setItem('claclaw.'+k,e.value);else localStorage.removeItem('claclaw.'+k)}catch(_){}window.__lines()})});
+    e.addEventListener('change',function(){lsPut('claclaw.'+k,e.value);window.__lines()})});
   var im=$('#setScImg');
   try{im.value=localStorage.getItem('claclaw.scImg')==='1'?'1':''}catch(_){}
   im.addEventListener('change',function(){
-    try{if(im.value)localStorage.setItem('claclaw.scImg','1');else localStorage.removeItem('claclaw.scImg')}catch(_){}
+    lsPut('claclaw.scImg',im.value?'1':'');
     if(window.__sc&&document.documentElement.getAttribute('data-theme')==='shichen')window.__sc.apply();   // 单选某个时辰（sel.value 是 shichen@N）也要立刻换
   });
 })();
@@ -6258,7 +6253,7 @@ acLoad();
 // 主题子页：设置里「主题 ›」、列表顶栏的调色板、Claw 页背景里「更新客户端」左边的圈都进这里；选了立刻换，背后还是原来那个下拉框（#setTheme / #setScImg）
 function thSub(){var sel=$('#setTheme'),o=sel.options[sel.selectedIndex],el=$('#setThemeSub');if(el)el.textContent=o?o.textContent:''}
 // 经络图版本表：先用本机存的立刻画，再去服务器取最新的，变了就重画（换了图地址跟着变，手机重新取）
-var scMer=(function(){try{return JSON.parse(localStorage.getItem('claclaw.scMer'))||{}}catch(e){return {}}})();
+var scMer=lsObj('claclaw.scMer');
 function scMerSync(){fetch('/sc-mer/index.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var t=JSON.stringify(j);if(t===JSON.stringify(scMer))return;scMer=j;try{localStorage.setItem('claclaw.scMer',t)}catch(e){}renderTheme()}).catch(function(){})}
 function openTheme(){mTab('host');hostView='theme';renderTheme();scMerSync()}
 var thPalC={};
@@ -6543,27 +6538,23 @@ function postCtok(body,busy){
 function showSessSet(j){
   var cp=j.clarelayPush,pv=$('#pushViaRow');pv.hidden=!cp;
   if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='自动：clarelay '+(cp.online?'在线，走 clarelay':'不在线，claclaw 自己推')}
-  if(j.uploadKeepDays){var uk=$('#setUpKeep'),uv=String(j.uploadKeepDays);if(![].some.call(uk.options,function(o){return o.value===uv})){var o2=document.createElement('option');o2.value=uv;o2.textContent=uv+' 天';uk.appendChild(o2)}uk.value=uv}
-  if(j.autoCompactK!=null){var ac=$('#setAutoCompact'),av=String(j.autoCompactK);if(![].some.call(ac.options,function(o){return o.value===av})){var o3=document.createElement('option');o3.value=av;o3.textContent=av+'k';ac.appendChild(o3)}ac.value=av}
-  [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
-    var sel=$(x[0]),v=String(x[1]);
-    if(![].some.call(sel.options,function(o){return o.value===v})){var o=document.createElement('option');o.value=v;o.textContent=v+' 分钟';sel.appendChild(o)}
-    sel.value=v;
-  });
+  if(j.uploadKeepDays)selEnsure('#setUpKeep',j.uploadKeepDays,' 天');
+  if(j.autoCompactK!=null)selEnsure('#setAutoCompact',j.autoCompactK,'k');
+  selEnsure('#setIdle',j.idleCloseMin,' 分钟');selEnsure('#setTake',j.takeoverMin,' 分钟');
 }
+// 下拉框选中服务端给的值；选项里没有就补一个
+function selEnsure(id,v,unit){var sel=$(id);v=String(v);if(![].some.call(sel.options,function(o){return o.value===v})){var o=document.createElement('option');o.value=v;o.textContent=v+unit;sel.appendChild(o)}sel.value=v}
+function saveSessSet(body,msg){postJson('/api/settings/session',body).then(function(r){return r.json()}).then(function(j){showSessSet(j);toast(msg?msg(j):'已保存')})}
 $('#setPushVia').addEventListener('change',function(){
-  postJson('/api/settings/session',{pushVia:this.value})
-    .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
+  saveSessSet({pushVia:this.value});
 });
 $('#setAutoCompact').addEventListener('change',function(){
-  postJson('/api/settings/session',{autoCompactK:Number(this.value)})
-    .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast(j.autoCompactK?'已保存：超过 '+j.autoCompactK+'k 自动压缩':'已关闭自动压缩')});
+  saveSessSet({autoCompactK:Number(this.value)},function(j){return j.autoCompactK?'已保存：超过 '+j.autoCompactK+'k 自动压缩':'已关闭自动压缩'});
 });
 ['#setIdle','#setTake','#setUpKeep'].forEach(function(id){
   $(id).addEventListener('change',function(){
     var body={};body[id==='#setIdle'?'idleCloseMin':id==='#setUpKeep'?'uploadKeepDays':'takeoverMin']=Number(this.value);
-    postJson('/api/settings/session',body)
-      .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
+    saveSessSet(body);
   });
 });
 // 排查用：直接在本机弹一条通知，不经苹果/微软的推送服务。
