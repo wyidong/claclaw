@@ -5,6 +5,7 @@
 //   - server 意外退出（崩溃、被杀）：记一行退出码，等几秒重新拉起（2 秒起，连着挂翻倍，最长 60 秒；稳定跑满 5 分钟就重置）
 //   - 不拉起的情况：正常退出（退出码 0，比如 Ctrl+C）；刚起就因为端口被占退出（已经有一个 claclaw 在跑）
 //   - 守护自己的 pid 写在 Logs\serve.pid，npm run restart 重启时连守护一起结束、再开新窗口 npm run serve
+//   - 参数原样传给 server.mjs：npm run serve -- --port 9000（端口和 server.mjs 一样认 --port / -p，其次 CLACLAW_PORT）
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
@@ -17,7 +18,15 @@ const LOGDIR = process.platform === 'win32'
   ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'claclaw', 'Logs')
   : path.join(os.homedir(), 'Library', 'Logs', 'claclaw');
 const LOG = path.join(LOGDIR, 'server.log'), PIDFILE = path.join(LOGDIR, 'serve.pid');
-const PORT = Number(process.env.CLACLAW_PORT || 8787);
+const ARGS = process.argv.slice(2);
+const argPort = () => {
+  for (let i = 0; i < ARGS.length; i++) {
+    const m = ARGS[i].match(/^--port=(.+)$/);
+    if (m) return m[1];
+    if (ARGS[i] === '--port' || ARGS[i] === '-p') return ARGS[i + 1];
+  }
+};
+const PORT = Number(argPort() ?? process.env.CLACLAW_PORT ?? 8787);
 const MAX_LOG = 5 * 1024 * 1024;
 
 fs.mkdirSync(LOGDIR, { recursive: true });
@@ -59,7 +68,7 @@ async function run() {
   rotate();
   const t0 = Date.now();
   note(`start node server.mjs（守护 pid ${process.pid}）`);
-  child = spawn(process.execPath, ['server.mjs'], { cwd: ROOT, stdio: ['inherit', 'pipe', 'pipe'], env: { ...process.env, CLACLAW_SERVE: '1' } });
+  child = spawn(process.execPath, ['server.mjs', ...ARGS], { cwd: ROOT, stdio: ['inherit', 'pipe', 'pipe'] });
   child.stdout.on('data', writer(process.stdout));
   child.stderr.on('data', writer(process.stderr));
   const [code, signal] = await new Promise(ok => child.once('exit', (c, s) => ok([c, s])));
