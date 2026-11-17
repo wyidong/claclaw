@@ -274,6 +274,7 @@ var I18N={dict:{
 "双向：两边都能主动找对方":"Two-way: either side can reach the other",
 "发消息":"Messaging",
 "发消息，/ 查看命令":"Message, / for commands",
+"还没有 Claw，先在「Claw」里装一个":"No Claw yet, install one under Claw first",
 "发送":"Send",
 "取消":"Cancel",
 "取消这条排队中的消息？取消后不会再发":"Cancel this queued message? It won't be sent",

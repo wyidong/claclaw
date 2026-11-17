@@ -202,7 +202,7 @@ window.__sc=(function(){
       <button type="button" id="attachBtn" aria-label="添加图片"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 4.5v13M4.5 11h13"/></svg></button>
       <input type="file" id="fileIn" multiple hidden>
       <div id="taWrap">
-        <textarea id="ta" rows="1" placeholder="给 Claude 发消息" aria-label="消息"></textarea>
+        <textarea id="ta" rows="1" placeholder="发消息，/ 查看命令" aria-label="消息"></textarea>
       </div>
       <button type="button" id="taClr" aria-label="清空输入框" title="清空输入框" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg></button>
       <button type="button" id="stopBtn" aria-label="停止" title="停止 Claude 当前的工作" hidden></button>
@@ -1708,7 +1708,7 @@ function setSuggestion(t){
 }
 function syncSuggestion(){
   var on=!!suggestion&&!ta.value&&!busy&&!!session;
-  ta.placeholder=on?suggestion:session&&session.group?'发消息，@ 谁谁回':PLACEHOLDER;
+  ta.placeholder=on?suggestion:session&&session.group?'发消息，@ 谁谁回':!session&&noClaw?'还没有 Claw，先在「Claw」里装一个':PLACEHOLDER;
   taWrap.classList.toggle('sug',on);
   syncSend();
 }
@@ -3969,7 +3969,7 @@ function applyClaws(list){
   });
   document.querySelector('.claw-none').hidden=any;
   // 一个能用的 Claw 都没有（新装的电脑）：Claw 入口亮红点，提示先装一个
-  noClaw=!ok.length;$('#railClaw').classList.toggle('need',noClaw);var mct=$('#mtabs [data-tab="claw"]');if(mct)mct.classList.toggle('need',noClaw);
+  noClaw=!ok.length;$('#railClaw').classList.toggle('need',noClaw);var mct=$('#mtabs [data-tab="claw"]');if(mct)mct.classList.toggle('need',noClaw);syncSuggestion();
   document.querySelectorAll('.claw-g').forEach(function(g){g.hidden=!g.querySelector('.claw-card:not([hidden])')});clawDsFit();   // 整组都没装就不显示组名
   // 列表页正显示着「还没登录」的提示、现在登上了：重新加载列表
   if(clawSel&&$('#sList .login-need')&&!(clawInfo[clawSel]&&clawInfo[clawSel].login&&clawInfo[clawSel].login.need))openSheet(true);
