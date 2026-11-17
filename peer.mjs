@@ -19,6 +19,7 @@ import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
 import crypto from 'node:crypto';
+import net from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 import { classifyAddr } from './peerrtc.mjs';
@@ -94,20 +95,30 @@ export const ourInbox = c => { const rs = ourRelays(c); return { inbox: ourBaseN
 export const ourBase = c => { const ip = lanIp(); return ip ? 'http://' + ip + ':' + c.port + PEER_BASE : ''; };
 
 // ---------- 我们的全部协同地址 ----------
-// 同一个路径 /claclaw-peer 拼在不同网络的地址上：局域网（名字、IP）、Tailscale、外网直连（clarelay 回连探测通了的公网 IP）、
-// clarelay 子域名（https，门卫对 /claclaw-peer 放行）、旧的中继隧道。邀请、配对、每次请求（x-claclaw-addrs）都带上，对方按 局域网 → Tailscale → 打洞直连 → 外网直连 → 中继 试
+// 同一个路径 /claclaw-peer 拼在不同网络的地址上：局域网（名字、IP）、Tailscale、
+// clarelay 子域名（https，门卫对 /claclaw-peer 放行）、旧的中继隧道。邀请、配对、每次请求（x-claclaw-addrs）都带上，对方按 局域网 → Tailscale → 打洞直连 → 中继 试
 export function tailscaleIps() {
   const out = [];
   for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (a.family === 'IPv4' && !a.internal && classifyAddr(a.address) === 'tailscale') out.push(a.address);
   return [...new Set(out)];
 }
-let extra = { wan: [], relay: [] };   // server.mjs 填：wan = 探测通了的外网地址，relay = clarelay 子域名地址
+let extra = { relay: [] };   // server.mjs 填：relay = clarelay 子域名地址
 export function setOurExtra(o) { extra = { ...extra, ...o }; }
+// 不再公布「外网直连」（公网 IP:协同端口 的明文 http）：钥匙会明文过公网；跨网络走中继（https / 端到端加密）或打洞直连（DTLS）
 export const ourAddrs = c => {
   if (!c.enabled) return [];
   const u = h => 'http://' + h + ':' + c.port + PEER_BASE;
-  return [...new Set([ourBaseName(c), ourBase(c), ...tailscaleIps().map(u), ...extra.wan, ...extra.relay, ...ourRelays(c)].filter(Boolean))].slice(0, 10);
+  return [...new Set([ourBaseName(c), ourBase(c), ...tailscaleIps().map(u), ...extra.relay, ...ourRelays(c)].filter(Boolean))].slice(0, 10);
 };
+// 明文 http 能发给谁（请求头里有钥匙）：只认内网——私有 IPv4、本机、链路本地、IPv6 ULA / 同一 /64；
+// Tailscale 段（100.64/10，也是运营商 CGNAT 段）只在本机有 Tailscale 网卡时认（那时走 WireGuard 加密），否则当公网
+export function plainAddrOk(a, hasTs = tailscaleIps().length > 0) {
+  a = String(a || '').replace(/^\[|\]$/g, '');
+  if (a === '::1') return true;
+  if (!net.isIP(a.replace(/^::ffff:/, '').split('%')[0])) return false;
+  const k = classifyAddr(a);
+  return k === 'lan' || (k === 'tailscale' && hasTs);
+}
 // 地址属于哪种网络：relay（中继隧道 / clarelay 子域名，https）、tailscale、lan（内网 IP、.local）、wan（公网 IP）
 export function addrKind(url) {
   if (url === DIRECT) return 'direct';
@@ -262,6 +273,16 @@ export function callPeer(base, sub, { token, body, ms = 10 * 60 * 1000, connectM
   if (data) { headers['content-type'] = 'application/json'; headers['content-length'] = data.length; }
   const mod = u.protocol === 'https:' ? https : http;
   const opt = { method: data ? 'POST' : 'GET', headers };
+  // 明文 http 只发内网：IP 直接核对；名字（.local 等）在解析出地址后、连接之前核对，公网地址一律不连（钥匙、配对码不明文过公网）
+  if (u.protocol === 'http:') {
+    const h = u.hostname.replace(/^\[|\]$/g, ''), bad = () => Object.assign(new Error('不用明文 http 连公网地址（' + h + '）：跨网络请走中继或直连'), { connect: true, code: 'PLAIN_PUBLIC' });
+    if (net.isIP(h)) { if (!plainAddrOk(h)) return Promise.reject(bad()); }
+    else opt.lookup = (host, o, cb) => dns.lookup(host, o, (e, addr, fam) => {
+      if (e) return cb(e);
+      if (Array.isArray(addr)) { const ok = addr.filter(x => plainAddrOk(x.address)); return ok.length ? cb(null, ok) : cb(bad()); }
+      return plainAddrOk(addr) ? cb(null, addr, fam) : cb(bad());
+    });
+  }
   if (pin && u.protocol === 'https:') opt.createConnection = (o, cb) => {   // 握手后、发出钥匙之前核对指纹
     const so = tls.connect({ host: o.host, port: o.port, servername: o.servername, rejectUnauthorized: false });
     so.once('secureConnect', () => { const got = 'sha256//' + crypto.createHash('sha256').update(so.getPeerX509Certificate().publicKey.export({ type: 'spki', format: 'der' })).digest('base64'); if (got === pin) cb(null, so); else { so.destroy(); cb(Object.assign(new Error('中继证书指纹对不上'), { code: 'PIN_MISMATCH' })); } });
@@ -435,6 +456,11 @@ function chanScore(pid, url, i, directMs) {
 }
 let directApi = null;   // server.mjs 注入：{ open(pid) → conn | null }
 export function setDirect(api) { directApi = api; }
+// 撤销配对：清掉这个对方的走路记录、各条路的表现、中继试探结果
+export function forgetPeer(pid) {
+  peerRoute.delete(pid); chanStats.delete(pid);
+  for (const k of relayProbe.keys()) if (k.startsWith(pid + ' ')) relayProbe.delete(k);
+}
 
 export async function peerCall(c, p, sub, opts = {}) {
   const lan = peerLanUrls(p);
@@ -484,8 +510,11 @@ export async function probeChan(c, p, url, ms = 8000) {
 // 局域网换到新地址后，备用地址留谁：对方断开重连会换 IP，旧 IP 换了就没用了，不留；主机名（.local）不随 IP 变，留着
 const isLanIp = u => { try { return addrKind(u) === 'lan' && /^[\d.]+$/.test(new URL(u).hostname); } catch { return false; } };
 export const keepLanAlt = (url, ...olds) => olds.find(u => u && u !== url && !isRelayAddr(u) && !isLanIp(u)) || undefined;
+const plainPublicIp = u => { try { const h = new URL(u).hostname.replace(/^\[|\]$/g, ''); return net.isIP(h) && !plainAddrOk(h, true); } catch { return false; } };
+// 公网明文地址（老版本公布的「外网直连」）不走：callPeer 也会拒；p.ip 只在是内网地址时拿来拼（经中继配对记下的可能是公网 IP / 中继域名）
 export const peerLanUrls = p => {
-  const lan = [p.inbox, p.inboxAlt, ...(Array.isArray(p.addrs) ? p.addrs : [])].filter(u => u && !isRelayAddr(u));
-  if (p.ip && lan[0]) { try { const u = new URL(lan[0]); if (u.hostname !== p.ip) { u.hostname = p.ip; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
+  const lan = [p.inbox, p.inboxAlt, ...(Array.isArray(p.addrs) ? p.addrs : [])].filter(u => u && !isRelayAddr(u) && !plainPublicIp(u));
+  const ip = String(p.ip || '').replace(/^\[|\]$/g, ''), host = net.isIPv6(ip) ? '[' + ip + ']' : ip;
+  if (ip && lan[0] && classifyAddr(ip) === 'lan') { try { const u = new URL(lan[0]); if (u.hostname !== host) { u.hostname = host; lan.push(u.toString().replace(/\/$/, '')); } } catch {} }
   return [...new Set(lan)];
 };

@@ -25,14 +25,14 @@ test('地址头：只认 …/claclaw-peer，none 清空，坏的忽略', () => {
   assert.deepEqual(parseAddrsHeader('http://1.2.3.4:8788/claclaw-peer  https://a.b/claclaw-peer javascript:x'), ['http://1.2.3.4:8788/claclaw-peer', 'https://a.b/claclaw-peer']);
 });
 
-test('我们的地址：关着协同为空；clarelay 补的子域名、公网地址排进去', () => {
+test('我们的地址：关着协同为空；clarelay 补的子域名排进去；不再公布公网明文地址', () => {
   assert.deepEqual(ourAddrs({ enabled: false, port: 8788 }), []);
   setOurExtra({ wan: ['http://1.2.3.4:8788/claclaw-peer'], relay: ['https://abc.relay.example/claclaw-peer'] });
   const a = ourAddrs({ enabled: true, port: 8788, peers: [] });
-  assert.ok(a.includes('http://1.2.3.4:8788/claclaw-peer'));
+  assert.ok(!a.includes('http://1.2.3.4:8788/claclaw-peer'));
   assert.ok(a.includes('https://abc.relay.example/claclaw-peer'));
-  assert.ok(a.indexOf('http://1.2.3.4:8788/claclaw-peer') < a.indexOf('https://abc.relay.example/claclaw-peer'));
-  setOurExtra({ wan: [], relay: [] });
+  assert.ok(a.every(u => /^https:/.test(u) || addrKind(u) !== 'wan'));
+  setOurExtra({ relay: [] });
 });
 
 test('对方的地址表：http 的进局域网候选，https 的进中继候选', () => {
