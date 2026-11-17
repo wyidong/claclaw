@@ -312,7 +312,6 @@ peerqueue.mjs     协同消息连不上就排队重发、收信去重
 peerguard.mjs     协同消息触发的那一轮：哪些操作直接放行、哪些要确认
 peerjudge.mjs     规则标出有风险的操作后，让小模型判断要不要请你确认
 group.mjs         群聊：成员、@ 解析、带上下文、转发次数、排队重试、镜像
-relay/            自建中继和隧道（不在同一个局域网时，可选）
 devnotify.mjs     推送交给本机的 clarelay 电脑端
 skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
 skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）
