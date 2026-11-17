@@ -1750,7 +1750,7 @@ setInterval(() => {
 
 // ---------- 跨网络：经 clarelay 中继 ----------
 // 协同页粘贴一次中继邀请码（clarelay1.…），claclaw 自己在后台连隧道，把公开地址 + 证书指纹存成「中继地址」，配对时告诉对方。
-// clarelay 是独立项目：协同中继用的 tunnel.mjs 是第三方库（vendor.mjs），和内置电脑端同一份。
+// clarelay 是独立项目：协同中继用的是第三方库 clarelay.mjs（vendor.mjs，单文件），和内置电脑端同一份。
 // 只在加入 clarelay 时从加入的那台中继下载（relaydev，验发布签名）；别人给的中继邀请码只用来连接，不用来下载代码。
 let clarelay = null, clarelayDir = '';
 const relayTuns = new Map();
@@ -1761,10 +1761,10 @@ const relayHostOf = inv => { try { return new URL(clarelay.parseInvite(inv).rela
 async function loadClarelay() {
   const d = libDir('clarelay');
   if (clarelay && clarelayDir === d) return clarelay;
-  try { const m = await libImport('clarelay', 'tunnel.mjs'); if (m) { clarelay = m; clarelayDir = d; } } catch (e) { log('relay: 加载 clarelay 出错', e.message); }
+  try { const m = await libImport('clarelay'); if (m) { clarelay = m; clarelayDir = d; } } catch (e) { log('relay: 加载 clarelay 出错', e.message); }
   return clarelay;
 }
-// 电脑端代码刚下载 / 换了新版：协同中继的隧道换用新的 tunnel.mjs 重连
+// 电脑端代码刚下载 / 换了新版：协同中继的隧道换用新的 clarelay.mjs 重连
 function reloadRelayTunnels() {
   if (clarelay && clarelayDir === libDir('clarelay')) return;
   for (const [, r] of relayTuns) { clearTimeout(r.retry); try { r.t?.stop(); } catch {} }

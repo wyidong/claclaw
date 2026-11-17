@@ -224,12 +224,12 @@ export function applyListener(c, handler, log) {
 // 出错时标出是不是「连都没连上」（connect: true）：只有这种情况才换对方的另一个地址重试，
 // 已经送到对方、只是等回复时出的错不能重试，不然同一条消息会被送两遍
 // 经 clarelay 中继、端到端加密的地址（…/t/<名>/…#pin=…&key=…）：交给 clarelay 的 relayRequest（核对证书指纹 + 加解密）
-// tunnel.mjs 是第三方库（vendor/clarelay/，和内置电脑端同一份）；换了新版按新目录重新加载
+// 协同中继用的 clarelay 是第三方库（vendor/clarelay/ 的单文件 clarelay.mjs，和内置电脑端同一份）；换了新版按新目录重新加载
 let relayLib = null, relayLibDir = '';
 async function loadRelayLib() {
   const d = libDir('clarelay');
   if (relayLib && relayLibDir === d) return relayLib;
-  try { const m = await libImport('clarelay', 'tunnel.mjs'); if (m?.relayRequest) { relayLib = m; relayLibDir = d; } } catch {}
+  try { const m = await libImport('clarelay'); if (m?.relayRequest) { relayLib = m; relayLibDir = d; } } catch {}
   return relayLib;
 }
 async function callRelay(base, sub, { token, body, ms, extra = {} }) {

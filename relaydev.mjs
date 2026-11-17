@@ -1,5 +1,8 @@
-// claclaw 内置的 clarelay 电脑端：代码是第三方库（vendor.mjs），从加入的那台 clarelay 中继主域名下载到 vendor/clarelay/，不进 claclaw 版本库。
-// - 没下载过：加入时（按邀请码里的中继）或启动时（按身份文件里的中继）先下载，核对 sha256 后再用；下载失败过一阵重试。
+// claclaw 内置的 clarelay 电脑端：clarelay 是可选的第三方网络渠道，用户在宿主页粘贴设备邀请码之前 claclaw 不碰它。
+// 代码是第三方库（vendor.mjs）：单文件 clarelay.mjs，从加入的那台 clarelay 中继主域名下载到 vendor/clarelay/，不进 claclaw 版本库（协议见中继的 /_relay/PROTOCOL.md §17）。
+// - 没下载过：加入时（按邀请码里的中继）或启动时（按身份文件里的中继）先下载，用发布公钥验签后再用；下载失败过一阵重试。
+// - 发布公钥：设备邀请码里带的（k / releaseKey），按圈子域名记在数据目录，以后只认它；邀请码还没带公钥时就加入的老电脑，
+//   用设备凭证连一次控制连接，读中继 hello 里的 releaseKey 记下（§9.4、§17），之后以记下的为准，不跟着中继换。
 // - 有新版：宿主页显示「更新到 x」，点了下载新版、重连（不用重启 claclaw）。
 // - 宿主页「网络 › clarelay」粘贴设备邀请码加入；之后每次启动按身份文件自动连上（没撤销、没点「断开」）。
 // - 身份文件沿用单独安装时的 ~/.clarelay-device.json：以前单独装过电脑端的电脑不用重新邀请。
@@ -11,8 +14,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import tls from 'node:tls';
 import { execFileSync, spawn } from 'node:child_process';
-import { libImport, libInstall, libCheck, libInfo, libDir, newerVersion, releaseKeyOk, libFetchKey } from './vendor.mjs';
+import { libImport, libInstall, libFetch, libInfo, libDir, newerVersion, releaseKeyOk } from './vendor.mjs';
 
 const IS_WIN = process.platform === 'win32', IS_MAC = process.platform === 'darwin';
 const PLIST = () => path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.clarelay.device.plist');
@@ -39,6 +43,38 @@ export function inviteInfo(v) {
 }
 export const inviteBase = v => inviteInfo(v).base;
 const stateBase = st => st ? hostBase(st.domain, st.port) : '';
+// 老电脑取发布公钥：用设备凭证建一次控制连接（GET /_device/control + Upgrade: clarelay，§9.1），读到中继发的 hello 就断开，
+// 返回 hello.releaseKey（格式不对 / 没有返回 ''）。只在本机还没有电脑端代码时用：这时没有别的控制连接在跑（中继会断开同一设备的旧连接）
+export function helloKey(st, { timeout = 20e3, connect = tls.connect } = {}) {
+  return new Promise((ok, fail) => {
+    if (!st?.id || !st.token || !/^[a-z0-9.-]+$/i.test(st.domain || '')) return fail(new Error('本机身份文件不完整'));
+    const host = st.domain.toLowerCase(), port = Number(st.port) || 443;
+    let buf = Buffer.alloc(0), head = true, done = false;
+    const s = connect({ host, port, servername: host, ALPNProtocols: ['http/1.1'] });
+    const end = (e, k) => { if (done) return; done = true; clearTimeout(t); s.destroy(); e ? fail(e) : ok(k); };
+    const t = setTimeout(() => end(new Error('等中继的 hello 超时')), timeout);
+    s.on('secureConnect', () => s.write('GET /_device/control HTTP/1.1\r\nhost: ' + host + (port !== 443 ? ':' + port : '') +
+      '\r\nconnection: Upgrade\r\nupgrade: clarelay\r\nauthorization: Bearer ' + st.token + '\r\nx-device-id: ' + st.id + '\r\n\r\n'));
+    s.on('data', d => {
+      buf = Buffer.concat([buf, d]);
+      if (buf.length > 1 << 20) return end(new Error('中继的 hello 太长'));
+      if (head) {
+        const i = buf.indexOf('\r\n\r\n'); if (i < 0) return;
+        const code = Number(/^HTTP\/1\.[01] (\d{3})/.exec(buf.subarray(0, i).toString('latin1'))?.[1]);
+        if (code !== 101) return end(new Error(code === 401 ? '设备凭证不对（可能已被撤销）' : '控制连接没建起来（HTTP ' + (code || '?') + '）'));
+        head = false; buf = buf.subarray(i + 4);
+      }
+      for (let j; (j = buf.indexOf(10)) >= 0;) {
+        const line = buf.subarray(0, j).toString('utf8').trim(); buf = buf.subarray(j + 1);
+        let m; try { m = JSON.parse(line); } catch { continue; }
+        if (m && m.t === 'hello') return end(null, releaseKeyOk(m.releaseKey));
+      }
+    });
+    s.on('error', e => end(e));
+    s.on('close', () => end(new Error('连接断了，没等到中继的 hello')));
+  });
+}
+
 export function relayStatePath(DATA) {
   if (process.env.CLACLAW_CLARELAY_STATE) return process.env.CLACLAW_CLARELAY_STATE;
   return process.env.CLACLAW_DATA ? path.join(DATA, 'clarelay-device.json') : path.join(os.homedir(), '.clarelay-device.json');
@@ -62,8 +98,9 @@ function externalAlive(localFile) {
  * @param {(off: boolean) => void} o.setOff
  * @param {(dev: object|null) => void} o.onDevice  内置的起来 / 停了（devnotify 改成直接调它）
  * @param {(...a) => void} o.log
- * @param {() => void} [o.onLib]  电脑端代码刚下载 / 换了新版（协同中继的隧道要重新加载 tunnel.mjs）
- * @param {() => Promise<object>} [o.load]  测试用：替换加载电脑端（vendor/clarelay/agent.mjs），也不去查新版本
+ * @param {() => void} [o.onLib]  电脑端代码刚下载 / 换了新版（协同中继的隧道要重新加载 clarelay.mjs）
+ * @param {() => Promise<object>} [o.load]  测试用：替换加载电脑端（vendor/clarelay/…/clarelay.mjs），也不去查新版本
+ * @param {(st: object) => Promise<string>} [o.helloKey]  测试用：替换「连一次控制连接取发布公钥」
  */
 export function makeRelayDev(o) {
   const STATE = relayStatePath(o.DATA), LOCAL = STATE.replace(/\.json$/, '') + '.local.json';
@@ -86,27 +123,37 @@ export function makeRelayDev(o) {
     fs.writeFileSync(KEYS + '.tmp', JSON.stringify(all, null, 2), { mode: 0o600 }); fs.renameSync(KEYS + '.tmp', KEYS);
     log((old ? '换了' : '记下') + ' ' + domain + ' 的发布公钥 …' + key.slice(-8, -1) + '（' + via + '）');
   }
-  async function keysFor(base, domain) {
+  // 这个圈子的发布公钥：记下的 → 身份文件里电脑端自己记的（加入时从邀请码、或 hello 记的）→ 老电脑连一次控制连接从 hello 取
+  async function keysFor(domain) {
     let k = keyOf(domain);
-    if (!k) { k = await libFetchKey('clarelay', base); saveKey(domain, k, '老电脑首次从中继取'); }
-    return [k];
+    if (k) return [k];
+    const st = readState();
+    if (st && stateDomain(st) === domain) {
+      k = releaseKeyOk(st.releaseKey);
+      if (k) { saveKey(domain, k, '身份文件'); return [k]; }
+      if (!dev && !starting && !st.revoked) {
+        k = await (o.helloKey || helloKey)(st).catch(e => { throw new Error('取不到发布公钥：' + e.message); });
+        if (k) { saveKey(domain, k, '中继 hello（老电脑首次）'); return [k]; }
+      }
+    }
+    throw new Error('还没有这个中继的发布公钥：在 clarelay 管理页生成一张新的设备邀请码粘贴进来（同一个圈子不会重新加入、网址不变）');
   }
   const stateDomain = st => st?.domain ? String(st.domain).toLowerCase() : '';
 
   let loadedDir = '';   // 正在用的电脑端是哪个版本目录（命令行装了新版、点「更新」时按它判断要不要重连）
   async function loadAgent(invite) {
     if (o.load) return o.load();
-    let m = await libImport('clarelay', 'agent.mjs');
-    if (m) { loadedDir = libDir('clarelay'); return m; }
+    let m = await libImport('clarelay');
+    if (m?.startDevice) { loadedDir = libDir('clarelay'); return m; }
     const iv = invite ? inviteInfo(invite) : null, st = readState();
     const base = iv ? iv.base : stateBase(st), domain = iv ? iv.domain : stateDomain(st);
     if (!base) throw new Error('还没下载 clarelay 电脑端，也不知道从哪下载：先粘贴设备邀请码');
     log('下载电脑端：' + base);
-    try { const r = await libInstall('clarelay', base, { log: o.log, pubkeys: iv?.key ? [iv.key] : await keysFor(base, domain) }); latest = { version: r.info.version, at: Date.now() }; }
+    try { const r = await libInstall('clarelay', base, { log: o.log, pubkeys: iv?.key ? [iv.key] : await keysFor(domain) }); latest = { version: r.info.version, at: Date.now() }; }
     catch (e) { throw new Error('下载 clarelay 电脑端没成：' + e.message); }
     o.onLib?.();
-    m = await libImport('clarelay', 'agent.mjs');
-    if (!m) throw new Error('clarelay 电脑端下载了但加载不了');
+    m = await libImport('clarelay');
+    if (!m?.startDevice) throw new Error('clarelay 电脑端下载了但加载不了');
     loadedDir = libDir('clarelay');
     return m;
   }
@@ -114,7 +161,9 @@ export function makeRelayDev(o) {
     if (o.load || checking) return;
     const st = readState(), base = stateBase(st);
     if (!base || (latest && Date.now() - latest.at < 6 * 3600e3)) return;
-    checking = keysFor(base, stateDomain(st)).then(pubkeys => libCheck('clarelay', base, { pubkeys })).then(m => { latest = { version: m.version, at: Date.now() }; },
+    const k = keyOf(stateDomain(st));   // 查新版只用记下的公钥（不为这个去连控制连接）
+    if (!k) return;
+    checking = libFetch('clarelay', base, { pubkeys: [k] }).then(m => { latest = { version: m.version, at: Date.now() }; },
       () => { latest = { version: latest?.version || '', at: Date.now() - 5 * 3600e3 }; })   // 查不到：1 小时后再查
       .finally(() => { checking = null; });
   }
@@ -136,8 +185,8 @@ export function makeRelayDev(o) {
       const vbs = STARTUP_VBS(), bak = vbs + '.claclaw-bak', had = fs.existsSync(vbs);
       if (had) fs.renameSync(vbs, bak);
       let port = 8792; try { port = Number(new URL(JSON.parse(fs.readFileSync(LOCAL, 'utf8')).url).port) || 8792; } catch {}
-      // 守护脚本 wscript（命令行里有 clarelay-device.vbs）、它起的 node（命令行里有 device\agent.mjs，clarelay 0.4.0 起是 client\agent.mjs）、占着本机接口端口的进程；不碰自己
-      const ps = `$ids = @(Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'wscript.exe' -and $_.CommandLine -like '*clarelay-device.vbs*') -or ($_.Name -eq 'node.exe' -and ($_.CommandLine -like '*device\\agent.mjs*' -or $_.CommandLine -like '*device/agent.mjs*' -or $_.CommandLine -like '*client\\agent.mjs*' -or $_.CommandLine -like '*client/agent.mjs*')) } | ForEach-Object { $_.ProcessId })
+      // 守护脚本 wscript（命令行里有 clarelay-device.vbs）、它起的 node（命令行里有 device\agent.mjs，clarelay 0.4.0 起是 client\agent.mjs，0.5.2 起是单文件 clarelay.mjs）、占着本机接口端口的进程；不碰自己
+      const ps = `$ids = @(Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'wscript.exe' -and $_.CommandLine -like '*clarelay-device.vbs*') -or ($_.Name -eq 'node.exe' -and ($_.CommandLine -like '*device\\agent.mjs*' -or $_.CommandLine -like '*device/agent.mjs*' -or $_.CommandLine -like '*client\\agent.mjs*' -or $_.CommandLine -like '*client/agent.mjs*' -or $_.CommandLine -like '*clarelay.mjs*')) } | ForEach-Object { $_.ProcessId })
 $ids += @(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { $_.OwningProcess })
 $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }`;
       try { execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { stdio: 'ignore', windowsHide: true }); } catch {}
@@ -167,7 +216,8 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
         const d = await startDevice({ invite: invite || undefined, state: STATE, name: deviceName(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log, open: o.getOpen?.() || {},
           onStatus: s => { if (s.error) lastErr = s.error; else if (s.online) lastErr = ''; } });   // 每次连不上都带原因；连上（hello）不带 error，清掉
         dev = d; o.onDevice(d); ext.commit(); retryN = 0;
-        if (invite) { const iv = inviteInfo(invite); if (iv.key) saveKey(iv.domain, iv.key, '设备邀请码'); }   // 加入成功：记下邀请码里的发布公钥
+        if (invite) { const iv = inviteInfo(invite); if (iv.key) saveKey(iv.domain, iv.key, '设备邀请码'); }   // 加入成功（同一个圈子不重新加入）：记下邀请码里的发布公钥
+        else if (d.releaseKey) { const dm = stateDomain(readState()); if (dm && !keyOf(dm) && releaseKeyOk(d.releaseKey)) saveKey(dm, d.releaseKey, '电脑端 hello'); }
         log('内置电脑端已启动：' + d.url);
       } catch (e) { lastErr = e.message; ext.restore(); throw e; }
       return info();
@@ -218,7 +268,7 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
     async update() {
       const st = readState(), base = stateBase(st);
       if (!base) throw new Error('还没加入 clarelay：不知道从哪下载');
-      const r = await libInstall('clarelay', base, { log: o.log, pubkeys: await keysFor(base, stateDomain(st)) });
+      const r = await libInstall('clarelay', base, { log: o.log, pubkeys: await keysFor(stateDomain(st)) });
       latest = { version: r.info.version, at: Date.now() };
       const moved = r.changed || (loadedDir && loadedDir !== libDir('clarelay'));
       if (moved) {
