@@ -82,11 +82,11 @@ window.__sc=(function(){
 // 界面语言：默认中文；设置里选了 English 就先加载 /i18n/en.js（词典 + 翻译引擎，看着页面把界面文字换成英文）
 (function(){try{if(localStorage.getItem('claclaw.lang')==='en')document.write('<script src="/i18n/en.js"><\/script>')}catch(e){}})();
 (function(){try{var t=localStorage.getItem('claclaw.theme');if(t==='light'||t==='dark'||t==='ziwei'||t==='shichen')document.documentElement.setAttribute('data-theme',t);if(t==='shichen'){var fz=localStorage.getItem('claclaw.scZ');if(fz!==null&&/^\d+$/.test(fz))window.__scZ=+fz;window.__sc.apply()}}catch(e){}})();
-// 外观「边框粗细」「线条深浅」：首帧前就写到 <html> 上（--bw 线宽；lc 类 + --lk 往文字色加深 / --lkl 往卡片底减淡，线色在 app.css 的 body 上重算）
+// 外观「边框粗细」「线条深浅」：首帧前就写到 <html> 上（--bw 线宽；lc 类 + --ln-dk 往文字色加深 / --ln-lt 往卡片底减淡，线色在 app.css 的 body 上重算）
 (window.__lines=function(){var r=document.documentElement,w='',c='';try{w=localStorage.getItem('claclaw.lineW')||'';c=localStorage.getItem('claclaw.lineC')||''}catch(_){}
   var W={none:'0px',xs:'.33px',md:'.67px',lg:'1px',xl:'1.5px'},C={lt:['0%','55%'],dk:['18%','0%'],dk2:['36%','0%']};
   if(W[w])r.style.setProperty('--bw',W[w]);else r.style.removeProperty('--bw');
-  r.classList.toggle('lc',!!C[c]);if(C[c]){r.style.setProperty('--lk',C[c][0]);r.style.setProperty('--lkl',C[c][1])}else{r.style.removeProperty('--lk');r.style.removeProperty('--lkl')}})();
+  r.classList.toggle('lc',!!C[c]);if(C[c]){r.style.setProperty('--ln-dk',C[c][0]);r.style.setProperty('--ln-lt',C[c][1])}else{r.style.removeProperty('--ln-dk');r.style.removeProperty('--ln-lt')}})();
 // 手机：页面很大，经中继打开时会先画出默认的聊天页、等脚本到了才切到该去的页面（闪一下）。脚本定好第一页之前先不显示
 (function(){if(window.matchMedia('(min-width:1000px)').matches)return;var h=document.documentElement;h.classList.add('boot');setTimeout(function(){h.classList.remove('boot')},1500)})();   // 和轻雾同一档（不再有重雾），最多 1.5 秒；电脑宽屏不上雾
 // 雾感（只在手机）：点刷新从清楚渐变到轻雾 → 页面加载、连服务器期间保持轻雾 → 连上变清楚；从打开算最多 1.5 秒，到时没连上就清掉雾、刷新图标变黄转圈；代替「正在连接」黄条；嵌在 clarelay 外壳里时也告诉外壳

@@ -22,11 +22,11 @@
   --pc0b:#FFE4E6;--pc0f:#9F1239;--pc1b:#FEF3C7;--pc1f:#92400E;--pc2b:#E0F2FE;--pc2f:#075985;--pc3b:#FFEDD5;--pc3f:#9A3412;--pc4b:#CCFBF1;--pc4f:#115E59;--pc5b:#FAE8FF;--pc5f:#86198F;--pc6b:#ECFCCB;--pc6f:#3F6212;
 }
 /* 外观「线条深浅」（<html class="lc">，见页面开头 __lines）：线色在 body 上重算——取 :root 上主题给的色当底（同一元素上自己引用自己会成环），
-   往文字色加深 --lk、往卡片底减淡 --lkl；--sep 是手机顶栏底线 / 底部菜单顶线（主题给的是页面底色）。各主题只管配色，这里不分主题 */
+   往文字色加深 --ln-dk、往卡片底减淡 --ln-lt；--sep 是手机顶栏底线 / 底部菜单顶线（主题给的是页面底色）。各主题只管配色，这里不分主题 */
 :root{--line0:var(--line);--sline0:var(--strip-line);--sep:var(--bg)}
-html.lc body{--line:color-mix(in srgb,color-mix(in srgb,var(--line0),var(--surface) var(--lkl)),var(--ink) var(--lk));
-  --strip-line:color-mix(in srgb,color-mix(in srgb,var(--sline0),var(--surface) var(--lkl)),var(--ink) var(--lk));
-  --sep:color-mix(in srgb,color-mix(in srgb,var(--bg),var(--surface) var(--lkl)),var(--ink) var(--lk))}
+html.lc body{--line:color-mix(in srgb,color-mix(in srgb,var(--line0),var(--surface) var(--ln-lt)),var(--ink) var(--ln-dk));
+  --strip-line:color-mix(in srgb,color-mix(in srgb,var(--sline0),var(--surface) var(--ln-lt)),var(--ink) var(--ln-dk));
+  --sep:color-mix(in srgb,color-mix(in srgb,var(--bg),var(--surface) var(--ln-lt)),var(--ink) var(--ln-dk))}
 /* 白色主题的会话目录、Claw 卡片：白卡片细边，选中浅绿平铺（不凸起）；别的主题这几个变量清空，用规则里的默认（浅色底、凸起） */
 :root{--dir-bg:transparent;--dir-bg-m:var(--bg);--dir-bd:1px solid var(--bg);--dir-hover:var(--bg);--dir-sel-bg:var(--user-bg);--dir-sel-sh:none}
 @media (min-width:1000px){:root{--claw-bg:var(--surface)}}   /* Claw 卡片跟会话目录：手机上灰卡片，电脑上白卡片 */
