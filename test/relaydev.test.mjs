@@ -101,3 +101,24 @@ test('devnotify：内置时直接调电脑端，不走本机接口', async () =>
   dn.useDevice(null);
   assert.equal(dn.devConfigured(), false);
 });
+
+test('邀请码里的发布公钥：加入成功才记下（按域名），移除时删掉；格式不对的当没有', async () => {
+  const { inviteInfo } = await import('../relaydev.mjs');
+  const crypto = await import('node:crypto');
+  const KEY = crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+  const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+  assert.deepEqual(inviteInfo('clarelay-device1.' + b64({ d: 'Relay.Test', c: 'x', k: KEY })), { base: 'https://relay.test', domain: 'relay.test', key: KEY });
+  assert.equal(inviteInfo(JSON.stringify({ clarelay: 'device-invite', relay: 'relay.test', code: 'x', releaseKey: KEY })).key, KEY);
+  assert.equal(inviteInfo('clarelay-device1.' + b64({ d: 'relay.test', c: 'x', k: 'abc' })).key, '', '格式不对的当没有');
+  assert.equal(inviteInfo('clarelay-device1.' + b64({ d: 'relay.test', c: 'x', k: crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }).publicKey.export({ type: 'spki', format: 'der' }).toString('base64') })).key, '', '不是 Ed25519 的不要');
+
+  try { fs.unlinkSync(STATE); } catch {}
+  const KEYS = path.join(DATA, 'clarelay-release-keys.json');
+  try { fs.unlinkSync(KEYS); } catch {}
+  const h = harness();
+  await h.rd.join('clarelay-device1.' + b64({ d: 'relay.test', c: 'x', k: KEY }));
+  assert.equal(JSON.parse(fs.readFileSync(KEYS, 'utf8'))['relay.test'].key, KEY);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(KEYS).mode & 0o777, 0o600);
+  await h.rd.remove();
+  assert.equal(JSON.parse(fs.readFileSync(KEYS, 'utf8'))['relay.test'], undefined);
+});

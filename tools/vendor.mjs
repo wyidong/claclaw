@@ -1,12 +1,15 @@
 // 第三方库（vendor/，见 vendor/README.md）
 //   node tools/vendor.mjs                                   列出已装的库
-//   node tools/vendor.mjs install <库> <https://下载地址>     下载、验签、核对、装上（已是最新就不动，不降级）
+//   node tools/vendor.mjs install <库> <https://下载地址> [--key 发布公钥]
+//                                                           下载、验签、核对、装上（已是最新就不动，不降级）；
+//                                                           公钥默认用加入 clarelay 时记下的（数据目录 clarelay-release-keys.json，按域名）
 //   node tools/vendor.mjs install <库> --src <本机目录>       从本机目录装（开发用，比如 ../clarelay/client；不验签，标成「未签名」）
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { LIBS, libInfo, libInstall, vendorRoot } from '../vendor.mjs';
+import { fileURLToPath } from 'node:url';
+import { LIBS, libInfo, libInstall, vendorRoot, releaseKeyOk } from '../vendor.mjs';
 
 const [cmd, id, src] = process.argv.slice(2);
 const die = m => { console.error(m); process.exit(1); };
@@ -32,8 +35,19 @@ if (src === '--src') {
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
   base = 'http://127.0.0.1:' + srv.address().port;
 }
+let pubkeys = [];
+if (!srv) {
+  const ki = process.argv.indexOf('--key');
+  if (ki > 0) pubkeys = [releaseKeyOk(process.argv[ki + 1]) || die('--key 后面的发布公钥格式不对')];
+  else {
+    const DATA = process.env.CLACLAW_DATA ? path.resolve(process.env.CLACLAW_DATA) : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
+    let k = ''; try { k = releaseKeyOk(JSON.parse(fs.readFileSync(path.join(DATA, 'clarelay-release-keys.json'), 'utf8'))[new URL(base).hostname]?.key); } catch {}
+    if (!k) die('没有记下这个域名的发布公钥：用 --key 给（公钥在设备邀请码里，或那台中继的 PROTOCOL.md §17）');
+    pubkeys = [k];
+  }
+}
 try {
-  const r = await libInstall(id, base, { log: (...a) => console.log(...a), ...(srv ? { unsigned: true, allowDowngrade: true } : {}) });
+  const r = await libInstall(id, base, { log: (...a) => console.log(...a), pubkeys, ...(srv ? { unsigned: true, allowDowngrade: true } : {}) });
   console.log((r.changed ? '装好：' : '已经是这个版本：') + id + ' ' + r.info.version + (r.info.signed ? '' : '（未签名）'));
   console.log('正在运行的 claclaw：宿主页 clarelay 点「更新」或重启后用上');
 } catch (e) { console.error('没装上：' + e.message); process.exitCode = 1; }

@@ -1,7 +1,7 @@
 // 第三方库：运行时下载到 vendor/<库>/<版本>-<哈希前 8 位>/，不进 claclaw 版本库（vendor/ 里只提交 README.md 和 .gitignore）。
 // - 清单要有发布方的签名：清单 = { lib, version, files: { 文件名: sha256 }, doc }，签名 = 发布方私钥对清单原始字节的 Ed25519 签名（base64）。
-//   公钥写死在下面 LIBS 里（随 claclaw 版本库发布）；私钥只在发布方自己电脑上，不进任何仓库、不经协同。
-//   先验签，再逐个下载文件核对 sha256：下载地址（中继）只负责存文件，它被改了 / 出事了也塞不进别的代码。
+//   公钥由调用方给，claclaw 里不写死（clarelay：设备邀请码里带的发布公钥，加入时和域名一起记下，以后只认它；见 relaydev.mjs）。
+//   私钥只在发布方自己电脑上。先验签，再逐个下载文件核对 sha256：中继被改了 / 出事了也换不了已加入电脑的代码。
 // - 不降级：已装的是签过名的版本时，只装更新的版本（防止被换回有漏洞的旧版）；同一版本重新签发的照常装。
 //   LIBS 里的 minVersion：比它旧的一律不装（新电脑第一次下载也挡住签过名的旧版）。
 // - 只从 https 下载（按系统 CA 校验证书、不跟跳转）；本机 127.0.0.1 / localhost 可以用 http（测试）。下载地址也只用自己加入的那台中继。
@@ -23,8 +23,7 @@ export const LIBS = {
     manifest: '/_relay/client/manifest.json',   // { lib: 'clarelay', version, files: { 文件名: sha256 }, doc }
     sig: '/_relay/client/manifest.sig',          // 清单原始字节的 Ed25519 签名（base64）
     file: f => '/_relay/client/' + encodeURIComponent(f),
-    // clarelay 发布公钥（SPKI DER base64；可以多个，换钥匙时新旧并存）。空 = 还没配，不下载
-    pubkeys: [],
+    key: '/_relay/client/release-key.pub',       // 发布公钥：只给邀请码还不带公钥时就加入的老电脑取一次
     minVersion: '0.5.0',   // 比这个旧的一律不装（新电脑第一次下载时也挡住签过名的旧版）
     need: ['agent.mjs', 'common.mjs', 'tunnel.mjs'],
   },
@@ -47,6 +46,12 @@ export function newerVersion(a, b) {
     return p > q;
   }
   return false;
+}
+// 发布公钥：Ed25519 的 SPKI DER base64；格式不对返回 ''
+export function releaseKeyOk(k) {
+  k = String(k || '').trim();
+  if (!/^[A-Za-z0-9+/]{40,100}={0,2}$/.test(k)) return '';
+  try { return crypto.createPublicKey({ key: Buffer.from(k, 'base64'), format: 'der', type: 'spki' }).asymmetricKeyType === 'ed25519' ? k : ''; } catch { return ''; }
 }
 // 清单签名：任一公钥验得过就算
 export function verifySig(bytes, sigB64, pubkeys) {
@@ -102,12 +107,12 @@ async function get(url, max, fetchImpl) {
 /**
  * 读下载地址上的清单并验签：{ version, files, doc }
  * @param {object} [o]
- * @param {string[]} [o.pubkeys]  测试用：替换 LIBS 里的公钥
+ * @param {string[]} [o.pubkeys]  发布公钥（验签用，任一验得过就算）
  * @param {boolean} [o.unsigned]  不验签（只给命令行 --src 从本机目录装用）
  */
 export async function libCheck(id, base, { fetchImpl = fetch, pubkeys, unsigned = false } = {}) {
-  const L = libOf(id), origin = baseOf(base), keys = pubkeys || L.pubkeys;
-  if (!unsigned && !keys?.length) throw new Error(L.name + '：claclaw 里还没配它的发布公钥，不能下载');
+  const L = libOf(id), origin = baseOf(base), keys = (pubkeys || []).filter(releaseKeyOk);
+  if (!unsigned && !keys.length) throw new Error(L.name + '：还没有发布公钥，不能下载（用带公钥的设备邀请码重新加入）');
   let raw, m;
   try { raw = await get(origin + L.manifest, MAX_MANIFEST, fetchImpl); } catch (e) { throw new Error(L.name + '：读不到清单（' + e.message + '）'); }
   if (!unsigned) {
@@ -123,6 +128,15 @@ export async function libCheck(id, base, { fetchImpl = fetch, pubkeys, unsigned 
   for (const f of names) if (!FILE_RE.test(f) || f === 'current.json' || !/^[0-9a-f]{64}$/.test(String(files[f]))) throw new Error(L.name + '：清单里有不对的文件名或哈希：' + f.slice(0, 60));
   for (const f of L.need) if (!files[f]) throw new Error(L.name + '：清单里缺 ' + f);
   return { version: m.version, files, doc: typeof m.doc === 'string' ? m.doc : '' };
+}
+
+/** 从下载地址取一次发布公钥（只给老电脑首次记下；之后以记下的为准，不再取） */
+export async function libFetchKey(id, base, { fetchImpl = fetch } = {}) {
+  const L = libOf(id);
+  if (!L.key) throw new Error(L.name + '：没有公钥地址');
+  const k = releaseKeyOk((await get(baseOf(base) + L.key, 1024, fetchImpl)).toString('utf8'));
+  if (!k) throw new Error(L.name + '：下载地址上的发布公钥格式不对');
+  return k;
 }
 
 const locks = new Map();

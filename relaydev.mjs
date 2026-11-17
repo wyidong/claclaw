@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
-import { libImport, libInstall, libCheck, libInfo, libDir, newerVersion } from './vendor.mjs';
+import { libImport, libInstall, libCheck, libInfo, libDir, newerVersion, releaseKeyOk, libFetchKey } from './vendor.mjs';
 
 const IS_WIN = process.platform === 'win32', IS_MAC = process.platform === 'darwin';
 const PLIST = () => path.join(os.homedir(), 'Library', 'LaunchAgents', 'com.clarelay.device.plist');
@@ -25,17 +25,19 @@ function deviceName() {
   return os.hostname();
 }
 
-// 下载电脑端的地址：中继主域名（邀请码 / 身份文件里的 domain + port）
+// 下载电脑端的地址：中继主域名（邀请码 / 身份文件里的 domain + port）；邀请码里还带发布公钥（紧凑格式的 k、JSON 的 releaseKey，见 clarelay PROTOCOL.md §8.1）
 const hostBase = (d, p) => /^[a-z0-9.-]+$/i.test(d || '') ? 'https://' + d.toLowerCase() + (Number(p) && Number(p) !== 443 ? ':' + Number(p) : '') : '';
-export function inviteBase(v) {
+export function inviteInfo(v) {
   v = String(v || '').trim();
+  let d, p, k;
   try {
-    if (v.startsWith('{')) { const j = JSON.parse(v); return hostBase(j.relay, j.port); }
-    const m = /clarelay-device1\.([A-Za-z0-9_-]+)/.exec(v.replace(/\s+/g, ''));
-    if (m) { const j = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')); return hostBase(j.d, j.p); }
+    if (v.startsWith('{')) { const j = JSON.parse(v); d = j.relay; p = j.port; k = j.releaseKey; }
+    else { const m = /clarelay-device1\.([A-Za-z0-9_-]+)/.exec(v.replace(/\s+/g, '')); if (m) { const j = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')); d = j.d; p = j.p; k = j.k; } }
   } catch {}
-  return '';
+  const base = hostBase(d, p);
+  return { base, domain: base ? String(d).toLowerCase() : '', key: base ? releaseKeyOk(k) : '' };
 }
+export const inviteBase = v => inviteInfo(v).base;
 const stateBase = st => st ? hostBase(st.domain, st.port) : '';
 export function relayStatePath(DATA) {
   if (process.env.CLACLAW_CLARELAY_STATE) return process.env.CLACLAW_CLARELAY_STATE;
@@ -72,15 +74,35 @@ export function makeRelayDev(o) {
   const readState = () => { try { return JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch { return null; } };
 
   // 电脑端代码：已下载就直接用；没下载就从中继下载（加入时按邀请码，之后按身份文件）
+  // 发布公钥：按圈子域名记在数据目录（加入时从邀请码记下，以后只认它；邀请码带公钥之前就加入的老电脑从中继取一次）
+  const KEYS = path.join(o.DATA, 'clarelay-release-keys.json');
+  const readKeys = () => { try { return JSON.parse(fs.readFileSync(KEYS, 'utf8')) || {}; } catch { return {}; } };
+  const keyOf = domain => releaseKeyOk(readKeys()[domain]?.key);
+  function saveKey(domain, key, via) {
+    const all = readKeys();
+    if (!domain || !key || all[domain]?.key === key) return;
+    const old = all[domain]?.key;
+    all[domain] = { key, via, at: Date.now() };
+    fs.writeFileSync(KEYS + '.tmp', JSON.stringify(all, null, 2), { mode: 0o600 }); fs.renameSync(KEYS + '.tmp', KEYS);
+    log((old ? '换了' : '记下') + ' ' + domain + ' 的发布公钥 …' + key.slice(-8, -1) + '（' + via + '）');
+  }
+  async function keysFor(base, domain) {
+    let k = keyOf(domain);
+    if (!k) { k = await libFetchKey('clarelay', base); saveKey(domain, k, '老电脑首次从中继取'); }
+    return [k];
+  }
+  const stateDomain = st => st?.domain ? String(st.domain).toLowerCase() : '';
+
   let loadedDir = '';   // 正在用的电脑端是哪个版本目录（命令行装了新版、点「更新」时按它判断要不要重连）
   async function loadAgent(invite) {
     if (o.load) return o.load();
     let m = await libImport('clarelay', 'agent.mjs');
     if (m) { loadedDir = libDir('clarelay'); return m; }
-    const base = invite ? inviteBase(invite) : stateBase(readState());
+    const iv = invite ? inviteInfo(invite) : null, st = readState();
+    const base = iv ? iv.base : stateBase(st), domain = iv ? iv.domain : stateDomain(st);
     if (!base) throw new Error('还没下载 clarelay 电脑端，也不知道从哪下载：先粘贴设备邀请码');
     log('下载电脑端：' + base);
-    try { const r = await libInstall('clarelay', base, { log: o.log }); latest = { version: r.info.version, at: Date.now() }; }
+    try { const r = await libInstall('clarelay', base, { log: o.log, pubkeys: iv?.key ? [iv.key] : await keysFor(base, domain) }); latest = { version: r.info.version, at: Date.now() }; }
     catch (e) { throw new Error('下载 clarelay 电脑端没成：' + e.message); }
     o.onLib?.();
     m = await libImport('clarelay', 'agent.mjs');
@@ -90,9 +112,9 @@ export function makeRelayDev(o) {
   }
   function refreshLatest() {
     if (o.load || checking) return;
-    const base = stateBase(readState());
+    const st = readState(), base = stateBase(st);
     if (!base || (latest && Date.now() - latest.at < 6 * 3600e3)) return;
-    checking = libCheck('clarelay', base).then(m => { latest = { version: m.version, at: Date.now() }; },
+    checking = keysFor(base, stateDomain(st)).then(pubkeys => libCheck('clarelay', base, { pubkeys })).then(m => { latest = { version: m.version, at: Date.now() }; },
       () => { latest = { version: latest?.version || '', at: Date.now() - 5 * 3600e3 }; })   // 查不到：1 小时后再查
       .finally(() => { checking = null; });
   }
@@ -145,6 +167,7 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
         const d = await startDevice({ invite: invite || undefined, state: STATE, name: deviceName(), services: { claclaw: 'http://127.0.0.1:' + o.port }, log, open: o.getOpen?.() || {},
           onStatus: s => { if (s.error) lastErr = s.error; else if (s.online) lastErr = ''; } });   // 每次连不上都带原因；连上（hello）不带 error，清掉
         dev = d; o.onDevice(d); ext.commit(); retryN = 0;
+        if (invite) { const iv = inviteInfo(invite); if (iv.key) saveKey(iv.domain, iv.key, '设备邀请码'); }   // 加入成功：记下邀请码里的发布公钥
         log('内置电脑端已启动：' + d.url);
       } catch (e) { lastErr = e.message; ext.restore(); throw e; }
       return info();
@@ -193,9 +216,9 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
     },
     // 下载新版的电脑端；换了就重连（正连着的话）
     async update() {
-      const base = stateBase(readState());
+      const st = readState(), base = stateBase(st);
       if (!base) throw new Error('还没加入 clarelay：不知道从哪下载');
-      const r = await libInstall('clarelay', base, { log: o.log });
+      const r = await libInstall('clarelay', base, { log: o.log, pubkeys: await keysFor(base, stateDomain(st)) });
       latest = { version: r.info.version, at: Date.now() };
       const moved = r.changed || (loadedDir && loadedDir !== libDir('clarelay'));
       if (moved) {
@@ -205,7 +228,7 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
       return { ...info(), updated: !!moved };
     },
     async join(invite) {
-      // 邀请码：clarelay 复制出来的 JSON（可带换行），或旧的一行 clarelay-device1.…；格式由 clarelay/common.mjs 的 parseDeviceInvite 认
+      // 邀请码：clarelay 复制出来的 JSON（可带换行），或旧的一行 clarelay-device1.…；格式见 clarelay PROTOCOL.md §8.1，由电脑端的 parseDeviceInvite 认
       const v = String(invite || '').trim();
       if (v.startsWith('{')) { try { JSON.parse(v); } catch { throw new Error('邀请码不是完整的 JSON：从 clarelay 复制时要整段复制'); } }
       else if (!/clarelay-device1\./.test(v)) throw new Error('这不是 clarelay 设备邀请码');
@@ -214,7 +237,11 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
     },
     async connect() { if (!readState()?.id) throw new Error('还没加入：先粘贴设备邀请码'); o.setOff(false); return start(); },
     async disconnect() { o.setOff(true); clearTimeout(retry); await stop(); return info(); },
-    async remove() { clearTimeout(retry); await stop(); try { fs.unlinkSync(STATE); } catch {} o.setOff(false); lastErr = ''; log('已移除本机身份文件'); return info(); },
+    async remove() {
+      clearTimeout(retry); await stop();
+      const dm = stateDomain(readState()), all = readKeys();   // 退出圈子：记下的发布公钥也删掉，再加入以新邀请码里的为准
+      if (dm && all[dm]) { delete all[dm]; try { fs.writeFileSync(KEYS, JSON.stringify(all, null, 2), { mode: 0o600 }); } catch {} }
+      try { fs.unlinkSync(STATE); } catch {} o.setOff(false); lastErr = ''; log('已移除本机身份文件'); return info(); },
     stop: async () => { clearTimeout(retry); await stop(); },
   };
   return api;
