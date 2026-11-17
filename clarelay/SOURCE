@@ -1,1 +1,0 @@
-clarelay a799723 保留独立协同中继：公开下载按仓库路径（下载下来能直接跑 / 安装）；/_relay/tunnel.mjs 由协同中继核心提供（主域名上也有），tunnelCommand 改用它；README 写明两种部署方式

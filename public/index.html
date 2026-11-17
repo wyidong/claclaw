@@ -2936,7 +2936,10 @@ function crRow(){
   if(!r.joined)return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">未加入<small>在 clarelay「管理」里生成设备邀请码，粘贴进来</small>'+err+'</span><span class="cr-btns">'+pill('join','粘贴邀请码')+'</span></div>';
   var st=r.starting?'连接中…':r.revoked?'已撤销':!r.running?(r.off?'已断开':'未连接'):r.status!=='active'?'等管理员批准':r.online?'在线':'离线';
   var btns=r.revoked?pill('join','新邀请码重新加入')+pill('remove','移除','del'):(r.running||r.starting?pill('disconnect','断开'):pill('connect','连接'))+pill('remove','移除','del');
-  return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">'+esc(r.name||'')+' · '+st+'<small>'+esc(String(r.url||'').replace(/^https:\/\//,''))+'</small>'+(r.revoked||!r.online?err:'')+'</span><span class="cr-btns">'+btns+'</span></div>';
+  // 电脑端代码是第三方库（vendor/clarelay，从中继下载）：显示版本，有新版给「更新」
+  var l=r.lib||{},lv=l.installed?(l.version?'电脑端 '+l.version:''):'电脑端还没下载（连接时自动下载）';
+  if(l.update&&!r.revoked)btns=pill('update','更新到 '+l.latest)+btns;
+  return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">'+esc(r.name||'')+' · '+st+'<small>'+esc(String(r.url||'').replace(/^https:\/\//,''))+'</small>'+(lv?'<small>'+esc(lv)+'</small>':'')+(r.revoked||!r.online?err:'')+'</span><span class="cr-btns">'+btns+'</span></div>';
 }
 function crPaint(){var el=$('#hostBody .cr-row');if(el)el.outerHTML=crRow()}
 // 邀请码弹窗：clarelay 复制出来的 JSON（带换行）；旧的 clarelay-device1. 一行也认
@@ -2961,7 +2964,7 @@ function crOp(op,inv){
   postJson('/api/clarelay',body).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     relayBusy='';if(x.j&&'joined' in x.j)relaySt=x.j;crPaint();
     if(op==='join'){if(!x.ok){$('#crErr').textContent=x.j&&x.j.error||'出错了';showDlg($('#crDlg'),true);return}showDlg($('#crDlg'),false)}
-    toast(x.ok?({join:'已加入，等管理员批准或马上就连上',connect:'正在连接',disconnect:'已断开',remove:'已移除'})[op]:'没成：'+(x.j&&x.j.error||'出错了'));
+    toast(x.ok?(op==='update'?(x.j.updated?'电脑端已更新到 '+(x.j.lib&&x.j.lib.version||'')+'，正在重连':'已经是最新'):({join:'已加入，等管理员批准或马上就连上',connect:'正在连接',disconnect:'已断开',remove:'已移除'})[op]):'没成：'+(x.j&&x.j.error||'出错了'));
     setTimeout(crLoad,2500);
   }).catch(function(e){relayBusy='';crPaint();toast('没成：'+e.message)});
 }   // hostView='peer'：宿主页里打开了「claclaw 协同」子页面，暂停自动刷新

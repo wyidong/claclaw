@@ -1,0 +1,4 @@
+# 下载来的第三方库，不进 claclaw 版本库（见 README.md）
+*
+!.gitignore
+!README.md

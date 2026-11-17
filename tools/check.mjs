@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const SKIP = new Set(['node_modules', '.git', 'data', '.worktrees']);
+const SKIP = new Set(['node_modules', '.git', 'data', '.worktrees', 'vendor']);   // vendor：下载来的第三方库，不归我们查
 
 function mjsFiles(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

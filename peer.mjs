@@ -22,6 +22,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DATA, writeJsonAtomic } from './auth.mjs';
 import { classifyAddr } from './peerrtc.mjs';
+import { libDir, libImport } from './vendor.mjs';
 
 const FILE = path.join(DATA, 'peer.json');
 export const PEER_BASE = '/claclaw-peer';
@@ -223,18 +224,17 @@ export function applyListener(c, handler, log) {
 // 出错时标出是不是「连都没连上」（connect: true）：只有这种情况才换对方的另一个地址重试，
 // 已经送到对方、只是等回复时出的错不能重试，不然同一条消息会被送两遍
 // 经 clarelay 中继、端到端加密的地址（…/t/<名>/…#pin=…&key=…）：交给 clarelay 的 relayRequest（核对证书指纹 + 加解密）
-let relayLib = null;
+// tunnel.mjs 是第三方库（vendor/clarelay/，和内置电脑端同一份）；换了新版按新目录重新加载
+let relayLib = null, relayLibDir = '';
 async function loadRelayLib() {
-  if (relayLib) return relayLib;
-  const here = path.dirname(fileURLToPath(import.meta.url));   // 先内置的 ./clarelay/tunnel.mjs，再旁边的 clarelay 仓库、npm 包
-  for (const p of [pathToFileURL(path.join(here, 'clarelay', 'tunnel.mjs')).href, pathToFileURL(path.join(here, '..', 'clarelay', 'tunnel.mjs')).href, 'clarelay/tunnel.mjs']) {
-    try { const m = await import(p); if (m.relayRequest) return relayLib = m; } catch {}
-  }
-  return null;
+  const d = libDir('clarelay');
+  if (relayLib && relayLibDir === d) return relayLib;
+  try { const m = await libImport('clarelay', 'tunnel.mjs'); if (m?.relayRequest) { relayLib = m; relayLibDir = d; } } catch {}
+  return relayLib;
 }
 async function callRelay(base, sub, { token, body, ms, extra = {} }) {
   const mod = await loadRelayLib();
-  if (!mod) throw Object.assign(new Error('对方走中继，这台电脑没装 clarelay'), { connect: true });
+  if (!mod) throw Object.assign(new Error('对方走中继，这台电脑还没下载 clarelay（宿主页加入 clarelay 后自动下载）'), { connect: true });
   const i = base.indexOf('#'), addr = base.slice(0, i).replace(/\/+$/, '') + (sub || '') + base.slice(i);
   const headers = { ...extra };
   if (token) headers.authorization = 'Bearer ' + token;

@@ -120,7 +120,9 @@ Qoder、CodeBuddy 这类要先登录账号才能用；Kimi、Codex、MiniMax Cod
 
 ## clarelay：经中继从外网访问（可选）
 
-claclaw 内置了 clarelay 的电脑端（`clarelay/` 目录，从 clarelay 仓库同步：`node tools/sync-clarelay.mjs`，这里不要直接改）。不用就什么都不启动。
+claclaw 内置了 clarelay 电脑端的接入。不用就什么都不启动。
+
+电脑端代码是第三方库，不在 claclaw 仓库里。加入 clarelay 时，claclaw 会从邀请码里那台中继的主域名下载到 `vendor/clarelay/`，核对 sha256 之后再用。启动时如果发现没下载，就按身份文件里的中继补下。宿主页会显示电脑端的版本，有新版时出现「更新到 x」，点一下就会下载新版并重连。中继那边提供的下载和协议说明见那台中继的 `/_relay/PROTOCOL.md`。第三方库的通用做法见 `vendor/README.md`。
 
 - **加入**：「设置 → 宿主 → 网络 → clarelay」点「粘贴邀请码」，贴入从 clarelay 管理页复制的设备邀请码（JSON，带换行也行；旧的 `clarelay-device1.` 一行也认）。之后 claclaw 每次启动自动连上。
 - **断开 / 连接**：只停 / 恢复连接，身份保留；**移除**：删掉本机身份文件，再加入要新的邀请码（中继那边要在管理页撤销这台）。
@@ -282,7 +284,8 @@ minimax.mjs       MiniMax Code 会话（mcode acp；历史靠 session/load 重�
 codebuddy.mjs     CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebuddy/projects；模型库写进 ~/.codebuddy/models.json）
 qoder.mjs         Qoder CLI 会话（qodercli --acp；列表读 ~/.qoder/projects；模型库写进 ~/.qoder/settings.json 的 customModels）
 copilot.mjs       GitHub Copilot CLI 会话（copilot --acp；列表读 ~/.copilot/session-state；模型库走 BYOK 环境变量）
-relaydev.mjs      内置的 clarelay 电脑端：加入 / 断开 / 移除、启动时自动连、停掉单独安装的那份（电脑端代码在 clarelay/）
+relaydev.mjs      内置的 clarelay 电脑端：加入 / 断开 / 移除 / 更新、启动时自动连、停掉单独安装的那份（电脑端代码是第三方库 vendor/clarelay/）
+vendor.mjs        第三方库：运行时下载到 vendor/<库>/，核对 sha256、按版本目录换（tools/vendor.mjs 命令行）
 cclike.mjs        Claude Code 式会话记录（projects/<目录>/<id>.jsonl）的通用读取：CodeBuddy、Qoder 共用
 acp.mjs           ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面几个都继承它，只写各自的差异
 login.mjs         在手机上登录各 Claw：电脑上套伪终端起登录命令，网址 / 一次性代码推到手机（tools/ptywrap.py 是伪终端包装）

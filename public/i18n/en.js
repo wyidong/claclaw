@@ -740,6 +740,8 @@ var I18N={dict:{
 "断开":"Disconnect",
 "粘贴 clarelay 设备邀请码（clarelay-device1. 开头）":"Paste the clarelay device invite (starts with clarelay-device1.)",
 "已加入，等管理员批准或马上就连上":"Joined — connecting, or waiting for admin approval",
+"电脑端还没下载（连接时自动下载）":"Client not downloaded yet (downloads when connecting)",
+"已经是最新":"Already up to date",
 "正在连接":"Connecting",
 "已移除":"Removed",
 "预览":"Preview",
@@ -1325,6 +1327,9 @@ var I18N={dict:{
 "让 AI 会话找本机其他 Claw 的会话、或另一台电脑上的会话，发消息、拿回复":"Lets an AI session reach other Claw sessions on this computer or sessions on another computer: send messages, get replies",
 },
 pat:[
+["^电脑端 ([\\w.+-]+)$","Client $1"],
+["^更新到 ([\\w.+-]+)$","Update to $1"],
+["^电脑端已更新到 ([\\w.+-]*)，正在重连$","Client updated to $1, reconnecting"],
 ["^只读 · ([\\s\\S]+?)，原处闲置满 (\\d+) 分钟后可接管$","Read-only · $T1; can take over after $2 min idle there"],
 ["^只读 · ([\\s\\S]+)$","Read-only · $T1"],
 ["^下载失败：([\\s\\S]+)$","Download failed: $1"],
