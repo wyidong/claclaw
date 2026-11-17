@@ -3,6 +3,7 @@
 //   公钥写死在下面 LIBS 里（随 claclaw 版本库发布）；私钥只在发布方自己电脑上，不进任何仓库、不经协同。
 //   先验签，再逐个下载文件核对 sha256：下载地址（中继）只负责存文件，它被改了 / 出事了也塞不进别的代码。
 // - 不降级：已装的是签过名的版本时，只装更新的版本（防止被换回有漏洞的旧版）；同一版本重新签发的照常装。
+//   LIBS 里的 minVersion：比它旧的一律不装（新电脑第一次下载也挡住签过名的旧版）。
 // - 只从 https 下载（按系统 CA 校验证书、不跟跳转）；本机 127.0.0.1 / localhost 可以用 http（测试）。下载地址也只用自己加入的那台中继。
 // - 全部核对上才写成新的版本目录，最后改 vendor/<库>/current.json 指过去。
 // - 每个版本一个目录：已经加载进内存的旧版本照常跑；换新版的地方重新 import 新目录（路径不同，不会拿到缓存里的旧模块）。
@@ -24,6 +25,7 @@ export const LIBS = {
     file: f => '/_relay/client/' + encodeURIComponent(f),
     // clarelay 发布公钥（SPKI DER base64；可以多个，换钥匙时新旧并存）。空 = 还没配，不下载
     pubkeys: [],
+    minVersion: '0.5.0',   // 比这个旧的一律不装（新电脑第一次下载时也挡住签过名的旧版）
     need: ['agent.mjs', 'common.mjs', 'tunnel.mjs'],
   },
 };
@@ -139,6 +141,7 @@ async function installNow(id, base, { log, fetchImpl, pubkeys, unsigned, allowDo
   const L = libOf(id), origin = baseOf(base);
   const m = await libCheck(id, origin, { fetchImpl, pubkeys, unsigned });
   const cur = current(id);
+  if (L.minVersion && !allowDowngrade && newerVersion(L.minVersion, m.version)) throw new Error(L.name + '：下载地址上是 ' + m.version + '，claclaw 要求至少 ' + L.minVersion + '，没装');
   if (cur && cur.signed !== false && !allowDowngrade && m.version !== cur.version && !newerVersion(m.version, cur.version)) throw new Error(L.name + '：已装 ' + cur.version + '，下载地址上是更旧的 ' + m.version + '，不降级');
   const tag = sha256(JSON.stringify(Object.entries(m.files).sort())).slice(0, 8);
   const dirName = m.version.replace(/[^0-9A-Za-z.-]/g, '_') + '-' + tag;

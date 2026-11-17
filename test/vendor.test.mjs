@@ -47,26 +47,26 @@ test('下载地址只认 https（本机回环可以 http）', () => {
 test('装、重复装不动、换新版、留上一个版本', async () => {
   assert.equal(libInfo('clarelay').installed, false);
   assert.equal(await libImport('clarelay', 'agent.mjs'), null);
-  const s1 = await serve('0.4.0', lib('0.4.0'));
+  const s1 = await serve('0.5.0', lib('0.5.0'));
   const r1 = await libInstall('clarelay', s1.base);
   assert.equal(r1.changed, true);
-  assert.equal(libInfo('clarelay').version, '0.4.0');
-  assert.equal((await libImport('clarelay', 'agent.mjs')).startDevice(), '0.4.0');
+  assert.equal(libInfo('clarelay').version, '0.5.0');
+  assert.equal((await libImport('clarelay', 'agent.mjs')).startDevice(), '0.5.0');
   const d1 = libDir('clarelay');
   assert.equal(fs.readFileSync(path.join(d1, 'rtc-client.js'), 'utf8'), '// x');
   const r1b = await libInstall('clarelay', s1.base);
   assert.equal(r1b.changed, false, '同一版本不重下');
   s1.close();
 
-  const s2 = await serve('0.5.0', lib('0.5.0'));
+  const s2 = await serve('0.6.0', lib('0.6.0'));
   assert.equal((await libInstall('clarelay', s2.base)).changed, true);
   const d2 = libDir('clarelay');
   assert.notEqual(d2, d1);
-  assert.equal((await libImport('clarelay', 'agent.mjs')).startDevice(), '0.5.0', '新目录 import 到的是新版');
+  assert.equal((await libImport('clarelay', 'agent.mjs')).startDevice(), '0.6.0', '新目录 import 到的是新版');
   assert.ok(fs.existsSync(d1), '上一个版本留着');
   s2.close();
 
-  const s3 = await serve('0.5.1', lib('0.5.1'));
+  const s3 = await serve('0.6.1', lib('0.6.1'));
   await libInstall('clarelay', s3.base);
   assert.ok(!fs.existsSync(d1), '更早的删掉');
   assert.ok(fs.existsSync(d2));
@@ -87,15 +87,16 @@ test('签名：没配公钥不下载；签名不对、没签名、清单不是�
 test('哈希对不上、清单里有坏文件名、缺文件、跳转、签名不对、降级：不装，当前版本不变', async () => {
   const before = libDir('clarelay'), ver = libInfo('clarelay').version;
   const cases = [
-    [await serve('0.6.0', lib('0.6.0'), { key: KP2.privateKey }), /签名不对/],
-    [await serve('0.6.0', lib('0.6.0'), { nosig: true }), /签名/],
-    [await serve('0.6.0', lib('0.6.0'), { lib: 'other' }), /不是给 clarelay/],
-    [await serve('0.4.9', lib('0.4.9')), /不降级/],
-    [await serve('0.6.0', lib('0.6.0'), { bad: 'tunnel.mjs' }), /sha256/],
-    [await serve('0.6.0', lib('0.6.0'), { names: ['../evil.mjs'] }), /文件名/],
-    [await serve('0.6.0', lib('0.6.0'), { names: ['.hidden'] }), /文件名/],
-    [await serve('0.6.0', { 'agent.mjs': 'x' }), /缺/],
-    [await serve('0.6.0', lib('0.6.0'), { redirect: true }), /清单/],
+    [await serve('0.7.0', lib('0.7.0'), { key: KP2.privateKey }), /签名不对/],
+    [await serve('0.7.0', lib('0.7.0'), { nosig: true }), /签名/],
+    [await serve('0.7.0', lib('0.7.0'), { lib: 'other' }), /不是给 clarelay/],
+    [await serve('0.5.9', lib('0.5.9')), /不降级/],
+    [await serve('0.4.99', lib('0.4.99')), /至少 0\.5\.0/],
+    [await serve('0.7.0', lib('0.7.0'), { bad: 'tunnel.mjs' }), /sha256/],
+    [await serve('0.7.0', lib('0.7.0'), { names: ['../evil.mjs'] }), /文件名/],
+    [await serve('0.7.0', lib('0.7.0'), { names: ['.hidden'] }), /文件名/],
+    [await serve('0.7.0', { 'agent.mjs': 'x' }), /缺/],
+    [await serve('0.7.0', lib('0.7.0'), { redirect: true }), /清单/],
   ];
   for (const [s, re] of cases) { await assert.rejects(libInstall('clarelay', s.base), re); s.close(); }
   assert.equal(libDir('clarelay'), before);
@@ -130,5 +131,15 @@ test('本机目录装的（未签名）能被签名的版本替换，签名版�
     assert.equal(libInfo('clarelay').signed, true);
     const s3 = await serve('0.5.0', { ...lib('0.5.0'), 'x.mjs': '//re' });
     assert.equal((await libInstall('clarelay', s3.base)).changed, true, '同一版本重新签发的照常装'); s3.close();
+  } finally { process.env.CLACLAW_VENDOR = V; }
+});
+
+test('最低版本：新电脑第一次下载，签过名的旧版也不装', async () => {
+  const V3 = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor3-'));
+  process.env.CLACLAW_VENDOR = V3;
+  try {
+    const s = await serve('0.4.0', lib('0.4.0'));
+    await assert.rejects(libInstall('clarelay', s.base), /至少 0\.5\.0/); s.close();
+    assert.equal(libInfo('clarelay').installed, false);
   } finally { process.env.CLACLAW_VENDOR = V; }
 });
