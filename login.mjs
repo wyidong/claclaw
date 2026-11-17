@@ -7,7 +7,7 @@
 // 登没登录（loggedIn）：按各家留在磁盘上的凭据文件判断，判断不了的返回 null
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { HOME, findBin, binEnv, binCall, readJson, WIN } from './util.mjs';
 import { DATA } from './auth.mjs';
@@ -28,15 +28,26 @@ const anyFile = (d, skip) => { try { return fs.readdirSync(d, { withFileTypes: t
 const LOGIN_WS = path.join(DATA, 'login-ws');   // 起终端界面型登录（CodeBuddy）用的空目录：它要先「信任目录」，别让它信任用户的目录
 const PTYWRAP = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tools', 'ptywrap.py');   // 伪终端包装（见文件头）
 
-// qodercli status 要起一次 node（约 1 秒）：结果缓存 60 秒，登录成功后主动清掉
-let qoderCache = { at: 0, ok: null };
-function qoderLoggedIn() {
-  if (Date.now() - qoderCache.at < 60000) return qoderCache.ok;
+// qodercli status 要起一次 node（约 1 秒，最多等 15 秒）：异步跑，不卡住 claclaw；结果缓存 60 秒，登录成功后主动清掉
+let qoderCache = { at: 0, ok: null }, qoderRun = null;
+function qoderCheck() {
+  if (qoderRun) return qoderRun;
   const bin = qdBin();
-  let ok = null;
-  if (bin) { const c = binCall(bin, ['status', '-o', 'json']); try { ok = !!JSON.parse(execFileSync(c.cmd, c.args, { encoding: 'utf8', timeout: 15000, env: binEnv(), stdio: ['ignore', 'pipe', 'ignore'] })).logged_in; } catch {} }
-  qoderCache = { at: Date.now(), ok };
-  return ok;
+  if (!bin) { qoderCache = { at: Date.now(), ok: null }; return Promise.resolve(null); }
+  const c = binCall(bin, ['status', '-o', 'json']);
+  qoderRun = new Promise(res => {
+    const p = execFile(c.cmd, c.args, { encoding: 'utf8', timeout: 15000, env: binEnv() }, (e, out) => {
+      let ok = null; if (!e) try { ok = !!JSON.parse(out).logged_in; } catch {}
+      qoderCache = { at: Date.now(), ok }; qoderRun = null; res(ok);
+    });
+    p.stdin?.end();
+  });
+  return qoderRun;
+}
+// 列表用：先给缓存里的（第一次是 null = 判断不了），过期了后台去查，下次就是新的
+function qoderLoggedIn() {
+  if (Date.now() - qoderCache.at >= 60000) qoderCheck();
+  return qoderCache.ok;
 }
 const iflowSettings = () => readJson(path.join(process.env.IFLOW_HOME || path.join(HOME, '.iflow'), 'settings.json'), {});
 
@@ -77,7 +88,7 @@ export function dsHasKey(file = DSH_CRED()) {
 // 每个能登录的 Claw：label；cmd()：[程序, 参数]（程序找不到返回 null）；cwd；
 // steps：看到什么就自动输什么（终端界面型）；keyPrompt：要先填 key（看到这个提示就把 key 喂进去）；paste：要用户粘贴授权码的提示；
 // doneWhen(text)：进程不会自己退出的（CodeBuddy）怎么算成功；write(key)：不起命令、直接写文件的
-// loggedIn()：true / false / null（判断不了）；libOk()：模型库能顶上、不登录也能用
+// loggedIn()：true / false / null（判断不了）；check()：现查一次（Promise，可省）；libOk()：模型库能顶上、不登录也能用
 // Codex：claclaw 实际起的是 codex-acp（它带着自己那份 Codex）。登录用它转发的 `codex-acp cli login --device-auth`，
 // 跑的就是会话用的同一个 Codex（凭据同样写到 $CODEX_HOME/auth.json）；`codex-acp login` 只有浏览器回调登录，手机上用不了。
 // 没装 codex-acp、只装了 Codex 本体的，退回 `codex login --device-auth`（凭据位置一样，装好 codex-acp 后直接能用）
@@ -95,7 +106,7 @@ export const SPECS = {
   },
   qoder: {
     label: 'Qoder', cmd: () => { const b = qdBin(); return b && [b, ['login']]; },
-    loggedIn: qoderLoggedIn, libOk: () => false,
+    loggedIn: qoderLoggedIn, check: qoderCheck, libOk: () => false,
     hint: '打开网址，用 Qoder 账号登录；授权后电脑上的命令会自己完成',
   },
   codebuddy: {
@@ -225,7 +236,7 @@ export function loginStart(claw, ws, { key = '', log } = {}) {
   };
   p.stdout.on('data', onData); p.stderr.on('data', onData);
   p.on('error', e => finish(j, false, log, s.label + ' 启动失败：' + e.message));
-  p.on('exit', code => { if (j.status !== 'running') return; const ok = code === 0 && (s.doneWhen ? true : s.loggedIn() !== false); finish(j, ok, log, ok ? '' : '命令退出了（' + code + '）：' + (j.raw || j.tail)); });
+  p.on('exit', async code => { if (j.status !== 'running') return; const ok = code === 0 && (s.doneWhen ? true : await (s.check || s.loggedIn)() !== false); finish(j, ok, log, ok ? '' : '命令退出了（' + code + '）：' + (j.raw || j.tail)); });   // check：要现查的（缓存可能是登录前的）
   // 最多等 15 分钟
   setTimeout(() => { if (j.status === 'running') finish(j, false, log, '15 分钟没有完成，已停止'); }, 15 * 60 * 1000).unref?.();
   push(j);

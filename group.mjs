@@ -118,8 +118,8 @@ const memberView = (m, viewer) => ({ name: m.name, claw: m.claw || '', collab: v
 
 export class Groups {
   // logDir：群记录文件（给成员会话读的纯文本）放这里；不要放在数据目录里，那里对协同那一轮算敏感位置
-  constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, onAv = () => {}, permReply = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300 }) {
-    Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, onAv, permReply, retryMs, retryFor, syncDelay });
+  constructor({ dir, logDir = path.join(dir, 'logs'), log = () => {}, deliver, peerOp = async () => ({}), onItem = () => {}, onAv = () => {}, permReply = () => {}, retryMs = 20000, retryFor = 30 * 60e3, syncDelay = 300, pendingTtl = 60 * 60e3 }) {
+    Object.assign(this, { dir, logDir, log, deliver, peerOp, onItem, onAv, permReply, retryMs, retryFor, syncDelay, pendingTtl });
     this.map = new Map(); this.syncT = new Map();
     // 正在发给协同成员、还没等到对方回话（202 / 回复）的：`群id|编号` → { key, depth, peerId, answered }。
     // 对方可能在我们这边还等着 202 时就把回复发来了（不装 claclaw 的对方常这样），这时也要认
@@ -402,19 +402,27 @@ export class Groups {
     const g = this.get(id);
     if (!g || g.mirror || !g.peers().includes(peerId)) return false;
     const rid = String(replyTo || '') || (String(text || '').match(/^回复 (\S+)/) || [])[1] || '';
+    // 等了太久的不再等（对方那边 30 分钟就放弃了，再留些余量给晚到的回复）：免得旧编号一直挂着，把之后不带编号的话错认成回复
+    let stale = false;
+    for (const [k, x] of Object.entries(g.pending)) if (Date.now() - (x.at || 0) > this.pendingTtl) { delete g.pending[k]; stale = true; if (g.status[x.key] === '已收到，回复稍后到') this.setStatus(g, x.key, ''); }
+    if (stale) this.save(g);
     const mine = Object.entries(g.pending).filter(([, x]) => x.peerId === peerId);
     const fl = [...this.inflight].filter(([k, x]) => k.startsWith(id + '|') && x.peerId === peerId && !x.answered);
+    const fsid = String(fromSession || '').toLowerCase();
+    const sameSid = m => { const k = String(m?.id || '').toLowerCase(); return !!k && (k.startsWith(fsid) || fsid.startsWith(k)); };
+    // 不带编号时只认在等的那个成员自己的会话发来的；说了是别的会话（from_session 对不上）就不算它的回复
+    const awaited = x => { const m = g.members.find(y => y.key === x.key); return !fsid || !m?.id || sameSid(m); };
     let p = null;
     if (rid) {
       const hit = mine.find(([k, x]) => k === rid || x.alt === rid);
       if (hit) { p = hit[1]; delete g.pending[hit[0]]; }
       else { const f = this.inflight.get(id + '|' + rid); if (f && f.peerId === peerId && !f.answered) { f.answered = true; p = f; } }
       if (!p) return false;
-    } else if (mine.length + fl.length === 1) {
+    } else if (mine.length + fl.length === 1 && awaited(mine.length ? mine[0][1] : fl[0][1])) {
       if (mine.length) { p = mine[0][1]; delete g.pending[mine[0][0]]; } else { p = fl[0][1]; p.answered = true; }
     } else {
-      const ms = g.members.filter(x => x.peerId === peerId), fsid = String(fromSession || '').toLowerCase();
-      const m = (fsid && ms.find(x => { const k = String(x.id).toLowerCase(); return k.startsWith(fsid) || fsid.startsWith(k); })) || (ms.length === 1 ? ms[0] : null);
+      const ms = g.members.filter(x => x.peerId === peerId);
+      const m = (fsid && ms.find(sameSid)) || (ms.length === 1 ? ms[0] : null);
       if (!m) return false;
       p = { key: m.key, depth: 1 };
     }

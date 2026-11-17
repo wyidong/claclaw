@@ -11,7 +11,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { AcpAgent, AcpRunner, localNames, stampTimes, stripTags } from './acp.mjs';
 import { HOME, tilde, oneLine, findBin, binEnv, binCall } from './util.mjs';
 import { storeNow, envName } from './modelpick.mjs';
@@ -94,28 +95,33 @@ function wanted(store) {
 }
 const mask = k => k ? k.slice(0, 4) + '****' + k.slice(-4) : '';
 const v1 = u => String(u).replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
-const mcode = (args, env = {}, log) => {
+const execFileP = promisify(execFile);
+// 异步跑（每次最多 60 秒，一次同步要跑好几回）：同步跑会把整个 claclaw 卡住
+const mcode = async (args, env = {}, log) => {
   const bin = mmBin();
   const c = binCall(bin, args);
-  try { return execFileSync(c.cmd, c.args, { encoding: 'utf8', timeout: 60000, env: { ...binEnv(), ...env }, stdio: ['ignore', 'pipe', 'pipe'] }); }
+  try { const run = execFileP(c.cmd, c.args, { encoding: 'utf8', timeout: 60000, env: { ...binEnv(), ...env } }); run.child.stdin?.end(); return (await run).stdout; }   // stdin 关掉：不让它等输入
   catch (e) { log?.('mcode ' + args.slice(0, 2).join(' ') + ' failed:', String(e.stderr || e.message).trim().split('\n').pop()); return null; }
 };
+let syncedSig = null;   // 上次完整同步成功时模型库的签名：没变就不再跑 mcode
 // 进程起来前同步一次：现有的 claclaw- 供应商和模型库对不上就删了重加；模型库里没了的删掉。只碰 claclaw- 开头的
-function syncProviders(log) {
+async function syncProviders(log) {
   const want = wanted(storeNow());
   const sig = want.length ? crypto.createHash('sha256').update(JSON.stringify(want.map(w => [w.name, w.format, w.base, w.models, w.image, w.context, w.p.key || '']))).digest('hex').slice(0, 16) : '';
   if (!mmBin()) return { env: {}, sig };
+  if (syncedSig === sig) return { env: {}, sig };
   let cur = null;
-  try { cur = JSON.parse(mcode(['provider', 'list', '--json'], {}, log) || 'null'); } catch {}
+  try { cur = JSON.parse(await mcode(['provider', 'list', '--json'], {}, log) || 'null'); } catch {}
   if (!cur?.providers) return { env: {}, sig };   // 命令跑不了（没装好）：不动
   const have = cur.providers.filter(x => x.kind === 'custom' && /^claclaw-/.test(x.name || ''));
   const same = (h, w) => h.baseUrl === w.base && h.apiFormat === w.format && (h.models || []).map(m => m.modelId).join(',') === w.models.join(',') && (!w.p.key || h.maskedApiKey === mask(w.p.key))
     && (!w.context || (h.models || []).every(m => m.contextLimit === w.context));
-  let changed = false;
+  let changed = false, ok = true;
   for (const h of have) {
     const w = want.find(x => x.name === h.name);
     if (w && same(h, w)) continue;
-    mcode(['provider', 'remove', h.providerId, '--yes'], {}, log); changed = true;
+    if (await mcode(['provider', 'remove', h.providerId, '--yes'], {}, log) == null) ok = false;
+    changed = true;
   }
   const noDefault = !cur.providers.some(x => x.active && x.kind !== 'custom' && (x.hasApiKey || x.kind === 'minimax-oauth' && x.models?.length));
   for (const w of want) {
@@ -126,11 +132,12 @@ function syncProviders(log) {
       ...(w.context ? ['--context-limit', String(w.context), '--output-limit', String(Math.min(65536, w.context))] : []), ...(w.image ? ['--support-image'] : [])];
     // mcode 自己没登录、也没别的默认模型：第一家加完就选成默认（--use 会先试连一次；试不通就不带 --use 再加一次）
     let r = null;
-    if (noDefault && w === want[0]) r = mcode([...args, '--use'], env, log);
-    if (r == null) r = mcode(args, env, log);
-    if (r != null) { changed = true; log?.('mcode provider added', w.name); }
+    if (noDefault && w === want[0]) r = await mcode([...args, '--use'], env, log);
+    if (r == null) r = await mcode(args, env, log);
+    if (r != null) { changed = true; log?.('mcode provider added', w.name); } else ok = false;
   }
   if (changed) log?.('mcode providers synced', want.length);
+  if (ok) syncedSig = sig;
   return { env: {}, sig };
 }
 
@@ -208,10 +215,13 @@ export function mmArchive(sid, { timeoutMs = 30000 } = {}) {
     const as = binCall(bin, ['app-server', '--stdio', '--foreground']);
     const p = spawn(as.cmd, as.args, { env: binEnv(), stdio: ['pipe', 'pipe', 'ignore'] });
     let buf = '', status = 0, body = '', settled = false;
-    const send = m => p.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
+    const send = m => { if (!settled && p.stdin.writable) p.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n'); };
     const done = (err, v) => { if (settled) return; settled = true; clearTimeout(tm); try { p.kill(); } catch {} err ? reject(err) : resolve(v); };
     const tm = setTimeout(() => done(new Error('mcode 没有响应（30 秒）')), timeoutMs);
     p.on('error', e => done(e));
+    // 进程已经退了还往 stdin 写 → EPIPE：没人监听会变成未捕获异常，把整个 claclaw 带崩
+    p.stdin.on('error', e => done(new Error('mcode app-server 连接断了（' + (e.code || e.message) + '）')));
+    p.stdout.on('error', () => {});
     p.on('exit', code => done(new Error('mcode app-server 退出了（' + code + '）')));
     p.stdout.on('data', d => {
       buf += d; let i;

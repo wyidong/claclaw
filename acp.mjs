@@ -117,7 +117,7 @@ export const stripTags = t => String(t || '').replace(/\s*<(system-reminder|[a-z
 export class AcpAgent {
   // name：日志和报错里的名字（dsh / opencode / kimi）
   // bin()：找程序，找不到返回 null；missing：找不到时的提示
-  // command(bin)：[可执行文件, 参数]；prepare(log)：起进程前调，返回 { env, sig }（模型库注入的环境变量和签名）
+  // command(bin)：[可执行文件, 参数]；prepare(log)：起进程前调，返回 { env, sig }（模型库注入的环境变量和签名），也可以返回它的 Promise
   // rpcError(err)：把 JSON-RPC 的 error 转成给人看的话；hardKill：空闲关进程时除了关 stdin 还 kill
   constructor({ name, bin, missing, command, prepare, rpcError, hardKill = true }) {
     Object.assign(this, { name, findBin: bin, missing, command, prepare, rpcErrorOf: rpcError, hardKill });
@@ -153,6 +153,22 @@ export class AcpAgent {
   }
   spawnNow(bin, log) {
     const prep = this.prepare?.(log) || {};
+    // prepare 是异步的（要跑外部命令同步配置，不能卡住事件循环）：等它完再起进程。
+    // 同时来的几次 start 共用这一个 ready；中途 stop() 了（gen 变了）就作废；prepare 出错了 ready 清掉，下次重来
+    if (typeof prep.then === 'function') {
+      const gen = this.gen;
+      const ready = prep.then(r => {
+        if (this.gen !== gen || this.ready !== ready) throw new Error(this.name + ' 已停止');
+        this.ready = null;
+        return this.spawnWith(bin, log, r || {});
+      }).catch(e => { if (this.ready === ready) this.ready = null; throw e; });
+      this.ready = ready;
+      ready.catch(() => {});
+      return ready;
+    }
+    return this.spawnWith(bin, log, prep);
+  }
+  spawnWith(bin, log, prep) {
     this.sig = prep.sig || ''; this.stale = false;
     // binCall：Windows 上 npm 装的命令是 .cmd，spawn 不了，换成 node 跑它里面的 JS 入口（其他系统原样返回）
     const { cmd, args } = binCall(...this.command(bin));

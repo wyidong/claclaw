@@ -1623,6 +1623,8 @@ async function peerHandler(req, res) {
     if (gid) {
       const ok = groups.remoteReply(gid, peer.id, String(jb.reply_to || ''), text, jb.att, fromSession);
       log('group reply in', peer.name, gid, ok ? 'ok' : 'rejected');
+      // 收下的也记进去重：同一个 msg_id 重发（不带编号的会当成主动说话）不能在群里贴两遍
+      if (ok && dupKey) { const r = [200, { ok: true, reply: '' }]; peerSeen.set(dupKey, { at: Date.now(), result: Promise.resolve(r) }); peerSeenDisk.set(dupKey, seenRecord(...r)); }
       return out(ok ? 200 : 404, ok ? { ok: true, reply: '' } : { ok: false, error: groups.get(gid) ? '这个群里没有你的会话，或这条回复的编号对不上（已经回过 / 不是发给你的）' : '没有这个群' });
     }
     // 群投递：只有本机确实有对方那个群的镜像时才按群消息处理（群的说明、不单独推送）；否则当普通协同消息

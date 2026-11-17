@@ -120,8 +120,15 @@ function syncConfig(log) {
   try { cur = fs.readFileSync(CONFIG, 'utf8'); } catch {}
   const next = kimiConfigMerge(cur, inj);
   if (next !== cur && (cur || inj.tables)) {
-    try { fs.mkdirSync(path.dirname(CONFIG), { recursive: true }); fs.writeFileSync(CONFIG, next, { mode: 0o600 }); log?.('kimi config synced', inj.aliases.length, 'models'); }
-    catch (e) { log?.('kimi config write failed', e.message); }
+    // 先写临时文件再改名：写到一半出错 / 被杀时 config.toml 不会只剩半截；权限沿用原文件的（没有就 600）
+    const tmp = CONFIG + '.claclaw-' + process.pid;
+    try {
+      fs.mkdirSync(path.dirname(CONFIG), { recursive: true });
+      let mode = 0o600; try { mode = fs.statSync(CONFIG).mode & 0o777; } catch {}
+      fs.writeFileSync(tmp, next, { mode }); fs.chmodSync(tmp, mode);
+      fs.renameSync(tmp, CONFIG);
+      log?.('kimi config synced', inj.aliases.length, 'models');
+    } catch (e) { try { fs.unlinkSync(tmp); } catch {} log?.('kimi config write failed', e.message); }
   }
   return inj;
 }
