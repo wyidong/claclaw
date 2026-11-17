@@ -146,7 +146,7 @@ clarelay 是可选的第三方网络渠道：没粘贴设备邀请码之前，cl
 
 让局域网里两台电脑上的 AI 会话直接对话：你这边的会话有问题可以直接问对方电脑上的会话，对方的回复自动回到你这边；两边的人在 claclaw 网页上都能看到它们在聊什么，随时插话或叫停。
 
-四个 Claw（Claude Code、DeepSeek、OpenCode、OpenClaw）的会话都能加入协同，**同一台电脑上的会话之间也能互相找**：
+各个 Claw 的会话都能加入协同，**同一台电脑上的会话之间也能互相找**：
 - **收**：别的会话的消息由 claclaw 送进会话，这一轮的回复自动传回去。
 - **发**：Claude 会话用内置的 `peer_sessions` / `peer_send` 工具（`peer` 填「本机」就是找本机的会话）；其他 Claw 的 AI 用 claclaw-peer 技能，也就是本机命令 `~/.claclaw/bin/claclaw-peer`（`whoami` / `list` / `send` / `result`）。技能在用上这个 Claw 时自动装好，不用你操作。
 - **规矩**：本机的会话之间都能互相找；找另一台电脑，发起的会话要加入协同池，且只能找开放了它的对方。发起方必须认得出是哪个会话：命令不写 `--from` 时，claclaw 按「命令在哪个目录跑 + 哪个会话正在回复」自动认，认不出就拒绝。（这是用法上的规矩，不是安全边界：本机以你的身份运行的程序本来就读得到 claclaw 的数据。）
@@ -226,8 +226,18 @@ clarelay 是可选的第三方网络渠道：没粘贴设备邀请码之前，cl
 ### 安全
 
 - **钥匙只存哈希**：我们发给对方的钥匙，本机只存它的哈希（像网站存密码），`data/peer.json` 被看到也拿不出能用的钥匙；对方给我们的钥匙存原文（每次访问对方要带上），`data/` 只有本人可读、不进 git
-- **外部消息 = 别人的指令**：对方发来的消息触发的那一轮（Claude 会话），不管权限模式是什么（包括「跳过确认」），有风险的操作都要你在网页上确认：运行只读命令（`ls`、`git status/log/diff/pull`、`grep` 等；pull 只认 origin）、读普通文件、改本项目目录里的文件直接放行；claclaw 仓库没有未提交改动时，常规维护 `npm run check`、`npm test`、`npm run restart`（等所有会话空闲再重启）也直接放行；其余命令、改目录外的文件、读钥匙密码等敏感位置（`~/.ssh`、`data/`、`.env`、shell 启动文件和命令历史……）、展开或列出环境变量（`$HOME` 等少数几个除外；环境里有 Claude 长期令牌，一律确认、不交给审查模型）、联网，都要确认，可以选「本轮同类都允许」。本机会话在处理对方消息时转给别的会话的消息也一样。DeepSeek / OpenCode / OpenClaw 会话还没有这层保护，加入协同时不要开「跳过确认」
-- 局域网明文 http，只在信任的网络里用；不要把 8788 映射到公网
+- **外部消息 = 别人的指令**：对方发来的消息触发的那一轮，不管权限模式是什么（包括「跳过确认」），有风险的操作都要你在网页上确认：运行只读命令（`ls`、`git status/log/diff/pull`、`grep` 等；pull 只认 origin）、读普通文件、改本项目目录里的文件直接放行；claclaw 仓库没有未提交改动时，常规维护 `npm run check`、`npm test`、`npm run restart`（等所有会话空闲再重启）也直接放行；其余命令、改目录外的文件、读钥匙密码等敏感位置（`~/.ssh`、`data/`、`.env`、shell 启动文件和命令历史……）、展开或列出环境变量（`$HOME` 等少数几个除外；环境里有 Claude 长期令牌，一律确认、不交给审查模型）、联网，都要确认，可以选「本轮同类都允许」（同类 = 同一个命令加子命令，比如 `npm test`；删除、`git push`、`git commit`、`kill` 这类收不回来的操作不算同类，每次都问）。本机会话在处理对方消息时转给别的会话的消息也一样。ACP 的 Claw（DeepSeek、Kimi、Qwen、Codex……）同样审查：会话开着自动 / yolo 模式时，这一轮临时切到「每次都问」，结束后切回；OpenCode（只有 build / plan）、DeepSeek、Mini 没有可切的模式，按 Agent 自己的确认走，OpenClaw 还没有这层保护，加入协同时不要给它们开自动放行
+- 局域网明文 http，只在信任的网络里用；不要把 8788 映射到公网。钥匙不会明文发到公网地址：明文 http 只发给局域网地址（以及本机装了 Tailscale 时的 Tailscale 地址），不在同一个网络时走中继或打洞直连（都加密）
+
+### 群聊
+
+几个会话（本机任意 Claw 的、协同对方开放的）拉进一个群，三方的对话集中在一处看，不用来回转述。
+- **建群**：「最近」页搜索框左边的「建群」，选成员（本机会话显示 Claw logo，协同会话再加协同标识）。群放在「最近」里，和会话一起按活动排序；从「最近」删除 = 解散，记录一起删
+- **@ 才触发**：@ 谁谁回一轮，`@全体` 全员回；没 @ 的消息只记录，交给**主理人**（群设置里可以指定一个成员，你没 @ 人的消息由它接）。被 @ 的成员会带上它没看过的群记录
+- **成员互相 @**：成员回复里 @ 别的成员就转过去；成员之间最多连着转 5 次，再多只显示、不转发
+- **在忙就排队**，送到后照常贴回；成员要你确认操作时，群里会提示
+- **拉了协同会话的群**，对方电脑的「最近」里也会出现：群的主体在建群的电脑上，对方那边是镜像，在镜像里发的消息转回建群电脑处理；任何一边删除 = 解散
+- 成员会话照常能单独打开、单独对话；未读和推送按群算
 
 ### 常见问题
 
@@ -273,6 +283,11 @@ clarelay 是可选的第三方网络渠道：没粘贴设备邀请码之前，cl
 
 ```text
 server.mjs        HTTP + WebSocket 服务、会话列表、权限转发；Claude Code 会话（Agent SDK）和接管
+claudehist.mjs    Claude 会话记录（~/.claude/projects）的读取：列表预览、用量、上下文、按轮增量解析历史、历史图片和工具卡片
+claudebin.mjs     Claude 用哪个程序跑：SDK 自带的，缺了就用系统里的 claude 命令
+claudeusage.mjs   Claude 订阅用量（5 小时窗口、周窗口）
+autocompact.mjs   上下文超过设置的线时，每轮结束后自动 /compact
+dissect.mjs       会话解剖：按轮列出步骤、工具、token、耗时
 openclaw.mjs      OpenClaw 会话（通过本机 OpenClaw 网关）
 dsh.mjs           DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
 opencode.mjs      OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
@@ -280,7 +295,7 @@ kimi.mjs          Kimi Code 会话（kimi ACP；历史靠 session/load 重放；
 codex.mjs         Codex 会话（codex-acp；历史靠 session/load 重放；列表读 ~/.codex/sessions；模型库走 CODEX_CONFIG，所有会话一起换）
 qwen.mjs          Qwen Code 会话（qwen --acp；历史靠 session/load 重放；列表读 ~/.qwen/projects；模型库写进 ~/.qwen/settings.json）
 glm.mjs           GLM Agent 会话（glm-acp-agent；历史靠 session/load 重放；列表读 ~/.local/state/glm-acp-agent/sessions；模型库走环境变量，一个进程一家供应商）
-mini.mjs          Mini 会话（纯问答，agent 本体在 mini-agent.mjs；历史靠 session/load 重放；列表读 data/mini-sessions；模型库走环境变量，一个进程一家供应商；超出预算 CLACLAW_MINI_BUDGET 默认 6000 token 时整体丢最早几轮）
+mini.mjs          Mini 会话（纯问答，agent 本体是 mini-agent.mjs；历史靠 session/load 重放；列表读 data/mini-sessions；模型库走环境变量，一个进程一家供应商；超出预算 CLACLAW_MINI_BUDGET 默认 6000 token 时整体丢最早几轮）
 iflow.mjs         iFlow CLI 会话（iflow --experimental-acp；历史从 ~/.iflow/acp/sessions 的记录转；模型 / 模式由 claclaw 合成成选项；模型库走环境变量，一个进程一个模型）
 minimax.mjs       MiniMax Code 会话（mcode acp；历史靠 session/load 重放；列表只读它的 SQLite 库；模型库用 mcode provider add 同步）
 codebuddy.mjs     CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebuddy/projects；模型库写进 ~/.codebuddy/models.json）
@@ -292,11 +307,26 @@ cclike.mjs        Claude Code 式会话记录（projects/<目录>/<id>.jsonl）�
 acp.mjs           ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面几个都继承它，只写各自的差异
 login.mjs         在手机上登录各 Claw：电脑上套伪终端起登录命令，网址 / 一次性代码推到手机（tools/ptywrap.py 是伪终端包装）
 peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
+peerrtc.mjs       协同打洞直连（WebRTC DataChannel，不经中继）
+peerqueue.mjs     协同消息连不上就排队重发、收信去重
+peerguard.mjs     协同消息触发的那一轮：哪些操作直接放行、哪些要确认
+peerjudge.mjs     规则标出有风险的操作后，让小模型判断要不要请你确认
+group.mjs         群聊：成员、@ 解析、带上下文、转发次数、排队重试、镜像
+relay/            自建中继和隧道（不在同一个局域网时，可选）
+devnotify.mjs     推送交给本机的 clarelay 电脑端
 skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
 skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）
 host.mjs          「宿主」页：电脑、资源、网络、各 Claw 状态
 tts.mjs           电脑合成语音（微软在线语音 / macOS say）
 auth.mjs          登录
+modelstore.mjs    模型库（data/models.json）
+modelpick.mjs     模型库接到各 Claw 的会话里选
+install.mjs       电脑上一个 Claw 都没有时，帮用户装第一个（DeepSeek）
+skins.mjs         会话的头像和网名
+localfile.mjs     聊天里点文件路径：本机直接打开，别的设备预览
+video.mjs         收视频 / 文件：存到 data/uploads/，把路径告诉 AI
+httpbody.mjs      读请求体
+util.mjs          各模块共用的小工具
 push.mjs          推送通知（Web Push）
 passwd.mjs        命令行改登录账号
 public/           前端（单文件页面 + 登录页 + 主屏幕图标）
