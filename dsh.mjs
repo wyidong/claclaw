@@ -268,7 +268,8 @@ const agent = new AcpAgent({
   command: bin => /\.m?js$/.test(bin) ? [process.execPath, [bin, '--profile', 'acp']] : [bin, ['--profile', 'acp']],
   hardKill: false,   // 只关 stdin，让 dsh 自己收尾（释放 session.lock）
 });
-export const dsShutdown = () => agent.stop();
+// 关 claclaw 时连压缩用的 dsh web 一起停掉（不然留成孤儿进程）
+export const dsShutdown = () => Promise.all([agent.stop(), ...[...webHosts.values()].map(stop => stop())]);
 
 // ---------- dsh 原生 /compact ----------
 // ACP 只暴露 session/new、resume、close、prompt 等，没有命令通道；/compact 是 dsh host 的
@@ -288,6 +289,9 @@ export function parseDshWebUrl(text) {
   return m ? m[1] : '';
 }
 
+// 正在跑的 dsh web（压缩用）：进程 → stop。dsShutdown 停掉它们；claclaw 走别的路退出（没经过 shutdown）时 'exit' 里兜底杀掉
+const webHosts = new Map();
+process.on('exit', () => { for (const p of webHosts.keys()) { try { p.kill('SIGTERM'); } catch {} } });
 
 function startDshWeb(log) {
   const bin = dshBin();
@@ -309,6 +313,7 @@ function startDshWeb(log) {
     stdio: ['ignore', 'pipe', 'pipe'], cwd: HOME,
     env: binEnv(),
   });
+  p.once('exit', () => webHosts.delete(p));
   p.on('error', () => {});   // 兜底：ready 之后下面的 onError 会被摘掉，之后再出 'error'（如 kill 失败）别变成未捕获异常
   p.stdout.setEncoding('utf8');
   p.stderr.setEncoding('utf8');
@@ -348,6 +353,7 @@ function startDshWeb(log) {
   const stop = async () => {
     if (stopped) return;
     stopped = true;
+    webHosts.delete(p);
     try { p.kill('SIGTERM'); } catch {}
     await new Promise(resolve => {
       if (p.exitCode !== null || p.signalCode !== null) return resolve();
@@ -357,6 +363,7 @@ function startDshWeb(log) {
     });
     log?.('dsh compact host stopped');
   };
+  webHosts.set(p, stop);
   return { ready, stop };
 }
 

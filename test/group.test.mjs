@@ -154,6 +154,20 @@ test('不装 claclaw 的协同成员：202 还没回回复就先到也认；只�
   assert.deepEqual(g2.pending, {});
 });
 
+test('不写编号：同一对方别的会话说话不算在等的那个成员的回复；等太久的编号过期', async () => {
+  const { groups } = setup(async () => ({ accepted: true, msgId: 'm-3' }));
+  const g = groups.create({ members: [M('s1', '后端'), M('abc12345', '需求', { peerId: 'P15' }), M('def67890', '测试', { peerId: 'P15' })] });
+  groups.post(g.id, '@需求 x'); await flush();
+  assert.ok(g.pending['m-3']);
+  assert.equal(groups.remoteReply(g.id, 'P15', '', '我是测试', undefined, 'def67890'), true);
+  await flush();
+  assert.equal(g.items.find(x => x.text === '我是测试').who, g.members.find(m => m.id === 'def67890').key);
+  assert.ok(g.pending['m-3'], '需求那条还在等');
+  g.pending['m-3'].at -= 2 * 3600e3;
+  assert.equal(groups.remoteReply(g.id, 'P15', 'm-3', '回复 m-3\n晚了'), false, '过期的编号不收');
+  assert.deepEqual(g.pending, {});
+});
+
 test('不装 claclaw 的协同成员：不带编号发到群 = 主动说话，@ 谁转给谁；不是成员不收；能按序号读群记录', async () => {
   const { groups, calls } = setup(async () => ({ ok: true, reply: '收到' }));
   const g = groups.create({ members: [M('s1', '后端'), M('abc12345', '需求', { peerId: 'P15' })] });

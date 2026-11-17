@@ -114,3 +114,23 @@ test('agent 关了 stdin 还往里写（EPIPE）：不会变成未捕获异常�
   assert.ok(gone(p), 'hardKill 的 agent 管道断了要把进程杀掉');
   assert.ok(logs.some(l => /stdin error/.test(l)));
 });
+
+test('prepare 返回 Promise：等它完再起进程，同时来的 start 只起一个；等的时候 stop() 了就作废', { timeout: 15000 }, async () => {
+  let release;
+  const { ag, spawns } = mkAgent({ prepare: () => new Promise(r => { release = r; }) });
+  const a = ag.use(), b = ag.use();
+  await sleep(20);
+  assert.equal(spawns(), 0, 'prepare 没完不起进程');
+  release({ env: {}, sig: 's1' });
+  await Promise.all([a, b]);
+  assert.equal(spawns(), 1);
+  assert.equal(ag.sig, 's1');
+  await ag.stop();
+  const c = ag.use();
+  await sleep(20);
+  ag.stop();
+  release({ env: {}, sig: 's2' });
+  await assert.rejects(c, /已停止/);
+  assert.equal(spawns(), 1, 'stop 之后不再起');
+  assert.equal(ag.ready, null);
+});
