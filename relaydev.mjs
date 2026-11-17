@@ -124,14 +124,15 @@ export function makeRelayDev(o) {
     log((old ? '换了' : '记下') + ' ' + domain + ' 的发布公钥 …' + key.slice(-8, -1) + '（' + via + '）');
   }
   // 这个圈子的发布公钥：记下的 → 身份文件里电脑端自己记的（加入时从邀请码、或 hello 记的）→ 老电脑连一次控制连接从 hello 取
-  async function keysFor(domain) {
+  // inStart：从 start() 里调的（starting 已经是自己这一次，这时还没有控制连接在跑，可以连）；别处要等没人在启动才连
+  async function keysFor(domain, { inStart = false } = {}) {
     let k = keyOf(domain);
     if (k) return [k];
     const st = readState();
     if (st && stateDomain(st) === domain) {
       k = releaseKeyOk(st.releaseKey);
       if (k) { saveKey(domain, k, '身份文件'); return [k]; }
-      if (!dev && !starting && !st.revoked) {
+      if (!dev && (inStart || !starting) && !st.revoked) {
         k = await (o.helloKey || helloKey)(st).catch(e => { throw new Error('取不到发布公钥：' + e.message); });
         if (k) { saveKey(domain, k, '中继 hello（老电脑首次）'); return [k]; }
       }
@@ -149,7 +150,7 @@ export function makeRelayDev(o) {
     const base = iv ? iv.base : stateBase(st), domain = iv ? iv.domain : stateDomain(st);
     if (!base) throw new Error('还没下载 clarelay 电脑端，也不知道从哪下载：先粘贴设备邀请码');
     log('下载电脑端：' + base);
-    try { const r = await libInstall('clarelay', base, { log: o.log, pubkeys: iv?.key ? [iv.key] : await keysFor(domain) }); latest = { version: r.info.version, at: Date.now() }; }
+    try { const r = await libInstall('clarelay', base, { log: o.log, pubkeys: iv?.key ? [iv.key] : await keysFor(domain, { inStart: true }) }); latest = { version: r.info.version, at: Date.now() }; }
     catch (e) { throw new Error('下载 clarelay 电脑端没成：' + e.message); }
     o.onLib?.();
     m = await libImport('clarelay');

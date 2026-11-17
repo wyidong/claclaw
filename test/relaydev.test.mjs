@@ -122,3 +122,20 @@ test('邀请码里的发布公钥：加入成功才记下（按域名），移�
   await h.rd.remove();
   assert.equal(JSON.parse(fs.readFileSync(KEYS, 'utf8'))['relay.test'], undefined);
 });
+
+test('老电脑（身份文件里没公钥、还没下载电脑端）启动时：在 start 里连一次控制连接取公钥再下载', async () => {
+  const crypto = await import('node:crypto');
+  const KEY = crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+  const V = fs.mkdtempSync(path.join(os.tmpdir(), 'rd-vendor-')), old = process.env.CLACLAW_VENDOR;
+  process.env.CLACLAW_VENDOR = V;
+  const KEYS = path.join(DATA, 'clarelay-release-keys.json');
+  try { fs.unlinkSync(KEYS); } catch {}
+  fs.writeFileSync(STATE, JSON.stringify({ id: 'd1', token: 't', label: 'x', domain: 'relay.invalid', status: 'active' }));
+  const hello = [];
+  const rd = makeRelayDev({ port: 8787, DATA, log() {}, getOff: () => false, setOff() {}, onDevice() {}, helloKey: async st => { hello.push(st.id); return KEY; } });
+  try {
+    await assert.rejects(rd.connect(), /下载 clarelay 电脑端没成/);   // relay.invalid 下载不了；关键是先取到了公钥
+    assert.deepEqual(hello, ['d1'], 'start 里也要能连控制连接取公钥');
+    assert.equal(JSON.parse(fs.readFileSync(KEYS, 'utf8'))['relay.invalid'].key, KEY);
+  } finally { process.env.CLACLAW_VENDOR = old; if (old === undefined) delete process.env.CLACLAW_VENDOR; try { fs.unlinkSync(STATE); } catch {} }
+});
