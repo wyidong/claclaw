@@ -10,8 +10,8 @@ import { EventEmitter } from 'node:events';
 // 第三方库：装在临时目录里，不碰 claclaw 自己的 vendor/
 const V = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-'));
 process.env.CLACLAW_VENDOR = V;
-const { libInstall: install0, libInstallFile, libFetch, libInfo, libImport, libDir, baseOf, LIBS, newerVersion, verifySig, releaseKeyOk, fileVersion } = await import('../vendor.mjs');
-const { inviteBase, inviteInfo, helloKey } = await import('../relaydev.mjs');
+const { libInstall: install0, libInstallFile, libFetch, libInfo, libImport, libDir, baseOf, LIBS, newerVersion, verifySig, releaseKeyOk, fileVersion } = await import('../src/peer/vendor.mjs');
+const { inviteBase, inviteInfo, helloKey } = await import('../src/peer/relaydev.mjs');
 
 // 测试用的发布钥匙（正式的公钥从设备邀请码 / hello 来）
 const KP = crypto.generateKeyPairSync('ed25519'), KP2 = crypto.generateKeyPairSync('ed25519');

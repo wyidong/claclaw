@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const DSH = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-dsh-cmd-'));
 process.env.DSH_HOME = DSH;
-const { DsRunner, COMMANDS, parseDshWebUrl } = await import('../dsh.mjs');
+const { DsRunner, COMMANDS, parseDshWebUrl } = await import('../src/claws/dsh.mjs');
 
 const tick = () => new Promise(r => setImmediate(r));
 function runner(opts = {}) {

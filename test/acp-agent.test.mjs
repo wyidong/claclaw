@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'acp-agent-data-'));   // acp.mjs 引入 auth.mjs 前先指到临时目录
-const { AcpAgent, AcpRunner } = await import('../acp.mjs');
+const { AcpAgent, AcpRunner } = await import('../src/claws/acp.mjs');
 
 // 假 agent：initialize 正常回；hang 永远不回；die 直接退出；closeStdin 关掉自己的 stdin 但进程不退（之后再写就是 EPIPE）
 const FAKE = `

@@ -1,0 +1,390 @@
+// OpenCode 适配。
+// - 会话列表和历史：只读打开 ~/.local/share/opencode/opencode.db（SQLite，用 Node 自带的 node:sqlite），不用起 opencode。
+// - 发消息：claclaw 自己起一个 `opencode acp`（ACP 标准协议，stdin/stdout 一行一条 JSON-RPC），
+//   session/resume 接上已有会话、session/prompt 发消息。和 dsh 的适配是一个路子。
+// 网页里 OpenCode 会话的 id = 'op:' + opencode 会话 id（ses_…），和 Claude 的 UUID、oc:、ds: 区分开。
+// 接管：opencode 不登记「哪个进程开着哪个会话」，也没有写入锁，只能按目录推断——终端里有 opencode 开在某个目录，
+// 这个目录里在它启动之后有过改动的会话中最新的那个（claclaw 自己写的不算），就当作正在终端里用着。
+// 和 Claude 会话一样：原处闲置满「接管等待」的分钟数才能接管，接管会结束终端里的那个 opencode。
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { storeNow, opencodeInject } from '../modelpick.mjs';
+import { AcpAgent, AcpRunner, optName, toolTarget, listItem, trashPath } from './acp.mjs';
+import { HOME, oneLine, tms, findBin, runBin as run, WIN, listenPort } from '../util.mjs';
+
+const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(HOME, '.local', 'share'), 'opencode');
+const DB = path.join(DATA_DIR, 'opencode.db');
+export const OP_PREFIX = 'op:';
+export const isOp = id => typeof id === 'string' && id.startsWith(OP_PREFIX);
+const sidOf = id => id.slice(OP_PREFIX.length);
+const validSid = sid => /^ses_[A-Za-z0-9]+$/.test(sid);
+// opencode 还没起好标题时的默认标题
+const DEFAULT_TITLE = /^(New session|Child session) - \d{4}-\d\d-\d\dT/;
+
+let sqlite = null;
+try { sqlite = await import('node:sqlite'); } catch {}
+
+// 当前 Node 有没有 node:sqlite（读 opencode 的库要用；Node 22.13 才有）
+export const opSupported = () => !!sqlite;
+export const opUnsupportedReason = () => '当前 Node 没有 node:sqlite（需要 Node 22.13 以上），读不了 OpenCode 会话';
+
+export const opInstalled = () => !!opBin();   // 只认程序：卸载后留下的数据库不算装了（会话也打不开）
+
+// 每次查询单独开一个只读连接，用完就关：不占着库，也不怕 opencode 升级时换了库文件
+function query(fn) {
+  if (!sqlite) throw new Error(opUnsupportedReason());
+  if (!fs.existsSync(DB)) return null;
+  const db = new sqlite.DatabaseSync(DB, { readOnly: true });
+  try { return fn(db); } finally { try { db.close(); } catch {} }
+}
+const parse = s => { try { return JSON.parse(s); } catch { return null; } };
+const modelOf = m => { const o = typeof m === 'string' ? parse(m) : m; return o?.id || o?.modelID || ''; };
+
+// 当前上下文大小：最后一条回复的输入量（输入 + 缓存读写）；最后一条是压缩摘要时用摘要长度（≈压缩后的大小）
+function opCtx(id) {
+  if (!isOp(id) || !validSid(sidOf(id))) return null;
+  try {
+    const rows = query(db => db.prepare('select data from message where session_id = ? order by time_created desc, id desc limit 30').all(sidOf(id))) || [];
+    for (const r of rows) {
+      const d = parse(r.data);
+      if (d?.role !== 'assistant') continue;
+      const t = d.tokens || {};
+      if (d.summary) return Number(t.output) || null;
+      const n = (Number(t.input) || 0) + (Number(t.cache?.read) || 0) + (Number(t.cache?.write) || 0);
+      if (n) return n;
+    }
+  } catch {}
+  return null;
+}
+
+// 会话累计用量（「会话 ↑输入 ↓输出」）：所有回复相加；输入 = input + 缓存读写，输出 = output + 推理
+export function opTokSum(id) {
+  if (!isOp(id) || !validSid(sidOf(id))) return null;
+  try {
+    const r = query(db => db.prepare(`select sum(coalesce(json_extract(data,'$.tokens.input'),0) + coalesce(json_extract(data,'$.tokens.cache.read'),0) + coalesce(json_extract(data,'$.tokens.cache.write'),0)) i,
+      sum(coalesce(json_extract(data,'$.tokens.output'),0) + coalesce(json_extract(data,'$.tokens.reasoning'),0)) o
+      from message where session_id = ? and json_extract(data,'$.role') = 'assistant'`).get(sidOf(id)));
+    return r && (r.i || r.o) ? { in: Number(r.i) || 0, out: Number(r.o) || 0 } : null;
+  } catch { return null; }
+}
+
+// ---------- 会话列表 ----------
+const LIST_SQL = `select id, directory, title, time_created, time_updated, model from session
+  where parent_id is null and time_archived is null order by time_updated desc limit 300`;
+// 第一条用户消息（还没起标题的会话拿它当标题）
+const FIRST_SQL = `select p.data from part p join message m on m.id = p.message_id
+  where m.session_id = ? and json_extract(m.data, '$.role') = 'user' and json_extract(p.data, '$.type') = 'text'
+    and coalesce(json_extract(p.data, '$.synthetic'), 0) = 0
+  order by p.time_created, p.id limit 1`;
+
+function listRows() {
+  return query(db => {
+    const first = db.prepare(FIRST_SQL);
+    return db.prepare(LIST_SQL).all().map(s => ({
+      ...s, first: !s.title || DEFAULT_TITLE.test(s.title) ? oneLine(parse(first.get(s.id)?.data)?.text) : '',
+    }));
+  }) || [];
+}
+const titleOf = s => (s.title && !DEFAULT_TITLE.test(s.title) ? s.title : s.first.slice(0, 60)) || '新会话';
+
+export function opSessionList({ busy = () => false, takeoverMin = 30 } = {}) {
+  const rows = listRows();
+  const held = heldSessions(rows, takeoverMin);
+  return rows.map(s => listItem('opencode', OP_PREFIX + s.id, busy, { title: titleOf(s), cwd: s.directory, branch: modelOf(s.model), updated: s.time_updated, held: held.get(s.id) || null }));
+}
+export const opExists = id => isOp(id) && validSid(sidOf(id)) && !!query(db => db.prepare('select 1 from session where id = ?').get(sidOf(id)));
+
+// ---------- 终端里开着的 opencode → 推断它占着的会话 ----------
+const ourWrites = new Map();   // opencode 会话 id → claclaw 最后一次往里写的时间（这些改动不算终端的）
+const touch = sid => ourWrites.set(sid, Date.now());
+
+function etimeMs(s) {   // ps 的 etime：[[dd-]hh:]mm:ss
+  const [d, rest] = s.includes('-') ? s.split('-') : ['0', s];
+  const p = rest.split(':').map(Number);
+  while (p.length < 3) p.unshift(0);
+  return (((Number(d) * 24 + p[0]) * 60 + p[1]) * 60 + p[2]) * 1000;
+}
+// Windows 上查不了「终端是不是正开着同一个会话」：认出 opencode 进程不难，难的是拿它的工作目录 ——
+// lsof -d cwd 没有等价物（要 NtQueryInformationProcess）。所以这里整个跳过，宁可不检测也不误判成占用。
+let procCache = { at: 0, list: [] };
+function foreignProcs() {
+  if (WIN) return [];
+  if (Date.now() - procCache.at < 3000) return procCache.list;
+  const list = [];
+  let out = '';
+  try { out = execFileSync('ps', ['-axo', 'pid=,ppid=,etime=,comm='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch {}
+  for (const line of out.split('\n')) {
+    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+    if (!m || !/(^|\/)opencode(\.exe)?$/.test(m[4].trim())) continue;
+    const pid = Number(m[1]);
+    if (pid === agent.proc?.pid || Number(m[2]) === process.pid) continue;   // claclaw 自己起的
+    list.push({ pid, start: Date.now() - etimeMs(m[3]) });
+  }
+  if (list.length) {
+    let o = '';
+    try { o = execFileSync('lsof', ['-a', '-d', 'cwd', '-Fpn', '-p', list.map(p => p.pid).join(',')], { encoding: 'utf8' }); }
+    catch (e) { o = String(e.stdout || ''); }   // 有进程刚退出时 lsof 返回非 0，但别的照样输出
+    let cur = null;
+    for (const l of o.split('\n')) {
+      if (l[0] === 'p') cur = list.find(p => p.pid === Number(l.slice(1)));
+      else if (l[0] === 'n' && cur) cur.cwd = l.slice(1);
+    }
+  }
+  procCache = { at: Date.now(), list: list.filter(p => p.cwd) };
+  return procCache.list;
+}
+const realCache = new Map();
+const real = d => { if (!realCache.has(d)) { let r = d; try { r = fs.realpathSync(d); } catch {} realCache.set(d, r); } return realCache.get(d); };
+
+// 会话 id → 和 Claude 会话的 busyElsewhere 同一种格式
+function heldSessions(rows, takeoverMin) {
+  const held = new Map();
+  const procs = foreignProcs();
+  if (!procs.length) return held;
+  for (const p of procs) {
+    const s = rows.find(r => r.directory && (r.directory === p.cwd || real(r.directory) === p.cwd)
+      && r.time_updated >= p.start - 2000 && !(ourWrites.get(r.id) >= r.time_updated - 5000));
+    if (!s) continue;
+    const h = held.get(s.id);
+    if (h) { h.pids.push(p.pid); continue; }
+    const idleMin = Math.floor((Date.now() - s.time_updated) / 60000);
+    const status = idleMin < 15 && lastTurnOpen(s.id) ? 'busy' : 'idle';
+    held.set(s.id, {
+      pids: [p.pid], entrypoint: 'cli', name: titleOf(s), status,
+      idleMin, canTakeover: status === 'idle' && idleMin >= takeoverMin, needMin: takeoverMin,
+    });
+  }
+  return held;
+}
+// 最后一条是用户消息、或者回复还没结束：终端那边正在干活
+function lastTurnOpen(sid) {
+  const m = query(db => db.prepare('select data from message where session_id = ? order by time_created desc, id desc limit 1').get(sid));
+  const d = parse(m?.data);
+  return !!d && (d.role === 'user' || !d.time?.completed);
+}
+
+export function opTakeoverInfo(id, takeoverMin) {
+  if (!isOp(id) || !foreignProcs().length) return null;
+  return heldSessions(listRows(), takeoverMin).get(sidOf(id)) || null;
+}
+export async function opEndHolders(info) {
+  const pids = info?.pids || [];
+  const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+  for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch {} }
+  for (let i = 0; i < 50 && pids.some(alive); i++) await new Promise(r => setTimeout(r, 100));
+  for (const pid of pids) if (alive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch {} }
+  await new Promise(r => setTimeout(r, 300));
+  procCache.at = 0;
+  return !pids.some(alive);
+}
+
+// ---------- 记录 → 网页条目（和 Claude 历史同一套格式；图片给 {media_type, data}，由 server 的分页按预算转成 data URL） ----------
+function dataImage(p) {
+  const m = String(p.url || '').match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
+  return m ? { media_type: m[1], data: m[2] } : null;
+}
+const errText = e => e?.name === 'MessageAbortedError' ? '已中断' : '出错：' + (e?.data?.message || e?.message || e?.name || '未知错误');
+
+function toItems(msgs, parts) {
+  const byMsg = new Map();
+  for (const p of parts) {
+    const d = parse(p.data);
+    if (!d) continue;
+    if (!byMsg.has(p.message_id)) byMsg.set(p.message_id, []);
+    byMsg.get(p.message_id).push(d);
+  }
+  const items = [];
+  for (const m of msgs) {
+    const md = parse(m.data);
+    if (!md) continue;
+    const ps = byMsg.get(m.id) || [];
+    if (md.role === 'user') {
+      const text = ps.filter(p => p.type === 'text' && !p.synthetic && !p.ignored).map(p => p.text).join('\n').trim();
+      const imgs = ps.filter(p => p.type === 'file' && /^image\//.test(p.mime || '')).map(dataImage).filter(Boolean);
+      if (text || imgs.length) items.push({ kind: 'user', text, images: imgs.length ? imgs : undefined, at: tms(md.time?.created) });
+    } else if (md.role === 'assistant') {
+      for (const p of ps) {
+        if (p.type === 'text' && !p.synthetic && p.text?.trim()) items.push({ kind: 'ai', text: p.text.trim(), at: tms(p.time?.end || md.time?.completed || md.time?.created) });
+        else if (p.type === 'tool') {
+          const st = p.state || {};
+          items.push({ kind: 'tool', id: p.callID || p.id, name: p.tool, target: toolTarget(st.input), status: st.status === 'error' ? 'no' : 'ok', output: String(st.output ?? st.error ?? '').slice(0, 4000) });
+        }
+      }
+      if (md.error) items.push({ kind: 'ai', text: '（' + errText(md.error) + '）' });
+    }
+  }
+  return items;
+}
+
+// ---------- ACP 进程（底座见 acp.mjs） ----------
+function opBin() { return findBin('opencode', [path.dirname(process.execPath), path.join(HOME, '.opencode', 'bin')]); }
+const agent = new AcpAgent({
+  name: 'opencode', bin: opBin, missing: '没找到 opencode 命令，先装好 OpenCode',
+  command: bin => [bin, ['acp']],
+  // 模型库里的供应商注入进去（OpenCode 会和用户自己的配置合并）：claclaw-<id>，key 走环境变量
+  prepare: () => { const inj = opencodeInject(storeNow()); return { sig: inj.sig, env: inj.content ? { OPENCODE_CONFIG_CONTENT: inj.content, ...inj.env } : {} }; },
+});
+// 模型库改了：opencode 进程要重启才看得到。没有会话接着就马上关，有就等它们都关掉
+export const opModelsChanged = log => agent.modelsChanged(opencodeInject(storeNow()).sig, log);
+export const opShutdown = () => agent.stop();
+export const opAcpRunning = () => agent.running;
+
+// 可调选项（ACP configOptions）：model / effort / mode（build、plan）
+const COMMANDS = [
+  { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
+  { name: 'effort', description: '思考强度（不带参数：列出可选项）', hint: '<强度>', builtin: true },
+  { name: 'mode', description: 'build（直接动手）/ plan（只出方案，不改文件）', hint: '<模式>', builtin: true },
+];
+const noProv = n => String(n || '').replace(/^[^/]+\//, '');   // 「OpenCode/MiniMax …」只留模型名
+
+// ---------- 打开的 OpenCode 会话 ----------
+export const opRunners = new Map();
+
+// 重试也没用的模型报错：OpenCode 免费额度用完（要等额度恢复或订阅），碰到就直接停下这一轮
+const OP_GIVE_UP = /free usage limit reached/i;
+export class OpRunner extends AcpRunner {
+  static agent = agent; static prefix = OP_PREFIX; static runners = opRunners;
+  static label = 'OpenCode'; static commands = COMMANDS;
+  static cfgIds = { model: 'model', effort: 'effort', mode: 'mode' };
+  static cfgNames = { model: '模型', effort: '思考强度', mode: '模式' };
+  static waitArgs = true;   // opencode 先发一条只有工具名的 tool_call，参数在后面的 update 里
+  static onCreated(sid) { touch(sid); }
+
+  constructor(id, opts) { super(id, opts); this.model = ''; this.cache = null; }   // cache：{ key, items }，会话没改动就不重读
+  get imageError() { return '当前 OpenCode 模型没有声明图片输入（ACP image=false）。换一个支持图片的模型，或改用 Claude / OpenClaw 发图。'; }
+
+  // 读库拿历史（{items, total}，和 Claude 的 loadHistory 一样，server 用同一套分页）
+  history() {
+    if (!validSid(this.sid)) return { items: [], total: 0 };
+    const r = query(db => {
+      const s = db.prepare('select directory, title, time_updated, model from session where id = ?').get(this.sid);
+      if (!s) return null;
+      if (this.cache?.key === s.time_updated) return { s, items: this.cache.items };
+      const msgs = db.prepare('select id, data from message where session_id = ? order by time_created, id').all(this.sid);
+      const parts = db.prepare('select message_id, data from part where session_id = ? order by time_created, id').all(this.sid);
+      return { s, items: toItems(msgs, parts) };
+    });
+    if (!r) return { items: [], total: 0 };
+    const { s, items } = r;
+    this.cache = { key: s.time_updated, items };
+    this.cwd = this.cwd || s.directory || ''; this.info.cwd = this.cwd;
+    const firstUser = items.find(x => x.kind === 'user')?.text || '';
+    this.title = (s.title && !DEFAULT_TITLE.test(s.title) ? s.title : oneLine(firstUser).slice(0, 60)) || this.title || 'OpenCode 会话';
+    if (!this.model) this.model = modelOf(s.model);
+    return { items, total: items.length };
+  }
+  modelNameOf(cfg) { return noProv(optName(cfg, 'model')); }
+  cleanName(n) { return noProv(n); }
+  ownModel(o, store) {
+    const v = String(o.value), name = String(o.name || v), slash = v.indexOf('/');
+    const prov = slash > 0 ? v.slice(0, slash) : '', id = slash > 0 ? v.slice(slash + 1) : v;
+    const sp = prov.startsWith('claclaw-') ? store.providers.find(p => 'claclaw-' + p.id === prov) : null;
+    return { value: v, label: noProv(name), sub: name.includes('/') ? name.split('/')[0] : prov, id, base: sp ? Object.values(sp.endpoints)[0] : '' };
+  }
+  ctxNow() { return opCtx(this.id); }   // 上下文大小：每轮结束读库
+  beforePrompt() { touch(this.sid); this.watchRetry(); }
+  onFinish() { touch(this.sid); this.unwatchRetry(); }
+  finish(o = {}) {   // 自动停掉的（免费额度用完之类）：按出错收尾（opencode 被 cancel 后 stopReason 照样回 end_turn，不能按 cancelled 认）
+    if (this.staleTurn(o.turn)) return;   // 已经收过尾的那一轮又来收尾：不管（也别清掉新一轮的 stopWhy）
+    if (this.stopWhy && !o.error) o = { error: this.stopWhy, turn: o.turn };
+    this.stopWhy = '';
+    return super.finish(o);
+  }
+  // 模型报错（额度用完、超时、过载……）时 OpenCode 自己等着重试，ACP 里一声不吭，网页只看到一直「工作中」。
+  // 这一轮进行中每 5 秒问一次 /session/status：在重试就把报错和下次重试时间告诉网页；免费额度用完这种重试也没用的，直接停掉这一轮
+  watchRetry() {
+    this.unwatchRetry();
+    let last = '', lastMsg = '';
+    const tick = async () => {
+      if (!this.busy || this.closed) return this.unwatchRetry();
+      let st = null;
+      try { st = await opStatus(this.sid, this.cwd); } catch {}
+      if (st?.type !== 'retry' || !this.busy) return;
+      let msg = String(st.message || '模型没有回应').replace(/\s+/g, ' ').trim();   // 报错常带换行缩进（Google 的一大段），压成一段、最多 300 字
+      if (msg.length > 300) msg = msg.slice(0, 300) + '…';
+      const key = st.attempt + '|' + msg;
+      if (key === last) return;
+      last = key;
+      this.log?.('opencode retry', this.sid.slice(0, 16), 'attempt=' + st.attempt, msg.slice(0, 120));
+      if (OP_GIVE_UP.test(msg)) {
+        this.stopWhy = '模型报错：' + msg + '\n重试也没用，已停下这一轮；换个模型再发。';
+        this.agent.notify('session/cancel', { sessionId: this.sid });
+        return this.unwatchRetry();
+      }
+      const next = Number(st.next) || 0, at = next ? new Date(next > 1e12 ? next : Date.now() + next).toLocaleTimeString('zh-CN', { hour12: false }) : '';
+      if (msg === lastMsg) this.emit({ t: 'sys', text: 'OpenCode 第 ' + st.attempt + ' 次重试' + (at ? '（' + at + ' 再试）' : '') + '，报错同上；不想等就点停止，换个模型再发。' });   // 同样的报错不再整段重复
+      else this.emit({ t: 'sys', text: '模型报错：' + msg + '\nOpenCode 会自己重试（第 ' + st.attempt + ' 次' + (at ? '，' + at + ' 再试' : '') + '）；不想等就点停止，换个模型再发。' });
+      lastMsg = msg;
+      this.activity('等重试');
+    };
+    this.retryT = setInterval(tick, 5000);
+    this.retryT.unref?.();
+  }
+  unwatchRetry() { clearInterval(this.retryT); this.retryT = null; }
+  // external_directory：要碰工作目录外的路径（opencode 默认对这个要确认）
+  permInfo(tc, known) {
+    const r = super.permInfo(tc, known);
+    const cwd = this.cwd, raw = r.raw;
+    const outside = [...(tc.locations || []).map(l => l?.path), raw.parentDir, raw.filepath, raw.filePath]
+      .find(x => typeof x === 'string' && path.isAbsolute(x) && cwd && x !== cwd && !x.startsWith(cwd + '/'));
+    if (outside) r.reason = '涉及工作目录外：' + outside;
+    return r;
+  }
+}
+
+// 新建：在某个目录里开一个新的 opencode 会话
+export const opNewSession = (cwd, opts) => OpRunner.create(cwd, opts);
+
+// 删除：先 opencode export 存一份到 claclaw 回收站（能用 opencode import 找回），再 opencode session delete
+const runBin = (args, ms) => run(opBin(), args, ms, { maxBuffer: 256 * 1024 * 1024, missing: '没找到 opencode 命令' });
+export async function opDelete(id, trashDir) {
+  const sid = sidOf(id);
+  if (!validSid(sid) || !opExists(id)) throw new Error('找不到这个会话');
+  const json = await runBin(['export', sid], 60000);
+  const start = json.indexOf('{');   // 前面可能有一行提示文字
+  if (start < 0) throw new Error('导出失败，未删除');
+  const file = trashPath(trashDir, 'opencode', sid, '.json');
+  fs.writeFileSync(file, json.slice(start), { mode: 0o600 });
+  await runBin(['session', 'delete', sid], 60000);
+  return file;
+}
+
+// 改名：ACP 里没有改名，但 `opencode acp` 进程自己在 127.0.0.1 上开着 opencode 的 HTTP 接口，
+// 用它的 PATCH /session/{id} 改标题（走 opencode 自己的逻辑，不直接写库）。端口默认 4096，被占了会换，所以按进程查。
+let apiPort = { pid: 0, port: 0 };
+async function acpApiPort() {
+  const proc = () => agent.proc;
+  if (proc() && apiPort.pid === proc().pid) return apiPort.port;
+  for (let i = 0; i < 20 && proc(); i++) {
+    const port = listenPort(proc().pid);   // macOS 走 lsof，Windows 走 netstat -ano
+    if (port) { apiPort = { pid: proc().pid, port }; return apiPort.port; }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  throw new Error('找不到 opencode 的本机接口');
+}
+function apiHeaders() {
+  const headers = { 'content-type': 'application/json' };
+  if (process.env.OPENCODE_SERVER_PASSWORD) headers.authorization = 'Basic ' + Buffer.from((process.env.OPENCODE_SERVER_USERNAME || 'opencode') + ':' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
+  return headers;
+}
+// 会话现在的状态（GET /session/status）：{ type: 'idle' | 'busy' | 'retry', attempt, message, next, action }，没有返回 null
+async function opStatus(sid, dir) {
+  if (!agent.proc) return null;
+  const port = await acpApiPort();
+  const r = await fetch(`http://127.0.0.1:${port}/session/status` + (dir ? '?directory=' + encodeURIComponent(dir) : ''), { headers: apiHeaders(), signal: AbortSignal.timeout(4000) });
+  return r.ok ? (await r.json())?.[sid] || null : null;
+}
+export async function opRename(id, title, log) {
+  const sid = sidOf(id);
+  const dir = validSid(sid) && query(db => db.prepare('select directory from session where id = ?').get(sid))?.directory;
+  if (!dir) throw new Error('找不到这个会话');
+  await agent.start(log);
+  const port = await acpApiPort();
+  const headers = apiHeaders();
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/session/${sid}?directory=${encodeURIComponent(dir)}`,
+      { method: 'PATCH', headers, body: JSON.stringify({ title }), signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  } finally { agent.idleCheck(); }   // 只为改名起的进程：没会话接着就照常 10 分钟后关
+}

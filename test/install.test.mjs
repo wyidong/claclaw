@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { installStart, installState, installReset } from '../install.mjs';
-import { dsWriteKey, dsHasKey } from '../login.mjs';
+import { installStart, installState, installReset } from '../src/claws/install.mjs';
+import { dsWriteKey, dsHasKey } from '../src/claws/login.mjs';
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-install-'));
 const KEY = 'sk-0123456789abcdef0123456789abcdef';

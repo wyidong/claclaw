@@ -30,7 +30,7 @@ claclaw 把本机的 AI 编程工具叫作 **Claw**，目前支持十四个：[C
 | Qwen Code | 起 `qwen --acp` 进程 | 18+ | 模型库里的模型自动配进去（Qwen 账号登录已停，要用自己的 key）；`/model`、`/mode` |
 | Codex | 起 `codex-acp` 进程（官方 ACP 转接，`npm i -g @agentclientprotocol/codex-acp`，自带 Codex） | 18+ | 用 Codex 自己的配置 / 登录，或在会话设置里换成模型库的模型（Codex 没登录、没配服务商时默认用模型库第一个，不用先登录）（要支持 Responses 接口，比如 DeepSeek；所有 Codex 会话一起换）；`/model`、`/mode` |
 | GLM Agent | 起 `glm-acp-agent` 进程（社区做的 ACP agent，`npm i -g glm-acp-agent`） | 18+ | 默认用智谱 Z.AI 的 GLM Coding Plan（要 `glm-acp-agent --setup` 存 key）；也能用模型库里有 OpenAI 兼容地址的供应商（一个进程一家供应商，换供应商所有 GLM 会话一起换）；`/model`、`/mode` |
-| Mini | claclaw 自带的纯问答 agent（`mini-agent.mjs`，ACP），不调工具、不碰电脑上的文件和命令，不用另外安装 | 18+ | 模型库里的模型都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序用一种），本机地址排最前；访问国外接口按 `HTTPS_PROXY` 走代理（Ollama 填 `http://127.0.0.1:11434/v1`，key 随便填）。每轮只发一段很短的系统提示和对话本身，首字快；每轮结束显示「模型 · 首字耗时 · 生成速度」，方便试本地模型；回复到了输出上限会自动接着写（最多 4 段，拼成一条），被模型过滤拦下（如 Gemini 防复述）时写明原因；默认关思考，会话设置里可开；能发图（三种接口各按自己的写法发，历史里最多带最近 6 张；模型要能看图：如 deepseek-flash、Gemini 能看，deepseek-v4-pro 不看图也不报错，会把图当成 Unsupported Image） |
+| Mini | claclaw 自带的纯问答 agent（`src/claws/mini-agent.mjs`，ACP），不调工具、不碰电脑上的文件和命令，不用另外安装 | 18+ | 模型库里的模型都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序用一种），本机地址排最前；访问国外接口按 `HTTPS_PROXY` 走代理（Ollama 填 `http://127.0.0.1:11434/v1`，key 随便填）。每轮只发一段很短的系统提示和对话本身，首字快；每轮结束显示「模型 · 首字耗时 · 生成速度」，方便试本地模型；回复到了输出上限会自动接着写（最多 4 段，拼成一条），被模型过滤拦下（如 Gemini 防复述）时写明原因；默认关思考，会话设置里可开；能发图（三种接口各按自己的写法发，历史里最多带最近 6 张；模型要能看图：如 deepseek-flash、Gemini 能看，deepseek-v4-pro 不看图也不报错，会把图当成 Unsupported Image） |
 | iFlow CLI | 起 `iflow --experimental-acp` 进程（`npm i -g @iflow-ai/iflow-cli`） | 18+ | 模型库里的模型能用（一个进程一个模型，换模型所有 iFlow 会话一起换）；iFlow 自带的模型要先在终端登录心流账号；新会话自动从「什么都不问」切到「先问」；`/model`、`/mode` |
 | MiniMax Code | 起 `mcode acp` 进程（`npm i -g @minimax-ai/code`） | **22.13+**（会话在 SQLite 库里） | 模型库里的模型自动用 `mcode provider add` 配进去（key 会被 mcode 写进它的 config.yaml，文件 600）；也能 `mcode login` 用 MiniMax 账号；`/model`、`/mode` |
 | CodeBuddy Code | 起 `codebuddy --acp` 进程（`npm i -g @tencent-ai/codebuddy-code`） | 18+ | 要先在终端登录过腾讯账号（微信 / Google / 企业域）；模型库里 OpenAI 兼容的模型写进 `~/.codebuddy/models.json`（key 只能写进文件，600）；`/model`、`/mode`。这一块没在真机上验证过 |
@@ -282,56 +282,58 @@ clarelay 是可选的第三方网络渠道：没粘贴设备邀请码之前，cl
 ## 文件
 
 ```text
-server.mjs        HTTP + WebSocket 服务、会话列表、权限转发；Claude Code 会话（Agent SDK）和接管
-claudehist.mjs    Claude 会话记录（~/.claude/projects）的读取：列表预览、用量、上下文、按轮增量解析历史、历史图片和工具卡片
-claudebin.mjs     Claude 用哪个程序跑：SDK 自带的，缺了就用系统里的 claude 命令
-claudeusage.mjs   Claude 订阅用量（5 小时窗口、周窗口）
-autocompact.mjs   上下文超过设置的线时，每轮结束后自动 /compact
-dissect.mjs       会话解剖：按轮列出步骤、工具、token、耗时
-openclaw.mjs      OpenClaw 会话（通过本机 OpenClaw 网关）
-dsh.mjs           DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
-opencode.mjs      OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
-kimi.mjs          Kimi Code 会话（kimi ACP；历史靠 session/load 重放；模型库写进 ~/.kimi-code/config.toml）
-codex.mjs         Codex 会话（codex-acp；历史靠 session/load 重放；列表读 ~/.codex/sessions；模型库走 CODEX_CONFIG，所有会话一起换）
-qwen.mjs          Qwen Code 会话（qwen --acp；历史靠 session/load 重放；列表读 ~/.qwen/projects；模型库写进 ~/.qwen/settings.json）
-glm.mjs           GLM Agent 会话（glm-acp-agent；历史靠 session/load 重放；列表读 ~/.local/state/glm-acp-agent/sessions；模型库走环境变量，一个进程一家供应商）
-mini.mjs          Mini 会话（纯问答，agent 本体是 mini-agent.mjs；历史靠 session/load 重放；列表读 data/mini-sessions；模型库走环境变量，一个进程一家供应商；超出预算 CLACLAW_MINI_BUDGET 默认 6000 token 时整体丢最早几轮）
-iflow.mjs         iFlow CLI 会话（iflow --experimental-acp；历史从 ~/.iflow/acp/sessions 的记录转；模型 / 模式由 claclaw 合成成选项；模型库走环境变量，一个进程一个模型）
-minimax.mjs       MiniMax Code 会话（mcode acp；历史靠 session/load 重放；列表只读它的 SQLite 库；模型库用 mcode provider add 同步）
-codebuddy.mjs     CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebuddy/projects；模型库写进 ~/.codebuddy/models.json）
-qoder.mjs         Qoder CLI 会话（qodercli --acp；列表读 ~/.qoder/projects；模型库写进 ~/.qoder/settings.json 的 customModels）
-copilot.mjs       GitHub Copilot CLI 会话（copilot --acp；列表读 ~/.copilot/session-state；模型库走 BYOK 环境变量）
-relaydev.mjs      内置的 clarelay 电脑端：加入 / 断开 / 移除 / 更新、启动时自动连、停掉单独安装的那份（电脑端代码是第三方库 vendor/clarelay/）
-vendor.mjs        第三方库：运行时下载到 vendor/<库>/，验发布签名、不降级、按版本目录换（tools/vendor.mjs 命令行）
-cclike.mjs        Claude Code 式会话记录（projects/<目录>/<id>.jsonl）的通用读取：CodeBuddy、Qoder 共用
-acp.mjs           ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面几个都继承它，只写各自的差异
-login.mjs         在手机上登录各 Claw：电脑上套伪终端起登录命令，网址 / 一次性代码推到手机（tools/ptywrap.py 是伪终端包装）
-peer.mjs          claclaw 协同：局域网收件服务、配对、请求对方
-peerrtc.mjs       协同打洞直连（WebRTC DataChannel，不经中继）
-peerqueue.mjs     协同消息连不上就排队重发、收信去重
-peerguard.mjs     协同消息触发的那一轮：哪些操作直接放行、哪些要确认
-peerjudge.mjs     规则标出有风险的操作后，让小模型判断要不要请你确认
-group.mjs         群聊：成员、@ 解析、带上下文、转发次数、排队重试、镜像
-devnotify.mjs     推送交给本机的 clarelay 电脑端
-skills.mjs        技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
+server.mjs        入口：HTTP + WebSocket 服务、会话列表、权限转发；Claude Code 会话（Agent SDK）和接管
+src/claws/        各 Claw 的接入（一个文件一家，ACP 的都继承 acp.mjs）：
+  claudehist.mjs   Claude 会话记录（~/.claude/projects）的读取：列表预览、用量、上下文、按轮增量解析历史、历史图片和工具卡片
+  claudebin.mjs    Claude 用哪个程序跑：SDK 自带的，缺了就用系统里的 claude 命令
+  claudeusage.mjs  Claude 订阅用量（5 小时窗口、周窗口）
+  autocompact.mjs  上下文超过设置的线时，每轮结束后自动 /compact
+  dissect.mjs      会话解剖：按轮列出步骤、工具、token、耗时
+  openclaw.mjs     OpenClaw 会话（通过本机 OpenClaw 网关）
+  dsh.mjs          DeepSeek Harness 会话（读 dsh 会话记录 + dsh ACP）
+  opencode.mjs     OpenCode 会话（只读 opencode 的 SQLite 库 + opencode ACP；按目录推断终端占用、接管）
+  kimi.mjs         Kimi Code 会话（kimi ACP；历史靠 session/load 重放；模型库写进 ~/.kimi-code/config.toml）
+  codex.mjs        Codex 会话（codex-acp；历史靠 session/load 重放；列表读 ~/.codex/sessions；模型库走 CODEX_CONFIG，所有会话一起换）
+  qwen.mjs         Qwen Code 会话（qwen --acp；历史靠 session/load 重放；列表读 ~/.qwen/projects；模型库写进 ~/.qwen/settings.json）
+  glm.mjs          GLM Agent 会话（glm-acp-agent；历史靠 session/load 重放；列表读 ~/.local/state/glm-acp-agent/sessions；模型库走环境变量，一个进程一家供应商）
+  mini.mjs         Mini 会话（纯问答，agent 本体是 mini-agent.mjs；历史靠 session/load 重放；列表读 data/mini-sessions；模型库走环境变量，一个进程一家供应商；超出预算 CLACLAW_MINI_BUDGET 默认 6000 token 时整体丢最早几轮）
+  iflow.mjs        iFlow CLI 会话（iflow --experimental-acp；历史从 ~/.iflow/acp/sessions 的记录转；模型 / 模式由 claclaw 合成成选项；模型库走环境变量，一个进程一个模型）
+  minimax.mjs      MiniMax Code 会话（mcode acp；历史靠 session/load 重放；列表只读它的 SQLite 库；模型库用 mcode provider add 同步）
+  codebuddy.mjs    CodeBuddy Code 会话（codebuddy --acp；列表读 ~/.codebuddy/projects；模型库写进 ~/.codebuddy/models.json）
+  qoder.mjs        Qoder CLI 会话（qodercli --acp；列表读 ~/.qoder/projects；模型库写进 ~/.qoder/settings.json 的 customModels）
+  copilot.mjs      GitHub Copilot CLI 会话（copilot --acp；列表读 ~/.copilot/session-state；模型库走 BYOK 环境变量）
+  cclike.mjs       Claude Code 式会话记录（projects/<目录>/<id>.jsonl）的通用读取：CodeBuddy、Qoder 共用
+  acp.mjs          ACP 共用底座：AcpAgent（agent 进程 + JSON-RPC）、AcpRunner（打开的会话：收发、工具卡片、确认、换模型、排队）；上面几个都继承它，只写各自的差异
+  login.mjs        在手机上登录各 Claw：电脑上套伪终端起登录命令，网址 / 一次性代码推到手机（tools/ptywrap.py 是伪终端包装）
+  install.mjs      电脑上一个 Claw 都没有时，帮用户装第一个（DeepSeek）
+src/peer/         协同、群聊、clarelay：
+  relaydev.mjs   内置的 clarelay 电脑端：加入 / 断开 / 移除 / 更新、启动时自动连、停掉单独安装的那份（电脑端代码是第三方库 vendor/clarelay/）
+  vendor.mjs     第三方库：运行时下载到 vendor/<库>/，验发布签名、不降级、按版本目录换（tools/vendor.mjs 命令行）
+  peer.mjs       claclaw 协同：局域网收件服务、配对、请求对方
+  peerrtc.mjs    协同打洞直连（WebRTC DataChannel，不经中继）
+  peerqueue.mjs  协同消息连不上就排队重发、收信去重
+  peerguard.mjs  协同消息触发的那一轮：哪些操作直接放行、哪些要确认
+  peerjudge.mjs  规则标出有风险的操作后，让小模型判断要不要请你确认
+  group.mjs      群聊：成员、@ 解析、带上下文、转发次数、排队重试、镜像
+  devnotify.mjs  推送交给本机的 clarelay 电脑端
+src/              其余：
+  skills.mjs      技能：安装 / 卸载 / 启动时同步，本机令牌和 ~/.claclaw/bin 命令
+  host.mjs        「宿主」页：电脑、资源、网络、各 Claw 状态
+  tts.mjs         电脑合成语音（微软在线语音 / macOS say）
+  auth.mjs        登录
+  modelstore.mjs  模型库（data/models.json）
+  modelpick.mjs   模型库接到各 Claw 的会话里选
+  skins.mjs       会话的头像和网名
+  localfile.mjs   聊天里点文件路径：本机直接打开，别的设备预览
+  video.mjs       收视频 / 文件：存到 data/uploads/，把路径告诉 AI
+  httpbody.mjs    读请求体
+  util.mjs        各模块共用的小工具
+  push.mjs        推送通知（Web Push）
+  passwd.mjs      命令行改登录账号
 skills/           预先准备的技能（index.json 登记；claclaw-peer：协同收发命令）
-host.mjs          「宿主」页：电脑、资源、网络、各 Claw 状态
-tts.mjs           电脑合成语音（微软在线语音 / macOS say）
-auth.mjs          登录
-modelstore.mjs    模型库（data/models.json）
-modelpick.mjs     模型库接到各 Claw 的会话里选
-install.mjs       电脑上一个 Claw 都没有时，帮用户装第一个（DeepSeek）
-skins.mjs         会话的头像和网名
-localfile.mjs     聊天里点文件路径：本机直接打开，别的设备预览
-video.mjs         收视频 / 文件：存到 data/uploads/，把路径告诉 AI
-httpbody.mjs      读请求体
-util.mjs          各模块共用的小工具
-push.mjs          推送通知（Web Push）
-passwd.mjs        命令行改登录账号
 public/           前端（单文件页面 + 登录页 + 主屏幕图标）
 tools/make-icons.py  生成主屏幕图标（python3 + Pillow）
-tools/setup-edge-tts.sh   装 / 升级微软在线语音（在 data/edge-tts 里建 Python 环境；Windows 上用 setup-edge-tts.ps1；不装就用浏览器自带的声音）
+tools/setup-edge-tts.sh  装 / 升级微软在线语音（在 data/edge-tts 里建 Python 环境；Windows 上用 setup-edge-tts.ps1；不装就用浏览器自带的声音）
 tools/edge-tts-helper.py  微软在线语音的常驻合成助手
-probe/            开发时用来核实 SDK 行为的探针脚本
-claude-session-demo.html  最初的纯前端交互演示（预设脚本，不连后端）
+test/             测试（npm test）
 ```

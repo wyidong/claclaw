@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { emptyStore, applyOp, publicView, loadStore, saveStore, revealKey, providerName, displayName, parseModels, fetchModels } from '../modelstore.mjs';
+import { emptyStore, applyOp, publicView, loadStore, saveStore, revealKey, providerName, displayName, parseModels, fetchModels } from '../src/modelstore.mjs';
 
 const KEY = 'sk-test-0123456789abcdefWXYZ';
 const add = (s, b) => applyOp(s, { op: 'provider-save', ...b });

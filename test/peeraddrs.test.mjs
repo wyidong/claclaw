@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-pa-'));
-const { addrKind, parseAddrsHeader, ourAddrs, setOurExtra, peerCall, peerRoute, peerLanUrls, peerRelays, ADDRS_HEADER, DIRECT } = await import('../peer.mjs');
+const { addrKind, parseAddrsHeader, ourAddrs, setOurExtra, peerCall, peerRoute, peerLanUrls, peerRelays, ADDRS_HEADER, DIRECT } = await import('../src/peer/peer.mjs');
 
 test('地址分类', () => {
   assert.equal(addrKind('http://192.168.1.5:8788/claclaw-peer'), 'lan');
@@ -55,14 +55,14 @@ test('按顺序试：局域网不通换 Tailscale；请求带上我们的地址�
 });
 
 test('中继地址：带 #pin= 的和只带 #key= 的（域名 + 正式证书）都认，别的不认', async () => {
-  const { parseRelaysHeader, RELAY_ADDR } = await import('../peer.mjs');
+  const { parseRelaysHeader, RELAY_ADDR } = await import('../src/peer/peer.mjs');
   const a = 'https://1.2.3.4:8790/t/x/claclaw-peer#pin=sha256//abc=&key=k1', b = 'https://relay.example/t/y/claclaw-peer#key=k2';
   assert.deepEqual(parseRelaysHeader(a + ' ' + b + ' https://relay.example/t/z/claclaw-peer http://1.2.3.4/t/x#key=k'), [a, b]);
   assert.ok(RELAY_ADDR.test(b) && !RELAY_ADDR.test('https://relay.example/x#foo=1'));
 });
 
 test('局域网换了 IP：旧 IP 不留作备用，主机名留着', async () => {
-  const { keepLanAlt } = await import('../peer.mjs');
+  const { keepLanAlt } = await import('../src/peer/peer.mjs');
   const A = 'http://192.168.1.27:8799/claclaw-peer', B = 'http://192.168.1.204:8799/claclaw-peer', H = 'http://X.local:8788/claclaw-peer';
   assert.equal(keepLanAlt(A, B, undefined), undefined);
   assert.equal(keepLanAlt(A, B, H), H);

@@ -13,7 +13,7 @@ const py = process.platform === 'win32'
   : path.join(DATA, 'edge-tts', 'venv', 'bin', 'python');
 fs.mkdirSync(path.dirname(py), { recursive: true });
 fs.writeFileSync(py, 'junk', { mode: 0o600 });
-const { ttsVoices, ttsWarm, ttsSynth } = await import('../tts.mjs');
+const { ttsVoices, ttsWarm, ttsSynth } = await import('../src/tts.mjs');
 after(() => fs.rmSync(DATA, { recursive: true, force: true }));
 
 test('微软语音装坏了：预热不崩，列表里没有微软的声音，合成报错而不是抛到进程级', async () => {

@@ -1,7 +1,7 @@
 // Claude 用哪个程序跑：SDK 自带的在就用它；缺了用电脑上的 claude 命令兜底（claudebin.mjs）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sdkBinNames, sdkBinOk, claudeExe } from '../claudebin.mjs';
+import { sdkBinNames, sdkBinOk, claudeExe } from '../src/claws/claudebin.mjs';
 
 test('找自带程序的包名和 SDK 一样：Linux 两种 libc 都试，Windows 带 .exe', () => {
   assert.deepEqual(sdkBinNames('darwin', 'arm64'), ['@anthropic-ai/claude-agent-sdk-darwin-arm64/claude']);

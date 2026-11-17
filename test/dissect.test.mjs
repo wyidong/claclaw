@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { dissectClaudeLines, dissectClaude, dissectDs, dissectKimi, dissectMini, toolBrief, toolKind, userTextOf } from '../dissect.mjs';
+import { dissectClaudeLines, dissectClaude, dissectDs, dissectKimi, dissectMini, toolBrief, toolKind, userTextOf } from '../src/claws/dissect.mjs';
 
 const T0 = Date.parse('2026-10-26T12:00:00Z');
 const iso = (ms) => new Date(T0 + ms).toISOString();

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { peerRisk, bashRisk, sensitiveRoots } from '../peerguard.mjs';
+import { peerRisk, bashRisk, sensitiveRoots } from '../src/peer/peerguard.mjs';
 
 const H = os.homedir();
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-'));

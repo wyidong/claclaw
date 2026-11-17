@@ -33,7 +33,7 @@ if (HAS_ZSTD) {
 }
 
 process.env.DSH_HOME = DSH;
-const { dsSessionList, dsRecordsOf, dsExists } = await import('../dsh.mjs');
+const { dsSessionList, dsRecordsOf, dsExists } = await import('../src/claws/dsh.mjs');
 
 test('0.1 的旧会话能列出来，标题和目录对', { skip: !HAS_ZSTD }, () => {
   const s = dsSessionList().find(x => x.id === 'ds:' + OLD);

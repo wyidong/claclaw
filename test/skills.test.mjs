@@ -8,7 +8,7 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-skills-'));
 // 使用者真实的 ~/.agents/skills、~/.claude/skills，把人家的技能目录弄脏。两个都要设。
 process.env.HOME = home;
 process.env.USERPROFILE = home;
-const skills = await import('../skills.mjs');
+const skills = await import('../src/skills.mjs');
 
 test('技能装到共用目录、标记为 claclaw 装的，卸载只删自己装的', () => {
   assert.equal(skills.stateAt('claclaw-peer', 'agents'), 'none');

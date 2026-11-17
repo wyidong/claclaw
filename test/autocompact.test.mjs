@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AUTO_COMPACT, autoCompactDue, autoCompactRun } from '../autocompact.mjs';
+import { AUTO_COMPACT, autoCompactDue, autoCompactRun } from '../src/claws/autocompact.mjs';
 
 test('自动压缩：从不 / 到线才压 / 压过没降不反复压', () => {
   const sent = [], ev = [];

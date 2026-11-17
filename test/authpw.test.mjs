@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-authpw-'));
-const { setupMaster, setLastSet, verifyPassword, anyNoPassword } = await import('../auth.mjs');
+const { setupMaster, setLastSet, verifyPassword, anyNoPassword } = await import('../src/auth.mjs');
 
 test('verifyPassword', () => {
   setupMaster('boss', 'pw-master');

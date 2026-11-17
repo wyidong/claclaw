@@ -8,14 +8,14 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { SPECS, codexLoginCmd } = await import('../login.mjs');
-const { qdBin } = await import('../qoder.mjs');
-const { mmBin } = await import('../minimax.mjs');
-const { kmBin } = await import('../kimi.mjs');
-const { cbBin } = await import('../codebuddy.mjs');
-const { cxBin } = await import('../codex.mjs');
-const { cpBin } = await import('../copilot.mjs');
-const { glBin } = await import('../glm.mjs');
+const { SPECS, codexLoginCmd } = await import('../src/claws/login.mjs');
+const { qdBin } = await import('../src/claws/qoder.mjs');
+const { mmBin } = await import('../src/claws/minimax.mjs');
+const { kmBin } = await import('../src/claws/kimi.mjs');
+const { cbBin } = await import('../src/claws/codebuddy.mjs');
+const { cxBin } = await import('../src/claws/codex.mjs');
+const { cpBin } = await import('../src/claws/copilot.mjs');
+const { glBin } = await import('../src/claws/glm.mjs');
 
 test('Codex 登录：有 codex-acp 用它带的 Codex（cli login --device-auth），没有才退回 codex 本体', () => {
   assert.deepEqual(codexLoginCmd('/x/codex-acp', '/x/codex'), ['/x/codex-acp', ['cli', 'login', '--device-auth']]);
@@ -36,7 +36,7 @@ test('qoder / minimax 的程序目录：findBin 第二个参数是目录，装�
   const ext = process.platform === 'win32' ? '.exe' : '';   // Windows 上 findBin 只认带后缀的（PATHEXT）
   const qd = put('.qoder', 'bin', 'qodercli', 'qodercli' + ext);
   const mm = put('.minimax-code', 'bin', 'mcode' + ext);
-  const js = `const [{ qdBin }, { mmBin }] = await Promise.all([import('./qoder.mjs'), import('./minimax.mjs')]); console.log(JSON.stringify([qdBin(), mmBin()]));`;
+  const js = `const [{ qdBin }, { mmBin }] = await Promise.all([import('./src/claws/qoder.mjs'), import('./src/claws/minimax.mjs')]); console.log(JSON.stringify([qdBin(), mmBin()]));`;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', js], {
     cwd: ROOT, encoding: 'utf8',
     env: { ...process.env, HOME: home, USERPROFILE: home, CLACLAW_DATA: fs.mkdtempSync(path.join(os.tmpdir(), 'login-bins-data-')) },

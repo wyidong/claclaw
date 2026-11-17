@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, rtcClose, rtcCloseAll, classifyAddr } from '../peerrtc.mjs';
+import { rtcLib, rtcConfig, rtcConnect, rtcAnswer, rtcOpen, rtcState, rtcClose, rtcCloseAll, classifyAddr } from '../src/peer/peerrtc.mjs';
 
 const lib = await rtcLib();
 

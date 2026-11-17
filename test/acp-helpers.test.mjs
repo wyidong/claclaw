@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'acp-helpers-'));
 process.env.CLACLAW_DATA = path.join(tmp, 'data');   // acp.mjs 引入 auth.mjs 前先指到临时目录
-const { AcpAgent, AcpLoadRunner, fileRows, syncJsonConfig, toTrash, listItem, localNames } = await import('../acp.mjs');
+const { AcpAgent, AcpLoadRunner, fileRows, syncJsonConfig, toTrash, listItem, localNames } = await import('../src/claws/acp.mjs');
 
 const agent = new AcpAgent({ name: 'fake-load', bin: () => null, missing: 'no' });
 class R extends AcpLoadRunner {

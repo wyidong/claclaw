@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
-import { readBody } from '../httpbody.mjs';
+import { readBody } from '../src/httpbody.mjs';
 
 const body = (text) => Readable.from([Buffer.from(text, 'utf8')]);
 

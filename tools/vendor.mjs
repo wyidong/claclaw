@@ -5,9 +5,9 @@
 //                                                           公钥默认用加入 clarelay 时记下的（数据目录 clarelay-release-keys.json，按域名）
 //   node tools/vendor.mjs install <库> --src <本机文件>       从本机文件装（开发用，比如 ../clarelay/dist/clarelay.mjs；不验签，标成「未签名」）
 import path from 'node:path';
-import { LIBS, libInfo, libInstall, libInstallFile, vendorRoot, releaseKeyOk } from '../vendor.mjs';
-import { DATA } from '../auth.mjs';
-import { readJson } from '../util.mjs';
+import { LIBS, libInfo, libInstall, libInstallFile, vendorRoot, releaseKeyOk } from '../src/peer/vendor.mjs';
+import { DATA } from '../src/auth.mjs';
+import { readJson } from '../src/util.mjs';
 
 const [cmd, id, src] = process.argv.slice(2);
 const die = m => { console.error(m); process.exit(1); };

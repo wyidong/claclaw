@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-ttsstream-'));
 process.env.CLACLAW_DATA = DATA;
-const { mp3Dur, ttsJob, ttsJobInfo, ttsStream } = await import('../tts.mjs');
+const { mp3Dur, ttsJob, ttsJobInfo, ttsStream } = await import('../src/tts.mjs');
 after(() => fs.rmSync(DATA, { recursive: true, force: true }));
 
 // MPEG2 Layer III、24kHz、32kbps：一帧 96 字节、576 个采样 = 0.024 秒

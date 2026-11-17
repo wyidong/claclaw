@@ -22,7 +22,7 @@ test('已读报丢了 → 5 秒后全量同步，没成 15 秒后再来，成了
   const f = path.join(dir, 'local.json');
   fs.writeFileSync(f, JSON.stringify({ url: 'http://127.0.0.1:' + srv.address().port, token: 't' }));
   process.env.CLACLAW_CLARELAY_LOCAL = f;
-  const { startDevNotify, devRead } = await import('../devnotify.mjs?' + Date.now());
+  const { startDevNotify, devRead } = await import('../src/peer/devnotify.mjs?' + Date.now());
   const logs = [], syncs = [];
   let syncOk = false;
   const until = async (fn, ms = 3000) => { const t = Date.now(); while (!fn()) { if (Date.now() - t > ms) throw new Error('等不到'); await new Promise(r => setImmediate(r)); } };

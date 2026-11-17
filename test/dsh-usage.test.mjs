@@ -40,7 +40,7 @@ if (HAS_ZSTD) {
 }
 
 process.env.DSH_HOME = DSH;
-const { dsUsage, DsRunner } = await import('../dsh.mjs');
+const { dsUsage, DsRunner } = await import('../src/claws/dsh.mjs');
 
 test('累计四个 provider 桶，并按消息时间和模型估算 CNY', { skip: !HAS_ZSTD }, () => {
   const u = dsUsage('ds:' + SID);

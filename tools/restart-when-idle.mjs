@@ -46,7 +46,7 @@ process.on('exit', cleanup);
 
 const log = s => fs.appendFileSync(LOG, s + '\n');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const { issueToken, revokeToken } = await import(pathToFileURL(path.join(ROOT, 'auth.mjs')).href);
+const { issueToken, revokeToken } = await import(pathToFileURL(path.join(ROOT, 'src', 'auth.mjs')).href);
 async function withToken(via, fn) {
   const token = issueToken(via, '127.0.0.1');
   try { return await fn({ cookie: 'claclaw_sid=' + token, origin: BASE }); } finally { revokeToken(token); }

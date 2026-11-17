@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_STEPS, RETRY_EVERY, BUSY_RETRY, BUSY_MAX, BUSY_LATER } from '../peerqueue.mjs';
+import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_STEPS, RETRY_EVERY, BUSY_RETRY, BUSY_MAX, BUSY_LATER } from '../src/peer/peerqueue.mjs';
 
 test('发送结果归类：只有连不上才排队，对方明确拒绝的不重试', () => {
   assert.equal(classify({ ok: true, status: 200 }), 'ok');

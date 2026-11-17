@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-cp-'));
-const { callPeer } = await import('../peer.mjs');
+const { callPeer } = await import('../src/peer/peer.mjs');
 
 function serve(handler) {
   return new Promise(r => { const s = http.createServer(handler); s.listen(0, '127.0.0.1', () => r(s)); });

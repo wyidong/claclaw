@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-pp-'));
-const { plainAddrOk, callPeer, peerLanUrls, peerCall, peerRoute, chanList, noteChan, forgetPeer } = await import('../peer.mjs');
+const { plainAddrOk, callPeer, peerLanUrls, peerCall, peerRoute, chanList, noteChan, forgetPeer } = await import('../src/peer/peer.mjs');
 
 test('哪些地址能走明文 http', () => {
   for (const a of ['10.1.2.3', '172.16.0.1', '172.31.255.1', '192.168.1.5', '127.0.0.1', '169.254.1.1', '::1', 'fe80::1', 'fd00::1', 'fc00::1', '::ffff:192.168.1.5']) assert.equal(plainAddrOk(a, false), true, a);

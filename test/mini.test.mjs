@@ -8,8 +8,8 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-data-'));   // mini.mjs 引入 auth.mjs 前先指到临时目录
-const { pickRoute, statsLine, baseOf } = await import('../mini.mjs');
-const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'mini-agent.mjs');
+const { pickRoute, statsLine, baseOf } = await import('../src/claws/mini.mjs');
+const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'claws', 'mini-agent.mjs');
 
 const P = (id, url, models = ['m1']) => ({ id, name: id, endpoints: { openai: url }, key: 'k', models: models.map(x => ({ id: x })) });
 const store = { providers: [P('deepseek', 'https://api.deepseek.com'), P('ollama', 'http://127.0.0.1:11434/v1', ['q1', 'q2']), P('anthropic-only', 'x')] };

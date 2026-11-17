@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-pair-'));
-const { notePairFail, pairHoldState, clearPairFails, addPending, approvePending, getPending, dropPending, PAIR_WAITS, PAIR_TTL } = await import('../peer.mjs');
+const { notePairFail, pairHoldState, clearPairFails, addPending, approvePending, getPending, dropPending, PAIR_WAITS, PAIR_TTL } = await import('../src/peer/peer.mjs');
 
 test('输错冷却逐级变长，冷却中只有输错的一方显示配对中，结束后告诉它失败', () => {
   clearPairFails();

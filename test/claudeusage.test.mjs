@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { makeClaudeUsage } from '../claudeusage.mjs';
+import { makeClaudeUsage } from '../src/claws/claudeusage.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cu-'));
 

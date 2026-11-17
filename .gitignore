@@ -11,3 +11,4 @@ claude-web-handoff.md
 
 # 图标方案草图（python3 tools/icon-concepts.py 可重新生成）
 public/icons/concept-*.png
+.idea/

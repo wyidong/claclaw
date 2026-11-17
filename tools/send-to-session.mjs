@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import { WebSocket } from 'ws';
 import { listSessions } from '@anthropic-ai/claude-agent-sdk';
-import { issueToken, revokeToken } from '../auth.mjs';
+import { issueToken, revokeToken } from '../src/auth.mjs';
 
 const [idArg, file, ...rest] = process.argv.slice(2);
 const wait = rest.includes('--wait');

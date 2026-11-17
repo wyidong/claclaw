@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-volc-'));
 process.env.CLACLAW_DATA = DATA;
-const { volcSay, volcSetKey, volcInfo, ttsVoices, ttsSynth, ttsCachePrune, TTS_CACHE_DAYS, VOLC_TONE } = await import('../tts.mjs');
+const { volcSay, volcSetKey, volcInfo, ttsVoices, ttsSynth, ttsCachePrune, TTS_CACHE_DAYS, VOLC_TONE } = await import('../src/tts.mjs');
 const realFetch = globalThis.fetch;
 after(() => { globalThis.fetch = realFetch; fs.rmSync(DATA, { recursive: true, force: true }); });
 const KEY = 'k-1234567890-abcd';

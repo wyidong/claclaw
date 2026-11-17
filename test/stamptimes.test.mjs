@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stampTimes } from '../acp.mjs';
+import { stampTimes } from '../src/claws/acp.mjs';
 
 test('stampTimes：用户按文字对齐，回复取这一轮最后一条回复的时间', () => {
   const items = [

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { peerRisk, bashRisk, sensitiveRoots, peerInstructed, peerIntent, destructive } from '../peerguard.mjs';
+import { peerRisk, bashRisk, sensitiveRoots, peerInstructed, peerIntent, destructive } from '../src/peer/peerguard.mjs';
 
 const H = os.homedir(), proj = path.join(H, 'w', 'proj'), data = path.join(proj, 'data');
 const roots = sensitiveRoots(data);

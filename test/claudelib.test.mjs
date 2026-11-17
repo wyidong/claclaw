@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLibPick, claudeLibEnv, claudeLibProviders, noProxyAdd } from '../modelpick.mjs';
+import { parseLibPick, claudeLibEnv, claudeLibProviders, noProxyAdd } from '../src/modelpick.mjs';
 
 test('parseLibPick：lib:<Key id>/<模型>', () => {
   assert.deepEqual(parseLibPick('lib:deepseek/deepseek-v4-pro'), { provider: 'deepseek', model: 'deepseek-v4-pro' });

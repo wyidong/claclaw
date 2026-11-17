@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { cleanUserPath, findUserPath, openArgs, previewType } from '../localfile.mjs';
+import { cleanUserPath, findUserPath, openArgs, previewType } from '../src/localfile.mjs';
 
 const HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-lf-')));
 const WS = path.join(HOME, 'ws');                       // 会话开在上级目录

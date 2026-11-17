@@ -23,7 +23,7 @@ if (HAS_ZSTD) {
 
 process.env.DSH_HOME = DSH;
 process.env.CLACLAW_DATA = path.join(DSH, 'data');   // 别把测试备份写进真实 data/trash
-const { dsRename, dsSessionList, dsSupported, dsLockAvailable, dsRunners } = await import('../dsh.mjs');
+const { dsRename, dsSessionList, dsSupported, dsLockAvailable, dsRunners } = await import('../src/claws/dsh.mjs');
 if (HAS_ZSTD) lockOk = await dsLockAvailable();
 const skip = !HAS_ZSTD || !lockOk;
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { isGroupId, toWire, fromWire, memberNames, parseMentions, composeDelivery, Groups } from '../group.mjs';
+import { isGroupId, toWire, fromWire, memberNames, parseMentions, composeDelivery, Groups } from '../src/peer/group.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'grp-'));
 const flush = () => new Promise(r => setTimeout(r, 5));

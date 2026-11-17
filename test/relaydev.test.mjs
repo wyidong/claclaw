@@ -9,7 +9,7 @@ import { EventEmitter } from 'node:events';
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'rd-'));
 process.env.CLACLAW_DATA = DATA;
 delete process.env.CLACLAW_CLARELAY_STATE;
-const { makeRelayDev, relayStatePath } = await import('../relaydev.mjs');
+const { makeRelayDev, relayStatePath } = await import('../src/peer/relaydev.mjs');
 const STATE = path.join(DATA, 'clarelay-device.json');
 
 function harness(off0 = false) {
@@ -81,7 +81,7 @@ test('有身份、没断开：启动时自动连', async () => {
 
 test('devnotify：内置时直接调电脑端，不走本机接口', async () => {
   process.env.CLACLAW_CLARELAY_LOCAL = path.join(DATA, 'none.local.json');
-  const dn = await import('../devnotify.mjs');
+  const dn = await import('../src/peer/devnotify.mjs');
   assert.equal(dn.devConfigured(), false);
   const got = [];
   const d = Object.assign(new EventEmitter(), { online: true, push: true, status: 'active', url: 'https://x', shellUrl: 'https://s', name: 'mac', id: 'd1',
@@ -103,7 +103,7 @@ test('devnotify：内置时直接调电脑端，不走本机接口', async () =>
 });
 
 test('邀请码里的发布公钥：加入成功才记下（按域名），移除时删掉；格式不对的当没有', async () => {
-  const { inviteInfo } = await import('../relaydev.mjs');
+  const { inviteInfo } = await import('../src/peer/relaydev.mjs');
   const crypto = await import('node:crypto');
   const KEY = crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
   const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');

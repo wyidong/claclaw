@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SPECS, loginInfo, tailOf } from '../login.mjs';
+import { SPECS, loginInfo, tailOf } from '../src/claws/login.mjs';
 
 test('登录规格：每个都有名字、说明，要么能起命令要么直接写文件；loginInfo 字段齐全', () => {
   for (const [k, s] of Object.entries(SPECS)) {
@@ -23,6 +23,6 @@ test('tailOf：终端界面重画连成一行的几帧按转圈字符切开、�
 });
 
 test('Copilot 登录用设备码（默认的浏览器回调只能在电脑上用）', async () => {
-  const { SPECS } = await import('../login.mjs');
+  const { SPECS } = await import('../src/claws/login.mjs');
   assert.ok(SPECS.copilot && /--device-code/.test(String(SPECS.copilot.cmd)), 'Copilot 要用设备码登录');
 });

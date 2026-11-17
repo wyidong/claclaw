@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { storeMatch, opencodeInject, splitGroups, hostOf, kimiInject, kimiConfigMerge, qwenInject, qwenSettingsMerge } from '../modelpick.mjs';
-import * as mp from '../modelpick.mjs';
+import { storeMatch, opencodeInject, splitGroups, hostOf, kimiInject, kimiConfigMerge, qwenInject, qwenSettingsMerge } from '../src/modelpick.mjs';
+import * as mp from '../src/modelpick.mjs';
 
 const store = { version: 1, providers: [
   { id: 'deepseek', name: 'DeepSeek', endpoints: { anthropic: 'https://api.deepseek.com/anthropic', openai: 'https://api.deepseek.com' }, key: 'sk-ds-1234',
