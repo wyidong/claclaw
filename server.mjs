@@ -2548,6 +2548,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/setup' && req.method === 'POST') return handleSetup(req, res);
     if (url.pathname === '/api/login' && req.method === 'POST') return handleLogin(req, res);
     if (url.pathname === '/api/logout' && req.method === 'POST') {
+      if (!sameOrigin(req)) return sendJson(res, 403, { error: 'bad origin' });   // 别的网站不能替你登出
       revokeToken(cookieToken(req));
       return sendJson(res, 200, { ok: true }, { 'set-cookie': loginCookie('', req, 0) });
     }
@@ -3176,11 +3177,13 @@ const handler = async (req, res) => {
       return;
     }
     res.writeHead(404).end('not found');
-  } catch (e) {
-    log('http error', e?.message);
-    res.writeHead(500).end('error');
-  }
+  } catch (e) { httpError(res, e); }
 };
+// 各个 handleX 是 async 且以 `return handleX(...)` 调用，抛错不会落进上面的 catch（没 await），这里兜住，免得整个进程退出
+function httpError(res, e) {
+  log('http error', e?.message);
+  try { if (!res.headersSent) res.writeHead(500); res.end('error'); } catch {}
+}
 
 // 页面（近 600KB）和样式（近 200KB）：压缩后发，带 ETag——没改过手机就用自己存的（304），改了马上拿新的。
 // 压缩结果按 ETag 记一份（每个地址一份），同一版内容只压一次
@@ -3379,8 +3382,8 @@ wss.on('connection', (ws, req) => {
         r.subscribe(ws);
         log('new ' + c.logName + ' session', r.sid, 'in', cwd);
         newSkin(r.id);
-        return send(acpNewOpened(c, r, cwd));
-        for (const n of notes) r.emit({ t: 'sys', text: n });   // FIXME 到不了（上一行已 return）：模型 / 推理强度没设上的提示从来没发出去过
+        send(acpNewOpened(c, r, cwd));
+        for (const n of notes) r.emit({ t: 'sys', text: n });   // 模型 / 推理强度没设上：会话打开后提示
         return;
       }
       if (m.t === 'session.new') {
@@ -3690,7 +3693,7 @@ skills.syncInstalled(log);
 // （2026-10 出过：一个这样的进程活了一天，协同消息全被它吞了，别的会话被它判成「在终端里用」拒收）。
 // 其他地址被占：多半是同时启动的另一个刚退出、还没放开，过几秒再试
 for (const host of HOSTS) {
-  const srv = http.createServer(handler);
+  const srv = http.createServer((req, res) => handler(req, res).catch(e => httpError(res, e)));
   let tries = 0;
   srv.on('upgrade', onUpgrade);
   srv.on('error', e => {
