@@ -2991,8 +2991,10 @@ const handler = async (req, res) => {
     // manifest 由浏览器不带 cookie 去取，必须免登录
     // Service Worker 脚本：浏览器更新它时不一定带 cookie，免登录（里面没有任何敏感内容）
     if (url.pathname === '/sw.js') {
+      // 没加入 clarelay：去掉引它 sw.js 的那行（加入 / 移除后内容变了，浏览器会自动换新的 service worker）
+      const sw = fs.readFileSync(path.join(ROOT, 'public', 'sw.js'), 'utf8');
       res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-cache' });
-      return fs.createReadStream(path.join(ROOT, 'public', 'sw.js')).pipe(res);
+      return res.end(relayDev.info().joined ? sw : sw.replace(/^try \{ importScripts\('\/_clarelay\/sw\.js'\); \} catch \(e\) \{\}\n/m, ''));
     }
     if (url.pathname === '/manifest.webmanifest') {
       res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' });
@@ -3029,7 +3031,9 @@ const handler = async (req, res) => {
         ' · ' + pad(mt.getMonth() + 1) + '-' + pad(mt.getDate()) + ' ' + pad(mt.getHours()) + ':' + pad(mt.getMinutes());
       if (!setUp && isFirstDev(req)) res.setHeader('set-cookie', devCookie(devCookieVal(req), req));   // 第一台设备：每次打开续期
       const prefs = JSON.stringify(clientPrefs()).replace(/</g, '\\u003c').replace(/\u2028|\u2029/g, c => '\\u' + c.charCodeAt(0).toString(16));
-      return sendPage(req, res, html.replace('__PAGE_VERSION__', ver).replace('__CSS_VER__', css.ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
+      // clarelay 是可选的第三方网络渠道：没加入（没填设备邀请码）就不在页面里引它的直连脚本，连 404 请求都不发
+      const page = relayDev.info().joined ? html : html.replace(/<script src="\/_clarelay\/rtc\.js"><\/script>[^\n]*\n/, '');
+      return sendPage(req, res, page.replace('__PAGE_VERSION__', ver).replace('__CSS_VER__', css.ver).replace('/*__CLIENT_PREFS__*/null', () => prefs));
     }
     if (url.pathname === '/api/upload/file') {
       const f = videoFile(UPLOADS, url.searchParams.get('id'));
