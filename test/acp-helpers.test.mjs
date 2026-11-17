@@ -76,7 +76,7 @@ test('syncJsonConfig：没变不写、读不懂不动、写出来 600', () => {
   assert.ok(!fs.existsSync(f));   // 没有文件、模型库也空：不建
   syncJsonConfig(f, { tag: 'x', count: 1, merge, log });
   assert.equal(fs.readFileSync(f, 'utf8'), '{\n  "ours": [\n    1\n  ]\n}\n');
-  assert.equal(fs.statSync(f).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(f).mode & 0o777, 0o600);   // Windows 没有 Unix 权限位
   const m = fs.statSync(f).mtimeMs;
   syncJsonConfig(f, { tag: 'x', count: 1, merge, log });
   assert.equal(fs.statSync(f).mtimeMs, m);

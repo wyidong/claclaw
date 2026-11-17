@@ -20,8 +20,8 @@ test('自带程序在不在：解析得到且文件存在才算；解析报错�
 
 test('兜底：自带的在 → 不传路径；缺了有 claude 命令 → 传它；都没有 → 不传；Windows 只认 .exe', () => {
   assert.deepEqual(claudeExe({ ok: () => true, find: () => '/usr/local/bin/claude' }), {});
-  assert.deepEqual(claudeExe({ ok: () => false, find: () => '/usr/local/bin/claude' }), { pathToClaudeCodeExecutable: '/usr/local/bin/claude' });
-  assert.deepEqual(claudeExe({ ok: () => false, find: () => null }), {});
+  assert.deepEqual(claudeExe({ ok: () => false, find: () => '/usr/local/bin/claude', platform: 'darwin' }), { pathToClaudeCodeExecutable: '/usr/local/bin/claude' });
+  assert.deepEqual(claudeExe({ ok: () => false, find: () => null, platform: 'darwin' }), {});
   assert.deepEqual(claudeExe({ ok: () => false, find: () => 'C:\\npm\\claude.cmd', platform: 'win32' }), {});
   assert.deepEqual(claudeExe({ ok: () => false, find: () => 'C:\\Users\\a\\.local\\bin\\claude.exe', platform: 'win32' }), { pathToClaudeCodeExecutable: 'C:\\Users\\a\\.local\\bin\\claude.exe' });
 });

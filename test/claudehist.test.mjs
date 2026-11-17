@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-hist-')));
-process.env.HOME = HOME;   // 模块加载时取家目录：先改好再 import
+process.env.HOME = process.env.USERPROFILE = HOME;   // 模块加载时取家目录：先改好再 import（Windows 的 os.homedir() 看 USERPROFILE）
 const h = await import('../src/claws/claudehist.mjs');
 test.after(() => fs.rmSync(HOME, { recursive: true, force: true }));
 
