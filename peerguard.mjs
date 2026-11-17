@@ -439,6 +439,20 @@ export function readsEnv(cmd) {
   return false;
 }
 
+// 「本轮同类都允许」按什么算同类：每段命令的命令名（git / npm 这类再带上子命令，node / python 带上脚本），
+// 复合命令（&& ; | …）按所有段的命令名一起算——允许过 `cd ~ && ls` 不等于允许 `cd x && rm -rf y`，允许过 git commit 不等于允许 git push
+const SUB_CMDS = new Set(['git', 'npm', 'npx', 'pnpm', 'yarn', 'bun', 'deno', 'docker', 'kubectl', 'brew', 'pip', 'pip3', 'cargo', 'go', 'gh', 'make', 'node', 'python', 'python3', 'bash', 'sh', 'zsh']);
+export function bashKey(cmd) {
+  const heads = segments(cmd).map(seg => {
+    const w = words(seg).filter((a, i, all) => !all.slice(0, i + 1).every(x => /^[A-Za-z_][A-Za-z0-9_]*=/.test(x)));   // 去掉开头的 FOO=1
+    const c = String(w[0] || '');
+    if (!SUB_CMDS.has(c.split('/').pop())) return c;
+    // 子命令：第一个不是选项、也不是 -C / -c 这类选项参数的词；npm run x 这类再带上脚本名
+    const args = w.filter((a, i) => i > 0 && !/^-/.test(a) && !/^-[Cc]$|^--(git-dir|work-tree|prefix)$/.test(w[i - 1]));
+    return [c, ...args.slice(0, /^(run|run-script|exec|x)$/.test(args[0] || '') ? 2 : 1)].join(' ');
+  });
+  return 'bash:' + heads.join(' ; ');
+}
 // 工具调用的风险：null = 直接放行；否则返回 { key（「本轮同类都允许」按它记）, reason }
 export function peerRisk(name, input, cwd, roots, opts) {
   input = input || {};
@@ -467,8 +481,8 @@ export function peerRisk(name, input, cwd, roots, opts) {
     if (readsEnv(input.command)) return { key: 'read-sensitive', reason: '读取环境变量（里面有登录令牌等钥匙）' };
     const r = bashRisk(input.command, cwd, roots, opts);
     if (!r) return null;
-    const first = words(String(input.command || '').trim())[0] || '';
-    return { key: 'bash:' + first, reason: r };
+    // 删除 / 强推这类收不回来的：不给「本轮同类都允许」的 key（null），每次都单独确认
+    return { key: destructive(name, input) ? null : bashKey(input.command), reason: r };
   }
   if (name === 'WebFetch' || name === 'WebSearch') return { key: name, reason: '联网（可能把内容带出去）' };
   return { key: name, reason: '用工具 ' + name };
