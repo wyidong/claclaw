@@ -544,6 +544,8 @@ function clawT(id){id=String(id||'');for(var i=0;i<CLAW_T.length;i++)if(id.index
 function clawById(k){for(var i=0;i<CLAW_T.length;i++)if(CLAW_T[i].id===k)return CLAW_T[i];return null}
 function clawOf(id){var c=clawT(id);return c?c.id:'claude'}
 function hk(k){return 'claclaw.'+k}
+function lsPut(k,v){try{if(v)localStorage.setItem(k,v);else localStorage.removeItem(k)}catch(_){}}   // v 为空就删掉
+function lsObj(k){try{return JSON.parse(localStorage.getItem(k)||'{}')||{}}catch(_){return {}}}
 function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(_){return false}}   // 配额满 / 隐私模式会抛错：存不上就算了，别让后面的流程中断
 var DESKTOP=window.matchMedia('(min-width:1000px)');
 // 弹出窗口（电脑上标题栏「弹出」开的独立小窗，地址带 ?s=会话&solo=1）：只显示这一个会话，不记成「上次打开的会话」、刷新还是它
@@ -600,6 +602,10 @@ function confirmTakeover(title,b){
   return confirm('接管「'+title+'」？\n\n'+idleText(b)+'。\n接管会结束'+where(b.entrypoint)+'里这个会话的进程；之后在'+where(b.entrypoint)+'里重新打开它，网页端会自动退出。');
 }
 
+var LOADING='<div class="h-empty">加载中…</div>';   // 宿主页 / 子页还没拿到数据时
+// 协同 / 本机会话发来的消息开头那段【claclaw 协同 · 来自对方：…】；peerFrom 取「来自」后面那串（末尾和开头重复的那节去掉）
+var PEER_HEAD=/^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/;
+function peerFrom(m){var pf=m[2].split(' · ');if(pf.length>2&&pf[0]===pf[pf.length-1])pf.pop();return pf.join(' · ')}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
 // ---------- Markdown：自己写的小渲染器，先转义再加标签，回复里的内容没法往页面注入 HTML ----------
@@ -692,7 +698,6 @@ function mdInline(s){
   // 像文件路径的（class fp）：点代码打开文件，复制交给后面的图标
   s=s.replace(/`([^`\n]+)`/g,function(_,c){var fp=isPathLike(c);return put('<code'+(fp?' class="fp"':'')+'>'+c+'</code>'+(fp||c.trim().length>=6&&/[0-9\/._:@=-]/.test(c)?COPY_BTN:''))});
   s=mdTags(s,put);
-  // 图片 ![说明](地址)：只认 http(s) 和本站路径（/icons/... 这类，不认 // 开头的）
   // 图片 ![说明](地址)：只自动加载本站（/ 开头）的；外链的渲染成普通链接、显示地址，点了才打开
   // （AI 回复里的图片可能带着会话数据，自动加载等于把它送出去）
   s=s.replace(/!\[([^\]\n]*)\]\(((?:https?:\/\/|\/(?!\/))[^\s)]+)\)/g,function(_,t,u){
@@ -871,9 +876,9 @@ function addUser(t,images,vid){
     if(!t&&vn){   // 只有视频：找前面那条等着它的文字消息，填进去，不另起一条
       var hosts=feed.querySelectorAll('.msg.user[data-vpend]'),host=null;
       for(var hi=hosts.length-1;hi>=0;hi--)if(!hosts[hi].dataset.vdone&&hosts[hi].dataset.vpend===vn[1]){host=hosts[hi];break}
-      if(host){fillVideo(host,thumb,lab);var ht=host.querySelector('.uvid');if(ht&&idm){ht.dataset.vid=idm[1];ht.dataset.vname=vn[1];if(isFile&&AUDIO_EXT.test(vn[1])&&!ht.querySelector('audio'))ht.insertBefore(audioEl('/api/upload/file?id='+encodeURIComponent(idm[1])),ht.querySelector('.uvid-b'))}return host}
+      if(host){fillVideo(host,thumb,lab);var ht=host.querySelector('.uvid');if(ht&&idm){ht.dataset.vid=idm[1];ht.dataset.vname=vn[1];if(isFile&&AUDIO_EXT.test(vn[1])&&!ht.querySelector('audio'))ht.insertBefore(audioEl(upUrl(idm[1])),ht.querySelector('.uvid-b'))}return host}
     }
-    e.appendChild(isFile?fileTile(vn?vn[1]:'',lab,idm?'/api/upload/file?id='+encodeURIComponent(idm[1]):''):videoTile(thumb,lab,false));e.dataset.vdone='1';if(idm){var nt=e.querySelector('.uvid');nt.dataset.vid=idm[1];nt.dataset.vname=vn?vn[1]:''}
+    e.appendChild(isFile?fileTile(vn?vn[1]:'',lab,idm?upUrl(idm[1]):''):videoTile(thumb,lab,false));e.dataset.vdone='1';if(idm){var nt=e.querySelector('.uvid');nt.dataset.vid=idm[1];nt.dataset.vname=vn?vn[1]:''}
   }else if(vid){e.appendChild(vid.kind==='file'?fileTile(vid.name,vid.label||fmtSize(vid.size||0),vid.url||''):videoTile(vid.url,vid.label||'▶ 视频',true));if(vid.pend)e.dataset.vpend=vid.pend}
   else if(pend){e.appendChild(pkind==='file'?fileTile(pend,'文件'):videoTile('','▶ 视频',false));e.dataset.vpend=pend}
   e.vbadge=e.querySelector('.uvid-b');
@@ -889,8 +894,8 @@ function addUser(t,images,vid){
     e.appendChild(g);
   }
   // 协同 / 本机会话发来的消息：开头给 AI 看的说明不显示，只留一个「协同 · 来源」小标签
-  var pm2=t&&/^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t);
-  if(pm2){var pt=document.createElement('div');pt.className='upeer';var pf=pm2[2].split(' · ');if(pf.length>2&&pf[0]===pf[pf.length-1])pf.pop();pt.textContent=(pm2[1]==='协同'?'协同 · ':'本机 · ')+pf.join(' · ');e.appendChild(pt);t=t.slice(pm2[0].length)}
+  var pm2=t&&PEER_HEAD.exec(t);
+  if(pm2){var pt=document.createElement('div');pt.className='upeer';pt.textContent=pm2[1]+' · '+peerFrom(pm2);e.appendChild(pt);t=t.slice(pm2[0].length)}
   if(t){var tx=document.createElement('div');tx.className='ut';tx.textContent=t;e.appendChild(tx)}
   feed.appendChild(e);scrollDown(true);
   return e;
@@ -905,6 +910,7 @@ function vidOpen(){
   return vidDb;
 }
 function vidStore(mode,fn){return vidOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('v',mode),st=tx.objectStore('v'),out=fn(st);tx.oncomplete=function(){res(out&&out.result!==undefined?out.result:out)};tx.onerror=function(){rej(tx.error)}})})}
+function vidGet(k){return vidStore('readonly',function(st){return st.get(k)})}
 function vidKeepDays(){var d=+localStorage.getItem('claclaw.vidKeep');return d>0?d:60}
 function vidCapMB(){var c=+localStorage.getItem('claclaw.vidCap');return c>0?c:2048}
 function vidSave(id,file,name,kind){
@@ -926,9 +932,9 @@ function vidUsage(){
 function playVideo(id){
   var pl=$('#vplayer'),v=pl.querySelector('video');
   var go=function(src,local){v.src=src;v.dataset.local=local?src:'';pl.classList.add('on');var pp=v.play();if(pp&&pp.catch)pp.catch(function(){})};
-  vidStore('readonly',function(st){return st.get(id)}).then(function(rec){
-    if(rec&&rec.blob)go(URL.createObjectURL(rec.blob),true);else go('/api/upload/file?id='+encodeURIComponent(id),false);
-  }).catch(function(){go('/api/upload/file?id='+encodeURIComponent(id),false)});
+  vidGet(id).then(function(rec){
+    if(rec&&rec.blob)go(URL.createObjectURL(rec.blob),true);else go(upUrl(id),false);
+  }).catch(function(){go(upUrl(id),false)});
   v.onerror=function(){if(!v.dataset.local&&pl.classList.contains('on')){closeVideo();addSys('这个视频本机和电脑上都没有了（超过了保留时间）')}};
 }
 function closeVideo(){var pl=$('#vplayer'),v=pl.querySelector('video');pl.classList.remove('on');try{v.pause()}catch(_){}if(v.dataset.local)URL.revokeObjectURL(v.dataset.local);v.removeAttribute('src');v.load()}
@@ -936,28 +942,28 @@ document.getElementById('vplayer').querySelector('button').addEventListener('cli
 feed.addEventListener('click',function(e){var t=e.target.closest&&e.target.closest('.uvid');
   if(t&&t.classList.contains('ufile')){var ts=tileSrc(t);if(ts&&(e.target.closest('.f-dl')||!fvCan(ts.name))){e.preventDefault();if(e.target.closest('.f-dl'))dlFile(ts.src,ts.name,0,e.target.closest('.f-dl'));return}}   // 看不了的文件：点块本身不打开，只有下载按钮
   if(t&&t.dataset.fpath){e.preventDefault();openLocalFile(t.dataset.fpath,t.dataset.fname);return}if(t&&!t.dataset.vid&&t.dataset.gurl){e.preventDefault();if(t.dataset.gname)openGroupFile(t.dataset.gurl,t.dataset.gname);else window.open(t.dataset.gurl,'_blank');return}if(t&&t.dataset.vid){e.preventDefault();if(/^f/.test(t.dataset.vid))openFile(t.dataset.vid,t.dataset.vname||'');else playVideo(t.dataset.vid)}});
-// 文件：本机有就直接打开（看不了的类型浏览器会给下载 / 分享），没有再从电脑取
 // 这里看得了的文件（点开在页面里预览）：文本、图片、矢量图、PDF；别的（压缩包、文档、音视频…）点下载按钮直接存本机，不打开预览页
 var FV_PREVIEW=/\.(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env|png|jpe?g|gif|webp|heic|svg|pdf)$/i;
 function fvCan(name){return FV_PREVIEW.test(name||'')}
 // 取文件内容：src = {id}（发过 / 发回来的文件，本机缓存优先）| {path}（电脑上的文件）| {url}（群附件）
 // size：知道大小的，缓存或下回来的大小对不上（直连中途断了只收到一半）就不用、不存，重新从电脑取
+function upUrl(id){return '/api/upload/file?id='+encodeURIComponent(id)}   // 发过的附件在电脑上的原文件
 function fileBlob(src,name,size){
   var ok=function(b){return b&&(!(+size)||b.size===+size)};
   if(src.path)return postJson('/api/fs/read',{path:src.path}).then(function(r){return r.ok?r.blob():httpErr(r)});
   if(src.url)return fetch(src.url).then(function(r){if(!r.ok)return httpErr(r);return r.blob()});
   var id=src.id,net=function(){
-    return fetch('/api/upload/file?id='+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error(r.status===404?'电脑上也没有了（超过了保留时间）':'HTTP '+r.status);return r.blob()})
+    return fetch(upUrl(id)).then(function(r){if(!r.ok)throw new Error(r.status===404?'电脑上也没有了（超过了保留时间）':'HTTP '+r.status);return r.blob()})
       .then(function(b){if(!ok(b))throw new Error('没收全（'+fmtSize(b.size)+' / '+fmtSize(+size)+'），网络断过，再试一次');vidSave(id,b,name,'file');return b});
   };
   if(!window.indexedDB)return net();
-  return vidStore('readonly',function(st){return st.get(id)}).then(function(rec){return rec&&ok(rec.blob)?rec.blob:net()},net);
+  return vidGet(id).then(function(rec){return rec&&ok(rec.blob)?rec.blob:net()},net);
 }
 // 存到本机：手机弹系统分享面板（存储到「文件」、用别的 App 打开），分享不了退回下载；电脑直接下到「下载」
 function saveBlob(blob,name){
   var f;try{f=new File([blob],name,{type:blob.type||'application/octet-stream'})}catch(_){f=null}
-  var dl=function(){var u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000);if(!fvTouch)toast('已保存到「下载」')};
-  if(fvTouch&&f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(e){if(!e||e.name!=='AbortError')dl()});return}   // 分享失败（不是用户取消）也退回下载
+  var dl=function(){var u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000);if(!TOUCH)toast('已保存到「下载」')};
+  if(TOUCH&&f&&navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f]}).catch(function(e){if(!e||e.name!=='AbortError')dl()});return}   // 分享失败（不是用户取消）也退回下载
   dl();
 }
 function dlFile(src,name,size,btn){
@@ -976,41 +982,39 @@ function tileSrc(t){
 // 群里的文件：在页面里预览，右上角「分享 / 保存」（电脑上是下载）——不再直接交给浏览器打开（那样存不下来）
 function openGroupFile(url,name){
   showFile(null,name,'加载中…');
-  fetch(url).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error(j.error||'HTTP '+r.status)},function(){throw new Error('HTTP '+r.status)});return r.blob()})
-    .then(function(b){showFile(b,name)}).catch(function(e){showFile(null,name,'打不开：'+e.message)});
+  fileBlob({url:url}).then(function(b){showFile(b,name)}).catch(function(e){showFile(null,name,'打不开：'+e.message)});
 }
 // 电脑上的文件（绝对路径）：读回来在页面里预览，右上角保存
-function openLocalFile(p,name){
+function openLocalFile(p,name){fvLoad(name,fileBlob({path:p}))}
+function openFile(id,name,size){fvLoad(name,fileBlob({id:id},name,size),upUrl(id))}
+// 先开着预览框写「加载中…」，取到了再放进去（这期间关掉或换了文件就不管了）
+function fvLoad(name,p,src){
   showFile(null,name,'加载中…');
-  postJson('/api/fs/read',{path:p}).then(function(r){return r.ok?r.blob():httpErr(r)})
-    .then(function(b){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(b,name)})
-    .catch(function(e){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(null,name,'打不开：'+e.message)});
+  var still=function(){return $('#fview').classList.contains('on')&&fvName===name&&!fvBlob};
+  p.then(function(b){if(still())showFile(b,name,'',src)}).catch(function(e){if(still())showFile(null,name,'打不开：'+e.message)});
 }
-function openFile(id,name,size){
-  showFile(null,name,'加载中…');
-  fileBlob({id:id},name,size).then(function(b){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(b,name,'','/api/upload/file?id='+encodeURIComponent(id))})
-    .catch(function(e){if($('#fview').classList.contains('on')&&fvName===name&&!fvBlob)showFile(null,name,'打不开：'+e.message)});
-}
-// 点聊天里的文件路径：电脑上直接开的（本机网页）由服务器用默认 App 打开；别的设备把文件读回来，在页面里预览
+// 浮层（登录、头像、群设置等）：第一次用时建出来挂在 body 上，点浮层外面的暗处关掉
+function pane(id,onBg){var p=$('#'+id);if(!p){p=document.createElement('div');p.id=id;document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p){if(onBg)onBg();else p.classList.remove('on')}})}return p}
 function showDlg(d,on){d.classList.toggle('on',on);d.setAttribute('aria-hidden',String(!on))}   // 弹窗 / 面板开关
+function dlgWire(d,x,close){x.addEventListener('click',close);d.addEventListener('click',function(e){if(e.target===d)close()})}   // 弹窗：点取消、点弹窗外面都关
 function needLogin(r){if(r.status===401){location.replace('/login');throw new Error('需要登录')}return r}   // 登录过期：回登录页
-function postJson(u,body){return fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})}
+function getJson(u,o){return fetch(u,o).then(function(r){return r.json()})}
+function json404(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}   // 接口 404：电脑上跑的还是老版本
+function postJson(u,body,signal){return fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:signal})}
 function httpErr(r){return r.json().then(function(j){throw new Error(j.error||('HTTP '+r.status))},function(){throw new Error('HTTP '+r.status)})}
+// 点聊天里的文件路径：电脑上直接开的（本机网页）由服务器用默认 App 打开；别的设备把文件读回来，在页面里预览
 function openPath(p){
   postJson('/api/fs/open',{path:p,cwd:(session&&session.cwd)||''}).then(function(r){return r.ok?r.json():httpErr(r)}).then(function(j){
     if(j.opened){toast(j.opened==='reveal'?'已在访达里选中（这类文件打开会运行，没直接打开）':'已在电脑上打开');return}
     if(j.dir){toast('这是文件夹，手机上看不了');return}
     if(j.size>50*1048576){toast('文件太大（'+fmtSize(j.size)+'），只能在电脑上打开');return}
-    showFile(null,j.name,'加载中…');
-    postJson('/api/fs/read',{path:j.path}).then(function(r){return r.ok?r.blob():httpErr(r)})
-      .then(function(b){if($('#fview').classList.contains('on')&&fvName===j.name&&!fvBlob)showFile(b,j.name)})
-      .catch(function(e){if($('#fview').classList.contains('on')&&fvName===j.name&&!fvBlob)showFile(null,j.name,'打不开：'+e.message)});
+    openLocalFile(j.path,j.name);
   }).catch(function(e){toast(e.message)});
 }
 // 在 claclaw 页面里看文件（文本、图片、PDF 直接显示，其他只给「分享 / 保存」）；不跳页面，关掉就回聊天
 var fvUrl='',fvBlob=null,fvName='';
 // 手机：系统分享面板（存到「文件」、用别的 App 打开）；电脑：直接下载到「下载」（Mac 上的分享面板对很多文件类型没反应）
-var fvTouch=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches),FV_ACT=fvTouch?'分享 / 保存':'保存';
+var TOUCH=COARSE.matches,FV_ACT=TOUCH?'分享 / 保存':'保存';
 // ---------- 会话解剖：标题栏点会话名打开。会话（总消耗、四桶、每轮一颗球、每轮明细表，轮多了分页）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） ----------
 var dissEl=$('#diss'),dissFor='',dissData=null,dissTurn=0,dissPage=0,dissScroll=0,DS_PAGE=30;
 var dissBeadsOpen=(function(){try{return localStorage.getItem('claclaw.dissBeads')==='1'}catch(_){return false}})();   // 球默认收起只露最后一行
@@ -1020,7 +1024,7 @@ function dsVal(n,known){return known===false?'--':dsTk(n)}   // 全程没上报�
 function dsDur(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1 秒':'0 秒';if(s<60)return s+' 秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h+' 小时 '+(m%60)+' 分';return m+' 分 '+(s%60)+' 秒'}
 function dsDurC(ms){ms=+ms||0;var s=Math.round(ms/1000);if(s<1)return ms?'<1秒':'0秒';if(s<60)return s+'秒';var m=Math.floor(s/60),h=Math.floor(m/60);if(h)return h>=100?h+'时':h+'时'+(m%60)+'分';return m+'分'+(s%60?s%60+'秒':'')}   // 表格里用的紧凑写法（不带空格），手机上一排放得下
 // 每轮明细的预览：协同 / 本机会话发来的话，开头那段给 AI 看的说明换成一个小标签（和聊天里一样），后面是正文
-function dsPreview(t){var m=/^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t||'');if(!m)return '<span>'+esc(dsBrief(t))+'</span>';var pf=m[2].split(' · ');if(pf.length>2&&pf[0]===pf[pf.length-1])pf.pop();var rest=dsBrief(t.slice(m[0].length));return '<span class="ds-from">'+m[1]+' · '+esc(pf.join(' · '))+'</span>'+(rest?'<span>'+esc(rest)+'</span>':'')}
+function dsPreview(t){var m=PEER_HEAD.exec(t||'');if(!m)return '<span>'+esc(dsBrief(t))+'</span>';var rest=dsBrief(t.slice(m[0].length));return '<span class="ds-from">'+m[1]+' · '+esc(peerFrom(m))+'</span>'+(rest?'<span>'+esc(rest)+'</span>':'')}
 function dsSec(ms){ms=+ms||0;return (ms/1000).toFixed(ms<10000?2:1)+' 秒'}
 function dsBrief(s){s=String(s||'').replace(/\s+/g,' ').trim();return s.length>120?s.slice(0,119)+'…':s}   // 只给每轮明细列表做一行预览；点进那一轮看全文
 function dsRaw(label,txt,open){return '<details class="ds-raw"'+(open?' open':'')+'><summary>'+label+' · '+dsN(String(txt).length)+' 字</summary><pre>'+esc(txt)+'</pre></details>'}   // 原样显示：标签按源码、换行照留
@@ -1149,7 +1153,7 @@ function showSession(restore){
 }
 function showTurn(i){
   var j=dissData;if(!j||!j.turns||!j.turns[i-1])return;
-  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},t=j.turns[i-1],multi=dsMulti(s);
+  var b=dissEl.querySelector('.ds-b'),s=j.summary||{},t=j.turns[i-1];
   if(!dissEl.classList.contains('t'))dissScroll=b.scrollTop;
   dissTurn=i;dissEl.classList.add('t');
   dissEl.querySelector('.ds-n').textContent='第 '+i+' 轮 / '+j.turns.length;
@@ -1190,7 +1194,7 @@ dissEl.querySelector('.ds-re').addEventListener('click',openDissect);
 dissEl.querySelector('.ds-prev').addEventListener('click',function(){if(dissTurn>1)showTurn(dissTurn-1)});
 dissEl.querySelector('.ds-next').addEventListener('click',function(){if(dissData&&dissTurn<dissData.turns.length)showTurn(dissTurn+1)});
 dissEl.querySelector('.ds-b').addEventListener('click',function(e){
-  var tg=e.target.closest('[data-tg="beads"]');if(tg){dissBeadsOpen=!dissBeadsOpen;try{localStorage.setItem('claclaw.dissBeads',dissBeadsOpen?'1':'0')}catch(_){}dissScroll=dissEl.querySelector('.ds-b').scrollTop;showSession(true);return}
+  var tg=e.target.closest('[data-tg="beads"]');if(tg){dissBeadsOpen=!dissBeadsOpen;lsSet('claclaw.dissBeads',dissBeadsOpen?'1':'0');dissScroll=dissEl.querySelector('.ds-b').scrollTop;showSession(true);return}
   var pg=e.target.closest('[data-pg]');if(pg){if(!pg.disabled){dissPage=+pg.dataset.pg;showSession(false);dissEl.querySelector('.ds-b').scrollTop=dissEl.querySelector('.ds-beads').offsetTop-8}return}
   var bd=e.target.closest('.ds-bead');if(bd){showTurn(+bd.dataset.i);return}
   var sr=e.target.closest('tr.s');if(sr){var d=sr.nextElementSibling;if(d&&d.classList.contains('d'))d.hidden=!d.hidden;return}
@@ -1214,7 +1218,7 @@ function showFile(blob,name,msg,src){
     fvUrl=URL.createObjectURL(new Blob([blob],{type:'image/svg+xml'}));var sv=document.createElement('img');sv.src=fvUrl;sv.style.background='#fff';b.appendChild(sv);return;
   }
   if(/^text\/|json|xml|javascript/.test(t)||/^(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env)$/i.test(ext)){
-    if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「'+FV_ACT+'」'+(fvTouch?'用别的 App 打开':'下载到电脑');b.appendChild(e1);return}
+    if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「'+FV_ACT+'」'+(TOUCH?'用别的 App 打开':'下载到电脑');b.appendChild(e1);return}
     blob.text().then(function(tx){
       var pre=document.createElement('pre');pre.textContent=tx;
       if(!/^(md|markdown)$/i.test(ext)){b.appendChild(pre);return}
@@ -1228,17 +1232,20 @@ function showFile(blob,name,msg,src){
     if(src)im.addEventListener('error',function(){if(im.src!==location.origin+src&&im.getAttribute('src')!==src)im.src=src},{once:true});   // 本机缓存那份坏了：直接从电脑取
   }else if(t==='application/pdf'||/^pdf$/i.test(ext)){
     fvUrl=URL.createObjectURL(blob.type?blob:new Blob([blob],{type:'application/pdf'}));var fr=document.createElement('iframe');fr.src=fvUrl;b.appendChild(fr);
-  }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「'+FV_ACT+'」'+(fvTouch?'存到「文件」或用别的 App 打开':'下载到电脑');b.appendChild(e2)}
+  }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「'+FV_ACT+'」'+(TOUCH?'存到「文件」或用别的 App 打开':'下载到电脑');b.appendChild(e2)}
 }
 $('#fview .fv-x').addEventListener('click',function(){$('#fview').classList.remove('on');$('#fview .fv-b').innerHTML='';if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}fvBlob=null});
 $('#fview .fv-share:not(.fv-mdt)').addEventListener('click',function(){if(fvBlob)saveBlob(fvBlob,fvName)});
 // 排版后的 .md 文件里：复制按钮、点代码块复制（和消息里一样）
-$('#fview .fv-b').addEventListener('click',function(e){
-  var t=e.target,btn=t.closest&&t.closest('.fv-md button');
-  if(btn&&btn.classList.contains('ic')){var prev=btn.previousElementSibling;if(prev)copyText(prev.tagName==='A'?prev.getAttribute('href'):prev.textContent);return}
-  if(btn&&btn.classList.contains('cp')){var box=btn.parentNode,pre=box.querySelector('pre');if(pre&&box.classList.contains('cb'))copyText(pre.textContent);else{var c=box.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}return}
-  var pb=t.closest&&t.closest('.fv-md .cb pre');if(pb&&!String(getSelection()||'').trim())copyText(pb.textContent);
-});
+// 复制：.ic 复制前面那个元素（链接复制地址），.cp 复制整块；点一下代码块也能复制整块（手机上不用对准右上角的小按钮），拖选文字时不算
+function copyClick(t,btnSel,preSel){
+  var btn=t.closest&&t.closest(btnSel);
+  if(btn&&btn.classList.contains('ic')){var prev=btn.previousElementSibling;if(prev)copyText(prev.tagName==='A'?prev.getAttribute('href'):prev.textContent);return true}
+  if(btn&&btn.classList.contains('cp')){var box=btn.parentNode,pre=box.querySelector('pre');if(pre&&box.classList.contains('cb'))copyText(pre.textContent);else{var c=box.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}return true}
+  var pb=t.closest&&t.closest(preSel);if(pb&&!String(getSelection()||'').trim()){copyText(pb.textContent);return true}
+  return false;
+}
+$('#fview .fv-b').addEventListener('click',function(e){copyClick(e.target,'.fv-md button','.fv-md .cb pre')});
 // 发过的图片：原图也存在本机（按发出去的压缩图算个指纹对应），聊天记录里点开看原图
 function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(36)+'.'+b64.length}
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
@@ -1249,7 +1256,7 @@ function showImage(src){
   var im=lightbox.querySelector('img');im.onerror=null;im._zs=1;im.removeAttribute('style');im.src=src;lbFree();lightbox.classList.add('on');
   var m=/^data:image\/[\w.+-]+;base64,(.+)$/.exec(src||''),hk2=/^\/api\/himg\?.*[?&]k=([^&]+)/.exec(src||'');   // 历史图片是网址，带着原图的 key
   var key=m?imgKey(m[1]):hk2?decodeURIComponent(hk2[1]):'';if(!key||!window.indexedDB)return;
-  vidStore('readonly',function(st){return st.get('img:'+key)}).then(function(rec){
+  vidGet('img:'+key).then(function(rec){
     if(!rec||!rec.blob||!lightbox.classList.contains('on')||im.src!==src)return;
     var u=lbUrl=URL.createObjectURL(rec.blob);im.onerror=function(){im.onerror=null;im.src=src;if(lbUrl===u)lbFree()};im.src=u;   // 原图打不开（比如 HEIC）就退回压缩图
   }).catch(function(){});
@@ -1299,7 +1306,7 @@ feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classLi
 // 苹果手机不记浏览器历史：记了的话系统侧滑返回会放截图动画、页面弹一下；返回只靠返回键和下面自己做的右滑。安卓照旧记（返回键 / 系统返回要用）
 var IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 function navPush(st){if(!IOS)history.pushState(st,'')}
-var TOUCH=window.matchMedia('(pointer:coarse)').matches,lpTimer=null,lpStart=null,lpFiredAt=0;
+var lpTimer=null,lpStart=null,lpFiredAt=0;
 document.addEventListener('click',function(e){
   if(Date.now()-lpFiredAt<700){e.preventDefault();e.stopPropagation();return}   // 长按复制后松手产生的 click：吞掉，不打开会话
   var el=e.target.closest&&e.target.closest('.cpid');if(!el||TOUCH)return;
@@ -1376,27 +1383,14 @@ function toast(t){
 }
 // 消息下面的「复制」按钮：复制原文（Markdown 源文本）
 feed.addEventListener('click',function(e){
-  var t=e.target,btn=t.closest&&t.closest('button');
-  if(btn&&btn.classList.contains('ic')){
-    var prev=btn.previousElementSibling;
-    if(prev)copyText(prev.tagName==='A'?prev.getAttribute('href'):prev.textContent);
-    return;
-  }
-  if(btn&&btn.classList.contains('cp')){
-    var box=btn.parentNode,pre=box.querySelector('pre');
-    if(pre&&box.classList.contains('cb'))copyText(pre.textContent);
-    else{var c=box.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}
-    return;
-  }
-  // 点一下代码块也能复制整块（手机上不用对准右上角的小按钮）；拖选文字时不算
-  var pb=t.closest&&t.closest('.md .cb pre');
-  if(pb&&!String(getSelection()||'').trim()){copyText(pb.textContent);return}
+  var t=e.target;if(copyClick(t,'button','.md .cb pre'))return;
   // 点一下行内代码（`xxx`）：文件路径就打开文件，其他的复制
   if(t.tagName==='CODE'&&!(t.parentNode&&t.parentNode.tagName==='PRE')&&t.closest('.md')){
     if(t.classList.contains('fp')&&!String(getSelection()||'').trim()){openPath(t.textContent);return}
     copyText(t.textContent);return
   }
 });
+function aiNew(){aiEl=document.createElement('div');aiEl.className='msg ai md';feed.appendChild(aiEl)}   // 新起一段 AI 回复（流式往里写）
 function addAi(t){var e=document.createElement('div');e.className='msg ai md';e.innerHTML=md(t);feed.appendChild(e);scrollDown()}
 // 别的会话发来的消息：灰色引用卡片，和自己发的气泡区分开
 // 消息时间：用户消息、协同消息每条都标；AI 一轮里连着几段只标最后一段（标新的就去掉同一轮前面那段的）
@@ -1439,7 +1433,7 @@ function gmSay(btn,w,text,from){return ttsWith(w.sid,function(){gmSay0(btn,w.nam
 function gmSay0(btn,name,text,from){
   var again=gmPlaying===btn&&ttsSpeaking()&&from==null;
   ttsStop();ttsHush=false;if(again)return;
-  tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+  ttsTapUnlock();
   var src=(name?name+' 说：':'')+text;
   if(from==null){from=ttsResumeAt(src);if(from!=null)toast('接着第 '+(from+1)+' 句念（长按播放键可选从哪句开始）')}
   ttsManual=true;ttsSay(src,true,from||0);
@@ -1489,7 +1483,7 @@ new MutationObserver(function(){var d=feed.querySelector(':scope>.sys-dir');if(d
 function addSys(t){var e=document.createElement('div');e.className='sys';e.textContent=t;feed.appendChild(e);scrollDown()}
 var workSince=0,workTimer=null,workLabel='思考中';
 // 工作状态只在输入框上方的状态条显示（以前消息区底部还有一个「思考中」，和状态条重复，已去掉）；think 只换状态条上的字
-function think(on,label){
+function think(label){
   if(label)workLabel=label;
   tickWork();
 }
@@ -1527,10 +1521,10 @@ function tickWork(){
 }
 // 服务器更新了（页面版本变了）→ 提示刷新；自动重连不会重新加载页面，旧页面会用旧功能
 var connectedOnce=false,updateReady=false,bootAt=Date.now();
-// 打开 / 刷新后先不提示「正在连接」：多数时候一两秒就连上了，提示条一闪反而像出了问题；3 秒还没连上才提示
-var CONN_WAIT=window.matchMedia('(min-width:1000px)').matches?10000:1500;   // 电脑照旧 10 秒
-setTimeout(function(){if(!connectedOnce)connState(true)},CONN_WAIT);   // 连接中由雾表示；3 秒还没连上，雾清掉、刷新图标变黄转圈（不出黄条）
-function connBanner(t){if(!connectedOnce&&Date.now()-bootAt<CONN_WAIT)return;connState(true)}
+// 打开 / 刷新后先不提示「正在连接」：多数时候一两秒就连上了，提示条一闪反而像出了问题；1.5 秒（电脑 10 秒）还没连上才提示
+var CONN_WAIT=DESKTOP.matches?10000:1500;   // 电脑照旧 10 秒
+setTimeout(function(){if(!connectedOnce)connState(true)},CONN_WAIT);   // 连接中由雾表示；到时还没连上，雾清掉、刷新图标变黄转圈（不出黄条）
+function connBanner(){if(!connectedOnce&&Date.now()-bootAt<CONN_WAIT)return;connState(true)}
 // 重连中：不出黄条，刷新图标（手机顶栏 / 电脑左栏）变黄、一直转；连上就恢复
 function connState(on){['#sReload','#railReload'].forEach(function(q){var b=$(q);if(b)b.classList.toggle('reconn',!!on)})}
 var PAGE_VER=((document.body.innerHTML.match(/页面版本 ([0-9a-f]{7})/)||[])[1])||'';
@@ -1633,7 +1627,7 @@ function imgCard(id,name,size){
 // 发回来的是 .svg：服务器为安全一律当下载给；这里取回文本，用 blob 图片显示（图片里的脚本不执行），失败退回下载卡片
 function svgCard(id,name,size){
   var f=document.createElement('figure');f.className='sfimg sfsvg';
-  fetch('/api/upload/file?id='+encodeURIComponent(id),{credentials:'same-origin'}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){
+  fetch(upUrl(id),{credentials:'same-origin'}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){
     var d=svgData(t);if(!d)throw 0;
     var im=document.createElement('img');im.src=d.url;im.alt=name;
     im.addEventListener('click',function(){openFile(id,name,size)});
@@ -1646,7 +1640,7 @@ function svgCard(id,name,size){
 // 发回来的是音频 / 视频：直接放播放器；点播放器只管播放，点下面的说明文字才打开「分享 / 保存」；打不开（过了保留期）退回下载卡片
 var SENT_VIDEO=/\.(mp4|webm|mov|m4v)$/i;
 function mediaCard(id,name,size){
-  var src='/api/upload/file?id='+encodeURIComponent(id),isV=SENT_VIDEO.test(id);
+  var src=upUrl(id),isV=SENT_VIDEO.test(id);
   var f=document.createElement('figure');f.className='sfimg sfmedia'+(isV?' sfvideo':'');
   var m=isV?document.createElement('video'):audioEl(src);
   if(isV){m.controls=true;m.playsInline=true;m.setAttribute('playsinline','');m.preload='metadata';m.src=src;m.addEventListener('loadedmetadata',function(){scrollDown()})}
@@ -1713,8 +1707,8 @@ function syncSuggestion(){
 function acceptSuggestion(noKb){
   if(!suggestion)return;
   ta.value=suggestion;suggestion=null;
-  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden';
-  syncSuggestion();syncSend();
+  taFit();
+  syncSuggestion();
   if(noKb===true&&COARSE.matches&&document.activeElement!==ta)return;
   ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
 }
@@ -1800,7 +1794,7 @@ function sendVideoJob(){
   outbox={text:job.extra?job.extra.text:'',images:job.extra?job.extra.images:[],video:{kind:job.v.kind,id:job.v.id,name:job.v.name,url:job.v.url,size:job.v.size},sid:job.sid,el:job.el};
   trySend();
 }
-// 长边压到 2000px 内转 JPEG；小于 1.5MB 的 PNG（截图）和 GIF 保持原样，免得文字糊或动图变静态
+// 长边压到 2000px 内转 JPEG；小于 1.5MB 的 PNG（截图）/ WebP、小于 3MB 的 GIF 保持原样，免得文字糊或动图变静态
 function compressImage(f){
   var keep=(f.type==='image/png'&&f.size<1.5e6)||(f.type==='image/gif'&&f.size<3e6)||(f.type==='image/webp'&&f.size<1.5e6);
   return new Promise(function(resolve,reject){
@@ -1932,7 +1926,7 @@ function pickCmd(i){
   ta.value='/'+c.name+' ';
   cmdMenu.hidden=true;
   ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);
-  syncSend();syncSuggestion();
+  syncSuggestion();
 }
 function setDock(s){dock.dataset.state=s;syncSend()}
 // 「发送」永远是发送；工作中另外放出一个「停止」，两个按钮不会因为打字变来变去
@@ -1959,7 +1953,6 @@ function setBusy(b){
   if(b)cmdMenu.hidden=true;
   if(b)suggestion=null;
   syncSuggestion();
-  if(!b)think(false);
   if(permQueue.length){if(dock.dataset.state!=='perm'&&dock.dataset.state!=='ask')showPerm()}else setDock(b?'busy':'idle');
 }
 
@@ -2044,11 +2037,7 @@ $('#askGo').addEventListener('click',function(){
   showAnswers(p.toolUseID,ans);
   dropPerm(p.requestId,'allow');
 });
-$('#askNo').addEventListener('click',function(){
-  var p=permQueue[0];if(!p)return;
-  wsSend({t:'permission.reply',requestId:p.requestId,decision:'deny'});
-  dropPerm(p.requestId,'deny');
-});
+$('#askNo').addEventListener('click',function(){reply('deny')});
 function showAnswers(toolUseID,ans){
   var c=cards[toolUseID];if(!c||c.answered)return;c.answered=true;
   var d=document.createElement('div');d.className='answers';
@@ -2115,7 +2104,7 @@ function onEvent(m){
       var keepAll=mergeFrom>=m.history.length;
       if(!keepAll){permQueue=[];aiEl=null;renderHistory(m.history.slice(mergeFrom),(m.historyStart||0)+mergeFrom)}
       // 正在输出的那段：用服务器攒下的全文补齐（断线时漏掉的字），接着收后面的
-      if(typeof m.liveText==='string'){if(!aiEl){aiEl=document.createElement('div');aiEl.className='msg ai md';feed.appendChild(aiEl)}aiText=m.liveText;aiEl.innerHTML=md(aiText)}
+      if(typeof m.liveText==='string'){if(!aiEl)aiNew();aiText=m.liveText;aiEl.innerHTML=md(aiText)}
       else if(aiEl&&keepAll){aiEl.innerHTML=md(aiText);aiEl=null}
       histMore=histStart>0;reuse=true;
     }
@@ -2143,7 +2132,7 @@ function onEvent(m){
     if(m.cwdShort&&!m.group)dirLine(m);
     }
     if(!SOLO)lsSet(hk('session'),m.id);
-    if(!SOLO&&typeof soloAlive==='function'&&soloAlive(m.id))setTimeout(function(){soloLeave(m.id)},0);   // 这个会话开在弹出窗口里（比如刷新后又打开了上次的会话）：主窗口让出来
+    if(!SOLO&&soloAlive(m.id))setTimeout(function(){soloLeave(m.id)},0);   // 这个会话开在弹出窗口里（比如刷新后又打开了上次的会话）：主窗口让出来
     refreshList();goChat();bgRefreshList();
     suggestion=m.suggestion||null;
     commands=m.commands||[];syncCmdMenu();   // 输入框里已经有「/」时，弹层立刻换成这个会话的命令
@@ -2190,18 +2179,18 @@ function onEvent(m){
       var dm2=/([\d.]+) 秒/.exec(m.text||''),ob=outbox;outboxDone();
       if(ob.el&&ob.el.isConnected){fillVideo(ob.el,'',ob.video.kind==='file'?fmtSize(ob.video.size||0):'▶ 视频'+(dm2?' '+Math.round(+dm2[1])+'s':''));ob.el.classList.remove('pending');if(!ob.el.dataset.vpend)stamp(ob.el,Date.now())}
       else addUser(m.text,m.images);
-      think(true);break;
+      think();break;
     }
     if(outbox&&(outbox.videoPending||outbox.filePending)&&String(m.text||'').replace(VIDEO_PENDING,'')===outbox.text)m={t:m.t,text:outbox.text,images:m.images,queued:m.queued};   // 文字后面服务器加了「视频随后到」
-    if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');if(m.queued)outbox.el.classList.add('queued');stamp(outbox.el,Date.now());outboxDone();think(true);break}
+    if(outbox&&m.text===outbox.text&&outbox.el&&outbox.el.isConnected){if(m.queued)outbox.el.classList.add('queued');outboxLanded();think();break}
     if(outbox&&m.text===outbox.text)outboxDone();
-    var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');stamp(ue,Date.now());think(true);
+    var ue=addUser(m.text,m.images);if(m.queued&&ue)ue.classList.add('queued');stamp(ue,Date.now());think();
     break;
   case 'group.msg':   // 群里新的一条（自己发的也从这里回来：镜像那边要等建群的电脑收下）
     if(!session||m.id!==session.id)break;
     var gi=m.item||{};
     if(gi.kind==='user'){
-      if(outbox&&gi.text===outbox.text&&outbox.el&&outbox.el.isConnected){var ob=outbox;ob.el.classList.remove('pending');if(ob.video&&ob.el.vbadge)ob.el.vbadge.textContent=(ob.video.kind==='file'?'':'视频 ')+fmtSize(ob.video.size||0);stamp(ob.el,Date.now());outboxDone()}
+      if(outbox&&gi.text===outbox.text&&outbox.el&&outbox.el.isConnected){if(outbox.video&&outbox.el.vbadge)outbox.el.vbadge.textContent=(outbox.video.kind==='file'?'':'视频 ')+fmtSize(outbox.video.size||0);outboxLanded()}
       else{if(outbox&&gi.text===outbox.text)outboxDone();stamp(addGu(gi),gi.at)}
       setBusy(false);
     }else if(gi.kind==='gm'){stamp(addGm(gi),gi.at);if(gi.text&&ttsModeAllows(3))ttsWith(gi.who&&gi.who.sid,function(){ttsSay(((gi.who&&gi.who.name)?gi.who.name+' 说：':'')+gi.text)})}   // 开着自动朗读（全局 + 群自己的喇叭）：成员回复来一条念一条，开头报名字；声音用成员会话自己设的（成员会话关了播报也照念）
@@ -2220,7 +2209,7 @@ function onEvent(m){
     refreshList();
     break;
   case 'send.dup':   // 重发的这份服务器早就收到了（卡住的那份后来送到了）：不再处理，当作已送达
-    if(outbox&&m.cid===outbox.cid){if(outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');stamp(outbox.el,Date.now())}outboxDone()}
+    if(outbox&&m.cid===outbox.cid)outboxLanded();
     break;
   case 'queue.sent':   // 排队的消息发出去了（合成一条）
     feed.querySelectorAll('.msg.user.queued').forEach(function(e){e.classList.remove('queued')});
@@ -2233,11 +2222,11 @@ function onEvent(m){
     pairBanner(m);
     break;
   case 'ai.start':
-    aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);ttsPos=0;ttsWarmUp();
-    if(busy)think(true,'输出中');
+    aiNew();aiText='';ttsPos=0;ttsWarmUp();
+    if(busy)think('输出中');
     break;
   case 'ai.delta':
-    if(!aiEl){aiEl=document.createElement('div');aiEl.className='msg ai md';aiText='';feed.appendChild(aiEl);ttsPos=0}
+    if(!aiEl){aiNew();aiText='';ttsPos=0}
     aiText+=m.text;ttsStream(aiText,false);
     // 边输出边排版：最多每 80ms 渲染一次
     if(!aiRender)aiRender=setTimeout(function(){aiRender=null;if(aiEl){aiEl.innerHTML=md(aiText);scrollDown()}},80);
@@ -2245,19 +2234,19 @@ function onEvent(m){
   case 'ai.end':
     clearTimeout(aiRender);aiRender=null;
     if(aiEl){aiEl.innerHTML=md(aiText);stamp(aiEl,Date.now());aiEl=null;scrollDown();ttsStream(aiText,true)}
-    if(busy)think(true,'思考中');
+    if(busy)think('思考中');
     break;
   case 'tool.start':
     if(!cards[m.id]){var c=newCard(m);c.status('run','运行中')}
-    if(busy)think(true,'运行 '+m.name);
+    if(busy)think('运行 '+m.name);
     break;
   case 'tool.result':
     var c2=cards[m.id];
     if(c2)finishCard(c2,m.output,m.isError);
-    if(busy)think(true,'思考中');
+    if(busy)think('思考中');
     break;
   case 'perm.request':
-    think(false);onPermRequest(m);
+    tickWork();onPermRequest(m);
     break;
   case 'perm.cancel':
     dropPerm(m.requestId,'cancel');
@@ -2265,7 +2254,7 @@ function onEvent(m){
   case 'perm.done':
     if(m.answers)showAnswers(m.toolUseID,m.answers);
     dropPerm(m.requestId,m.decision==='deny'?'deny':'allow');
-    if(busy&&!permQueue.length)think(true);
+    if(busy&&!permQueue.length)think();
     break;
   case 'busy':
     setBusy(!!m.on);
@@ -2283,7 +2272,7 @@ function onEvent(m){
     if(session&&m.cwdShort){session.cwdShort=m.cwdShort;session.dir=m.cwdShort.split('/').pop()||'';setHeader()}
     break;
   case 'status':   // 一条会被替换的状态（例如 OpenClaw 模型重试），只显示在工作状态条上，不进消息流
-    think(true,m.text);break;
+    think(m.text);break;
   case 'turn.done':
     ttsHush=false;
     if(m.tokSum)dirLine({tokSum:m.tokSum});
@@ -2410,14 +2399,14 @@ $('#ctxBtn').addEventListener('click',function(){
 })();
 var soloSkin=null;   // 弹出窗口：这个会话的头像 / 网名 {id, skin}，从「最近」列表里取
 function soloSkinLoad(id){
-  fetch('/api/recent').then(function(r){return r.json()}).then(function(a){
+  getJson('/api/recent').then(function(a){
     var x=(Array.isArray(a)?a:[]).find(function(y){return y.id===id});
     soloSkin={id:id,skin:x&&x.skin||null};if(session&&session.id===id)setHeader();
   }).catch(function(){});
 }
 function setHeader(){
-  if(typeof ttsMuteShow==='function'){ttsMuteShow();try{if(tts)ttsShowStop()}catch(_){}}
-  if(typeof notifBall==='function'){notifBall();if(session&&!notifLoaded)notifLoad()}   // 通知圆球：第一次打开会话时取一次各会话的开关
+  ttsMuteShow();try{if(tts)ttsShowStop()}catch(_){}
+  notifBall();if(session&&!notifLoaded)notifLoad();   // 通知圆球：第一次打开会话时取一次各会话的开关
   if(!session)return;
   var t=(session.title||'').trim(),dir=session.dir||'';
   // 弹出窗口：换过头像 / 网名的会话，左上角用头像 + 网名；头像上不放水印，第二行模型名左边放个小 Claw 图标
@@ -2455,7 +2444,7 @@ function connect(){
   clearTimeout(wsRetryT);wsRetryT=0;
   var old=ws;if(old){old.onopen=old.onclose=old.onmessage=null;if(old.readyState<2)try{old.close()}catch(_){}}
   var me=ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
-  var again=function(){if(me!==ws)return;connBanner('连接已断开，正在重连…');clearTimeout(wsRetryT);wsRetryT=setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)))};
+  var again=function(){if(me!==ws)return;connBanner();clearTimeout(wsRetryT);wsRetryT=setTimeout(connect,Math.min(10000,500*Math.pow(2,retry++)))};
   ws.onopen=function(){
     if(me!==ws)return;
     unreadBase=false;
@@ -2503,7 +2492,7 @@ function run(text){
   setBusy(true);
   if(video&&video.id){outbox={text:text,images:images,video:video,sid:session.id};outboxShow();trySend()}   // 视频早就传过（放回输入框后重发）
   else if(video&&session.group){   // 群里：等视频 / 文件传完，和文字、图片作为一条一起发（成员被 @ 时附件已经在）
-    var gel=addUser(text,images.map(function(i){return 'data:'+i.media_type+';base64,'+i.data}),{kind:video.kind,name:video.name,size:video.size,url:video.url,label:'上传 0%'});gel.classList.add('pending');
+    var gel=addUser(text,imgUrls(images),{kind:video.kind,name:video.name,size:video.size,url:video.url,label:'上传 0%'});gel.classList.add('pending');
     startVideoJob(video,session.id,gel,{text:text,images:images});
   }
   else{
@@ -2526,6 +2515,8 @@ function trySend(){
   ws.send(JSON.stringify({t:'message.send',cid:outbox.cid,text:outbox.text,images:outbox.images,video:outbox.video&&outbox.video.kind!=='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,file:outbox.video&&outbox.video.kind==='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined,filePending:outbox.filePending||undefined}));
   outboxTimer=setTimeout(function(){if(outbox&&Date.now()-lastEvt>8000)reconnectNow()},8000);   // 8 秒没回显、期间也没收到任何消息才判定连接已死
 }
+function imgUrls(a){return (a||[]).map(function(i){return 'data:'+i.media_type+';base64,'+i.data})}
+function outboxLanded(){if(outbox.el&&outbox.el.isConnected){outbox.el.classList.remove('pending');stamp(outbox.el,Date.now())}outboxDone()}   // 服务端确认收到：气泡去掉「发送中」、标上时间
 function outboxDone(){outbox=null;clearTimeout(outboxTimer);setTimeout(sendVideoJob,0)}
 // 丢掉疑似已死的连接，立即重连（不等浏览器慢慢发现断线）
 // clarelay 直连：路线变了更新宿主页那一行；变成直连时悄悄重连一次 ws，把实时连接搬到直连上（服务端重连后会补发全部状态）
@@ -2558,7 +2549,7 @@ function reconnectNow(){
 // 发出去立刻显示（半透明 = 发送中），服务器回显后变正常；不让人觉得消息发没了
 function outboxShow(){
   if(!outbox)return;
-  var imgs=(outbox.images||[]).map(function(i){return 'data:'+i.media_type+';base64,'+i.data});
+  var imgs=imgUrls(outbox.images);
   var vv=outbox.video||outbox.videoFile;
   outbox.el=addUser(outbox.text,imgs,vv?{kind:vv.kind,name:vv.name,size:vv.size,url:vv.url,label:outbox.video&&outbox.video.id?'服务器处理中…':'上传 0%',pend:outbox.videoPending||outbox.filePending||''}:null);outbox.el.classList.add('pending');
 }
@@ -2581,8 +2572,9 @@ $('#taClr').addEventListener('click',function(){
   if(document.activeElement===ta){ta.select();try{if(document.execCommand('delete')&&!ta.value)return}catch(_){}}
   ta.value='';ta.dispatchEvent(new Event('input'));
 });
+function taFit(){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden'}   // 输入框跟着内容长高
 ta.addEventListener('input',function(){
-  ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,taMax())+'px';ta.style.overflowY=ta.scrollHeight>ta.clientHeight+1?'auto':'hidden';syncSend();
+  taFit();syncSend();
   if(ta.value)suggestion=null; // 开始自己打字就作废
   syncSuggestion();
   cmdSel=0;syncCmdMenu();
@@ -2625,7 +2617,6 @@ function setMode(key,announce){
 }
 // 设置变化记一行「已切换为 模型 · 推理强度 · 权限」；连续改（中间没有别的消息）只更新这一行
 function cfgNote(extra){
-  if(typeof cfg==='undefined')return;
   var ml=MODES.find(function(x){return x.key===mode})||MODES[0];
   var parts=[];if(claudeSess()&&(cfg.models||cfg.model)){parts.push(curModelLabel()+(cfg.pick==='default'?'（默认）':''));if(cfg.effort)parts.push('推理强度 '+effortLabel(cfg.effort))}
   parts.push('权限 '+ml.label);
@@ -2748,29 +2739,29 @@ function usePace(w,k){
 // 要不要露出来：用得比平均快，或者已经用到 80% 以上（不看进度，快用完了总要知道）
 function useHot(w,k){var pc=usePace(w,k);return !!(pc&&pc.over||w&&!w.stale&&w.used>=0.8&&(!w.resetsAt||w.resetsAt>Date.now()))}
 // 工作中那一行右边：用超了（比平均快）或到了 80% 才出现，点了打开会话设置看详情
-var useFetchAt=0,USE_PREVIEW=false;   // true = 预览：不管超没超都显示（超了的变色）
+var useFetchAt=0;
 function renderWorkUse(){
   var el=$('#workUse');if(!el)return;
   var u=claudeUse,on=busy&&claudeSess()&&!cfg.lib&&!xcfg;
-  if(on&&!u&&Date.now()-useFetchAt>60000){useFetchAt=Date.now();fetch('/api/claude-usage').then(function(r){return r.json()}).then(function(j){if(!claudeUse)claudeUse=j.usage||null;renderWorkUse()}).catch(function(){})}
+  if(on&&!u&&Date.now()-useFetchAt>60000){useFetchAt=Date.now();getJson('/api/claude-usage').then(function(j){if(!claudeUse)claudeUse=j.usage||null;renderWorkUse()}).catch(function(){})}
   var parts=[],tips=[];
   if(on&&u)[['five_hour','5h','5 小时','小时'],['seven_day','周','本周','天']].forEach(function(r){
-    var w=u[r[0]],pc=usePace(w,r[0]),hot=useHot(w,r[0]);if(!hot&&!(USE_PREVIEW&&pc))return;
-    parts.push('<span'+(hot?' class="over"':'')+'>'+r[1]+' '+Math.round(w.used*100)+'%</span>');tips.push(r[2]+'已用 '+Math.round(w.used*100)+'%'+(pc?'，第 '+pc.n+' '+r[3]+'平均可用到 '+Math.round(pc.allow*100)+'%':''));
+    var w=u[r[0]],pc=usePace(w,r[0]),hot=useHot(w,r[0]);if(!hot)return;
+    parts.push('<span class="over">'+r[1]+' '+Math.round(w.used*100)+'%</span>');tips.push(r[2]+'已用 '+Math.round(w.used*100)+'%'+(pc?'，第 '+pc.n+' '+r[3]+'平均可用到 '+Math.round(pc.allow*100)+'%':''));
   });
   el.hidden=!parts.length;el.innerHTML=parts.join(' · ');el.title=tips.join('；');
 }
 function renderCfgUse(){
-  var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&['five_hour','seven_day'].some(function(k){return USE_PREVIEW?!!u[k]:useHot(u[k],k)});   // 和「思考中」右边一样：超过平均进度或用到 80% 才显示
+  var sec=$('#cfgUseSec'),u=claudeUse,show=!xcfg&&claudeSess()&&!cfg.lib&&!!u&&['five_hour','seven_day'].some(function(k){return useHot(u[k],k)});   // 和「思考中」右边一样：超过平均进度或用到 80% 才显示
   sec.hidden=!show;if(!show)return;
   $('#cfgUseNote').textContent=u.at?'上次回复时 · '+ago(u.at):'';
   $('#cfgUse').innerHTML=[['five_hour','5 小时',0],['seven_day','本周',1]].map(function(r){
-    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100),pc=usePace(w,r[0]);var hot=useHot(w,r[0]);if(!USE_PREVIEW&&!hot)return '';   // 没超、也没到 80% 的那条不显示
-    return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80||pc&&pc.over?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i>'+(pc?'<em class="pace" style="left:'+Math.round(pc.allow*100)+'%" title="到现在为止平均可用 '+Math.round(pc.allow*100)+'%"></em>':'')+'</span><span class="cu-pct'+(hot?' over':'')+'">'+p+'%</span>'+
+    var w=u[r[0]];if(!w)return '';var p=Math.round(w.used*100),pc=usePace(w,r[0]);if(!useHot(w,r[0]))return '';   // 没超、也没到 80% 的那条不显示
+    return '<b>'+r[1]+'</b><span class="cu-bar'+(p>=80||pc&&pc.over?' hi':'')+'"><i style="width:'+Math.min(100,p)+'%"></i>'+(pc?'<em class="pace" style="left:'+Math.round(pc.allow*100)+'%" title="到现在为止平均可用 '+Math.round(pc.allow*100)+'%"></em>':'')+'</span><span class="cu-pct over">'+p+'%</span>'+
       '<small>'+esc(w.stale?'已过重置时间，下次回复后更新':cuReset(w.resetsAt,r[2]))+'</small>';
   }).join('');
 }
-function loadCfgUse(){fetch('/api/claude-usage').then(function(r){return r.json()}).then(function(j){claudeUse=j.usage||null;renderCfgUse()}).catch(function(){})}
+function loadCfgUse(){getJson('/api/claude-usage').then(function(j){claudeUse=j.usage||null;renderCfgUse()}).catch(function(){})}
 function renderCfg(){
   var dlg=$('#cfgDlg');if(!dlg||!dlg.classList.contains('on'))return;
   renderCfgUse();
@@ -2849,8 +2840,7 @@ $('#cfgGo').addEventListener('click',function(){
   if(!session||document.body.classList.contains('ro')||$('#cfgBtn').style.display==='none')return;
   openCfg();
 });
-$('#cfgX').addEventListener('click',closeCfg);
-$('#cfgDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)closeCfg()});
+dlgWire($('#cfgDlg'),$('#cfgX'),closeCfg);
 function applyModel(m){
   if('lib' in m)cfg.lib=m.lib||null;
   if(m.models){cfg.models=m.models;if(!cfg.lib)lastModels=m.models}   // lastModels 给新建对话框用：只记 Claude 自己的模型
@@ -2877,20 +2867,20 @@ function refreshList(){if(DESKTOP.matches)openSheet()}
 setInterval(function(){if(DESKTOP.matches&&!document.hidden)openSheet()},60000);
 DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(e){if(e.matches)openSheet();else closeSheet();syncSend()});
 // 图标栏：上面是会话，最下面是设置（退出登录在设置页里）
-function railTab(set){mTab(set?'set':listMode==='recent'?'recent':'chats')}
+function railTab(set){mTab(set?'set':listTab())}
 // 底部菜单：claw（选择哪种助手）/ chats（会话列表）/ set（设置，子页面）
 function mTab(t){
   var app=$('#app');
-  if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){if(grpOnly)setGrpOnly(false,true);listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';try{localStorage.setItem('claclaw.listMode',nm)}catch(_){}}}
+  if(t==='recent'||t==='chats'){var nm=t==='recent'?'recent':'claw';if(nm!==listMode){if(grpOnly)setGrpOnly(false,true);listMode=nm;lastList=null;listFrozen=null;$('#sList').innerHTML='';lsSet('claclaw.listMode',nm)}}
   if(t!=='host')peerFromList='';   // 从列表进语音管理 / 协同后改点了别的：返回不再回列表
   app.classList.toggle('set-on',t==='set');app.classList.toggle('claw-on',t==='claw');app.classList.toggle('host-on',t==='host');
   // 离开时停在子页（模型管理 / 协同 / 技能）：把子页内容一起清掉，不然下次进宿主页，在 /api/host 回来前（或回不来时）看到的还是那个子页
-  if(t!=='host'){if(hostView)$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';hostView='';peerWatch(false)}
+  if(t!=='host'){if(hostView)$('#hostBody').innerHTML=LOADING;hostView='';peerWatch(false)}
   hostLive(t==='host');if(t==='claw'){loadClaws();mdlPeek();requestAnimationFrame(clawDsFit)}if(t==='set')loadSetData();
   $('#railSet').classList.toggle('on',t==='set');$('#railPeer').classList.remove('on');$('#railClaw').classList.toggle('on',t==='claw');$('#railHost').classList.toggle('on',t==='host');$('#railChats').classList.toggle('on',t==='recent');   // 电脑左栏的「会话」就是「最近」；选了某个 Claw 时亮的是那个 Claw 的图标
   document.querySelectorAll('#mtabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===t||(t==='host'&&b.dataset.tab==='set'))});   // 宿主页从设置进，底部亮「设置」
   $('.sheet-p').scrollTop=0;
-  if(typeof showClawSel==='function')showClawSel();
+  showClawSel();
 }
 // ---------- 宿主页 ----------
 var hostTimer=null;
@@ -2917,7 +2907,7 @@ function stackRows(){
 }
 (function(){
   var t=null,run=function(){clearTimeout(t);t=setTimeout(stackRows,30)};
-  ['hostPane'].forEach(function(id){var el=document.getElementById(id);if(el)new MutationObserver(run).observe(el,{childList:true,subtree:true})});
+  new MutationObserver(run).observe($('#hostPane'),{childList:true,subtree:true});
   addEventListener('resize',run);
 })();
 function hRow(k,v,sub,bar,low){   // bar：0~1 的占用条；low：越低越要警告（电池）
@@ -2948,8 +2938,7 @@ function crSubmit(e){
   $('#crErr').textContent='';crOp('join',v);
 }
 $('#crForm').addEventListener('submit',crSubmit);
-$('#crNo').addEventListener('click',function(){showDlg($('#crDlg'),false)});
-$('#crDlg').addEventListener('click',function(e){if(e.target===e.currentTarget)showDlg($('#crDlg'),false)});
+dlgWire($('#crDlg'),$('#crNo'),function(){showDlg($('#crDlg'),false)});
 function crLoad(){return fetch('/api/clarelay').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){relaySt=j;crPaint()}}).catch(function(){})}
 function crOp(op,inv){
   if(relayBusy)return;var body={op:op};
@@ -2964,10 +2953,11 @@ function crOp(op,inv){
     toast(x.ok?(op==='update'?(x.j.updated?'电脑端已更新到 '+(x.j.lib&&x.j.lib.version||'')+'，正在重连':'已经是最新'):({join:'已加入，等管理员批准或马上就连上',connect:'正在连接',disconnect:'已断开',remove:'已移除'})[op]):'没成：'+(x.j&&x.j.error||'出错了'));
     setTimeout(crLoad,2500);
   }).catch(function(e){relayBusy='';crPaint();toast('没成：'+e.message)});
-}   // hostView='peer'：宿主页里打开了「claclaw 协同」子页面，暂停自动刷新
+}
+function hostHome(){hostView='';$('#hostBody').innerHTML=LOADING;loadHost()}   // 从子页回宿主主页
 function loadHost(){
-  if(hostView)return;
-  fetch('/api/peer').then(function(r){return r.json()}).then(function(j){peerSt=j}).catch(function(){});
+  if(hostView)return;   // 打开着子页面（协同、模型管理…）：不刷新宿主主页
+  getJson('/api/peer').then(function(j){peerSt=j}).catch(function(){});
   crLoad();
   loadSkills();
   mdlPeek();
@@ -3009,17 +2999,16 @@ function hostLabels(){
   $('#setHostName').textContent=n?'宿主 · '+n:'宿主';
   $('#railHost').title=n?'宿主：'+n:'宿主';
 }
-function setHostName(n){hostName=n||'';try{localStorage.setItem('claclaw.hostName',hostName)}catch(_){}hostLabels()}
+function setHostName(n){hostName=n||'';lsSet('claclaw.hostName',hostName);hostLabels()}
 hostLabels();
-fetch('/api/claclaw/hello').then(function(r){return r.json()}).then(function(j){if(j&&j.name&&j.name!==hostName)setHostName(j.name)}).catch(function(){});
-// ---------- 宿主 → claclaw 协同 ----------
+getJson('/api/claclaw/hello').then(function(j){if(j&&j.name&&j.name!==hostName)setHostName(j.name)}).catch(function(){});
 // ---------- 技能：仓库 skills/ 里预先准备好的技能，用到相关场景时自动安装 ----------
 // 用到时服务端自动装（不用用户点）；设置 › 宿主 › 技能 里能看全部、装 / 卸
 var skillsSt=null,skillMsg={};
 function loadSkills(){
-  fetch('/api/skills').then(function(r){return r.json()}).then(function(j){
+  getJson('/api/skills').then(function(j){
     if(!Array.isArray(j))return;skillsSt=j;
-    if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
+    renderSkills();
   }).catch(function(){});
 }
 function skillsSum(){if(!skillsSt)return '';var n=0;skillsSt.forEach(function(s){if(s.targets.some(function(t){return t.state!=='none'}))n++});return n?'已装 '+n+' 个':skillsSt.length+' 个可装'}
@@ -3027,7 +3016,7 @@ function skillPost(op,name,target){
   postJson('/api/skills/'+op,{name:name,target:target}).then(function(r){return r.json()}).then(function(j){
     if(!Array.isArray(j)){skillMsg={err:j.error||'操作失败'};toast(j.error||'操作失败')}
     else{skillsSt=j;skillMsg={ok:op==='install'?'已安装':'已卸载'};toast(skillMsg.ok)}
-    if(hostView==='skills')renderSkills();else if(hostView==='peer')paintPoolSum();   // 协同页只刷新推荐卡片，不重画（免得清掉正在填的输入框）
+    renderSkills();
   }).catch(function(e){toast(e.message)});
 }
 // ---------- 设置 › 语音管理：按平台列声音，勾选哪些进「声音」列表、起别名；豆包在这里填 / 换 Key ----------
@@ -3035,7 +3024,7 @@ function skillPost(op,name,target){
 var vcEng=null,vcMsg='',vcKeyEdit=false;
 function openVoices(){mTab('host');hostView='voices';vcMsg='';vcKeyEdit=false;renderVoices();vcLoad()}
 function vcLoad(){
-  fetch('/api/tts/engines').then(function(r){return r.ok?r.json():null}).then(function(j){if(Array.isArray(j)){vcEng=j;vcSum()}return ttsLoadSrv()}).then(function(){renderVoices()}).catch(function(){});
+  vcEngGet().then(function(){return ttsLoadSrv()}).then(function(){renderVoices()}).catch(function(){});
 }
 function vcSum(){var el=$('#setVoicesSub');if(!el||!vcEng)return;var v=vcEng.find(function(e){return e.id==='volc'});el.textContent='本机、微软免费；豆包'+(v&&v.ready?'已填 Key':'要填 API Key')}
 // 「晓北 · 东北话（微软 · 女）」拆成名字「晓北 · 东北话」和小字「微软 · 女」；起了别名的小字后面带原名
@@ -3060,7 +3049,7 @@ function renderVoices(){
   h+='<div class="vc-tip">勾上的声音才出现在「声音」列表里；点名字改别名（清空恢复原名），点 ▶ 试听。</div>';
   var dev=ttsVoices();
   h+=vcSec('本机','免费','这台设备（浏览器）自带的声音，不用配置',dev.map(function(v){return vcRow(v.voiceURI,ttsLabel(v))}).join('')||'<div class="h-row vc-hint">这台设备没有中文声音</div>',dev.map(function(v){return v.voiceURI}));
-  if(!vcEng)h+='<div class="h-empty">加载中…</div>';
+  if(!vcEng)h+=LOADING;
   (vcEng||[]).forEach(function(e){
     var list=(tts.srv||[]).filter(function(v){return v.name.indexOf(e.id+':')===0}),top='';
     if(e.needKey){
@@ -3078,16 +3067,14 @@ function renderVoices(){
   document.querySelectorAll('#hostBody .vc-grp[data-mixed]').forEach(function(c){c.indeterminate=true});
 }
 function vcAct(act,a){
-  if(act==='vc-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
-  if(act==='vc-back'){hostView='';mTab('set');return}
+  if(act==='vc-back'){subBack();return}
   if(act==='vc-try'){
     var id=a.dataset.id,t='你好，这是我的声音，听听合不合适。';ttsStop();ttsManual=true;
     if(/^srv:/.test(id)){tts.srvUnlocked=false;srvUnlock(true);srvSay([t],id.slice(4),0,null,tts.rate);return}
     var v=ttsVoices().find(function(x){return x.voiceURI===id});if(!v||!ttsOk())return;
-    var u=new SpeechSynthesisUtterance(t);u.lang=v.lang||'zh-CN';u.rate=tts.rate;u.voice=v;speechSynthesis.speak(u);return;
+    devSpeak(t,tts.rate,v,v.lang);return;
   }
-  if(act==='vc-key-show'){if(mdlKey&&mdlKey.id==='tts:volc'){mdlKey.show=!mdlKey.show;renderVoices()}else keyAsk('tts:volc','show');return}
-  if(act==='vc-key-copy'){if(mdlKey&&mdlKey.id==='tts:volc')copyText(mdlKey.key,mdlCopyFail);else keyAsk('tts:volc','copy');return}
+  if(act==='vc-key-show'||act==='vc-key-copy'){keyUse('tts:volc',act==='vc-key-copy'?'copy':'show');return}
   if(act==='vc-key-edit'){vcKeyEdit=true;renderVoices();var i=$('#vcKey');if(i)i.focus();return}
   if(act==='vc-key-cancel'){vcKeyEdit=false;renderVoices();return}
   if(act==='vc-key-save'||act==='vc-key-del'){
@@ -3102,7 +3089,7 @@ function vcAct(act,a){
 }
 $('#hostBody').addEventListener('change',function(e){
   var t=e.target;if(hostView!=='voices'||!t.dataset||!t.dataset.id)return;
-  if(t.classList.contains('vc-on')){vcSetOn(t.dataset.id,t.checked);try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}ttsPickVoice();vcGrpSync();t.closest('.vc-row').classList.toggle('off',!t.checked)}
+  if(t.classList.contains('vc-on')){vcSetOn(t.dataset.id,t.checked);vcSave();vcGrpSync();t.closest('.vc-row').classList.toggle('off',!t.checked)}
   else if(t.classList.contains('vc-al')){var v=t.value.trim(),d=t.dataset.def||'',full=t.dataset.name||d;if(!v)t.value=d;var al=v&&v!==d&&v!==full?v:'';vcSet(t.dataset.id,'alias',al);var sb=t.parentNode.querySelector('.vc-sub');if(sb)sb.textContent=vcSubTxt(full,al)}   // 清空 = 回到原名
 });
 $('#hostBody').addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('vc-al')){e.preventDefault();e.target.blur()}});   // 改别名按回车就收起键盘、保存
@@ -3110,20 +3097,20 @@ $('#hostBody').addEventListener('keydown',function(e){if(e.key==='Enter'&&e.targ
 $('#hostBody').addEventListener('change',function(e){
   var t=e.target;if(hostView!=='voices'||!t.classList||!t.classList.contains('vc-grp'))return;
   (vcGroups[t.dataset.grp]||[]).forEach(function(id){vcSetOn(id,t.checked)});
-  try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}
-  ttsPickVoice();
+  vcSave();
   document.querySelectorAll('#hostBody .vc-on').forEach(function(c){if((vcGroups[t.dataset.grp]||[]).indexOf(c.dataset.id)>=0){c.checked=t.checked;c.closest('.vc-row').classList.toggle('off',!t.checked)}});
 });
 function vcGrpSync(){document.querySelectorAll('#hostBody .vc-grp').forEach(function(g){var ids=vcGroups[g.dataset.grp]||[],on=ids.filter(function(id){return !vcOff(id)}).length;g.checked=on===ids.length;g.indeterminate=on>0&&on<ids.length})}
 $('#setVoices').addEventListener('click',openVoices);
-fetch('/api/tts/engines').then(function(r){return r.ok?r.json():null}).then(function(j){if(Array.isArray(j)){vcEng=j;vcSum()}}).catch(function(){});
+function vcEngGet(){return fetch('/api/tts/engines').then(function(r){return r.ok?r.json():null}).then(function(j){if(Array.isArray(j)){vcEng=j;vcSum()}})}
+vcEngGet().catch(function(){});
 var BACK_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
 function pgHd(attrs,label,title){return '<div class="pg-hd"><button type="button" class="pe-back" '+attrs+' aria-label="'+label+'">'+BACK_SVG+'</button><div class="pg-t">'+esc(title||'')+'</div></div>'}
 function renderSkills(){
   if(hostView!=='skills')return;
   var h=pgHd('data-act="peer-back"','返回宿主','技能');
   if(skillMsg.err)h+='<div class="pe-err">'+esc(skillMsg.err)+'</div>';
-  if(!skillsSt)h+='<div class="h-empty">加载中…</div>';
+  if(!skillsSt)h+=LOADING;
   else h+=skillsSt.map(function(s){
     return '<div><div class="h-h">'+esc(s.title||s.name)+'</div><div class="h-card">'+
       '<div class="h-row"><span class="v" style="text-align:left">'+esc(s.desc||'')+'</span></div>'+
@@ -3148,9 +3135,9 @@ var MDL_FMT={anthropic:'Anthropic 格式',openai:'OpenAI 格式',gemini:'Gemini 
 function modelsSum(){if(!mdl)return '';var n=0;mdl.providers.forEach(function(p){n+=p.models.length});return mdl.providers.length?mdl.providers.length+' 个 Key · '+n+' 个模型':'还没有添加'}
 function loadModels(){
   // 先用缓存的列表画出来，读到最新的再重画——只在还停在列表页时重画（已经点进去在填的，不能冲掉）
-  fetch('/api/models').then(function(r){return r.json()}).then(function(j){if(!j||!Array.isArray(j.providers))return;var first=!mdl;mdl=j;mdlClawSub();if(first||!mdlSub)renderModels()}).catch(function(e){if(!mdl){mdlMsg={err:'读取失败：'+e.message};renderModels()}});
+  getJson('/api/models').then(function(j){if(!j||!Array.isArray(j.providers))return;var first=!mdl;mdl=j;mdlClawSub();if(first||!mdlSub)renderModels()}).catch(function(e){if(!mdl){mdlMsg={err:'读取失败：'+e.message};renderModels()}});
 }
-function mdlPeek(){if(!mdl)fetch('/api/models').then(function(r){return r.json()}).then(function(j){if(j&&Array.isArray(j.providers)&&!mdl){mdl=j;mdlClawSub()}}).catch(function(){})}
+function mdlPeek(){if(!mdl)getJson('/api/models').then(function(j){if(j&&Array.isArray(j.providers)&&!mdl){mdl=j;mdlClawSub()}}).catch(function(){})}
 function mdlClawSub(){var el=$('#clawModelsSub');if(el&&mdl&&mdl.providers.length)el.textContent=modelsSum()}
 function openModels(from){
   mdlFrom=from;
@@ -3159,7 +3146,6 @@ function openModels(from){
 }
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
 function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');return a.join(' · ')}
-function mdlField(id,label,val,attrs,wide,mono){return '<div class="h-row'+(wide?' pe-urlrow':'')+'"><span class="k">'+label+'</span><input id="'+id+'" class="pe-in'+(wide?' left mono':mono?' mono':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(val==null?'':String(val))+'" '+(attrs||'')+'></div>'}
 function mdlIn(id,val,attrs,mono,label){   // Key 详情的输入行：上面一行小标题，下面无框输入（点进去小标题变主题色）
   var sec=/type="password"/.test(attrs||'');attrs=(attrs||'').replace(/\s*type="password"/,'');
   return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+esc(label||'')+'</label><textarea id="'+id+'" rows="1" class="md-in'+(mono?' mono':'')+(sec?' md-secret':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" '+attrs+'>'+esc(val==null?'':String(val))+'</textarea></div>'}
@@ -3179,10 +3165,11 @@ function mdlFmtX(){var x=document.querySelector('#hostBody .md-fmtx'),r=x&&x.clo
 function mdlEpMain(fmt,url,auto){
   return '<div class="h-row md-f md-ep"><label class="md-lb" for="mdUrl0">接口地址<span class="md-fmtx">'+esc(url?MDL_FMT[fmt]||fmt:'格式自动判断')+'</span></label><input type="hidden" class="md-fmt" value="'+esc(fmt)+'"'+(auto?' data-auto="1"':'')+'>'+
     '<textarea id="mdUrl0" rows="1" class="md-in mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="比如 https://api.deepseek.com">'+esc(url||'')+'</textarea></div>'}
-function mdFv0(){var f=$('#mdFmt0'),v=f&&f.parentNode.querySelector('.md-fv');if(v)v.textContent=MDL_FMT[f.value]||f.value}
-function mdlFmtRow(fmt){return '<div class="h-row md-f"><label class="md-lb" for="mdFmt0">接口格式</label><span class="md-fk md-fkb"><span class="md-fv">'+esc(MDL_FMT[fmt]||fmt)+'</span><select id="mdFmt0" class="md-sel" aria-label="接口格式">'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></div>'}
+function mdlFmtOpts(fmt){return mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')}
+function mdFv(f){var v=f&&f.parentNode.querySelector('.md-fv');if(v)v.textContent=MDL_FMT[f.value]||f.value}   // 格式下拉框前面显示的格式名
+function mdlFmtRow(fmt){return '<div class="h-row md-f"><label class="md-lb" for="mdFmt0">接口格式</label><span class="md-fk md-fkb"><span class="md-fv">'+esc(MDL_FMT[fmt]||fmt)+'</span><select id="mdFmt0" class="md-sel" aria-label="接口格式">'+mdlFmtOpts(fmt)+'</select></span></div>'}
 function mdlEpRow(fmt,url,auto){
-  return '<div class="h-row md-f md-ep"><span class="md-lb"><span>接口地址</span><span class="md-fk md-fko"><span class="md-fv">'+esc(MDL_FMT[fmt]||fmt)+'</span><select class="md-fmt" aria-label="接口格式"'+(auto?' data-auto="1"':'')+'>'+mdl.formats.map(function(f){return '<option value="'+f+'"'+(f===fmt?' selected':'')+'>'+esc(MDL_FMT[f]||f)+'</option>'}).join('')+'</select></span></span>'+
+  return '<div class="h-row md-f md-ep"><span class="md-lb"><span>接口地址</span><span class="md-fk md-fko"><span class="md-fv">'+esc(MDL_FMT[fmt]||fmt)+'</span><select class="md-fmt" aria-label="接口格式"'+(auto?' data-auto="1"':'')+'>'+mdlFmtOpts(fmt)+'</select></span></span>'+
     '<textarea rows="1" class="md-in mono md-url" inputmode="url" maxlength="300" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…">'+esc(url||'')+'</textarea></div>'}
 function mdlKeyHtml(p){
   var k=mdlKey&&mdlKey.id===p.id&&mdlKey.show?mdlKey.key:'';
@@ -3204,12 +3191,11 @@ function renderModels(){
   if(hostView!=='models')return;
   var h='',errBox='<div class="pe-err" id="mdErr"'+(mdlMsg.err?'':' hidden')+'>'+esc(mdlMsg.err||'')+'</div>';
   var sub=mdlSub,pm=/^p:(\+?)(.*)$/.exec(sub),mm=/^m:([^:]*):(.*)$/.exec(sub);
-  if(!mdl){$('#hostBody').innerHTML=pgHd('data-act="mdl-back"','返回','模型管理')+errBox+(mdlMsg.err?'':'<div class="h-empty">加载中…</div>');return}
+  if(!mdl){$('#hostBody').innerHTML=pgHd('data-act="mdl-back"','返回','模型管理')+errBox+(mdlMsg.err?'':LOADING);return}
   if(pm){
     var tpl=pm[1]?mdlProv(pm[2]):null,p=!pm[1]&&pm[2]?mdlProv(pm[2]):null;   // tpl：照着它再加一个同家的 Key
     if(pm[2]&&!p&&!tpl){mdlSub='';return renderModels()}
     var src=p||tpl,eps=src?mdlEps0(src):[],needKey=!p||!p.hasKey;
-    var keyIn=function(lbl,ph){return mdlField('mdKey',lbl,'','type="password" maxlength="1000" placeholder="'+ph+'"',false,true)};
     h+=pgHd('data-act="mdl-back"','返回模型管理',p?p.name+(p.label?' · '+p.label:''):tpl?'再加一个 '+tpl.name+' 的 Key':'添加 Key')+errBox;
     var f0=eps[0]?eps[0][0]:'openai';
     // 默认只露三个框：Key、接口地址（格式按地址自动判断）、备注；其他收进「更多」
@@ -3272,7 +3258,9 @@ function mdlFetch(id){
 }
 function mdlModelsUpd(){var p=mdlRemote&&mdlProv(mdlRemote.id),el=$('#mdModels');if(p&&el&&mdlSub==='p:'+p.id)el.innerHTML=mdlModelsHtml(p)}
 function mdlKeyUpd(){if(!mdlKey&&$('#loginPane.on .lg-tokshow')&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok){openCtok(clawInfo.claude.login.ctok);return}   // 显示出来的令牌 1 分钟后藏起
-  if(mdlKey&&mdlKey.id==='claude:token'){if(mdlKey.show&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok)openCtok(clawInfo.claude.login.ctok,mdlKey.key);return}if(hostView==='voices'&&typeof renderVoices==='function'){renderVoices();return}var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
+  if(mdlKey&&mdlKey.id==='claude:token'){if(mdlKey.show&&clawInfo.claude&&clawInfo.claude.login&&clawInfo.claude.login.ctok)openCtok(clawInfo.claude.login.ctok,mdlKey.key);return}if(hostView==='voices'){renderVoices();return}var el=$('#mdKeyBox'),pm=/^p:(.+)$/.exec(mdlSub),p=pm&&mdlProv(pm[1]);if(el&&p&&p.hasKey)el.innerHTML=mdlKeyHtml(p)}
+// 查看 / 复制 Key：已经输过密码拿到了就直接用，没有先问密码
+function keyUse(id,mode){if(!(mdlKey&&mdlKey.id===id))return keyAsk(id,mode);if(mode==='copy')copyText(mdlKey.key,mdlCopyFail);else{mdlKey.show=!mdlKey.show;mdlKeyUpd()}}
 function mdlRemember(id,k,show){clearTimeout(mdlKeyT);mdlKey={id:id,key:k,show:show};mdlKeyUpd();mdlKeyT=setTimeout(mdlForget,60000)}
 function mdlForget(){clearTimeout(mdlKeyT);if(!mdlKey)return;mdlKey=null;mdlKeyUpd()}
 function mdlCopyFail(){if(mdlKey){mdlKey.show=true;mdlKeyUpd()}toast('复制不了，已显示出来，长按选择')}
@@ -3283,7 +3271,7 @@ function mdlAct(act,a){
     if(mm){mdlSub='p:'+mm[1];renderModels();return}
     if(pm){mdlSub='';mdlRemote=null;mdlForget();renderModels();return}
     if(mdlFrom==='claw'){mTab('claw');return}
-    hostView='';$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return;
+    hostHome();return;
   }
   if(act==='mdl-prov'){mdlSub='p:'+a.dataset.id;mdlMsg={};mdlForget();renderModels();return}
   if(act==='mdl-prov-new'){mdlSub='p:'+(a.dataset.from?'+'+a.dataset.from:'');mdlMsg={};renderModels();return}
@@ -3311,8 +3299,7 @@ function mdlAct(act,a){
     if(!confirm('删除 '+p.name+(p.label?' · '+p.label:'')+' 的 Key（…'+p.keyLast4+'）和它下面的 '+p.models.length+' 个模型？（电脑上会留一份备份，30 天后自动清掉）'))return;
     mdlPost({op:'provider-delete',id:p.id},'已删除',function(){mdlSub='';mdlRemote=null;mdlForget()});return;
   }
-  if(act==='mdl-key-show'&&pid){if(mdlKey&&mdlKey.id===pid){mdlKey.show=!mdlKey.show;mdlKeyUpd()}else keyAsk(pid,'show');return}
-  if(act==='mdl-key-copy'&&pid){if(mdlKey&&mdlKey.id===pid)copyText(mdlKey.key,mdlCopyFail);else keyAsk(pid,'copy');return}
+  if((act==='mdl-key-show'||act==='mdl-key-copy')&&pid){keyUse(pid,act==='mdl-key-copy'?'copy':'show');return}
   if(act==='mdl-fetch'&&pid){mdlFetch(pid);return}
   if(act==='mdl-pick-all'){var bs=document.querySelectorAll('#hostBody .md-pick input'),all=[].every.call(bs,function(x){return x.checked});[].forEach.call(bs,function(x){x.checked=!all});return}
   if(act==='mdl-pick-add'&&pid&&mdlRemote&&mdlRemote.items){
@@ -3342,8 +3329,7 @@ function keyAsk(id,mode){
   showDlg(keyDlg,true);($('#keyU').hidden?$('#keyP'):$('#keyU')).focus();
 }
 function closeKey(){showDlg(keyDlg,false);keyFor=null;$('#keyP').value=''}
-$('#keyNo').addEventListener('click',closeKey);
-keyDlg.addEventListener('click',function(e){if(e.target===keyDlg)closeKey()});
+dlgWire(keyDlg,$('#keyNo'),closeKey);
 $('#keyForm').addEventListener('submit',function(e){
   e.preventDefault();if(!keyFor)return;
   var t=keyFor;$('#keyErr').textContent='';$('#keyGo').disabled=true;
@@ -3371,13 +3357,13 @@ $('#hostBody').addEventListener('click',function(e){
   var a=e.target.closest('[data-act]');if(!a)return;
   if(a.dataset.act==='peer-rename'){e.stopPropagation();peRename(a.closest('.pe-peer'),a.dataset.id);return}
   var act=a.dataset.act;
-  if(act==='peer'){hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();return}
+  if(act==='peer'){peerEnter();return}
   if(act==='peer-sub'){peerGo(a.dataset.sub);return}
   if(act==='cr-op'){crOp(a.dataset.op);return}
   if(act==='pool-claw'){peerPoolClaw=a.dataset.claw;poolPaint();document.querySelectorAll('.pe-seg button').forEach(function(b){b.classList.toggle('on',b.dataset.claw===peerPoolClaw)});return}
   if(act==='pool-del'){poolSave((peerCfg.sessions||[]).filter(function(x){return x!==a.dataset.id}));return}
-  if(act==='peer-back'&&peerFromList){var fl=peerFromList;peerFromList='';hostView='';peerWatch(false);$('#railPeer').classList.remove('on');mTab(fl);openSheet(true);return}
-  if(act==='peer-back'){hostView='';peerWatch(false);$('#railPeer').classList.remove('on');$('#railSet').classList.add('on');$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost();return}
+  if(act==='peer-back'&&peerFromList){subBack();return}
+  if(act==='peer-back'){peerWatch(false);$('#railPeer').classList.remove('on');$('#railSet').classList.add('on');hostHome();return}
   if(act==='skills'){hostView='skills';skillMsg={};renderSkills();loadSkills();return}
   if(act==='models'){openModels('host');return}
   if(/^mdl-/.test(act)){mdlAct(act,a);return}
@@ -3412,11 +3398,11 @@ $('#hostBody').addEventListener('click',function(e){
 $('#hostBody').addEventListener('input',function(e){
   if(e.target.classList.contains('bad')&&e.target.id)peFieldErr(e.target.id,'');   // 一改就去掉框下面的错误
   if(e.target.id==='pePoolQ'){peerPoolQ=e.target.value;var l=$('#pePoolList');if(l&&peerCfg)l.innerHTML=poolListHtml(peerCfg)}   // 协同会话页搜索：只重画列表
-  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden'){f0.value=fs.value;mdFv0()}}mdlFmtX()}   // 模型管理：接口格式跟着地址猜
+  if(e.target.classList.contains('md-url')){var fs=e.target.parentNode.querySelector('.md-fmt[data-auto]');if(fs){fs.value=mdlGuess(e.target.value);var f0=$('#mdFmt0');if(f0&&fs.type==='hidden'){f0.value=fs.value;mdFv($('#mdFmt0'))}}mdlFmtX()}   // 模型管理：接口格式跟着地址猜
 });
 $('#hostBody').addEventListener('change',function(e){
-  if(e.target.classList.contains('md-fmt')){e.target.removeAttribute('data-auto');var fv=e.target.parentNode.querySelector('.md-fv');if(fv)fv.textContent=MDL_FMT[e.target.value]||e.target.value}
-  if(e.target.id==='mdFmt0'){mdFv0();var h0=document.querySelector('#hostBody .md-ep .md-fmt[type="hidden"]');if(h0){h0.value=e.target.value;h0.removeAttribute('data-auto')}mdlFmtX()}   // 「更多」里手动选了主地址的格式：不再跟着地址猜   // 手动选过格式：不再跟着地址猜
+  if(e.target.classList.contains('md-fmt')){e.target.removeAttribute('data-auto');mdFv(e.target)}
+  if(e.target.id==='mdFmt0'){mdFv($('#mdFmt0'));var h0=document.querySelector('#hostBody .md-ep .md-fmt[type="hidden"]');if(h0){h0.value=e.target.value;h0.removeAttribute('data-auto')}mdlFmtX()}   // 「更多」里手动选了主地址的格式：不再跟着地址猜   // 手动选过格式：不再跟着地址猜
   // 会话池：勾 / 取消马上提交
   if(e.target.closest&&e.target.closest('#hostBody .pe-ss.pool')){var id=e.target.value,arr=(peerCfg.sessions||[]).slice();
     if(e.target.checked){if(arr.indexOf(id)<0)arr.push(id)}else arr=arr.filter(function(x){return x!==id});poolSave(arr)}
@@ -3463,7 +3449,7 @@ function peerWatch(on){
   if(!on)return;
   peerPoll=setInterval(function(){
     if(hostView!=='peer'||document.hidden)return;
-    fetch('/api/peer').then(function(r){return r.json()}).then(function(j){if(hostView!=='peer')return;var c=peerCfg||{};j.dir=c.dir;j.sessions=c.sessions;peerCfg=j;paintPeerLive()}).catch(function(){});
+    getJson('/api/peer').then(function(j){if(hostView!=='peer')return;var c=peerCfg||{};j.dir=c.dir;j.sessions=c.sessions;peerCfg=j;paintPeerLive()}).catch(function(){});
   },3000);
   peerCheck=setInterval(function(){if(hostView==='peer'&&!document.hidden)peerCheckNow()},10000);
 }
@@ -3486,16 +3472,16 @@ function pairBanner(m){
     el.addEventListener('click',function(){el.classList.remove('on');openPeerView()})}
   el.textContent=m.name+'（'+m.ip+'）申请配对 · 点这里查看'+(m.code?' · 配对码 '+m.code:'');
   el.classList.add('on');clearTimeout(pairBannerT);pairBannerT=setTimeout(function(){el.classList.remove('on')},15000);
-  if(hostView==='peer'&&peerCfg)fetch('/api/peer').then(function(r){return r.json()}).then(function(j){var c=peerCfg||{};j.dir=c.dir;j.sessions=c.sessions;peerCfg=j;paintPeerLive()}).catch(function(){});
+  if(hostView==='peer'&&peerCfg)getJson('/api/peer').then(function(j){var c=peerCfg||{};j.dir=c.dir;j.sessions=c.sessions;peerCfg=j;paintPeerLive()}).catch(function(){});
 }
 // 点「配对申请」通知：直接打开 宿主 → claclaw 协同
 var wantPeer=new URLSearchParams(location.search).get('view')==='peer';
-function peerUsed(){document.documentElement.classList.add('peer-on');try{localStorage.setItem('claclaw.peerOn','1')}catch(_){}}
-fetch('/api/peer').then(function(r){return r.json()}).then(function(j){if(j&&((j.peers||[]).length||(j.pending||[]).length||(j.sessions||[]).length||j.outPair))peerUsed()}).catch(function(){});   // 本机记录丢了（iOS 嵌入页会清）也能按电脑上的协同数据补回
+function peerUsed(){document.documentElement.classList.add('peer-on');lsSet('claclaw.peerOn','1')}
+getJson('/api/peer').then(function(j){if(j&&((j.peers||[]).length||(j.pending||[]).length||(j.sessions||[]).length||j.outPair))peerUsed()}).catch(function(){});   // 本机记录丢了（iOS 嵌入页会清）也能按电脑上的协同数据补回
 function openPeerView(){
   peerUsed();
   if(!DESKTOP.matches&&!mList)goList();
-  mTab('host');hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync();
+  mTab('host');peerEnter();
 }
 // 左边栏的「协同」快捷入口：在协同页时亮起（这时「设置」不亮）；有配对申请时带红点
 function railPeerSync(){var b=$('#railPeer');if(!b)return;var on=$('#app').classList.contains('host-on')&&hostView==='peer';b.classList.toggle('on',on);if(on){b.classList.remove('dot');$('#sPeer').classList.remove('dot');$('#railSet').classList.remove('on')}}
@@ -3503,14 +3489,15 @@ $('#railPeer').addEventListener('click',function(){peerFromList='';openPeerView(
 $('#sPeer').addEventListener('click',function(){peerFromList=listTab();openPeerView()});   // 列表顶栏的「协同」快捷入口：返回时回到列表
 // 手机列表顶上的「语音管理」：从列表进的，返回时回到列表（不是设置 / 宿主页）
 var peerFromList='';
-var listTab=function(){return listMode==='recent'?'recent':'chats'};
+// 子页（语音管理 / 账号 / 主题 / 协同）的返回：从列表进的回列表，否则回设置
+function subBack(){var t=peerFromList;peerFromList='';hostView='';if(t){mTab(t);openSheet(true)}else mTab('set')}
+function listTab(){return listMode==='recent'?'recent':'chats'}
 $('#sVoice').addEventListener('click',function(){var t=listTab();peerFromList=t;openVoices()});
-// 电脑左栏的「模型管理」快捷入口：直接打开 宿主 → 模型管理，在模型管理页时亮起
 // 附近的 claclaw（局域网里开着协同的电脑，Bonjour 广播找到的）
 function peerScan(){
   if(!peerCfg||!peerCfg.local||!peerCfg.enabled||peerScanning)return;
   peerScanning=true;paintPeerNear();
-  fetch('/api/peer/nearby',{method:'POST'}).then(function(r){return r.json()}).then(function(list){peerNear=Array.isArray(list)?list:[]}).catch(function(){peerNear=[]})
+  getJson('/api/peer/nearby',{method:'POST'}).then(function(list){peerNear=Array.isArray(list)?list:[]}).catch(function(){peerNear=[]})
     .then(function(){peerScanning=false;paintPeerNear()});
 }
 function peerNearHtml(c){
@@ -3523,12 +3510,13 @@ function peerNearHtml(c){
   return '<div><div class="h-h">附近的 claclaw <button type="button" class="pe-scan" data-act="peer-scan"'+(peerScanning?' disabled':'')+'>'+(peerScanning?'查找中…':'重新查找')+'</button></div><div class="h-card">'+rows+empty+'</div></div>';
 }
 function paintPeerNear(){var el=$('#peNear');if(el&&peerCfg)el.innerHTML=peerNearHtml(peerCfg)}
+function peerEnter(){hostView='peer';peerSub='';peerMsg={};peerOnline={};loadPeerPage();railPeerSync()}
 function loadPeerPage(){
-  $('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';
-  var j=function(u){return fetch(u).then(function(r){return r.json()}).catch(function(){return []})};
+  $('#hostBody').innerHTML=LOADING;
+  var j=function(u){return getJson(u).catch(function(){return []})};
   // 先只等 /api/peer 就画出来（已配对、在线状态都靠它；池里会话的标题有 poolInfo 兜底）。
   // 各 Claw 的会话列表要十几个请求，走中继时一来一回很慢，放到后台取，取回来再补「协同会话」页和默认目录
-  fetch('/api/peer').then(function(r){return r.json()}).then(function(c){
+  getJson('/api/peer').then(function(c){
     if(hostView!=='peer')return;
     peerCfg=c;peNormCfg(peerCfg);
     renderPeer();peerWatch(true);peerCheckNow();peerScan();loadSkills();
@@ -3601,24 +3589,16 @@ function peerPendingHtml(c){
   }).join('')+'</div><div class="pe-note">确认 IP 和名字是你认识的电脑再点「同意」，会显示配对码，把码告诉对方；不认识就点「拒绝」。没点同意，对方猜对码也配不上。</div></div>';
 }
 // 已配对的对方：固定编号 + 固定颜色（会话列表里标「最近和谁通信」用同一套）
-// 对方的颜色：按对方 id 算出一个色相（看起来随机，同一个对方永远同一个颜色）
 // 对方的配色组：服务端配对时从 7 组预设里随机分好（color）；老版本服务端没给就按 id 算一个
 function peerPc(p){var c=p&&p.color;if(!(c>=0&&c<7)){var h=0,id=String(p&&p.id||'');for(var i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0;c=h%7}return 'pc'+c}
 function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div class="pe-err">'+esc(peerMsg.err)+'</div>':'')+(peerMsg.ok?'<div class="pe-ok">'+esc(peerMsg.ok)+'</div>':'')}
-// 会话池摘要：加入了几个会话、分布在几个目录
 function poolTitle(id){var s=poolInfo(id);return s?(s.title||'(无标题)'):shortId(id)}
 var CLAW_NAMES={claude:'Claude Code'};CLAW_T.forEach(function(c){CLAW_NAMES[c.id]=c.long});
 function peNormCfg(c){if(c&&c.dir&&c.dir.indexOf('|')<0)c.dir='claude|'+c.dir;return c}   // 旧配置只存了目录（没有「Claw|」前缀）：初次载入、每次操作后服务端回的配置都要转
 function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':(s.cwd||''))}   // OpenClaw 没有目录，全部归一组
 function peDirLabel(k){var i=k.indexOf('|'),cl=k.slice(0,i),d=k.slice(i+1).replace(/^\/(Users|home)\/[^\/]+/,'~');return cl==='claude'?(d||'(未知目录)'):CLAW_NAMES[cl]+(d?' · '+d:'')}
+function peDirShort(k){return peDirLabel(k).replace(/^[^·]*· /,'')}   // 不带 Claw 名的目录
 function poolCwd(id){var s=poolInfo(id);return s?peDirKey(s):clawOf(id)+'|'}
-function poolDir(id){var s=(peerList||[]).find(function(x){return x.id===id});return s?String(s.cwd||'').split('/').pop():''}
-function poolSumText(){
-  var ids=(peerCfg&&peerCfg.sessions)||[];if(!ids.length)return '还没加入会话';
-  var dirs={};ids.forEach(function(id){dirs[poolDir(id)]=1});
-  return '已加入 '+ids.length+' 个会话（'+Object.keys(dirs).length+' 个目录）：'+ids.map(function(id){return poolTitle(id)+'（'+poolDir(id)+'）'}).join('、')+'。改完点「保存」。';
-}
-function paintPoolSum(){var el=$('#pePoolSum');if(el)el.textContent=poolSumText()}
 // ---------- 协同页：主页 + 子页面 ----------
 // 主页：状态、配对申请、已配对（一行一个，点进详情）、三个入口（添加对方 / 协同会话 / 本机与网络）、复制邀请
 // 子页面：p:<对方 id> 对方详情 | add 添加对方 | pool 协同会话 | net 本机与网络
@@ -3673,14 +3653,15 @@ function peRename(row,id){
 // 已配对列表（主页）
 function peerPeersHtml(c){
   if(!c.peers||!c.peers.length)return hSec('已配对','<div class="h-row"><span class="v pe-left">还没有配对。'+(c.local?'点「添加对方」，或者把「复制邀请」发给对方。':'')+'</span></div>');
-  return '<div><div class="h-h">已配对</div><div class="h-card">'+c.peers.map(function(p){
+  return hSec('已配对',c.peers.map(function(p){
     var o=peerOnline[p.id];
     var v=!p.canCall?'只能对方找我们':!o?'检查中…':o.online?(o.sessions||[]).length+' 个会话':'离线';
     return '<div class="h-row h-link pe-peer ptint '+peerPc(p)+'" data-act="peer-sub" data-sub="p:'+esc(p.id)+'"><span class="k pe-peer-name">'+peerDot(p)+'<span class="pnm">'+esc(p.name)+'</span>'+peerRouteTag(p)+'</span><button type="button" class="pe-ren" data-act="peer-rename" data-id="'+esc(p.id)+'" aria-label="改名" title="改名">'+ICON_PEN+'<span>编辑</span></button><span class="v">'+v+'</span><span class="chev" aria-hidden="true"></span></div>';
-  }).join('')+'</div></div>';
+  }).join(''));
 }
 // 对方详情里会随在线检查变的部分（每 10 秒刷新，不动下面的勾选框）
-function peerDetailLive(c,p){
+function subPeer(c){return (c.peers||[]).find(function(x){return 'p:'+x.id===peerSub})}   // 正在看的那个对方（子页 p:<id>）
+function peerDetailLive(p){
   var o=peerOnline[p.id],rs=o&&o.relay;
   var st=!p.canCall?'单向：只能对方找我们':!o?'检查中…':o.online?'在线'+(o.route?' · '+routeName(o.route,o):''):'离线'+(o.error?'：'+esc(o.error):'');
   var one=function(x){return x.ok?'可用（约 '+fmtMs(x.ms)+'）':'不通：'+esc(x.error||'')};
@@ -3691,9 +3672,8 @@ function peerDetailLive(c,p){
   var ch=o&&Array.isArray(o.chans)?o.chans.slice():[];
   if(o&&o.direct&&!o.direct.open&&!ch.some(function(x){return x.key==='direct'}))ch.push({key:'direct',ok:false,none:1});
   ch.sort(function(a,b){return (a.ok?a.ms||9e5:1e9)-(b.ok?b.ms||9e5:1e9)});
-  var KIND={lan:'局域网',tailscale:'Tailscale',wan:'公网直连',relay:'中继'};
   var chs=ch.length?'<div class="pe-chs">'+ch.map(function(x){
-    var m=/^(\w+) (.*)$/.exec(x.key)||[],kind=x.key==='direct'?'直连'+(o.direct&&o.direct.open&&o.direct.via?' · '+(VIA[o.direct.via]||o.direct.via):''):(KIND[m[1]]||m[1]||x.key),addr=m[2]||'';
+    var m=/^(\w+) (.*)$/.exec(x.key)||[],kind=x.key==='direct'?'直连'+(o.direct&&o.direct.open&&o.direct.via?' · '+(VIA[o.direct.via]||o.direct.via):''):(ADDR_KIND[m[1]]||m[1]||x.key),addr=m[2]||'';
     var d=o.direct,pair=x.key==='direct'&&d&&d.open&&(d.local||d.remote)?'<span class="pe-ch-p">本机 '+esc(d.local||'?')+'<br>对方 '+esc(d.remote||'?')+(d.pair?'（'+esc(d.pair)+'）':'')+'</span>':'';
     return '<div class="pe-ch"><em class="pe-route'+(m[1]==='relay'?' rl':'')+'">'+esc(kind)+'</em><span class="pe-ch-a">'+esc(addr)+'</span><span class="pe-ch-ms'+(x.ok?'':x.none?' wait':' bad')+'">'+(x.ok?(x.ms?fmtMs(x.ms):'通'):x.none?'还没打通':'不通')+'</span>'+pair+'</div>';
   }).join('')+'</div>':'';
@@ -3707,11 +3687,11 @@ function peerDetailHtml(c,p){
   var allowHtml=pool.length?'<div class="pe-allow" data-id="'+esc(p.id)+'">'+CLAW_ORDER.filter(function(k){return byClaw[k]}).map(function(k){
     var g=byClaw[k];
     return '<div class="pe-claw-g"><span class="pe-claw-ic">'+clawIcon(k)+'</span>'+esc(CLAW_NAMES[k])+'</div>'+g.order.map(function(d){
-      return (k==='openclaw'?'':'<div class="pe-allow-dir">'+esc(peDirLabel(d).replace(/^[^·]*· /,''))+'</div>')+g.dirs[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
+      return (k==='openclaw'?'':'<div class="pe-allow-dir">'+esc(peDirShort(d))+'</div>')+g.dirs[d].map(function(id){var on=!allow||allow.indexOf(id)>=0;
         return '<label><input type="checkbox" value="'+esc(id)+'"'+(on?' checked':'')+(c.canAssign?'':' disabled')+'><span>'+esc(poolTitle(id))+'</span></label>'}).join('');
     }).join('');
   }).join('')+'</div>':'<span class="v pe-left">协同会话池是空的，先到「协同会话」里加</span>';
-  var h='<div><div class="h-card" id="peDetLive">'+peerDetailLive(c,p)+'</div></div>';
+  var h='<div><div class="h-card" id="peDetLive">'+peerDetailLive(p)+'</div></div>';
   h+='<div><div class="h-h">开放给它的会话</div><div class="h-card"><div class="h-row pe-col">'+allowHtml+'</div></div>'+
     '<div class="pe-note">'+(c.canAssign?'对方只能看到勾上的会话，勾选即生效。':'对方只能看到勾上的会话；只能在本机用 127.0.0.1 打开时修改。')+'</div></div>';
   var prs=Array.isArray(p.relays)?p.relays:[];
@@ -3750,7 +3730,7 @@ var CLAW_ORDER=['claude','codex','copilot','deepseek','kimi','qwen','glm','mini'
 // Claw 的图标：和左边栏用同一份（左边栏的按钮里就是图标）
 var GROUP_SVG='<svg class="gp-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 13.7c.5-.1 1-.2 1.5-.2 2.8 0 5 1.9 5 4.8"/></svg>';
 var COLLAB_SVG='<svg viewBox="0 0 64 48" fill="currentColor" aria-label="协同"><circle cx="14" cy="14" r="7"/><path d="M2 37V32C2 26.5 7.5 23 14 23S26 26.5 26 32V37Z"/><circle cx="50" cy="24" r="7"/><path d="M38 47V42C38 36.5 43.5 33 50 33S62 36.5 62 42V47Z"/><path d="M30 7L37 1V4.5H50V9.5H37V13Z"/><rect x="23" y="11" width="11" height="3" rx="1.5"/><rect x="27" y="19" width="13" height="3" rx="1.5" fill-opacity=".5"/><path d="M41 30L34 24.5V27.5H27V32.5H34V35.5Z"/></svg>';
-function clawIcon(k){if(k==='group')return GROUP_SVG;if(!/^[a-z]+$/.test(k||''))return '';var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:k?esc(CLAW_NAMES[k]||''):''}
+function clawIcon(k){if(k==='group')return GROUP_SVG;if(!/^[a-z]+$/.test(k||''))return '';var b=document.querySelector('#rail .rclaw[data-claw="'+k+'"]');return b?b.innerHTML:esc(CLAW_NAMES[k]||'')}
 // 群成员的头像：Claw logo（知道的话）+ 协同标识（别的电脑上的会话）
 function gmAv(w){return (w&&w.claw?'<span class="gm-ic">'+clawIcon(w.claw)+'</span>':'')+(w&&w.collab?'<span class="gm-co" title="协同会话'+(w.peer?' · '+esc(w.peer):'')+'">'+COLLAB_SVG+'</span>':'')}
 function clawSegBtn(k,n,on){return '<button type="button" data-act="pool-claw" data-claw="'+k+'" title="'+esc(CLAW_NAMES[k])+'" aria-label="'+esc(CLAW_NAMES[k])+'"'+(on?' class="on"':'')+'>'+clawIcon(k)+(n?'<i>'+n+'</i>':'')+'</button>'}
@@ -3761,8 +3741,8 @@ function poolJoinedHtml(c){
   var by={};ids.forEach(function(id){var k=clawOf(id);(by[k]=by[k]||[]).push(id)});
   return CLAW_ORDER.filter(function(k){return by[k]}).map(function(k){
     return '<div class="pe-claw-h"><b><span class="pe-claw-ic">'+clawIcon(k)+'</span>'+CLAW_NAMES[k]+'</b><span>'+by[k].length+' 个</span></div>'+by[k].map(function(id){
-      var s=poolInfo(id),d=s?peDirLabel(peDirKey(s)).replace(/^[^·]*· /,''):'';
-      return '<div class="h-row pe-pool-row"><span class="k"><span class="pe-pt">'+esc(s?(s.title||'(无标题)'):shortId(id))+'</span>'+(d&&k!=='openclaw'?'<small>'+esc(d)+'</small>':'')+'</span>'+
+      var s=poolInfo(id),d=s?peDirShort(peDirKey(s)):'';
+      return '<div class="h-row pe-pool-row"><span class="k"><span class="pe-pt">'+esc(poolTitle(id))+'</span>'+(d&&k!=='openclaw'?'<small>'+esc(d)+'</small>':'')+'</span>'+
         (c.canAssign?'<button type="button" class="pe-btn del pe-mini pe-soft" data-act="pool-del" data-id="'+esc(id)+'">移出</button>':'')+'</div>';
     }).join('');
   }).join('');
@@ -3773,7 +3753,7 @@ function poolListHtml(c){
   if(!ss.length)return '<div class="pe-note" style="margin:10px 14px">'+(q?'没有匹配的会话':'这个 Claw 没有会话')+'</div>';
   var by={},order=[];ss.forEach(function(s){var k=peDirKey(s);if(!by[k]){by[k]=[];order.push(k)}by[k].push(s)});
   return order.map(function(k){
-    return (peerPoolClaw==='openclaw'?'':'<div class="pe-allow-dir pe-pool-dir">'+esc(peDirLabel(k).replace(/^[^·]*· /,''))+'</div>')+
+    return (peerPoolClaw==='openclaw'?'':'<div class="pe-allow-dir pe-pool-dir">'+esc(peDirShort(k))+'</div>')+
       '<div class="pe-ss pool">'+by[k].map(function(s){return '<label><input type="checkbox" value="'+esc(s.id)+'"'+(joined.indexOf(s.id)>=0?' checked':'')+'><span>'+esc(s.title||'(无标题)')+'</span><small>'+esc(shortId(s.id))+'</small></label>'}).join('')+'</div>';
   }).join('');
 }
@@ -3860,12 +3840,12 @@ function peerMainHtml(c){
 function paintPeerLive(){
   if(hostView!=='peer'||!peerCfg)return;
   if(!peerSub){var a=$('#pePending'),b=$('#pePeers'),o=$('#peOutbox');if(a)a.innerHTML=peerPendingHtml(peerCfg);if(o)o.innerHTML=peerOutboxHtml(peerCfg);if(b&&!b.querySelector('.pe-peer.sw,.pnm-in'))b.innerHTML=peerPeersHtml(peerCfg);return}   // 正在左滑 / 改名时不重画
-  if(peerSub.indexOf('p:')===0){var p=(peerCfg.peers||[]).find(function(x){return 'p:'+x.id===peerSub}),d=$('#peDetLive'),t=document.querySelector('.pe-title .pe-peer-name');if(p&&d)d.innerHTML=peerDetailLive(peerCfg,p);if(p&&t)t.innerHTML=peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)}   // 标题上的路线标签跟着一起刷新，和「状态」一致
+  if(peerSub.indexOf('p:')===0){var p=subPeer(peerCfg),d=$('#peDetLive'),t=document.querySelector('.pe-title .pe-peer-name');if(p&&d)d.innerHTML=peerDetailLive(p);if(p&&t)t.innerHTML=peerDot(p)+'<span>'+esc(p.name)+'</span>'+peerRouteTag(p)}   // 标题上的路线标签跟着一起刷新，和「状态」一致
 }
 function renderPeer(){
   if(hostView!=='peer'||!peerCfg)return;
   var c=peerCfg,p=null;
-  if(peerSub.indexOf('p:')===0){p=(c.peers||[]).find(function(x){return 'p:'+x.id===peerSub});if(!p)peerSub=''}   // 对方已经撤销：回主页
+  if(peerSub.indexOf('p:')===0){p=subPeer(c);if(!p)peerSub=''}   // 对方已经撤销：回主页
   if(peerSub==='add'&&!c.local)peerSub='';
   var titles={add:'添加对方',pool:'协同会话',net:'本机与网络'};
   var h=peerSub?pgHd('data-act="peer-sub" data-sub=""','返回协同',titles[peerSub]||(p?p.name:'协同')):pgHd('data-act="peer-back"',peerFromList?'返回':'返回宿主','claclaw 协同');
@@ -3904,7 +3884,7 @@ function syncChatsTab(){
   var k=curClaw()||'';
   // 电脑左栏同一个按钮；一个 Claw 都没有（新装的电脑）：显示 claclaw 的 logo，不显示 Claude 的
   var rc=$('#railCur'),rk=noClaw?'-':k;if(rc&&rc.dataset.k!==rk){rc.dataset.k=rk;rc.innerHTML=noClaw?'<img class="tile" src="/icons/icon-192.png?v=11" alt="">':k?clawIcon(k):chatsIcon.outerHTML;rc.title=noClaw?'claclaw：还没有 Claw，先装一个':(k?CLAW_NAMES[k]+' ':'')+'会话';rc.setAttribute('aria-label',rc.title)}
-  if(tb.dataset.k===k&&tb.dataset.k!==undefined)return;
+  if(tb.dataset.k===k)return;
   var old=tb.querySelector('.ti,.tlogo'),n;
   if(k){n=document.createElement('span');n.className='tlogo';n.innerHTML=clawIcon(k)}else n=chatsIcon;
   if(old!==n)old.replaceWith(n);
@@ -3926,7 +3906,7 @@ showClawSel();
 var clawsAt=0;
 function loadClaws(){
 if(Date.now()-clawsAt<3000)return;clawsAt=Date.now();
-fetch('/api/claws').then(function(r){return r.json()}).then(function(list){try{localStorage.setItem(hk('claws'),JSON.stringify(list))}catch(_){}applyClaws(list)}).catch(function(){});
+getJson('/api/claws').then(function(list){lsSet(hk('claws'),JSON.stringify(list));applyClaws(list)}).catch(function(){});
 }
 // 上次查到的 Claw 列表先用上（经中继打开时不用先看到全部、再少几个），服务器的结果到了再更新
 var noClaw=false;   // 一个能用的 Claw 都没有
@@ -3935,6 +3915,8 @@ var okClaws=[];   // 能用的 Claw
 var loginFirst=null,autoHi=null;
 var clawInfo={};   // /api/claws 的结果，按 id 存（登录情况在 .login 里）
 var clawStarting={};   // 正在临时启动的 Claw（startClaw）：id → 开始时间
+// Claw 卡片上的小按钮（登录 / 启动 / 安装）：卡片本身也能点，所以不让点击冒上去
+function cardBtn(card,cls,fn){var b=document.createElement('span');b.className=cls;b.setAttribute('role','button');b.addEventListener('click',function(e){e.stopPropagation();fn()});card.appendChild(b);return b}
 function applyClaws(list){
   if(!Array.isArray(list))return;
   var any=false,ok=[];
@@ -3948,22 +3930,22 @@ function applyClaws(list){
     card.disabled=!c.supported||(down&&!canStart);card.classList.toggle('claw-down',canStart);
     card.querySelector('.claw-st').textContent=!c.supported?(c.reason||'这个 Claw 在当前环境下用不了'):starting?'正在启动…':down?'已安装，没有启动':c.canInstall?(c.installing?'正在安装，点开看进度':'还没安装，点「安装」帮你装好'):'';
     var sb=card.querySelector('.claw-start');
-    if(canStart){if(!sb){sb=document.createElement('span');sb.className='claw-login claw-start';sb.setAttribute('role','button');sb.addEventListener('click',function(e){e.stopPropagation();startClaw(c.id)});card.appendChild(sb)}sb.textContent=starting?'启动中…':'启动';sb.hidden=false}
+    if(canStart){if(!sb)sb=cardBtn(card,'claw-login claw-start',function(){startClaw(c.id)});sb.textContent=starting?'启动中…':'启动';sb.hidden=false}
     else if(sb)sb.hidden=true;
     // 一个 Claw 都没装：这张卡片（DeepSeek）带「安装」按钮，点卡片也是装
     var ib=card.querySelector('.claw-install');
-    if(c.canInstall){if(!ib){ib=document.createElement('span');ib.className='claw-login claw-install';ib.setAttribute('role','button');ib.addEventListener('click',function(e){e.stopPropagation();openInstall(c.id)});card.appendChild(ib)}ib.hidden=false;ib.textContent=c.installing?'安装中…':'安装'}
+    if(c.canInstall){if(!ib)ib=cardBtn(card,'claw-login claw-install',function(){openInstall(c.id)});ib.hidden=false;ib.textContent=c.installing?'安装中…':'安装'}
     else if(ib)ib.hidden=true;
     // 登录：没登录（模型库也顶不上）就写「未登录」；claclaw 能替它登的加个「登录」小按钮（已登录的写「换账号」）
     var lg=c.login,lb=card.querySelector('.claw-login:not(.claw-install):not(.claw-start)');
     if(c.supported&&!down&&lg&&lg.need)card.querySelector('.claw-st').textContent=lg.can?'未登录':'未登录（要在电脑上登录）';
     if(c.supported&&!down&&lg&&lg.can){
-      if(!lb){lb=document.createElement('span');lb.className='claw-login';lb.setAttribute('role','button');lb.addEventListener('click',function(e){e.stopPropagation();openLogin(c.id)});card.appendChild(lb)}
+      if(!lb)lb=cardBtn(card,'claw-login',function(){openLogin(c.id)});
       lb.textContent=lg.ctok?'长期令牌':lg.loggedIn===true?'换账号':lg.key?'填 key':'登录';lb.hidden=false;   // Claude：这里进的是长期令牌（它不在 claclaw 里登录）
     }else if(lb)lb.hidden=true;
     if((!c.supported||down)&&clawSel===c.id)clawSel=null;
     if(c.installed&&c.supported&&!down)ok.push(c.id);
-    if(!c.installed&&clawSel===c.id){clawSel=null;try{localStorage.removeItem(hk('claw'))}catch(_){}}
+    if(!c.installed&&clawSel===c.id){clawSel=null;lsPut(hk('claw'));}
   });
   document.querySelector('.claw-none').hidden=any;
   // 一个能用的 Claw 都没有（新装的电脑）：Claw 入口亮红点，提示先装一个
@@ -3984,7 +3966,7 @@ function openLogin(claw){
   if(lg.ctok)return openCtok(lg.ctok);
   loginClaw=claw;
   loginFirst=okClaws.length===1&&okClaws[0]===claw&&lg.loggedIn!==true?claw:null;
-  var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
+  var p=pane('loginPane',closeLogin);
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc((lg.loggedIn===true?'重新登录 ':'登录 ')+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
     +(lg.hint?'<p class="lg-hint">'+esc(lg.hint)+'</p>':'')
     +(lg.keyUrl?'<div class="lg-key"><a class="lg-btn ghost" href="'+esc(lg.keyUrl)+'" target="_blank" rel="noopener">打开平台网页拿 key</a></div>':'')
@@ -4024,7 +4006,7 @@ function firstChat(claw){
 }
 function pickClaw(id){
   if(curClaw()!==id){lastList=null;$('#sList').innerHTML=''}   // 换了 Claw：旧列表别闪一下
-  clawSel=id;try{localStorage.setItem(hk('claw'),clawSel)}catch(_){}
+  clawSel=id;lsSet(hk('claw'),clawSel);
   showClawSel();renderUnread();mTab('chats');openSheet();
 }
 document.querySelectorAll('.claw-card').forEach(function(c){c.addEventListener('click',function(){if(c.disabled)return;var i=clawInfo[c.dataset.claw];if(i&&i.canInstall&&!i.installed)openInstall(c.dataset.claw);else if(i&&i.canStart&&i.running===false)startClaw(c.dataset.claw);else pickClaw(c.dataset.claw)})});
@@ -4035,9 +4017,9 @@ function startClaw(id){
   clawStarting[id]=Date.now();again();
   var t0=Date.now(),done=function(list,msg){delete clawStarting[id];if(list)applyClaws(list);else again();if(msg)toast(msg)};
   var poll=function(){
-    fetch('/api/claws',{cache:'no-store'}).then(function(r){return r.json()}).then(function(list){
+    getJson('/api/claws',{cache:'no-store'}).then(function(list){
       var c=Array.isArray(list)&&list.filter(function(x){return x.id===id})[0];
-      if(c&&c.running){try{localStorage.setItem(hk('claws'),JSON.stringify(list))}catch(_){}return done(list,nm+' 已启动')}
+      if(c&&c.running){lsSet(hk('claws'),JSON.stringify(list));return done(list,nm+' 已启动')}
       if(Date.now()-t0>120e3)return done(list,nm+' 两分钟还没起来，看看电脑上它的日志');
       setTimeout(poll,3000);
     },function(){if(Date.now()-t0>120e3)done(null,'连不上服务');else setTimeout(poll,3000)});
@@ -4056,7 +4038,7 @@ function instCard(claw,on){
 }
 function openInstall(claw){
   var nm=CLAW_NAMES[claw]||claw;
-  var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
+  var p=pane('loginPane',closeLogin);
   loginClaw=null;
   p.innerHTML='<div class="lg-card" data-inst="'+esc(claw)+'"><div class="lg-hd"><b>'+esc('安装 '+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
     +'<p class="lg-hint">在本机安装 '+esc(nm)+'，通常 1–5 分钟（看网速）；装好填 API Key 即可用。</p>'
@@ -4069,14 +4051,14 @@ function openInstall(claw){
     instCard(claw,j.status==='running');
     var vis=p.classList.contains('on')&&p.querySelector('.lg-card[data-inst="'+claw+'"]');   // 窗口还开着、没换成别的（登录窗口共用这个面板）
     if(j.status!=='running'){clearInterval(instTimer);instTimer=null}
-    if(j.status==='ok'&&!vis){toast(nm+' 装好了：点它的卡片填 API key');fetch('/api/claws').then(function(r){return r.json()}).then(applyClaws).catch(function(){})}
+    if(j.status==='ok'&&!vis){toast(nm+' 装好了：点它的卡片填 API key');getJson('/api/claws').then(applyClaws).catch(function(){})}
     if(!vis)return;
     var b=p.querySelector('.lg-body');
     if(j.error&&j.status!=='fail'){b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error)+'</div>';return}
     if(j.status==='ok'){
       b.innerHTML='<div class="lg-st ok">✓ 安装完成</div><div class="lg-key"><button type="button" class="lg-btn lg-next">下一步：填 API key</button></div>';
       b.querySelector('.lg-next').addEventListener('click',function(){
-        fetch('/api/claws').then(function(r){return r.json()}).then(function(list){applyClaws(list);var i=clawInfo[claw];if(i&&i.login&&i.login.key)openLogin(claw);else{closeLogin();pickClaw(claw)}}).catch(function(e){toast(e.message)});
+        getJson('/api/claws').then(function(list){applyClaws(list);var i=clawInfo[claw];if(i&&i.login&&i.login.key)openLogin(claw);else{closeLogin();pickClaw(claw)}}).catch(function(e){toast(e.message)});
       });
       return;
     }
@@ -4091,7 +4073,7 @@ function openInstall(claw){
     b.querySelector('.inst-eta').textContent=eta;
     b.querySelector('.inst-st').textContent=j.tail||'正在安装…';
   };
-  var poll=function(){fetch('/api/claws/install').then(function(r){return r.json()}).then(function(j){if(j.claw===claw||j.status!=='none')paint(j)}).catch(function(){})};
+  var poll=function(){getJson('/api/claws/install').then(function(j){if(j.claw===claw||j.status!=='none')paint(j)}).catch(function(){})};
   clearInterval(instTimer);
   postJson('/api/claws/install',{claw:claw}).then(function(r){return r.json()}).then(function(j){paint(j);if(j.status==='running')instTimer=setInterval(poll,2000)}).catch(function(e){paint({status:'fail',error:e.message})});
 }
@@ -4132,8 +4114,7 @@ $('#rClear').addEventListener('click',recentClear);   // 「最近」顶上群�
   sp.addEventListener('scroll',later,{capture:true,passive:true});window.addEventListener('resize',later);DESKTOP.addEventListener('change',later);
   new MutationObserver(later).observe($('#app'),{attributes:true,attributeFilter:['class']});
   new MutationObserver(later).observe(sp,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class']});
-  btn.addEventListener('click',function(){if(btn.classList.contains('spin'))return;btn.classList.add('spin');setTimeout(function(){$('#railReload').click()},30)});
-  var sb=$('#sReload');sb.addEventListener('click',function(){if(sb.classList.contains('spin'))return;sb.classList.add('spin');setTimeout(function(){$('#railReload').click()},30)});
+  [btn,$('#sReload')].forEach(function(x){x.addEventListener('click',function(){if(x.classList.contains('spin'))return;x.classList.add('spin');setTimeout(function(){$('#railReload').click()},30)})});
   later();
 })();
 var reloadTo='',reloadToSet=false;try{reloadTo=sessionStorage.getItem('claclaw.reloadTo')||'';reloadToSet=reloadTo==='set';sessionStorage.removeItem('claclaw.reloadTo')}catch(_){}
@@ -4152,7 +4133,7 @@ $('#railReload').addEventListener('click',function(){
 try{var dr=JSON.parse(sessionStorage.getItem('claclaw.drafts')||'null');sessionStorage.removeItem('claclaw.drafts');
   if(dr){for(var k in dr)if(k)drafts[k]={text:dr[k],atts:[]};if(dr['']){ta.value=dr[''];ta.dispatchEvent(new Event('input'))}}}catch(_){}
 $('#railSet').addEventListener('click',function(){railTab(true)});
-$('#railHost').addEventListener('click',function(){var sub=hostView;mTab('host');if(sub){hostView='';peerWatch(false);$('#hostBody').innerHTML='<div class="h-empty">加载中…</div>';loadHost()}});   // 在协同 / 模型管理子页时点「宿主」回宿主页
+$('#railHost').addEventListener('click',function(){var sub=hostView;mTab('host');if(sub){peerWatch(false);hostHome()}});   // 在协同 / 模型管理子页时点「宿主」回宿主页
 var hostFromClaw=false;   // 从 Claw 页背景里的「宿主」进来的：返回回到 Claw 页
 $('#setHost').addEventListener('click',function(){hostFromClaw=false;mTab('host')});
 $('#bgHost').addEventListener('click',function(){hostFromClaw=true;hostView='';mTab('host')});
@@ -4170,10 +4151,10 @@ $('#hostBack').addEventListener('click',function(){if(hostFromClaw){hostFromClaw
     g.setPointerCapture(e.pointerId);g.classList.add('drag');document.body.classList.add('col-drag');
     var mv=function(ev){w=apply(ev.clientX-left)};
     var up=function(){g.removeEventListener('pointermove',mv);g.removeEventListener('pointerup',up);g.removeEventListener('pointercancel',up);
-      g.classList.remove('drag');document.body.classList.remove('col-drag');try{localStorage.setItem('claclaw.listW',String(w))}catch(_){}};
+      g.classList.remove('drag');document.body.classList.remove('col-drag');lsSet('claclaw.listW',String(w))};
     g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);
   });
-  g.addEventListener('dblclick',function(){apply(DEF);try{localStorage.removeItem('claclaw.listW')}catch(_){}});
+  g.addEventListener('dblclick',function(){apply(DEF);lsPut('claclaw.listW');});
   addEventListener('resize',function(){var cur=parseInt(getComputedStyle(app).getPropertyValue('--listW'))||0;if(cur)apply(cur)});
 })();
 // 电脑：输入区可以拖它的顶边调高低——最高占聊天区（消息 + 输入）的一半，最低留一行字 + 底下那排按钮；双击顶边恢复默认 190px
@@ -4190,16 +4171,15 @@ $('#hostBack').addEventListener('click',function(){if(hostFromClaw){hostFromClaw
     g.setPointerCapture(e.pointerId);g.classList.add('drag');document.body.classList.add('row-drag');
     var mv=function(ev){h=apply(h0+y0-ev.clientY)};
     var up=function(){g.removeEventListener('pointermove',mv);g.removeEventListener('pointerup',up);g.removeEventListener('pointercancel',up);
-      g.classList.remove('drag');document.body.classList.remove('row-drag');try{localStorage.setItem('claclaw.compH',String(h))}catch(_){}};
+      g.classList.remove('drag');document.body.classList.remove('row-drag');lsSet('claclaw.compH',String(h))};
     g.addEventListener('pointermove',mv);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);
   });
-  g.addEventListener('dblclick',function(){app.style.removeProperty('--compH');try{localStorage.removeItem('claclaw.compH')}catch(_){}});
+  g.addEventListener('dblclick',function(){app.style.removeProperty('--compH');lsPut('claclaw.compH');});
   addEventListener('resize',function(){var cur=parseInt(app.style.getPropertyValue('--compH'))||0;if(cur&&on())apply(cur)});
 })();
-// 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
 // 刚发出（或别的设备在这个会话里发出）一条消息：列表里「最后一条消息」立刻换成它，不等列表刷新
 // 协同 / 本机会话发来的消息：缩略显示「对方别名· 正文 / 👉🏻会话名· 正文（和服务端 peerPreview 一致）
-function peerPreview(t){var m=/^【claclaw (协同|本机) · 来自(?:对方|会话)：([\s\S]*?)（你的会话 ID[^】]*）】\n?/.exec(t||'');if(!m)return t;
+function peerPreview(t){var m=PEER_HEAD.exec(t||'');if(!m)return t;
   var who=m[1]==='协同'?m[2].split(' · ')[0]:m[2].replace(/（[^（）]*）\s*$/,'');return (m[1]==='协同'?'「':'👉🏻')+who.trim()+'· '+t.slice(m[0].length).replace(/\s+/g,' ').trim().slice(0,20)}
 function liveLastPrompt(id,text){
   text=peerPreview(String(text)).replace(/\s+/g,' ').trim();if(!text)return;
@@ -4208,14 +4188,12 @@ function liveLastPrompt(id,text){
   it.lastPrompt=text;
   document.querySelectorAll('#sList .s-row').forEach(function(r){
     if(r.dataset.id!==id)return;
-    var box=r.closest('.s-gbox'),h=box&&box.previousElementSibling;
-    if(h&&h.classList.contains('recent'))return;   // 最近活跃那组显示目录，不换
     var c=r.querySelector('.cwd');if(c){c.textContent=text;c.classList.add('lp')}
   });
 }
 // 点会话行：打开（别处占着的先确认接管）
 function rowOpen(s,row,b,bz){
-  if(!SOLO&&typeof soloAlive==='function'&&soloAlive(s.id)){soloFocus(s.id);return}   // 已经弹出去了：提到前面，不在主窗口再开一份
+  if(!SOLO&&soloAlive(s.id)){soloFocus(s.id);return}   // 已经弹出去了：提到前面，不在主窗口再开一份
   closeSheet();
   if(bz&&NOT_CLAUDE.test(s.id)){   // 其他 Claw：还是要先接管才能打开；Claude 的直接只读打开（输入框处有说明和「接管」）
     if(!bz.canTakeover){notice('「'+s.title+'」'+idleText(bz)+'，原处闲置满 '+bz.needMin+' 分钟后才能接管。');return}
@@ -4246,17 +4224,31 @@ function wxTime(ms){
 var recentTimer=null;
 // 列表在手机上记一份：重开页面（点通知、外壳重新载入）时先画上次的，取到新的再换，不用对着「加载中」等
 function listSaved(k){try{var v=JSON.parse(localStorage.getItem(hk('list.'+k))||'null');return Array.isArray(v)?v:null}catch(_){return null}}
-function listSave(k,arr){try{localStorage.setItem(hk('list.'+k),JSON.stringify(arr))}catch(_){}}
+function listSave(k,arr){lsSet(hk('list.'+k),JSON.stringify(arr))}
 function loadRecent(){
   var list=$('#sList');
   var tq=performance.now();
   if(!list.querySelector('.s-row')){var old=listSaved('recent');if(old)drawRecent(old)}
-  fetch('/api/recent').then(function(r){needLogin(r);if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(whenNotPressing).then(function(arr){
+  fetch('/api/recent').then(function(r){return json404(needLogin(r))}).then(whenNotPressing).then(function(arr){
     perfMark('最近',tq);
     if(Array.isArray(arr))listSave('recent',arr);
     drawRecent(arr);
   }).catch(function(e){if(!list.querySelector('.s-row'))list.innerHTML='<div class="s-empty">加载失败：'+esc(e.message)+'</div>'});
 }
+// 「最近」和按目录分组的列表共用的会话行：外层 div + 主按钮。协同会话的样式叫 collab，不能叫 peer：.peer 是聊天里「别的会话发来的消息」的样式
+function listRow(s,cls){
+  var row=document.createElement('div');row.className='s-row'+cls+(s.peer?' collab':'');row.dataset.id=s.id;
+  if(unread[s.id]||s.unread)row.classList.add('unread');
+  if(shakeAt[s.id])shkRow(row,s.id);   // 列表重画时还在抖的接着抖完
+  var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
+  if(session&&s.id===session.id)b.setAttribute('aria-current','true');
+  var bz=s.busyElsewhere;if(bz&&!bz.canTakeover)b.dataset.busy='1';
+  if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';   // 在终端 / VS Code 里正在干活：claclaw 只知道忙不忙，具体在哪写在下面那行 / 悬停提示里
+  return {row:row,b:b,bz:bz};
+}
+function bzText(bz){return idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管')}
+// 协同会话：名字用最近通信的那个对方的标识色（和协同页「已配对」里的一致）
+function peerTint(row,b,pl,name){row.classList.add('ptint',peerPc(pl));var tn=document.createElement('span');tn.className='ptn';tn.textContent=name;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn)}
 function drawRecent(arr){
     var list=$('#sList');
     if(listMode!=='recent')return;
@@ -4273,12 +4265,7 @@ function drawRecent(arr){
     if(!arr.length){list.innerHTML='<div class="s-empty">「最近」是空的。<br>任意 Claw 里有新动静的会话会出现在这里</div>';return}
     setTimeout(function(){sp.scrollTop=keepTop},0);
     arr.forEach(function(s){
-      var row=document.createElement('div');row.className='s-row wx'+(s.peer?' collab':'');row.dataset.id=s.id;
-      if(unread[s.id]||s.unread)row.classList.add('unread');
-      if(shakeAt[s.id])shkRow(row,s.id);   // 列表重画时还在抖的接着抖完
-      var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
-      if(session&&s.id===session.id)b.setAttribute('aria-current','true');
-      var bz=s.busyElsewhere;if(bz&&!bz.canTakeover)b.dataset.busy='1';
+      var x=listRow(s,' wx'),row=x.row,b=x.b,bz=x.bz;
       b.innerHTML='<span class="wx-av"></span><span class="wx-b"><span class="wx-top"><span class="t"></span><span class="when"></span></span><span class="m"><span class="cwd"></span></span></span>';
       var k=s.claw||clawOf(s.id),sk=s.skin||{},shown=sk.name||s.title,av=b.querySelector('.wx-av');
       // 换过头像：头像是选的图，右下角小标记是哪个 Claw；换过网名：标题显示网名（原名在悬停提示里，搜索也认原名）
@@ -4287,16 +4274,12 @@ function drawRecent(arr){
       if(sk.name)row.dataset.ot=s.title;
       skinAv(av,s);
       b.querySelector('.t').textContent=shown;
-      if(s.peerLast){   // 协同会话：名字用最近通信的那个对方的标识色（和按目录分组的列表、协同页一致）
-        row.classList.add('ptint',peerPc(s.peerLast));
-        var tn=document.createElement('span');tn.className='ptn';tn.textContent=shown;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
-      }
+      if(s.peerLast)peerTint(row,b,s.peerLast,shown);
       var dir=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'';
       var c=b.querySelector('.cwd');c.textContent=s.lastPrompt||s.branch||dir;c.title=(s.cwd||'')+(s.branch?'\n'+(s.claw&&s.claw!=='claude'?'模型：':'分支：')+s.branch:'');
       var whenTxt=s.unsent?'新建':wxTime(s.at||s.lastModified);
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
-      if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';
-      b.title=(sk.name?'原名：'+s.title+'\n':'')+CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管'):'')+(s.peerLast?'\n最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at):'');
+      b.title=(sk.name?'原名：'+s.title+'\n':'')+CLAW_NAMES[k]+(dir?' · '+dir:'')+(bz?'\n'+bzText(bz):'')+(s.peerLast?'\n最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at):'');
       b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
       // 手机左滑露出「删除」：只从「最近」里拿掉，会话本身不删、不用密码；之后有新消息还会回来
       var hd=document.createElement('button');hd.type='button';hd.className='s-hide';hd.setAttribute('aria-label','从最近里删除');hd.innerHTML='<span>删除</span>';
@@ -4305,7 +4288,7 @@ function drawRecent(arr){
       if(dissolve){hd.innerHTML='<span>解散</span>';hd.setAttribute('aria-label','解散群')}
       var hideIt=function(){
         if(dissolve&&!confirm('解散「'+s.title+'」？'+(s.group.mirror?'建群的电脑上':'对方电脑上')+'的这个群也会一起删除（成员会话本身不受影响）。'))return;
-        postJson(s.group&&!dissolve?'/api/recent/unlist':'/api/recent/hide',{id:s.id}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){
+        postJson(s.group&&!dissolve?'/api/recent/unlist':'/api/recent/hide',{id:s.id}).then(json404).then(function(j){
           if(!j.ok){toast(j.error||'删除失败');return}
           if(s.group&&!dissolve){s.cleared=true;row.remove();toast('已从最近里拿掉（群列表里还在）');return}
           row.remove();if(lastList)lastList=lastList.filter(function(x){return x.id!==s.id});toast(j.dissolved?'群已解散':'已从最近里删除');
@@ -4329,7 +4312,7 @@ function skinIndex(){
   return fetch('/avatars/index.json').then(function(r){needLogin(r);if(!r.ok)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){if(!j||!Array.isArray(j.groups))throw new Error('服务端还没更新，重启 claclaw 后可用');skinIx=j;return j});
 }
 function skinSave(s,patch){
-  return postJson('/api/skin',{id:s.id,av:patch.av,name:patch.name,snd:patch.snd,still:patch.still}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){
+  return postJson('/api/skin',{id:s.id,av:patch.av,name:patch.name,snd:patch.snd,still:patch.still}).then(json404).then(function(j){
     if(!j.ok)throw new Error(j.error||'保存失败');
     if(j.skin)s.skin=j.skin;else delete s.skin;
     if(lastList){lastList.forEach(function(x){if(x.id===s.id){if(j.skin)x.skin=j.skin;else delete x.skin}});listSave('recent',lastList);if(listMode==='recent')drawRecent(lastList)}
@@ -4340,13 +4323,13 @@ function skinSave(s,patch){
 // 来新消息（未读数变多）时：头像抖几下就停；网页开着就在网页里响这个会话选的提示音（声音文件是电脑上的提示音，/api/sound/file 转成 wav）
 // 会话设置里关了通知（铃铛）就不响，抖照样抖；电脑上开了「电脑提示音」时，电脑网页不再响（电脑自己会响，免得响两声）
 var sndInfoP=null,sndAC=null,sndBuf={},sndLast=0,shakeAt={},SHK_MS=2450;
-function sndInfo(){if(!sndInfoP)sndInfoP=fetch('/api/sound').then(function(r){return r.json()}).catch(function(){sndInfoP=null;return {}});return sndInfoP}
+function sndInfo(){if(!sndInfoP)sndInfoP=getJson('/api/sound').catch(function(){sndInfoP=null;return {}});return sndInfoP}
 function sndCtx(){var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;if(!sndAC)try{sndAC=new AC()}catch(_){return null}return sndAC}
 document.addEventListener('pointerdown',function(){   // iPhone：声音要在手指点过之后才放得出来——每次点的时候顺手把它唤醒
   var c=sndAC;if(!c||c.state==='running')return;
   try{c.resume&&c.resume().catch(function(){});var b=c.createBuffer(1,1,22050),src=c.createBufferSource();src.buffer=b;src.connect(c.destination);src.start(0)}catch(_){}
 },true);
-function sessSoundPlay(name,preview){
+function sessSoundPlay(name){
   var c=sndCtx();if(!c)return;
   if(c.state==='suspended'&&c.resume)c.resume().catch(function(){});
   var key=name||'';
@@ -4370,7 +4353,7 @@ function msgArrive(id){
   var wait=setTimeout(shake,3000);   // 声音迟迟出不来：不等了，先抖
   (notifLoaded?Promise.resolve():notifLoad()).then(function(){   // 各会话的通知开关还没取过（没打开过会话）：先取
     if(notifOffMap[id])return 0;
-    return sndInfo().then(function(j){if(DESKTOP.matches&&!COARSE.matches&&j.on)return 0;return sessSoundPlay(sk.snd||'',false)});
+    return sndInfo().then(function(j){if(DESKTOP.matches&&!COARSE.matches&&j.on)return 0;return sessSoundPlay(sk.snd||'')});
   }).then(function(){clearTimeout(wait);shake()},function(){clearTimeout(wait);shake()});   // 声音一响才跟着抖（取文件、解码要时间，先抖的话声音来时已经抖完了）
 }
 function skinPick(ix){   // 随机一套：所有头像里抽一个，网名里抽一个
@@ -4394,8 +4377,7 @@ function skinAv(el,s){
   el.addEventListener('contextmenu',function(e){if(TOUCH&&!DESKTOP.matches)e.preventDefault()});
 }
 function openSkin(s){
-  var p=$('#avPane');
-  if(!p){p=document.createElement('div');p.id='avPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
+  var p=pane('avPane');
   var k=s.claw||clawOf(s.id),sk=s.skin||{},cur={av:sk.av||'',name:sk.name||'',snd:sk.snd||'',still:!!sk.still},tab='av',sel={av:false,nm:false};   // sel：🎲 随机哪样（只按下一样就只随机那样；都按下 / 都没按就一起随机）
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>头像和网名</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
     +'<div class="av-me"><span class="av-pv"></span><input class="gp-in av-nm" maxlength="40" placeholder="网名（不填用会话原名）"><button type="button" class="av-dice" title="头像和网名一起随机" aria-label="头像和网名一起随机">🎲</button></div>'
@@ -4409,7 +4391,6 @@ function openSkin(s){
   p.querySelector('.gp-x').addEventListener('click',close);p.querySelector('.gp-cancel:not(.av-clr)').addEventListener('click',close);
   var pv=p.querySelector('.av-pv'),nm=p.querySelector('.av-nm'),list=p.querySelector('.av-list'),ix=null;
   nm.value=cur.name;nm.title='原名：'+s.title;
-  // 个性提示音 / 抖一抖：选了就试听（网页里响，不在电脑上响）；会话设置里关了通知（铃铛）就不响，抖照样抖
   // 提示音默认关；打开才出现选声音的一行（选了就试听，网页里响）。会话设置里关了通知（铃铛）就不响，抖照样抖
   var snd=p.querySelector('.av-snd'),sndv=p.querySelector('.av-sndv'),son=p.querySelector('.av-son'),pick=p.querySelector('.av-pick'),shk=p.querySelector('.av-shk'),sndOk=true,dflt='',lastPick='';   // 打开时先用设置里的电脑提示音
   if(cur.snd==='off')cur.snd='';
@@ -4431,10 +4412,10 @@ function openSkin(s){
     if(!j.supported){sndOk=false;sndShow()}   // 电脑上没有提示音可选（Linux）
   });
   son.addEventListener('change',function(){
-    if(son.checked){cur.snd=lastPick||dflt||snd.value;snd.value=cur.snd;if(cur.snd)sessSoundPlay(cur.snd,true)}else cur.snd='';
+    if(son.checked){cur.snd=lastPick||dflt||snd.value;snd.value=cur.snd;if(cur.snd)sessSoundPlay(cur.snd)}else cur.snd='';
     sndShow();
   });
-  snd.addEventListener('change',function(){cur.snd=lastPick=snd.value;sndShow();if(cur.snd)sessSoundPlay(cur.snd,true)});
+  snd.addEventListener('change',function(){cur.snd=lastPick=snd.value;sndShow();if(cur.snd)sessSoundPlay(cur.snd)});
   nm.addEventListener('input',function(){cur.name=nm.value;mark()});
   function preview(){pv.innerHTML=cur.av?'<img alt="" src="/avatars/'+esc(cur.av)+'">':clawIcon(k)}
   function mark(){
@@ -4502,12 +4483,13 @@ function skinUpload(file){
       var S=Math.min(256,n),c=document.createElement('canvas');c.width=c.height=S;
       c.getContext('2d').drawImage(im,(im.naturalWidth-n)/2,(im.naturalHeight-n)/2,n,n,0,0,S,S);
       var d=c.toDataURL('image/webp',.88);if(d.indexOf('data:image/webp')!==0)d=c.toDataURL('image/png');   // Safari 旧版不会出 webp
-      postJson('/api/skin/upload',{data:d}).then(function(r){if(r.status===404)throw new Error('服务端还没更新，重启 claclaw 后可用');return r.json()}).then(function(j){if(!j.ok)throw new Error(j.error||'上传失败');ok(j.av)}).catch(no);
+      postJson('/api/skin/upload',{data:d}).then(json404).then(function(j){if(!j.ok)throw new Error(j.error||'上传失败');ok(j.av)}).catch(no);
     };
     im.onerror=function(){URL.revokeObjectURL(u);no(new Error('读不了这张图（换 PNG / JPEG 试试）'))};
     im.src=u;
   });
 }
+// 搜索：按标题、ID、目录、分支过滤；搜索时所有组临时展开，没有命中的组隐藏
 function applySearch(){
   var q=$('#sSearch').value.trim().toLowerCase();
   document.querySelectorAll('#sList>.s-row').forEach(function(r){r.hidden=!!q&&(r.textContent+' '+(r.dataset.ot||'')+' '+(r.dataset.id||'')).toLowerCase().indexOf(q)<0});
@@ -4531,7 +4513,7 @@ $('#sNew').addEventListener('click',function(){
   if(listMode==='recent'){   // 「最近」：参照当前打开的会话，没有就用列表里最近的一个（群除外）；都没有就用选中的 Claw
     var ok=function(x){return x&&x.id&&!x.group&&clawOf(x.id)!=='group'&&(x.cwd||clawOf(x.id)==='openclaw')};
     var r0=ok(session)?session:(lastList||[]).find(ok);
-    if(!r0&&!lastList&&!this.dataset.retry){var me=this;me.dataset.retry=1;fetch('/api/recent').then(function(r){return r.json()}).then(function(a){if(Array.isArray(a)&&!lastList)lastList=a}).catch(function(){}).then(function(){me.click();delete me.dataset.retry});return}   // 列表还没取回：取一次再来
+    if(!r0&&!lastList&&!this.dataset.retry){var me=this;me.dataset.retry=1;getJson('/api/recent').then(function(a){if(Array.isArray(a)&&!lastList)lastList=a}).catch(function(){}).then(function(){me.click();delete me.dataset.retry});return}   // 列表还没取回：取一次再来
     if(r0){newInClaw(r0.claw&&r0.claw!=='group'?r0.claw:clawOf(r0.id),r0);return}
     if(clawSel){newInClaw(clawSel);return}
     alert('先在「Claw」页选一个 Claw，再新建会话');return;
@@ -4540,8 +4522,7 @@ $('#sNew').addEventListener('click',function(){
 });
 // 建群 / 群设置：按 Claw → 会话目录 → 会话逐层展开着选（只列有会话的 Claw）；协同的对方点开才去取它开放的会话。至少 2 个
 function openGroupView(){   // 对方建的群（镜像）：只能看群名和成员，改要去建群的电脑
-  var p=$('#grpPane');
-  if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
+  var p=pane('grpPane');
   var ms=(session&&session.group&&session.group.members)||[];
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>群信息</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
     +'<input class="gp-in gp-name" readonly><div class="gp-chips ro"></div><div class="gp-hosthint">群名和成员只能在建群的电脑上改</div>'
@@ -4555,8 +4536,7 @@ function openGroupView(){   // 对方建的群（镜像）：只能看群名和�
   if(!ms.length)chips.innerHTML='<div class="gp-sec">还没收到成员名单</div>';
 }
 function openGroupPick(gid){
-  var p=$('#grpPane');
-  if(!p){p=document.createElement('div');p.id='grpPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)p.classList.remove('on')})}
+  var p=pane('grpPane');
   p.innerHTML='<div class="gp-card"><div class="gp-hd"><b>'+(gid?'群设置':'建群')+'</b><button type="button" class="gp-x" aria-label="关闭">✕</button></div>'
     +'<input class="gp-in gp-name" placeholder="群名（可不填，默认用成员名）" maxlength="40"><div class="gp-chips"></div><div class="gp-hosthint" hidden>点成员名设为主理人（再点取消），没 @ 人的消息由它回</div><div class="gp-list"><div class="gp-sec">加载中…</div></div>'
     +'<div class="gp-ft"><button type="button" class="gp-cancel">取消</button><button type="button" class="gp-go" disabled>'+(gid?'保存':'建群')+'</button></div></div>';
@@ -4616,22 +4596,22 @@ function openGroupPick(gid){
     var sec=function(t){var d=document.createElement('div');d.className='gp-sec';d.textContent=t;list.appendChild(d);return d};
     sec('本机');var localBox=document.createElement('div');localBox.innerHTML='<div class="gp-sec">加载中…</div>';list.appendChild(localBox);
     var peerSec=sec('协同');peerSec.hidden=true;var peerBox=document.createElement('div');list.appendChild(peerBox);
-    fetch('/api/claws').then(function(r){return r.json()}).then(function(cl){
+    getJson('/api/claws').then(function(cl){
       var ok={};(Array.isArray(cl)?cl:[]).forEach(function(c){if(c.installed&&c.supported!==false)ok[c.id]=1});
       var ids=CLAW_ORDER.filter(function(k){return ok[k]});
-      return Promise.all(ids.map(function(k){return fetch('/api/sessions'+(k==='claude'?'':'?claw='+k)).then(function(r){return r.json()}).then(function(a){return [k,Array.isArray(a)?a.filter(function(s){return !s.unsent}):[]]},function(){return [k,[]]})}));
+      return Promise.all(ids.map(function(k){return getJson('/api/sessions'+(k==='claude'?'':'?claw='+k)).then(function(a){return [k,Array.isArray(a)?a.filter(function(s){return !s.unsent}):[]]},function(){return [k,[]]})}));
     }).then(function(res){
       localBox.innerHTML='';
       res.filter(function(x){return x[1].length}).forEach(function(x){clawNode(localBox,x[0],x[1])});
       if(!localBox.firstChild)localBox.innerHTML='<div class="gp-sec">本机没有会话</div>';
     }).catch(function(e){localBox.innerHTML='<div class="gp-sec">加载失败：'+esc(e.message)+'</div>'});
-    fetch('/api/group/peers').then(function(r){return r.json()}).then(function(peers){
+    getJson('/api/group/peers').then(function(peers){
       if(!Array.isArray(peers)||!peers.length)return;
       peerSec.hidden=false;
       peers.forEach(function(pr){
         var d=node(peerBox,'<span class="gm-co">'+COLLAB_SVG+'</span>'+label(''),function(kids){
           kids.innerHTML='<div class="gp-sec">正在问 '+esc(pr.name)+'…</div>';
-          fetch('/api/group/peer-sessions?peer='+encodeURIComponent(pr.peerId)).then(function(r){return r.json()}).then(function(j){
+          getJson('/api/group/peer-sessions?peer='+encodeURIComponent(pr.peerId)).then(function(j){
             kids.innerHTML='';
             if(!j.ok){kids.innerHTML='<div class="gp-sec"></div>';kids.firstChild.textContent='连不上：'+(j.error||'');return}
             if(!j.sessions.length){kids.innerHTML='<div class="gp-sec">（对方没有开放会话给本机）</div>';return}
@@ -4642,7 +4622,7 @@ function openGroupPick(gid){
       });
     }).catch(function(){});
   };
-  if(gid)fetch('/api/group/info?id='+encodeURIComponent(gid)).then(function(r){return r.json()}).then(function(j){
+  if(gid)getJson('/api/group/info?id='+encodeURIComponent(gid)).then(function(j){
     if(j.error){close();toast(j.error);return}
     nameIn.value=j.name||'';host=j.host||'';(j.members||[]).forEach(function(m){var k=(m.peerId?m.peerId+'/':'')+m.id;picked[k]={id:m.id,peerId:m.peerId,title:m.name||m.title,claw:m.claw};order.push(k)});
     sync();load();
@@ -4738,19 +4718,15 @@ function drawList(arr,claw){
     listResort=false;
     order.forEach(function(g){flat.push({grp:g});g.items.forEach(function(s){flat.push(s)})});
     flat.forEach(function(s){
-      var inRecent=false;
-      if(s.empty){var em=document.createElement('div');em.className='s-empty s-rempty';em.textContent=s.empty;cur.appendChild(em);return}
-      if(s.recent&&s.s){inRecent=true;s=s.s}
       if(s.grp){
         var g=s.grp,h=document.createElement('button');h.type='button';h.className='s-grp';
         var box=document.createElement('div');box.className='s-gbox';
         h.innerHTML=FOLDER_IC+'<span class="gn"></span><span class="gc"></span>';
         // 组标题只显示最后一级目录名；展开后在组里第一行显示完整路径
-        var last=g.recent?g.label:(g.label.split('/').pop()||g.label);
+        var last=g.label.split('/').pop()||g.label;
         h.querySelector('.gn').textContent=last;h.title=g.label;h.dataset.path=g.label;
-        if(!g.recent&&last!==g.label){var gp=document.createElement('div');gp.className='s-gpath';gp.textContent=g.label;box.appendChild(gp)}
-        h.querySelector('.gc').textContent=g.recent?'':g.items.length+' 个会话';
-        if(g.recent)h.classList.add('recent');
+        if(last!==g.label){var gp=document.createElement('div');gp.className='s-gpath';gp.textContent=g.label;box.appendChild(gp)}
+        h.querySelector('.gc').textContent=g.items.length+' 个会话';
         var shut=!!folded[g.key];
         h.setAttribute('aria-expanded',String(!shut));box.hidden=shut;
         h.addEventListener('click',function(){
@@ -4761,39 +4737,20 @@ function drawList(arr,claw){
         });
         list.appendChild(h);list.appendChild(box);cur=box;return;
       }
-      // 协同会话的样式叫 collab，不能叫 peer：.peer 是聊天里「别的会话发来的消息」的样式
-      var row=document.createElement('div');row.className='s-row'+(s.peer?' collab':'');row.dataset.id=s.id;
-      if(unread[s.id]||s.unread)row.classList.add('unread');
-      if(shakeAt[s.id])shkRow(row,s.id);   // 列表重画时还在抖的接着抖完
-      var b=document.createElement('button');b.type='button';b.className='s-item';row.appendChild(b);
-      if(session&&s.id===session.id)b.setAttribute('aria-current','true');
-      var bz=s.busyElsewhere;
-      if(bz&&!bz.canTakeover)b.dataset.busy='1';
+      var x=listRow(s,''),row=x.row,b=x.b,bz=x.bz;
       b.innerHTML='<div class="t"></div><div class="m"><span class="cwd"></span><span class="when"></span></div>'+(bz?'<div class="bz"></div>':'');
       b.querySelector('.t').textContent=s.title;
-      if(s.peerLast){   // 协同会话：最近和哪个对方通信，用那个对方的背景色（和协同页「已配对」里的一致）
-        row.classList.add('ptint',peerPc(s.peerLast));
-        var tn=document.createElement('span');tn.className='ptn';tn.textContent=s.title;var tt=b.querySelector('.t');tt.textContent='';tt.appendChild(tn);
+      if(s.peerLast){
+        peerTint(row,b,s.peerLast,s.title);
         b.title='最近和「'+s.peerLast.name+'」通信 · '+ago(s.peerLast.at);
       }
       // 目录已经在分组标题里了，只显示分支；非 git 目录没有分支：显示最后一条用户消息（放不下就截断）
-      // 「最近活跃」：目录名放在标题行最右边（电脑上鼠标移上去换成「编辑」），下面一行始终是最后一条消息；分支不显示，去目录组里看
       b.querySelector('.cwd').title=(s.cwd||'')+(s.branch?'\n'+(s.claw?'模型：':'分支：')+s.branch:'');   // 截断了也能悬停看全
-      if(inRecent){
-        row.classList.add('rec');
-        var tt0=b.querySelector('.t'),tw=document.createElement('span');tw.className='rtt';
-        while(tt0.firstChild)tw.appendChild(tt0.firstChild);if(!tw.childNodes.length)tw.textContent=s.title;
-        var rd=document.createElement('span');rd.className='rdir';rd.title=s.cwd||'';
-        rd.textContent=(s.cwdShort||'').replace(/^\/(Users|home)\/[^\/]+$/,'~').split('/').pop()||'~';
-        tt0.appendChild(tw);tt0.appendChild(rd);
-      }
-      b.querySelector('.cwd').textContent=inRecent?(s.lastPrompt||''):(s.branch||s.lastPrompt||'');
-      b.querySelector('.cwd').classList.toggle('lp',inRecent?!!s.lastPrompt:(!s.branch&&!!s.lastPrompt));
+      b.querySelector('.cwd').textContent=s.branch||s.lastPrompt||'';
+      b.querySelector('.cwd').classList.toggle('lp',!s.branch&&!!s.lastPrompt);
       var whenTxt=s.unsent?'新建 · 还没发消息':ago(s.lastModified);if(!s.unsent&&s.lastModified)b.dataset.lm=s.lastModified;
       b.querySelector('.when').textContent=whenTxt;b.dataset.when=whenTxt;
-      // 在终端 / VS Code 里正在干活的：claclaw 只知道忙不忙，显示在哪里工作
-      if(bz&&bz.status!=='idle')row.dataset.ext=bz.status==='waiting'?'别处待确认':'别处工作中';   // 具体在哪下面那行写着
-      if(bz)b.querySelector('.bz').textContent=idleText(bz)+(bz.name?'（'+bz.name+'）':'')+'，'+(bz.canTakeover?'可以接管':'满 '+bz.needMin+' 分钟可接管');
+      if(bz)b.querySelector('.bz').textContent=bzText(bz);
       b.addEventListener('click',function(){rowOpen(s,row,b,bz)});
       // 改名：任何会话都行（只是往记录末尾追加一条标题）
       var rn=document.createElement('button');rn.type='button';rn.className='s-ren';rn.setAttribute('aria-label','改名');
@@ -4808,9 +4765,8 @@ function drawList(arr,claw){
         row.appendChild(nw);
       }
       // 正在别处打开的会话、当前正在用的会话不给删（服务端也会拒绝）
-      var noDel=bz||(session&&s.id===session.id)||inRecent;   // 最近活跃里不给删：去它所在的目录组里删
-      if(!s.cwd&&noDel){}                      // 只有改名：默认位置
-      else if(noDel)row.classList.add('pn');   // 改名 + 新建
+      var noDel=bz||(session&&s.id===session.id);
+      if(noDel&&s.cwd)row.classList.add('pn');   // 改名 + 新建（没有目录时只有改名：默认位置）
       if(!noDel){
         row.classList.add(s.cwd?'three':'two'); // 删除 + 改名（+ 新建）
         var d=document.createElement('button');d.type='button';d.className='s-del';d.setAttribute('aria-label','删除会话');
@@ -4841,8 +4797,8 @@ function renderActivity(){
 // 干活的标记往上呼应：目录（组标题）里有会话在干活 → 目录绿点闪烁；当前 Claw 有任意会话在干活 → 底部「会话」图标轻闪
 function syncWorkMarks(){
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
-    var h=box.previousElementSibling;   // 「最近活跃」不是目录，不亮
-    if(h&&!h.classList.contains('recent'))h.classList.toggle('working',!!box.querySelector('.s-row.working'));
+    var h=box.previousElementSibling;
+    if(h)h.classList.toggle('working',!!box.querySelector('.s-row.working'));
   });
   var cc=curClaw()||'claude';
   var busyAny=Object.keys(activity).some(function(id){return activity[id]&&clawOf(id)===cc})||!!document.querySelector('#sList .s-row.working');
@@ -4884,8 +4840,8 @@ function renderUnread(){
   document.querySelectorAll('#sList .s-row.wx .wx-bd').forEach(function(bd){var n=unread[bd.closest('.s-row').dataset.id]||0;bd.textContent=n>1?(n>99?'99+':String(n)):'';bd.classList.toggle('num',n>1)});
   // 目录（组标题）：组里有未读的会话就亮红点，折叠着也看得到是哪个目录要处理
   document.querySelectorAll('#sList .s-gbox').forEach(function(box){
-    var h=box.previousElementSibling;   // 「最近活跃」是特殊的组，不亮红点
-    if(h&&!h.classList.contains('recent'))h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
+    var h=box.previousElementSibling;
+    if(h)h.classList.toggle('unread',!!box.querySelector('.s-row.unread'));
   });
   // 手机底栏：当前 Claw 的未读亮在「会话」上，别的 Claw 的未读亮在「Claw」上，Claw 页里对应的卡片也亮
   var otherClaw=Object.keys(byClaw).some(function(c){return c!==clawSel});
@@ -4976,9 +4932,10 @@ $('#sList').addEventListener('touchend',swEnd);$('#sList').addEventListener('tou
 // 刚滑过 / 有行开着时，点一下只是收起，不打开会话
 $('#sList').addEventListener('click',function(e){
   if(DESKTOP.matches)return;
-  if(Date.now()-swSuppress<150&&!e.target.closest('.s-ren,.s-del,.s-hide')){e.preventDefault();e.stopPropagation();return}
-  if(swOpen&&!e.target.closest('.s-ren,.s-del,.s-hide')){e.preventDefault();e.stopPropagation();swClose(swOpen);return}
-  if(e.target.closest('.s-ren,.s-del,.s-hide')){var r=e.target.closest('.s-row');setTimeout(function(){swClose(r,true)},50)}
+  var act=e.target.closest('.s-ren,.s-del,.s-hide');
+  if(Date.now()-swSuppress<150&&!act){e.preventDefault();e.stopPropagation();return}
+  if(swOpen&&!act){e.preventDefault();e.stopPropagation();swClose(swOpen);return}
+  if(act){var r=e.target.closest('.s-row');setTimeout(function(){swClose(r,true)},50)}
 },true);
 document.addEventListener('touchstart',function(e){if(swOpen&&!e.target.closest('#sList'))swClose(swOpen)},{passive:true});
 // ---------- 手机：左右滑 ----------
@@ -5031,10 +4988,10 @@ function ctxMenu(x,y,items){
 }
 document.addEventListener('mousedown',function(e){if(ctxEl&&!ctxEl.contains(e.target))ctxClose()},true);
 document.addEventListener('scroll',ctxClose,true);window.addEventListener('blur',ctxClose);
-function foldedGroups(){try{return JSON.parse(localStorage.getItem('claclaw.folded')||'{}')||{}}catch(_){return {}}}
+function foldedGroups(){return lsObj('claclaw.folded')}
 function closeSheet(){showDlg(sheet,false)}
 sheet.addEventListener('click',function(e){if(e.target===sheet)closeSheet()});
-// 电脑上会话列表常驻，点标题栏不用做什么（留给拖选复制）；手机上点标题栏回会话列表，刚选了字就不跳
+// 点标题栏里的会话 ID：复制
 $('#sid').addEventListener('click',function(e){var h=e.target.closest('.hid');if(!h||!session)return;e.stopPropagation();copyText(session.id)});
 // 手机：只有左上角返回键回会话列表（以前点标题栏任意地方都会回去，容易误触）
 // ---------- 手机：列表页 ⇄ 聊天页 ----------
@@ -5055,7 +5012,7 @@ function goList(toClaw){
   renderUnread();renderActivity();postViewing();
 }
 // 手机：进入会话、内容加载完的那一刻在后台刷新一次列表并重新排序（列表被聊天页挡着看不到）；
-// 服务器此时已把这次打开记为活跃，返回列表时当前会话就在「最近活跃」第一位。列表页里顺序完全不动
+// 服务器此时已把这次打开记为活跃，返回列表时当前会话排在最前。列表页里顺序完全不动
 function bgRefreshList(){if(!DESKTOP.matches&&!mList&&(clawSel||listMode==='recent')){listResort=true;openSheet(true)}}
 // 列表页里只在原位更新「几分钟前」
 function tickTimes(){
@@ -5103,7 +5060,7 @@ document.addEventListener('visibilitychange',function(){
   takePendingOpen().then(function(id){if(id==='view:peer')openPeerView();else if(id)openFromNotice(id)});   // 从后台回来：消息可能丢了，以这条记录为准
 });
 function openFromNotice(id){
-  if(!SOLO&&typeof soloAlive==='function'&&soloAlive(id)){soloFocus(id);return}
+  if(!SOLO&&soloAlive(id)){soloFocus(id);return}
   if(session&&session.id===id&&!mList){if(shellOpen===id){clog('shell open 已在这个会话');shellOpen=null}return}
   pendingOpen=id;
   if(!DESKTOP.matches){showFeedFor(id);$('#nm').textContent='';$('#sid').textContent=shortId(id);$('#where').textContent='';goChat()}
@@ -5159,9 +5116,9 @@ feed.addEventListener('scroll',function(){
 });
 function loadOlder(){
   if(!session||!histMore||histLoading)return;
-  histLoading=true;histArmed=false;wsSend({t:'history.more',before:histStart});
-  setTimeout(function(){histLoading=false},4000);
+  histArmed=false;reqOlder();
 }
+function reqOlder(){histLoading=true;wsSend({t:'history.more',before:histStart});setTimeout(function(){histLoading=false},4000)}
 function prependHistory(m){
   histLoading=false;
   if(!session||m.id!==session.id)return;
@@ -5180,7 +5137,7 @@ function prependHistory(m){
 }
 // 内容还不够一屏（滑不动就收不到 scroll）：自动再要一页，直到能滑为止
 function fillShort(){
-  if(session&&histMore&&!histLoading&&feed.scrollHeight<=feed.clientHeight+80){histLoading=true;wsSend({t:'history.more',before:histStart});setTimeout(function(){histLoading=false},4000)}
+  if(session&&histMore&&!histLoading&&feed.scrollHeight<=feed.clientHeight+80)reqOlder();
 }
 // 离开会话：只留最后大约一屏半（手机内存省着用），再进来立刻显示；更早的往上滑时再从服务器取
 var feedOwner=null;   // 聊天区现在画的是哪个会话：只有它的内容才能存进它的缓存（防止 A 的内容存到 B 名下）
@@ -5215,7 +5172,7 @@ function applyTheme(t){
   scTick(true);   // 流变时辰：状态栏改成地支色（scTick 里设），再报给外壳
   postTheme();
 }
-// 流变时辰：每分钟看一次时辰变没变，变了就换色；设置里的选项名带上当前时辰
+// 流变时辰：每分钟看一次时辰变没变，变了就换色
 var scName='';
 // 通用规矩（所有主题）：块和它所在区域的底色不同 → 不画边框；相同 → 照常画（CSS 在主题段后面的 nb-xxx 规则）。
 // 每项：[类名, 块（选择器，或一段样品 HTML + 样品里要量的选择器）, 放样品 / 比底色的区域]。块不在页面上时放一个看不见的样品进区域量一下再拿掉
@@ -5243,7 +5200,8 @@ var bdT=0;function bdLater(){cancelAnimationFrame(bdT);bdT=requestAnimationFrame
 new MutationObserver(bdLater).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-sc','class']});
 new MutationObserver(bdLater).observe(document.getElementById('app'),{attributes:true,attributeFilter:['class']});
 DESKTOP.addEventListener('change',bdLater);bdLater();
-window.__scTop=function(){var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});postTheme()};
+function scMeta(){var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb})}   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
+window.__scTop=function(){scMeta();postTheme()};
 function scTopVar(){return DESKTOP.matches?'--sc-out':document.documentElement.classList.contains('sc-img')?'--bg':'--strip'}   // 流变时辰的状态栏 / 外壳顶栏色：电脑和外圈同色；手机有图时用淡底，没图时和顶栏（= 底部菜单）同色
 function scVar(k){return getComputedStyle(document.documentElement).getPropertyValue(k).trim()}
 function scTick(force){
@@ -5251,10 +5209,9 @@ function scTick(force){
   if(!on){if(scName){window.__sc.clear();scName=''}return}
   var n=window.__sc.now().name;if(n===scName&&!force)return;
   scName=window.__sc.apply();
-  var sb=scVar(scTopVar());document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=sb});   // 状态栏 / 单独窗口的标题栏：手机和顶栏同一个淡底；电脑和外圈（左栏）同色
+  scMeta();
   var cs=document.querySelector('meta[name="color-scheme"]');if(cs)cs.content=document.documentElement.classList.contains('sc-dark')?'dark':'light';   // 6 阴是深色
   if(!force)postTheme();
-  var o=document.querySelector('#setTheme option[value="shichen"]');if(o)o.textContent='子午流注';
 }
 setInterval(function(){scTick(false)},60000);
 DESKTOP.addEventListener&&DESKTOP.addEventListener('change',function(){if(scName)scTick(true)});   // 窗口在手机 / 电脑宽度之间变：标题栏颜色跟着换
@@ -5350,12 +5307,12 @@ function ttsModeAllows(pri){
 }
 // 单个会话不播报：全局朗读开着时，标题栏的喇叭可以关掉这个会话的自动播报（只影响自动念；点浮动的播放键照样能念）
 // 会话单独的声音：{ 会话 id: 声音 id }（和「声音」下拉框的值一样）；没设的会话用设置里的默认声音
-var ttsSessV={};try{ttsSessV=JSON.parse(localStorage.getItem('claclaw.ttsSessVoice')||'{}')||{}}catch(_){}
+var ttsSessV=lsObj('claclaw.ttsSessVoice');
 // ttsAs：替谁念（群里成员的回复用成员自己会话设的声音、语速；没设的用全局）。只在 ttsWith 里临时设
 var ttsAs='';function ttsWith(sid,fn){var o=ttsAs;ttsAs=sid||'';try{return fn()}finally{ttsAs=o}}
 function ttsW(){var id=ttsAs||(session&&session.id),o=id&&ttsSessV[id];return o||tts.want}
 // 会话单独的语速：{ 会话 id: 倍数 }；没设的用设置里的语速
-var ttsSessR={};try{ttsSessR=JSON.parse(localStorage.getItem('claclaw.ttsSessRate')||'{}')||{}}catch(_){}
+var ttsSessR=lsObj('claclaw.ttsSessRate');
 function ttsR(sid){var r=+ttsSessR[sid||ttsAs||(session&&session.id)];return r>0?r:tts.rate}
 function ttsSessCustom(sid){return !!(ttsSessV[sid]||ttsSessR[sid])}
 function ttsDevVoice(){var w=ttsW();return ttsVoices().find(function(v){return v.voiceURI===w})||tts.voice}
@@ -5417,7 +5374,7 @@ function srvLabel(v){
 function srvScore(v){var n=v.name;return (/^volc:/.test(n)?400+(/_vv_/.test(n)?20:0)-(/@/.test(n)?30:0):0)+(/^edge:/.test(n)?200:0)+(/Xiaoyi/.test(n)?20:/Xiaoxiao/.test(n)?15:/Yunxi/.test(n)?10:0)-(/liaoning|shaanxi/.test(n)?50:0)+(/premium/i.test(n)?40:/enhanced/i.test(n)?30:0)+(/zh-CN/.test(v.lang)?100:0)}
 function ttsLoadSrv(){
   return fetch('/api/tts/voices').then(function(r){return r.ok?r.json():[]}).then(function(list){
-    // 只留微软的声音（Mac 自带的那几个不好听），去掉所有粤语
+    // 只留微软（edge）和豆包（volc）的声音，去掉所有粤语
     tts.srv=(Array.isArray(list)?list:[]).filter(function(v){return /^(edge|volc):/.test(v.name)&&!/HK|yue/i.test(v.lang||'')}).sort(function(a,b){return srvScore(b)-srvScore(a)});ttsPickVoice();
   }).catch(function(){});
 }
@@ -5435,20 +5392,25 @@ function ttsSrvVoice(){
   return ttsWantSrv()&&on?on.name:'';
 }
 // 语音管理里的设置：{ 声音 id: { off:1, alias:'别名' } }；声音 id 和「声音」下拉框的值一样（srv:… / 设备声音的 voiceURI）。默认全开
-var vcCfg={};try{vcCfg=JSON.parse(localStorage.getItem('claclaw.ttsVoices')||'{}')||{}}catch(_){}
+var vcCfg=lsObj('claclaw.ttsVoices');
 // 默认只勾几个常用的（不然下拉框、长按喇叭的列表一长串）：豆包 Vivi / Vivi 四川话 / 小何 / 云舟 / 小天、微软 晓晓 / 晓伊 / 云希，加上正在用的默认声音；其他到语音管理里自己勾
 var VC_REC=['srv:volc:zh_female_vv_uranus_bigtts','srv:volc:zh_female_vv_uranus_bigtts@sichuan','srv:volc:zh_female_xiaohe_uranus_bigtts','srv:volc:zh_male_m191_uranus_bigtts','srv:volc:zh_male_taocheng_uranus_bigtts','srv:edge:zh-CN-XiaoxiaoNeural','srv:edge:zh-CN-XiaoyiNeural','srv:edge:zh-CN-YunxiNeural'];
 function vcOff(id){var c=vcCfg[id];if(c&&c.off)return true;if(c&&c.on)return false;return !(id===tts.want||VC_REC.indexOf(id)>=0)}
 function vcSetOn(id,on){var c=vcCfg[id]||{};if(on){c.on=1;delete c.off}else{c.off=1;delete c.on}vcCfg[id]=c}
 function vcAlias(id){return vcCfg[id]&&vcCfg[id].alias||''}
-function vcSet(id,k,v){var c=vcCfg[id]||{};if(v)c[k]=v;else delete c[k];if(Object.keys(c).length)vcCfg[id]=c;else delete vcCfg[id];try{localStorage.setItem('claclaw.ttsVoices',JSON.stringify(vcCfg))}catch(_){}ttsPickVoice()}
-function ttsPickVoice(){
+function vcSet(id,k,v){var c=vcCfg[id]||{};if(v)c[k]=v;else delete c[k];if(Object.keys(c).length)vcCfg[id]=c;else delete vcCfg[id];vcSave()}
+function vcSave(){lsSet('claclaw.ttsVoices',JSON.stringify(vcCfg));ttsPickVoice()}
+// 「声音」列表里的：只放勾选的；全关了就当没设（不能一个都没有）
+function ttsLists(){
   var vs0=ttsVoices(),srv0=tts.srv||[];
-  // 列表里只放勾选的；全关了就当没设（不能一个都没有）
   var vs=vs0.filter(function(v){return !vcOff(v.voiceURI)}),srv=srv0.filter(function(v){return !vcOff('srv:'+v.name)});
   if(!vs.length&&!srv.length){vs=vs0;srv=srv0}
+  return {vs:vs,srv:srv};
+}
+function ttsPickVoice(){
+  var L=ttsLists(),vs=L.vs,srv=L.srv;
   // 正在用的那个被关掉了：换成列表里的第一个
-  if(tts.want&&vcOff(tts.want)){var nx=srv[0]?'srv:'+srv[0].name:vs[0]?vs[0].voiceURI:'';if(nx&&nx!==tts.want){tts.want=nx;try{localStorage.setItem('claclaw.ttsVoice',nx)}catch(_){}}}
+  if(tts.want&&vcOff(tts.want)){var nx=srv[0]?'srv:'+srv[0].name:vs[0]?vs[0].voiceURI:'';if(nx&&nx!==tts.want){tts.want=nx;lsSet('claclaw.ttsVoice',nx)}}
   tts.voice=vs.find(function(v){return v.voiceURI===tts.want})||vs[0]||null;
   var sel=$('#setTtsVoice');if(!sel)return;
   var dev=vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(vcAlias(v.voiceURI)||ttsLabel(v))+'</option>'}).join('');
@@ -5474,7 +5436,7 @@ srvEls.forEach(function(a){a.addEventListener('timeupdate',function(){
   var cov=(it.durs||[]).reduce(function(x,y){return x+y},0);
   if(document.hidden||it.infoBusy||(it.durs&&it.durs.length>=it.parts.length)||(a.currentTime<cov-1&&Date.now()-(it.infoAt||0)<15000))return;
   it.infoBusy=true;it.infoAt=Date.now();
-  fetch('/api/tts/job?id='+encodeURIComponent(it.job)).then(function(r){return r.json()}).then(function(j){if(j&&j.durs)it.durs=j.durs;at()}).catch(function(){}).then(function(){it.infoBusy=false});
+  getJson('/api/tts/job?id='+encodeURIComponent(it.job)).then(function(j){if(j&&j.durs)it.durs=j.durs;at()}).catch(function(){}).then(function(){it.infoBusy=false});
 })});
 // 朗读进度：开念一句记下是第几句；最后一句念完算读完（下次点就从头）
 var ttsProg=null,srvNow=null;
@@ -5484,16 +5446,16 @@ function ttsProgEnd(x){if(x&&x.prog&&x.pi>=x.prog.n-1)x.prog.done=true}
 function ttsResumeAt(src){return ttsProg&&ttsProg.src===src&&!ttsProg.done&&ttsProg.at>0?ttsProg.at:null}
 // 合成是要钱的（豆包按字数计费）：只提前合成正在念的这句 + 后面两句，念完一句再多合成一句；停了就把还没合成完的取消掉
 var SRV_AHEAD=3;
-// 带 sec 的（豆包同一段朗读）：等前一句合成完再发，豆包才接得上前面的语气
 function srvFetch(it){
-  if(!it.p&&it.stream){it.ac=window.AbortController?new AbortController():null;
-    it.p=fetch('/api/tts/job',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({parts:it.parts,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec}),signal:it.ac?it.ac.signal:undefined})
+  if(it.p)return it.p;
+  it.ac=window.AbortController?new AbortController():null;var sig=it.ac?it.ac.signal:undefined;
+  if(it.stream){
+    it.p=postJson('/api/tts/job',{parts:it.parts,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec},sig)
       .then(function(r){return r.json().then(function(j){if(!r.ok||!j.id)throw new Error('朗读任务没建成：'+(j.error||r.status));return j})})
       .then(function(j){it.ac=null;it.job=j.id;it.url='/api/tts/stream?id='+encodeURIComponent(j.id);return it})}
-  if(!it.p){it.ac=window.AbortController?new AbortController():null;var pv=it.prev&&srvFetch(it.prev);it.prev=null;
-    it.p=(pv?pv.catch(function(){}):Promise.resolve()).then(function(){return fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:it.text,voice:it.voice,rate:it.rate||tts.rate,sec:it.sec||undefined}),signal:it.ac?it.ac.signal:undefined})})
+  else it.p=postJson('/api/tts',{text:it.text,voice:it.voice,rate:it.rate||tts.rate},sig)
     .then(function(r){if(!r.ok)throw new Error('合成失败 '+r.status);return r.blob()})
-    .then(function(b){it.ac=null;it.url=URL.createObjectURL(b);return it})}
+    .then(function(b){it.ac=null;it.url=URL.createObjectURL(b);return it});
   return it.p;
 }
 function srvFree(it){if(!it)return;if(it.ac){try{it.ac.abort()}catch(_){}it.ac=null}if(it.url){if(!it.stream)URL.revokeObjectURL(it.url);it.url=null}}
@@ -5530,9 +5492,8 @@ function srvNext(){
 // 豆包、不止一段：整段做成一条连续的流（见 /api/tts/stream），锁屏也能念完；进度按每段时长换算
 function srvSay(parts,voice,base,prog,rate){
   if(/^volc:/.test(voice)&&parts.length>1){srvQ.push({stream:true,parts:parts.slice(),text:parts.join(''),voice:voice,rate:rate||ttsR(),base:base||0,pi:base||0,prog:prog,sec:'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10)});srvNext();return}
-  srvSay1(parts,voice,base,prog,rate);
+  var r=rate||ttsR();parts.forEach(function(p,k){srvQ.push({text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog})});srvNext();
 }
-function srvSay1(parts,voice,base,prog,rate){var r=rate||ttsR(),sec=/^volc:/.test(voice)&&parts.length>1?'cc'+Date.now().toString(36)+Math.random().toString(36).slice(2,10):'',pv=null;parts.forEach(function(p,k){var it={text:p,voice:voice,rate:r,pi:(base||0)+k,prog:prog,sec:sec,prev:sec?pv:null};pv=it;srvQ.push(it)});srvNext()}
 function srvStop(){srvGen++;srvNow=null;srvQ.forEach(srvFree);srvQ=[];srvBusy=false;srvBlocked=false;srvCur=null;srvEls.forEach(function(a){try{a.pause();if(/\/api\/tts\/stream/.test(a.src)){a.removeAttribute('src');a.load()}}catch(_){}});srvKeepIdle(false,true)}   // 手动停：保活立刻收，不拖那 8 秒
 // P0 打断：只暂停当前这一句，把要念的插到队首，不丢后面的队列
 function srvInterrupt(text,voice){
@@ -5571,38 +5532,35 @@ function srvKeepIdle(on,now){
   if(!srvIdleT)srvIdleT=setTimeout(off,8000);
 }
 // iPhone：<audio> 第一次播放要由点击触发；点一下时两个都放一小段静音，之后就能自己播
-function SILENT_WAV(){
-  var n=800,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
+// n 个采样的静音 WAV（8kHz 单声道 8 位无符号，静音是 128）
+function silentWav(n){
+  var b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
   w(0,'RIFF');d.setUint32(4,36+n,true);w(8,'WAVEfmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
   d.setUint32(24,8000,true);d.setUint32(28,8000,true);d.setUint16(32,1,true);d.setUint16(34,8,true);w(36,'data');d.setUint32(40,n,true);
   for(var i=0;i<n;i++)b[44+i]=128;
-  var str='';for(var j=0;j<b.length;j++)str+=String.fromCharCode(b[j]);return 'data:audio/wav;base64,'+btoa(str);
+  return b;
 }
-var SILENT_SRC=SILENT_WAV();
-// 保活用的长静音（秒）：走 Blob 而不是 data: URI —— 10 秒的 8kHz 单声道有 8 万字节，
-// base64 塞进字符串要 10 万多字符，没必要。内容同样是 8 位无符号静音（128）。
-function SILENT_BLOB(sec){
-  var r=8000,n=r*sec,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<t.length;i++)b[o+i]=t.charCodeAt(i)};
-  w(0,'RIFF');d.setUint32(4,36+n,true);w(8,'WAVEfmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
-  d.setUint32(24,r,true);d.setUint32(28,r,true);d.setUint16(32,1,true);d.setUint16(34,8,true);w(36,'data');d.setUint32(40,n,true);
-  for(var i=0;i<n;i++)b[44+i]=128;
-  return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
-}
+var SILENT_SRC=(function(){var b=silentWav(800),str='';for(var j=0;j<b.length;j++)str+=String.fromCharCode(b[j]);return 'data:audio/wav;base64,'+btoa(str)})();
+// 保活用的长静音（秒）：走 Blob 而不是 data: URI —— 10 秒有 8 万字节，base64 塞进字符串要 10 万多字符，没必要
+function SILENT_BLOB(sec){return URL.createObjectURL(new Blob([silentWav(8000*sec)],{type:'audio/wav'}))}
 function srvUnlock(force){
   if(tts.srvUnlocked&&!force)return;
   if(srvPlaying())return;
   tts.srvUnlocked=true;
   srvEls.forEach(function(a){try{if(a===srvCur||srvQ.some(function(x){return x.resumeEl===a}))return;a.src=SILENT_SRC;var p=a.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}});
 }
-function ttsText(src){
+// 朗读前去掉 Markdown 记号：代码块、表格、图片、链接地址都不念
+function ttsStrip(src){
   return String(src||'')
     .replace(/```[\s\S]*?```/g,'，代码略，')
     .replace(/^\s*\|.*\|\s*$/gm,'').replace(/^\s*[-:| ]{3,}\s*$/gm,'')
     .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
     .replace(/https?:\/\/\S+/g,'链接')
     .replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|~~/g,'')
-    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'')
-    .replace(/\n{2,}/g,'。\n').replace(/\s+/g,' ').trim();
+    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'');
+}
+function ttsText(src){
+  return ttsStrip(src).replace(/\n{2,}/g,'。\n').replace(/\s+/g,' ').trim();
 }
 // 边写边念：文字每出来完整的一句（句末标点或换行）就交去念，不等整段写完。
 // 代码块没写完时不切（等它写完整块念成「代码略」）；太短的碎句先攒着，和下一句一起念。
@@ -5631,13 +5589,7 @@ var TTS_MIN=40,TTS_MAX=220,TTS_BIG_MAX=400;
 function ttsBig(){return /^volc:/.test(ttsSrvVoice()||'')}
 // 文字的段落（换行分开；去掉 Markdown 记号，同 ttsText），没有句末标点的补个句号，念的时候段与段之间有停顿
 function ttsParas(src){
-  return String(src||'')
-    .replace(/```[\s\S]*?```/g,'，代码略，')
-    .replace(/^\s*\|.*\|\s*$/gm,'').replace(/^\s*[-:| ]{3,}\s*$/gm,'')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
-    .replace(/https?:\/\/\S+/g,'链接')
-    .replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|~~/g,'')
-    .replace(/^\s{0,3}(#{1,6}|>)\s*/gm,'').replace(/^\s*([-*+]|\d+[.)])\s+/gm,'')
+  return ttsStrip(src)
     .split(/\n+/).map(function(p){p=p.replace(/\s+/g,' ').trim().replace(/^[，,]+|[，,]+$/g,'');if(p&&!/[。！？!?；;：:…」”"’）)]$/.test(p))p+='。';return p}).filter(function(p){return /[^\s。，,]/.test(p)});
 }
 // 太长的一段：按句子切成 ceil(长度/上限) 份，每份差不多长
@@ -5938,7 +5890,7 @@ var narration=(function(){
 function ttsPreview(text){
   ttsStop();ttsManual=true;
   var sv=ttsSrvVoice();if(sv){srvUnlock();srvSay([text],sv,0,null,tts.rate);return}
-  if(!ttsOk())return;var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=tts.rate;if(tts.voice)u.voice=tts.voice;speechSynthesis.speak(u);
+  if(!ttsOk())return;devSpeak(text,tts.rate,tts.voice);
 }
 var TTS_IC={
   say:'<svg viewBox="0 0 24 24"><path d="M8.5 6v12l9.5-6z" fill="currentColor" stroke="none"/></svg>',
@@ -5996,7 +5948,6 @@ function ttsModeSet(mode){
   tts.mode=mode;tts.on=mode!=='off';
   try{localStorage.setItem('claclaw.ttsMode',mode);localStorage.setItem('claclaw.tts',tts.on?'1':'0')}catch(_){}
   if(tts.on){tts.unlocked=false;tts.srvUnlocked=false;ttsUnlock()}else ttsStop();
-  if(narration&&narration.reset)narration.reset();
   ttsSync();
 }
 function ttsSync(){
@@ -6011,7 +5962,6 @@ function ttsSync(){
   if(tts.on)ttsWake();else if(tts.lock){tts.lock.release().catch(function(){});tts.lock=null}
   ttsMuteShow();
 }
-// 喇叭：点一下开 / 关这个会话的播报；手机长按、电脑双击（或右键）选这个会话用的声音
 // 弹出成独立窗口：同一个会话再点就是把已经弹出的那个窗口提到前面
 var shellPopout=false;
 // 弹出窗口：同一个会话只在一处输入。弹出后主窗口让出这个会话（换到列表里下一个，没有就空着）；
@@ -6036,7 +5986,7 @@ function soloLeave(id){
   if(next){wsSend({t:'session.open',id:next.id,mode:mode});return}
   wsSend({t:'session.leave'});if(feedOwner===session.id)saveFeed(session.id);feedOwner=null;session=null;setBusy(false);
   feed.innerHTML='';$('#nm').textContent='选择会话';$('#sid').textContent='';$('#where').textContent='';setHeader();
-  try{localStorage.removeItem(hk('session'))}catch(_){}
+  lsPut(hk('session'));
   refreshList();
 }
 if(soloCh){
@@ -6063,21 +6013,21 @@ $('#ttsMute').addEventListener('click',function(e){
   if(!session||this.classList.contains('lock'))return;
   var me=this;me.classList.add('lock');setTimeout(function(){me.classList.remove('lock')},400);   // 防连击：边框闪一下就消失
   if(ttsMuted[session.id])delete ttsMuted[session.id];
-  else{ttsMuted[session.id]=1;if(ttsSpeaking())ttsStop();if(narration&&narration.onUserStop)narration.onUserStop()}
-  try{localStorage.setItem('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)))}catch(_){}
+  else{ttsMuted[session.id]=1;if(ttsSpeaking())ttsStop();narration.onUserStop()}
+  lsSet('claclaw.ttsMuted',JSON.stringify(Object.keys(ttsMuted).slice(-200)));
   ttsMuteShow();ttsShowStop();
 });
 // 可选的声音（和设置里「声音」下拉框一样：语音管理里勾上的，带别名）
 function ttsChoices(){
-  var vs0=ttsVoices(),srv0=tts.srv||[];
-  var vs=vs0.filter(function(v){return !vcOff(v.voiceURI)}),srv=srv0.filter(function(v){return !vcOff('srv:'+v.name)});
-  if(!vs.length&&!srv.length){vs=vs0;srv=srv0}
+  var L=ttsLists(),vs=L.vs,srv=L.srv;
   return srv.map(function(v){return {id:'srv:'+v.name,label:vcAlias('srv:'+v.name)||srvLabel(v)}}).concat(vs.map(function(v){return {id:v.voiceURI,label:vcAlias(v.voiceURI)||ttsLabel(v)}}));
 }
 // 用当前会话的声音、语速念一句（选完声音 / 调完语速试听）
-function ttsSessSay(t){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);ttsStop();ttsManual=true;var sv=ttsSrvVoice();if(sv)srvSay([t],sv);else if(ttsOk()){var u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=ttsR();var dv=ttsDevVoice();if(dv)u.voice=dv;speechSynthesis.speak(u)}}
-function ttsSessRateSave(){var ks=Object.keys(ttsSessR);if(ks.length>300)delete ttsSessR[ks[0]];try{localStorage.setItem('claclaw.ttsSessRate',JSON.stringify(ttsSessR))}catch(_){}}
-// 这个会话的声音和语速：放在会话设置里（标题栏右边 › →「朗读」）；长按 / 双击喇叭直接打开会话设置并滚到这一栏
+function devSpeak(t,rate,voice,lang){var u=new SpeechSynthesisUtterance(t);u.lang=lang||'zh-CN';u.rate=rate;if(voice)u.voice=voice;speechSynthesis.speak(u)}   // 用这台设备自带的语音念一句（试听）
+function ttsTapUnlock(){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true)}   // 这次点击就是 iPhone 要的「用户手势」：顺手解锁朗读
+function ttsSessSay(t){ttsTapUnlock();ttsStop();ttsManual=true;var sv=ttsSrvVoice();if(sv)srvSay([t],sv);else if(ttsOk())devSpeak(t,ttsR(),ttsDevVoice())}
+function ttsSessSave(o,k){var ks=Object.keys(o);if(ks.length>300)delete o[ks[0]];lsSet('claclaw.'+k,JSON.stringify(o))}   // 各会话的声音 / 语速：最多记 300 个
+// 这个会话的声音和语速：放在会话设置里（标题栏右边 › →「朗读」）
 function renderCfgTts(){
   var sel=$('#cfgVoice');if(!sel||!session)return;
   var sid=session.id,go=function(){
@@ -6094,24 +6044,23 @@ function cfgRateUi(){if(!session)return;var own=+ttsSessR[session.id]>0,r=+$('#c
 $('#cfgVoice').addEventListener('change',function(e){
   if(!session)return;var sid=session.id,v=e.target.value,lab=e.target.options[e.target.selectedIndex].textContent;
   if(v)ttsSessV[sid]=v;else delete ttsSessV[sid];
-  var ks=Object.keys(ttsSessV);if(ks.length>300)delete ttsSessV[ks[0]];
-  try{localStorage.setItem('claclaw.ttsSessVoice',JSON.stringify(ttsSessV))}catch(_){}
+  ttsSessSave(ttsSessV,'ttsSessVoice');
   ttsMuteShow(true);toast(v?'这个会话改用「'+lab+'」':'这个会话跟随默认声音');
   ttsSessSay('以后这个会话用这个声音念。');
 });
 $('#cfgRate').addEventListener('input',function(){$('#cfgRateV').textContent=(+this.value).toFixed(2)+' 倍'});
 $('#cfgRate').addEventListener('change',function(){
-  if(!session)return;ttsSessR[session.id]=+this.value;ttsSessRateSave();cfgRateUi();ttsMuteShow(true);
+  if(!session)return;ttsSessR[session.id]=+this.value;ttsSessSave(ttsSessR,'ttsSessRate');cfgRateUi();ttsMuteShow(true);
   ttsSessSay('现在是这个语速，听听合不合适。');
 });
 $('#cfgRateD').addEventListener('click',function(){
-  if(!session)return;delete ttsSessR[session.id];ttsSessRateSave();$('#cfgRate').value=String(tts.rate);cfgRateUi();ttsMuteShow(true);toast('这个会话跟随默认语速');
+  if(!session)return;delete ttsSessR[session.id];ttsSessSave(ttsSessR,'ttsSessRate');$('#cfgRate').value=String(tts.rate);cfgRateUi();ttsMuteShow(true);toast('这个会话跟随默认语速');
 });
 (function(){
   var b=$('#setEnterSend');
   var ui=function(){b.hidden=!COARSE.matches;b.dataset.on=enterSend?'1':'';ta.setAttribute('enterkeyhint',kbSend()?'send':'enter');syncSend()};
   if(COARSE.addEventListener)COARSE.addEventListener('change',ui);
-  b.addEventListener('click',function(){enterSend=!enterSend;try{localStorage.setItem('claclaw.enterSend',enterSend?'1':'0')}catch(_){}ui();toast(enterSend?'回车键发送':'回车键换行')});
+  b.addEventListener('click',function(){enterSend=!enterSend;lsSet('claclaw.enterSend',enterSend?'1':'0');ui();toast(enterSend?'回车键发送':'回车键换行')});
   ui();
 })();
 $('#setTts').addEventListener('click',function(){
@@ -6125,7 +6074,7 @@ $('#setTtsMode').addEventListener('change',function(e){
   if(m!=='off')ttsPreview(m==='reply'?'只念回复':m==='steps'?'关键节点和回复':'只念关键节点');
 });
 $('#setTtsVoice').addEventListener('change',function(e){
-  tts.want=e.target.value;try{localStorage.setItem('claclaw.ttsVoice',tts.want)}catch(_){}
+  tts.want=e.target.value;lsSet('claclaw.ttsVoice',tts.want);
   ttsPickVoice();
   tts.srvUnlocked=false;ttsUnlock();ttsPreview('你好，以后就用这个声音给你念回复。');
 });
@@ -6133,16 +6082,16 @@ $('#setTtsVoice').addEventListener('change',function(e){
 function ttsRateLabel(){var r=+$('#setTtsRate').value||1.1;$('#setTtsRateV').textContent=r.toFixed(2)+' 倍'+(Math.abs(r-1)<0.001?'（原速）':'')}
 $('#setTtsRate').addEventListener('input',ttsRateLabel);
 $('#setTtsRate').addEventListener('change',function(e){
-  tts.rate=+e.target.value||1.1;try{localStorage.setItem('claclaw.ttsRate',String(tts.rate))}catch(_){}
+  tts.rate=+e.target.value||1.1;lsSet('claclaw.ttsRate',String(tts.rate));
   ttsRateLabel();tts.srvUnlocked=false;ttsUnlock();ttsPreview('现在是这个语速，听听合不合适。');
 });
 $('#ttsStop').addEventListener('click',function(){
   if(ttsLongFired($('#ttsStop')))return;
   if(srvBlocked){srvBlocked=false;srvUnlock(true);srvNext();ttsShowStop();ttsDbg('tap continue');return}   // 这次点击就是 iPhone 要的「用户手势」：解锁后接着念
-  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;if(narration&&narration.onUserStop)narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
+  if(ttsSpeaking()){ttsStop();ttsHush=!!busy;narration.onUserStop();return}   // 还在回复中：这一轮后面的也别念了
   // 主动朗读最后一条回复（自动朗读关着也能用）；这次点击顺便解锁声音
   // 浏览器自带的声音不用先念一个空格解锁：这次点击里马上就开念；Edge 上那个空格会把第一句打断
-  tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+  ttsTapUnlock();
   ttsDbg('tap say '+(ttsSrvVoice()||'want='+(tts.want||'-'))+' srv='+(tts.srv?tts.srv.length:'-')+(DESKTOP.matches?' desk':' mob'));
   var src=ttsLastReply(),at=ttsResumeAt(src);
   if(at!=null)toast('接着第 '+(at+1)+' 句念（长按播放键可选从哪句开始）');
@@ -6153,7 +6102,7 @@ ttsLongPress($('#ttsStop'),function(){
   var src=ttsLastReply();
   ttsPickFrom(src,function(i){
     ttsStop();ttsHush=false;
-    tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true);
+    ttsTapUnlock();
     ttsDbg('tap say from '+i);ttsManual=true;ttsSay(src,true,i);ttsShowStop();
   });
 });
@@ -6204,13 +6153,12 @@ var ttsDbgAt=0,ttsDbgLast='';
 function ttsDbg(m){if(m===ttsDbgLast&&Date.now()-ttsDbgAt<300)return;ttsDbgAt=Date.now();ttsDbgLast=m;postJson('/api/tts/log',{m:String(m).slice(0,200)}).catch(function(){})}
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){
-    if(narration&&narration.onHidden)narration.onHidden();
+    narration.onHidden();
     if(!ttsSrvVoice())ttsStop();else tts.srvUnlocked=false;
   }
-  else{ttsWake();ttsPickVoice();if(narration&&narration.onVisible)narration.onVisible()}
+  else{ttsWake();ttsPickVoice();narration.onVisible()}
 });   // 回到前台时重新读一遍语音列表（刚在系统设置里下载的新语音）
 
-// 点麦克风、或正在语音输入时不解锁：解锁会放一小段静音，iPhone 一放声音就把刚开的语音识别打断（aborted）
 // 正在看某个会话（不是列表、设置、宿主页）
 function ttsInChat(){return !!session&&!(mList&&!DESKTOP.matches)&&!$('#app').classList.contains('set-on')&&!$('#app').classList.contains('host-on')}
 // 点屏幕顺便解锁声音（iPhone 要用户手势才让放）：只在会话里点才解锁，这个会话关了播报也不解锁。
@@ -6221,8 +6169,7 @@ ttsSync();
 (function(){
   var k=$('#setVidKeep'),c=$('#setVidCap');k.value=String(vidKeepDays());c.value=String(vidCapMB());
   if(!k.value)k.value='60';if(!c.value)c.value='2048';
-  k.addEventListener('change',function(){try{localStorage.setItem('claclaw.vidKeep',k.value)}catch(_){}vidPrune().then(showVidUse,function(){})});
-  c.addEventListener('change',function(){try{localStorage.setItem('claclaw.vidCap',c.value)}catch(_){}vidPrune().then(showVidUse,function(){})});
+  [[k,'vidKeep'],[c,'vidCap']].forEach(function(x){x[0].addEventListener('change',function(){lsSet('claclaw.'+x[1],x[0].value);vidPrune().then(showVidUse,function(){})})});
 })();
 function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$('#vidUse').textContent='图片原图、视频、文件存在本机：'+u.n+' 个，'+(u.size/1048576).toFixed(1)+'MB'}).catch(function(){})}
 (function(){
@@ -6232,20 +6179,20 @@ function showVidUse(){if(!window.indexedDB)return;vidUsage().then(function(u){$(
   sel.addEventListener('change',function(){
     var m=/^shichen@(\d+)$/.exec(sel.value),v=m?'shichen':sel.value;
     window.__scZ=m?+m[1]:null;
-    try{if(v)localStorage.setItem('claclaw.theme',v);else localStorage.removeItem('claclaw.theme');if(m)localStorage.setItem('claclaw.scZ',m[1]);else localStorage.removeItem('claclaw.scZ')}catch(_){}
+    lsPut('claclaw.theme',v);lsPut('claclaw.scZ',m&&m[1]);
     applyTheme(v);
   });
   var lg=$('#setLang');try{lg.value=localStorage.getItem('claclaw.lang')==='en'?'en':''}catch(_){}
   lg.addEventListener('change',function(){
-    try{if(lg.value)localStorage.setItem('claclaw.lang',lg.value);else localStorage.removeItem('claclaw.lang')}catch(_){}
+    lsPut('claclaw.lang',lg.value);
     setTimeout(function(){$("#railReload").click()},350);   // 等设置同步到电脑（300ms 防抖）再刷新，刷新后停在设置页
   });
   ['lineW','lineC'].forEach(function(k){var e=$('#set'+k[0].toUpperCase()+k.slice(1));try{e.value=localStorage.getItem('claclaw.'+k)||''}catch(_){}
-    e.addEventListener('change',function(){try{if(e.value)localStorage.setItem('claclaw.'+k,e.value);else localStorage.removeItem('claclaw.'+k)}catch(_){}window.__lines()})});
+    e.addEventListener('change',function(){lsPut('claclaw.'+k,e.value);window.__lines()})});
   var im=$('#setScImg');
   try{im.value=localStorage.getItem('claclaw.scImg')==='1'?'1':''}catch(_){}
   im.addEventListener('change',function(){
-    try{if(im.value)localStorage.setItem('claclaw.scImg','1');else localStorage.removeItem('claclaw.scImg')}catch(_){}
+    lsPut('claclaw.scImg',im.value?'1':'');
     if(window.__sc&&document.documentElement.getAttribute('data-theme')==='shichen')window.__sc.apply();   // 单选某个时辰（sel.value 是 shichen@N）也要立刻换
   });
 })();
@@ -6263,7 +6210,7 @@ function renderAcct(){
   if(hostView!=='acct')return;
   var h=pgHd('data-act="ac-back"',peerFromList?'返回':'返回设置',acSt&&!acSt.setUp?'设置用户名和密码':'登录账号');
   var err='<div class="pe-err" id="acErr"'+(acMsg.err?'':' hidden')+'>'+esc(acMsg.err||'')+'</div>';
-  if(!acSt){h+='<div class="h-empty">加载中…</div>'}
+  if(!acSt){h+=LOADING}
   else if(!acSt.setUp){
     h+='<div class="ac-mid"><div class="h-card">'+acField('acU','用户名','text','')+acField('acP','密码','password','')+acField('acP2','再输一次密码','password','')+'</div>'+err+'<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="ac-set">保存</button></div></div>';
   }else{
@@ -6275,8 +6222,7 @@ function renderAcct(){
   $('#hostBody').innerHTML=h;
 }
 function acAct(act,a){
-  if(act==='ac-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
-  if(act==='ac-back'){hostView='';mTab('set');return}
+  if(act==='ac-back'){subBack();return}
   if(act==='ac-eye'){var el=$('#'+a.dataset.for);if(!el)return;var show=el.type==='password';el.type=show?'text':'password';a.innerHTML=show?AC_EYE_X:AC_EYE;a.setAttribute('aria-label',show?'隐藏密码':'显示密码');return}
   var v=function(id){var e=$('#'+id);return e?e.value:''};
   var bad=function(m){var e=$('#acErr');if(e){e.textContent=m;e.hidden=false}};   // 只换提示，填好的不清掉
@@ -6287,19 +6233,16 @@ function acAct(act,a){
   a.disabled=true;$('#acErr').hidden=true;
   fetch(set?'/api/setup':'/api/acct',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x.ok){a.disabled=false;return bad(x.j.error||'没保存成功')}
-    toast(set?'已设置':'已修改');acMsg={};acLoad();acAct('ac-back');   // 设好了：入口跟着消失，回到原来的页面
+    toast(set?'已设置':'已修改');acMsg={};acLoad();subBack();   // 设好了：入口跟着消失，回到原来的页面
   }).catch(function(){a.disabled=false;bad('网络不通，没保存')});
 }
 $('#setAcctGo').addEventListener('click',function(){peerFromList='';openAcct()});
 $('#sAcct').addEventListener('click',function(){peerFromList=listTab();openAcct()});
 acLoad();
 // 主题子页：设置里「主题 ›」、列表顶栏的调色板、Claw 页背景里「更新客户端」左边的圈都进这里；选了立刻换，背后还是原来那个下拉框（#setTheme / #setScImg）
-var TH_C={'':'linear-gradient(135deg,#fff 50%,#161B21 50%)',light:'#FFFFFF',dark:'#161B21',ziwei:'#5B21B6'};
-(function(){var ZC=['6AAE65','3F7A3B','5E6C79','B8C4CF','D9B44A','8A6D1E','8E2A20','E06A5A','4A78B5','1F3F6E','8E4519','E8894A'];
-  TH_C.shichen='conic-gradient('+ZC.map(function(c){return '#'+c}).join(',')+',#'+ZC[0]+')';ZC.forEach(function(c,i){TH_C['shichen@'+i]='#'+c})})();
 function thSub(){var sel=$('#setTheme'),o=sel.options[sel.selectedIndex],el=$('#setThemeSub');if(el)el.textContent=o?o.textContent:''}
 // 经络图版本表：先用本机存的立刻画，再去服务器取最新的，变了就重画（换了图地址跟着变，手机重新取）
-var scMer=(function(){try{return JSON.parse(localStorage.getItem('claclaw.scMer'))||{}}catch(e){return {}}})();
+var scMer=lsObj('claclaw.scMer');
 function scMerSync(){fetch('/sc-mer/index.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var t=JSON.stringify(j);if(t===JSON.stringify(scMer))return;scMer=j;try{localStorage.setItem('claclaw.scMer',t)}catch(e){}renderTheme()}).catch(function(){})}
 function openTheme(){mTab('host');hostView='theme';renderTheme();scMerSync()}
 var thPalC={};
@@ -6349,8 +6292,7 @@ function renderTheme(){
   [].forEach.call($('#hostBody').querySelectorAll('.th-mer img'),function(im){if(im.complete&&!im.naturalWidth)im.remove();else im.addEventListener('error',function(){im.remove()})});   // 没有经络图：留下经名（404 可能在挂监听前就已经失败）
 }
 function thAct(act,a){
-  if(act==='th-back'&&peerFromList){var fv=peerFromList;peerFromList='';hostView='';mTab(fv);openSheet(true);return}
-  if(act==='th-back'){hostView='';mTab('set');return}
+  if(act==='th-back'){subBack();return}
   if(act==='th-mer'){var sm=a.currentSrc||a.src,mv=scMer[a.dataset.z]||{};showImage(mv.l?'/sc-mer/'+a.dataset.z+'-l.webp?v='+mv.l:sm);var li=lightbox.querySelector('img');li.style.background='#fff';li.onerror=function(){li.onerror=null;li.src=sm};return}   // 大图用高清版（-l），没有就用卡片上那张
   var el=act==='th-pick'?$('#setTheme'):act==='th-img'?$('#setScImg'):null;if(!el)return;
   el.value=a.dataset.v;el.dispatchEvent(new Event('change'));thSub();renderTheme();
@@ -6364,7 +6306,6 @@ thSub();
 (function(){
   var balls=[$('#ctxBtn'),$('#notifBtn'),$('#ttsMute')],ncAt=0,tilt=null,asked=false,raf=0,lastT=0,drag=null;
   balls.forEach(function(b){b._o=0;b._v=0});
-  function fixed(b){return false}   // 喇叭不再有长按选声音，三个球都能拖
   function on(){return !DESKTOP.matches}
   function vis(){return balls.filter(function(b){return !b.hidden&&b.offsetParent})}
   function put(b){b.style.transform=b._o?'translateX('+b._o.toFixed(1)+'px)':''}
@@ -6386,14 +6327,14 @@ thSub();
     var it=items();if(!on()||!it.length){lastT=0;return}
     var a=acc(),moving=!!drag||!!tilt;
     it.forEach(function(o){
-      var b=o.b;if(b===drag||fixed(b)){b._v=0;return}
+      var b=o.b;if(b===drag){b._v=0;return}
       b._v+=a*dt;b._v*=Math.pow(.25,dt);if(Math.abs(b._v)<4&&!a)b._v=0;
       b._o+=b._v*dt;clamp(o);if(b._v)moving=true;
     });
     for(var i=0;i+1<it.length;i++){   // 两个球相撞：推开、交换速度
       var L=it[i],R=it[i+1],ov=(L.n+L.b._o+L.w+4)-(R.n+R.b._o);
       if(ov>0){
-        if(L.b===drag||fixed(L.b))R.b._o+=ov;else if(R.b===drag||fixed(R.b))L.b._o-=ov;else{L.b._o-=ov/2;R.b._o+=ov/2}
+        if(L.b===drag)R.b._o+=ov;else if(R.b===drag)L.b._o-=ov;else{L.b._o-=ov/2;R.b._o+=ov/2}
         var v=L.b._v;L.b._v=R.b._v*.8;R.b._v=v*.8;
       }
     }
@@ -6404,7 +6345,7 @@ thSub();
   function onOri(e){if(e.gamma==null&&e.beta==null)return;tilt={g:e.gamma,b:e.beta};if(!document.hidden)kick()}
   var GK='claclaw.gyro',live=false;   // 重力滚动开关存在本机：'on' / 'off'；长按圆球切换
   function pref(){try{return localStorage.getItem(GK)}catch(_){return null}}
-  function setPref(v){try{localStorage.setItem(GK,v)}catch(_){}}
+  function setPref(v){lsSet(GK,v)}
   function ask(quiet){   // 长按圆球松手时调（quiet＝打开页面时按上次的开关自动接上，不提示）；授权框弹不出来就给一个按钮让用户点一下
     if(asked||live||pref()==='off')return;asked=true;var D=window.DeviceOrientationEvent;
     if(!window.isSecureContext){if(!quiet)toast('重力感应要 HTTPS 地址才能用，现在只能手拖');return}
@@ -6426,7 +6367,7 @@ thSub();
   if(pref()==='on'&&on())ask(true);
   balls.forEach(function(b){
     var sx=0,so=0,px=0,pt=0,moved=false,id=null,lp=0,lpd=false;
-    b.addEventListener('pointerdown',function(e){if(!on()||e.button||fixed(b))return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false;lpd=false;
+    b.addEventListener('pointerdown',function(e){if(!on()||e.button)return;id=e.pointerId;sx=px=e.clientX;pt=e.timeStamp;so=b._o;moved=false;lpd=false;
       clearTimeout(lp);lp=setTimeout(function(){lpd=true;b._nc=true;try{b.setPointerCapture(id)}catch(_){}toast(live?'松手关闭重力滚动':'松手开启重力滚动')},550)});   // 长按不动：松手时开关重力滚动（iOS 要在 touchend 里请求授权才弹框）
     b.addEventListener('pointermove',function(e){
       if(e.pointerId!==id)return;var dx=e.clientX-sx;
@@ -6490,9 +6431,8 @@ document.addEventListener('keydown',function(e){
 
 var pushBtn=$('#pushBtn'),pushTip=$('#pushTip');
 function pushUI(on){pushBtn.dataset.on=on?'1':'';$('#pushSub').textContent=on?'回复完、要确认时提醒':'关着'}
-var swReg=null;
 if('serviceWorker' in navigator&&window.isSecureContext){
-  navigator.serviceWorker.register('/sw.js').then(function(r){swReg=r}).catch(function(e){console.warn('sw',e)});
+  navigator.serviceWorker.register('/sw.js').catch(function(e){console.warn('sw',e)});
   // 点通知 → Service Worker 发来要打开的地址（/?s=会话ID）
   navigator.serviceWorker.addEventListener('message',function(e){
     var d=e.data||{};if(d.t!=='open')return;
@@ -6508,7 +6448,7 @@ function syncPushBtn(){
     pushBtn.hidden=true;pushTip.hidden=false;
     pushTip.textContent=window.isSecureContext?'这个浏览器不支持推送通知；iPhone 要先「添加到主屏幕」，从主屏幕图标打开':'推送通知要用 https 地址打开才能开启';
     // http 打开时给出 https 地址，点一下就过去（那边要重新登录、重新添加到主屏幕）
-    if(!window.isSecureContext)fetch('/api/push/key').then(function(r){return r.json()}).then(function(j){
+    if(!window.isSecureContext)getJson('/api/push/key').then(function(j){
       if(!j.httpsUrl)return;
       pushTip.textContent='推送通知要用 https 地址打开才能开启：';
       var a=document.createElement('a');a.href=j.httpsUrl;a.textContent=j.httpsUrl.replace(/^https:\/\//,'');a.style.color='var(--accent)';
@@ -6521,7 +6461,7 @@ function syncPushBtn(){
   pushUI(false);$('#pushLocal').hidden=true;
   navigator.serviceWorker.ready.then(function(r){return r.pushManager.getSubscription()}).then(function(sub){
     if(!sub)return;
-    return fetch('/api/push/status?endpoint='+encodeURIComponent(sub.endpoint)).then(function(r){return r.json()}).then(function(j){
+    return getJson('/api/push/status?endpoint='+encodeURIComponent(sub.endpoint)).then(function(j){
       if(j.subscribed){pushUI(true);$('#pushLocal').hidden=false}
     });
   }).catch(function(){});
@@ -6542,7 +6482,7 @@ function showSound(j){
   if(j.name)sel.value=j.name;
   soundBtn.dataset.on=j.on?'1':'';
 }
-function syncSound(){fetch('/api/sound').then(function(r){return r.json()}).then(showSound).catch(function(){})}
+function syncSound(){getJson('/api/sound').then(showSound).catch(function(){})}
 soundBtn.addEventListener('click',function(){
   postJson('/api/sound',{on:!soundBtn.dataset.on})
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast(j.on?'已开启，刚才应该响了一声':'已关闭电脑提示音')});
@@ -6552,12 +6492,12 @@ $('#soundSel').addEventListener('change',function(e){
     .then(function(r){return r.json()}).then(function(j){showSound(j);toast('已换成「'+soundLabel(j.name)+'」')});
 });
 // 设置页里的数据（提示音、会话设置、电脑合成的声音）进设置页再拉，启动时少几个请求
-function loadSetData(){showVidUse();syncSound();fetch('/api/settings/session').then(function(r){return r.json()}).then(showSessSet).catch(function(){});ttsLoadSrv()}
+function loadSetData(){showVidUse();syncSound();getJson('/api/settings/session').then(showSessSet).catch(function(){});ttsLoadSrv()}
 // Claude 长期令牌：入口在 Claw 页 Claude Code 卡片右下角（Claude 不在 claclaw 里登录，只有这一项）；面板只显示「已配置 · 后 4 位 · 配置时间」；登录了 claclaw 的网页在哪都能设置 / 替换 / 清除
 // shown：复制不了时把完整令牌显示出来（输对密码后才有），长按选择
 function openCtok(j,shown){
   loginClaw='claude';
-  var p=$('#loginPane');if(!p){p=document.createElement('div');p.id='loginPane';document.body.appendChild(p);p.addEventListener('click',function(e){if(e.target===p)closeLogin()})}
+  var p=pane('loginPane',closeLogin);
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>Claude 长期令牌</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
     +'<p class="lg-hint">所有 Claude 会话共用一个长期令牌（终端运行 claude setup-token 生成，一年有效）。</p>'
     +'<div class="lg-st">'+esc(j.set?'已配置 · …'+j.last4+(j.at?' · '+new Date(j.at).toLocaleString('zh-CN',{hour12:false}):''):'未配置 · 用 claude.ai 登录')+(j.set?' <button type="button" class="lg-btn ghost lg-copytok">复制</button>':'')+'</div>'
@@ -6587,27 +6527,23 @@ function postCtok(body,busy){
 function showSessSet(j){
   var cp=j.clarelayPush,pv=$('#pushViaRow');pv.hidden=!cp;
   if(cp){$('#setPushVia').value=j.pushVia||'auto';$('#pushViaSub').textContent='自动：clarelay '+(cp.online?'在线，走 clarelay':'不在线，claclaw 自己推')}
-  if(j.uploadKeepDays){var uk=$('#setUpKeep'),uv=String(j.uploadKeepDays);if(![].some.call(uk.options,function(o){return o.value===uv})){var o2=document.createElement('option');o2.value=uv;o2.textContent=uv+' 天';uk.appendChild(o2)}uk.value=uv}
-  if(j.autoCompactK!=null){var ac=$('#setAutoCompact'),av=String(j.autoCompactK);if(![].some.call(ac.options,function(o){return o.value===av})){var o3=document.createElement('option');o3.value=av;o3.textContent=av+'k';ac.appendChild(o3)}ac.value=av}
-  [['#setIdle',j.idleCloseMin],['#setTake',j.takeoverMin]].forEach(function(x){
-    var sel=$(x[0]),v=String(x[1]);
-    if(![].some.call(sel.options,function(o){return o.value===v})){var o=document.createElement('option');o.value=v;o.textContent=v+' 分钟';sel.appendChild(o)}
-    sel.value=v;
-  });
+  if(j.uploadKeepDays)selEnsure('#setUpKeep',j.uploadKeepDays,' 天');
+  if(j.autoCompactK!=null)selEnsure('#setAutoCompact',j.autoCompactK,'k');
+  selEnsure('#setIdle',j.idleCloseMin,' 分钟');selEnsure('#setTake',j.takeoverMin,' 分钟');
 }
+// 下拉框选中服务端给的值；选项里没有就补一个
+function selEnsure(id,v,unit){var sel=$(id);v=String(v);if(![].some.call(sel.options,function(o){return o.value===v})){var o=document.createElement('option');o.value=v;o.textContent=v+unit;sel.appendChild(o)}sel.value=v}
+function saveSessSet(body,msg){postJson('/api/settings/session',body).then(function(r){return r.json()}).then(function(j){showSessSet(j);toast(msg?msg(j):'已保存')})}
 $('#setPushVia').addEventListener('change',function(){
-  postJson('/api/settings/session',{pushVia:this.value})
-    .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
+  saveSessSet({pushVia:this.value});
 });
 $('#setAutoCompact').addEventListener('change',function(){
-  postJson('/api/settings/session',{autoCompactK:Number(this.value)})
-    .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast(j.autoCompactK?'已保存：超过 '+j.autoCompactK+'k 自动压缩':'已关闭自动压缩')});
+  saveSessSet({autoCompactK:Number(this.value)},function(j){return j.autoCompactK?'已保存：超过 '+j.autoCompactK+'k 自动压缩':'已关闭自动压缩'});
 });
 ['#setIdle','#setTake','#setUpKeep'].forEach(function(id){
   $(id).addEventListener('change',function(){
     var body={};body[id==='#setIdle'?'idleCloseMin':id==='#setUpKeep'?'uploadKeepDays':'takeoverMin']=Number(this.value);
-    postJson('/api/settings/session',body)
-      .then(function(r){return r.json()}).then(function(j){showSessSet(j);toast('已保存')});
+    saveSessSet(body);
   });
 });
 // 排查用：直接在本机弹一条通知，不经苹果/微软的推送服务。
@@ -6633,7 +6569,7 @@ pushBtn.addEventListener('click',function(){
   // iOS 要求：请求通知权限必须直接由这次点击触发
   step('等你允许通知…（看看有没有弹出询问框）',Notification.requestPermission(),60).then(function(perm){
     if(perm!=='granted'){syncPushBtn();if(perm==='denied')alert('通知被拒绝了：到浏览器或系统设置里允许这个网站发通知');return}
-    return step('正在准备…',Promise.all([navigator.serviceWorker.ready,fetch('/api/push/key').then(function(r){return r.json()})]),15).then(function(x){
+    return step('正在准备…',Promise.all([navigator.serviceWorker.ready,getJson('/api/push/key')]),15).then(function(x){
       return step('正在向推送服务登记…',x[0].pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(x[1].publicKey)}),20);
     }).then(function(sub){
       return postJson('/api/push/subscribe',{subscription:sub.toJSON()})
@@ -6687,7 +6623,7 @@ function newSibling(s){
     newOptsFor=s.claw;wsSend({t:'claw.opts',claw:s.claw});   // 按上次记下的清单给可选项，回来再画（claw.opts）
   }
   showDlg(newDlg,true);
-  if(!matchMedia('(pointer:coarse)').matches)$('#newName').focus();   // 手机不自动弹键盘：键盘一弹弹框被顶上去，看不到也点不到上面的目录
+  if(!COARSE.matches)$('#newName').focus();   // 手机不自动弹键盘：键盘一弹弹框被顶上去，看不到也点不到上面的目录
 }
 var newOptsFor=null;
 // Claude 新建：模型库里有 Anthropic 格式地址的 Key，就把模型换成下拉（Claude 自己的一组 + 每个 Key 一组）；
@@ -6729,8 +6665,7 @@ function drawNewOpts(claw,o){
 }
 function closeNew(){showDlg(newDlg,false);newFrom=null;newOptsFor=null}
 $('#newDir').addEventListener('input',function(e){e.target.style.width=Math.max(8,e.target.value.length+1)+'ch'});
-$('#newNo').addEventListener('click',closeNew);
-newDlg.addEventListener('click',function(e){if(e.target===newDlg)closeNew()});
+dlgWire(newDlg,$('#newNo'),closeNew);
 $('#newForm').addEventListener('submit',function(e){
   e.preventDefault();if(!newFrom)return;
   var dir=$('#newDir').value.trim(),orig=(newFrom.cwd||'').replace(/^\/(Users|home)\/[^\/]+(?=\/|$)/,'~');
@@ -6780,8 +6715,7 @@ function openDel(s){
   $('#delP').focus();
 }
 function closeDel(){showDlg(delDlg,false);delTarget=null}
-$('#delNo').addEventListener('click',closeDel);
-delDlg.addEventListener('click',function(e){if(e.target===delDlg)closeDel()});
+dlgWire(delDlg,$('#delNo'),closeDel);
 $('#delForm').addEventListener('submit',function(e){
   e.preventDefault();if(!delTarget)return;
   var t=delTarget,go=$('#delGo'),fin=false,tries=0,wt=0;$('#delErr').textContent='';go.disabled=true;go.textContent='删除中…';
@@ -6798,7 +6732,7 @@ $('#delForm').addEventListener('submit',function(e){
   var check=function(last){
     if(fin)return;clearTimeout(wt);
     var k=clawOf(t.id),again=function(){if(fin)return;if(last)bad(last);else if(++tries<3)wt=setTimeout(check,15000);else bad('没收到删除结果，网络可能断过。关掉后刷新列表看看删掉没有')};
-    fetch('/api/sessions'+(k==='claude'?'':'?claw='+k),{cache:'no-store'}).then(function(r){return r.json()}).then(function(arr){
+    getJson('/api/sessions'+(k==='claude'?'':'?claw='+k),{cache:'no-store'}).then(function(arr){
       if(fin)return;
       if(Array.isArray(arr)&&!arr.some(function(s){return s.id===t.id}))return ok();
       again();
