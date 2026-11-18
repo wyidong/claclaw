@@ -324,7 +324,7 @@ async function link(kind, q) {
 
 // 电影：只要版权方官方频道（YouTube 认证标记，或爱奇艺 / 优酷 / 腾讯 WeTV / 芒果 / 华策 / 央视等官方影视频道）免费公开的完整版，
 // 而且能嵌在 claclaw 聊天里直接播放。先给片单（不带链接），用户挑好再 --pick 出播放链接
-const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki/i;
+const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki|緯來|Videoland|公視|PTS|東森|三立|民視|TVB|myTV SUPER|美亞|Mei Ah|寰宇|Universe Films|英皇|Emperor Motion|天映|Celestial|Fortune Star|星空華文|嘉禾|Golden Harvest|VSO|Q1Q2|CONtv/i;   // 大小平台、电视台、片商的官方频道（另外 YouTube 认证频道都算）
 const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b/i;
 function movieName(t) {   // 片名：《》里的；没有就用不是「Multi Sub / 4K / 类型」的【】；再不行用 [] 或去掉修饰的标题
   let m = /《#?([^》]{1,30})》/.exec(t); if (m) return m[1].trim();
