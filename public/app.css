@@ -862,14 +862,16 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 .f-dl{flex:none;width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);cursor:pointer}
 .f-dl:disabled{opacity:.45;cursor:default}
 .f-dl.spin svg{animation:pulse 1s infinite}
-.ufile .f-dl{position:absolute;right:8px;bottom:6px;width:30px;height:30px}
 .ufile.nopv{cursor:default}
-.ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:var(--bw) solid var(--line);color:var(--ink)}
-.ufile-n{font-size:14px;word-break:break-all}
+/* 用户发出去的文件：和 AI 发回来的卡片同一种（.f-row）；.uvid-b 在这里是大小 / 上传进度那一行小字 */
+.ufile{display:block;width:min(280px,72vw);max-width:100%;border:var(--bw) solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);text-align:left;-webkit-tap-highlight-color:transparent}
+.ufile .uvid-b{position:static;padding:0;border-radius:0;background:none;color:var(--muted);font-size:12px}
+.ufile:not(.nopv):active{background:color-mix(in srgb,var(--surface),var(--ink) 5%)}
+.md .ufile{margin:6px 0}
 .att-file{width:auto;max-width:160px;padding:6px 26px 6px 8px;display:flex;align-items:center}
 .att-audio{height:auto;max-width:280px;flex-direction:column;align-items:stretch;gap:4px}
-.att-audio audio,.uaudio audio{display:block;width:100%;min-width:220px;height:36px}
-.uaudio{max-width:300px}
+.att-audio audio{display:block;width:100%;min-width:220px;height:36px}
+.uaudio audio{display:block;width:calc(100% - 16px);height:40px;margin:0 8px 8px}
 .att-fn{font-size:12px;line-height:16px;max-height:48px;overflow:hidden;word-break:break-all}
 #lightbox img{max-width:100%;max-height:100%;object-fit:contain;margin:auto;flex:none}
 #lightbox{overflow:auto;-webkit-overflow-scrolling:touch}
