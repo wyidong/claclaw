@@ -9,10 +9,17 @@
       "deepseek",
       "opencode",
       "kimi",
-      "openclaw"
+      "openclaw",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
     ],
     "auto": [
-      "agents"
+      "agents",
+      "iflow",
+      "codebuddy"
     ]
   },
   {
@@ -27,11 +34,19 @@
       "kimi",
       "qwen",
       "codex",
-      "openclaw"
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
     ],
     "auto": [
       "claude",
-      "agents"
+      "agents",
+      "iflow",
+      "codebuddy"
     ]
   },
   {
@@ -46,11 +61,19 @@
       "kimi",
       "qwen",
       "codex",
-      "openclaw"
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
     ],
     "auto": [
       "claude",
-      "agents"
+      "agents",
+      "iflow",
+      "codebuddy"
     ]
   }
 ]

@@ -56,3 +56,16 @@ test('用到 Claw 时按 auto 自动装：Claude 只装 claclaw-files，别的 C
   skills.ensure('claude');
   assert.equal(fs.readFileSync(path.join(own, 'SKILL.md'), 'utf8'), '自己的');
 });
+
+test('各 Claw 装到它自己读的目录：GLM → ~/.claude/skills，iFlow、CodeBuddy 各自的目录，其余 → ~/.agents/skills', () => {
+  assert.equal(skills.targetOf('glm'), 'claude');
+  assert.equal(skills.targetOf('iflow'), 'iflow');
+  assert.equal(skills.targetOf('codebuddy'), 'codebuddy');
+  for (const c of ['deepseek', 'kimi', 'qwen', 'codex', 'openclaw', 'minimax', 'qoder', 'copilot']) assert.equal(skills.targetOf(c), 'agents');
+  skills.ensure('iflow');
+  assert.ok(fs.existsSync(path.join(home, '.iflow', 'skills', 'claclaw-media', 'SKILL.md')));
+  skills.ensure('codebuddy');
+  assert.ok(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'claclaw-files', 'SKILL.md')));
+  const all = ['claude', 'deepseek', 'opencode', 'kimi', 'qwen', 'codex', 'openclaw', 'glm', 'iflow', 'minimax', 'codebuddy', 'qoder', 'copilot'];
+  for (const n of ['claclaw-files', 'claclaw-media']) assert.deepEqual(skills.catalog().find(s => s.name === n).claws, all);
+});

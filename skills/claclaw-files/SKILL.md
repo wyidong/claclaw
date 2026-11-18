@@ -37,7 +37,7 @@ description: 在 claclaw 网页（手机）里把文件交给用户看：图片�
 - 在电脑本机打开的网页：用电脑上的默认 App 打开（可执行的文件只在访达 / 资源管理器里选中）。
 - 手机等其他设备：读回来在页面里预览，支持上表里的 Markdown、文本 / 代码、图片、svg、PDF、heic；**视频、音频点路径看不了**，要用 send_file 发。文件夹看不了，超过 50MB 看不了。
 
-没有 send_file 工具的 Claw（DeepSeek、OpenCode、Kimi、Qwen、Codex、OpenClaw 等）只能用这种方式：做成上面能预览的格式，路径写进反引号。
+没有 send_file 工具的 Claw（DeepSeek、OpenCode、Kimi、Qwen、Codex、OpenClaw、GLM、iFlow、MiniMax、CodeBuddy、Qoder、Copilot 等）只能用这种方式：做成上面能预览的格式，路径写进反引号。
 
 ## 3. 在线视频 / 音频：直接写链接
 
