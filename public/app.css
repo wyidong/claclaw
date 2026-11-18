@@ -679,11 +679,50 @@ body.kb .perm-s{max-height:calc(var(--vvh,60vh) * .3)}
 .fv-share{border:var(--bw) solid var(--line);border-radius:8px;background:none;color:var(--ink);padding:6px 10px;font-size:14px}
 .fv-x{width:36px;height:36px;border:0;border-radius:50%;background:var(--line);color:var(--ink);font-size:22px;line-height:36px;padding:0}
 .fv-b{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
-.fv-b pre{margin:0;padding:12px;white-space:pre-wrap;word-break:break-word;font-size:14px}
-.fv-b img{display:block;max-width:100%;margin:0 auto}
-.fv-b iframe{width:100%;height:100%;border:0}
-.fv-md{padding:14px 16px 28px;font-size:15px;line-height:1.65;word-break:break-word}   /* .md 文件：按回复里的 Markdown 样式排版 */
-.fv-empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.fv-b iframe{width:100%;height:100%;border:0;display:block}
+#fview .fv-b{background:var(--surface)}
+/* 文件预览页：头部 = 类型小标 + 文件名 / 大小 + 「源码」切换 + 保存 + 关闭 */
+#fview>.fv-h{gap:10px;padding:calc(env(safe-area-inset-top) + 8px) 10px 8px 12px;background:var(--surface)}
+.fv-ic{flex:none;display:flex}.fv-ic:empty{display:none}
+.fv-ic .f-ic{width:30px;height:36px;padding-bottom:6px;font-size:8.5px;border-radius:5px 10px 5px 5px}.fv-ic .f-ic::before{width:9px;height:9px}
+.fv-ic .f-ic4{font-size:7.5px}
+.fv-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.fv-t .fv-n{flex:none;font-size:15px;line-height:1.3}
+.fv-z{font-size:12px;color:var(--muted);line-height:1.2}.fv-z:empty{display:none}
+#fview .fv-share{flex:none;height:32px;padding:0 12px;border-radius:16px;font-size:13px}
+#fview .fv-share:not(.fv-mdt){border-color:transparent;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-weight:600}
+#fview .fv-x{flex:none;width:32px;height:32px;font-size:20px;line-height:32px;background:color-mix(in srgb,var(--ink) 8%,transparent)}
+/* 代码、文本：行号 + 自动换行 + 简单着色（颜色和正文色混一点，深浅主题都看得清） */
+.fv-code{--hk:color-mix(in srgb,#8A3FD1 78%,var(--ink));--hs:color-mix(in srgb,#11804A 78%,var(--ink));--hn:color-mix(in srgb,#C2620A 80%,var(--ink));--hp:color-mix(in srgb,#1F66C9 80%,var(--ink));--he:color-mix(in srgb,#D33A3A 85%,var(--ink));--hw:color-mix(in srgb,#C98A00 85%,var(--ink));
+  counter-reset:ln;padding:10px 0 calc(24px + env(safe-area-inset-bottom,0px));font:12.5px/1.65 var(--mono,ui-monospace,monospace);color:var(--ink);background:var(--surface);min-height:100%;box-sizing:border-box}
+.fv-code .cl{position:relative;min-height:1.65em;padding:0 14px 0 calc(var(--lnw,2ch) + 26px);white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;tab-size:4}
+.fv-code .cl::before{counter-increment:ln;content:counter(ln);position:absolute;left:0;width:calc(var(--lnw,2ch) + 14px);text-align:right;color:var(--muted);opacity:.55;-webkit-user-select:none;user-select:none}
+.fv-code .cl::after{content:"";position:absolute;top:0;bottom:0;left:calc(var(--lnw,2ch) + 18px);border-left:var(--bw) solid var(--line)}
+.fv-code i{font-style:normal}
+.fv-code .hk{color:var(--hk)}.fv-code .hs{color:var(--hs)}.fv-code .hn{color:var(--hn)}.fv-code .hp{color:var(--hp)}
+.fv-code .hc{color:var(--muted)}.fv-code .he{color:var(--he);font-weight:600}.fv-code .hw{color:var(--hw);font-weight:600}
+/* CSV / TSV 表格：表头和行号列固定 */
+.fv-tbl{padding:0 0 calc(24px + env(safe-area-inset-bottom,0px));min-width:100%;min-height:100%;box-sizing:border-box;background:var(--surface);width:max-content;font-size:13px}
+.fv-tbl table{border-collapse:separate;border-spacing:0}
+.fv-tbl th,.fv-tbl td{padding:7px 12px;border-bottom:var(--bw) solid var(--line);border-right:var(--bw) solid var(--line);text-align:left;vertical-align:top;max-width:320px;white-space:pre-wrap;word-break:break-word;background:var(--surface)}
+.fv-tbl th{position:sticky;top:0;z-index:1;font-weight:600;background:color-mix(in srgb,var(--surface),var(--ink) 5%)}
+.fv-tbl tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--surface),var(--ink) 2.5%)}
+.fv-tbl .rn{position:sticky;left:0;z-index:1;min-width:2ch;color:var(--muted);text-align:right;font:11.5px/1.6 var(--mono,ui-monospace,monospace);background:color-mix(in srgb,var(--surface),var(--ink) 5%)!important}
+.fv-tbl th.rn{z-index:2}
+.fv-more{padding:10px 14px;color:var(--muted);font-size:12px}
+/* Markdown：阅读宽度，大屏居中 */
+.fv-md{max-width:760px;margin:0 auto;padding:18px 18px calc(32px + env(safe-area-inset-bottom,0px));font-size:15px;line-height:1.7;word-break:break-word;box-sizing:border-box}   /* .md 文件：按回复里的 Markdown 样式排版 */
+/* 图片：黑底居中；PDF：灰底 */
+#fview .fv-b.fv-img{display:flex;background:#0B0B0C}
+.fv-b.fv-img img{display:block;max-width:100%;max-height:100%;object-fit:contain;margin:auto;flex:none}
+#fview .fv-b.fv-pdf{background:#525659;overflow:hidden}
+/* 看不了 / 太大 / 加载中：中间一张卡片 */
+.fv-empty{display:flex;flex-direction:column;align-items:center;gap:10px;max-width:320px;margin:12vh auto 0;padding:28px 20px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.55}
+.fv-empty .f-ic{width:52px;height:62px;padding-bottom:10px;font-size:13px;border-radius:8px 16px 8px 8px}.fv-empty .f-ic::before{width:16px;height:16px;border-radius:0 0 0 6px}.fv-empty .f-ic4{font-size:11px}
+.fv-en{color:var(--ink);font-size:15px;font-weight:600;overflow-wrap:anywhere}
+.fv-dl{margin-top:6px;min-width:160px;height:44px;padding:0 22px;border:0;border-radius:22px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.fv-load .fv-em::before{content:"";display:block;width:22px;height:22px;margin:0 auto 10px;border-radius:50%;border:2.5px solid color-mix(in srgb,var(--accent) 25%,transparent);border-top-color:var(--accent);animation:fvspin .8s linear infinite}
+@keyframes fvspin{to{transform:rotate(360deg)}}
 /* ════ 公共 · 会话解剖页 ════ */
 /* 会话解剖页：标题栏点会话名打开。三层：会话（总消耗、四桶、每轮一颗球、每轮明细表）→ 轮（本轮四桶、你说的、做了什么、逐步表）→ 步（调了什么、回复） */
 #diss{position:absolute;inset:0;z-index:9;display:none;flex-direction:column;background:var(--bg);--ds-inp:#e8912d;--ds-cr:#8b7bff;--ds-cw:#9aa0a6;--ds-out:#3fb950}
@@ -797,7 +836,10 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 /* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最高 220）；点开才是原图 */
 .sfimg{align-self:flex-start;margin:6px 0;max-width:min(240px,70%)}
 .sfimg img{display:block;max-width:100%;max-height:220px;border-radius:12px;border:var(--bw) solid var(--line);cursor:zoom-in;background:var(--bg)}
-.sfimg figcaption{display:flex;gap:6px;font-size:12px;color:var(--muted);margin-top:4px;padding:0 2px;white-space:nowrap}
+.sfimg{min-width:140px}
+.sfimg figcaption{width:0;min-width:100%;box-sizing:border-box;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:4px;padding:0 0 0 2px;white-space:nowrap}
+.sf-pic{position:relative;display:inline-block;vertical-align:top;max-width:100%}
+.sf-pic .f-dl{position:absolute;right:6px;bottom:6px;width:32px;height:32px;background:rgba(0,0,0,.5);color:#fff;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}.sf-pic .f-dl svg{width:16px;height:16px}
 .sf-n{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .sf-z{flex:none;opacity:.8}
 /* AI 发回来的文件、音频、视频：同一种卡片——类型小标 + 文件名 / 大小 + 下载按钮；音视频的播放器放在卡片里 */

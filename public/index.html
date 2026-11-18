@@ -225,7 +225,7 @@ window.__sc=(function(){
   </nav>
 
   <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""></div>
-  <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-n"></span><button type="button" class="fv-share fv-mdt" hidden>源码</button><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
+  <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-ic"></span><span class="fv-t"><span class="fv-n"></span><span class="fv-z"></span></span><button type="button" class="fv-share fv-mdt" hidden>源码</button><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
   <div id="diss" role="dialog" aria-label="会话解剖"><div class="fv-h"><button type="button" class="ds-back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="fv-n ds-n">解剖</span><span class="ds-nav"><button type="button" class="fv-share ds-prev">‹ 上一轮</button><button type="button" class="fv-share ds-next">下一轮 ›</button></span><button type="button" class="fv-share ds-re">刷新</button></div><div class="ds-b"></div></div>
   <div id="vplayer" role="dialog" aria-label="播放视频"><video controls playsinline></video><button type="button" aria-label="关闭">×</button></div>
 
@@ -1245,32 +1245,124 @@ $('#sessBtn').addEventListener('click',function(){if(!session)return;if(session.
   dissEl.addEventListener('touchend',function(e){if(!g)return;var p=e.changedTouches[0],dx=p.clientX-g.x,dy=p.clientY-g.y,dt=Date.now()-g.t,tw=g.tw;g=null;if(tw)return;if(dx>70&&Math.abs(dy)<dx*0.6&&dt<600)dsBack()},{passive:true});
 })();
 $('#fview .fv-share:not(.fv-mdt)').textContent=FV_ACT;
+// 文件预览页：头部是类型小标 + 文件名 / 大小；文本、代码带行号和简单着色，JSON 自动排版，CSV / TSV 显示成表格，Markdown 排版，图片黑底，PDF 内嵌
+var FV_HOW=TOUCH?'，可以存到「文件」或用别的 App 打开':'，下载到电脑上看';
+function fvNote(msg,blob){   // 看不了 / 太大 / 出错：中间一张卡片，有文件时下面放一个大的「保存」按钮
+  var d=document.createElement('div');d.className='fv-empty';
+  if(blob){d.appendChild(fIcon(fvName));var n=document.createElement('div');n.className='fv-en';n.textContent=fvName;d.appendChild(n)}
+  var m=document.createElement('div');m.className='fv-em';m.textContent=msg;d.appendChild(m);
+  if(blob){var bt=document.createElement('button');bt.type='button';bt.className='fv-dl';bt.textContent=FV_ACT;bt.addEventListener('click',function(){saveBlob(blob,fvName)});d.appendChild(bt)}
+  return d;
+}
+// 代码着色：逐行扫（只记块注释跨行），注释 / 字符串 / 数字 / 关键字 / 键名 / 标签；不求完美，求轻快
+function kwSet(t){var o={};t.split(' ').forEach(function(w){o[w]=1});return o}
+var KW_JS=kwSet('break case catch class const continue default delete do else export extends false finally for from function if import in instanceof let new null of return static super switch this throw true try typeof undefined var void while yield async await'),
+  KW_PY=kwSet('def class return if elif else for while in is not and or import from as with try except finally raise pass break continue lambda None True False self yield async await global nonlocal'),
+  KW_SH=kwSet('if then else elif fi for while do done case esac in function return local export echo exit'),
+  KW_SQL=kwSet('select insert update delete from where join left right inner outer on order group by having create table drop alter index values into set limit and or not null primary key as distinct count');
+function hlCfg(ext){
+  var C={js:1,mjs:1,cjs:1,ts:1,tsx:1,jsx:1};
+  if(C[ext])return {lc:['//'],bs:'/*',be:'*/',q:'"\'`',kw:KW_JS};
+  if(ext==='json')return {q:'"',json:1};
+  if(ext==='py')return {lc:['#'],q:'"\'',kw:KW_PY};
+  if(ext==='sh'||ext==='env')return {lc:['#'],q:'"\'',kw:KW_SH,kv:ext==='env'};
+  if(/^(ya?ml|toml|ini|conf|cfg)$/.test(ext))return {lc:ext==='ini'?['#',';']:['#'],q:'"\'',kv:1};
+  if(ext==='sql')return {lc:['--'],bs:'/*',be:'*/',q:'\'"',kw:KW_SQL,ci:1};
+  if(ext==='css')return {bs:'/*',be:'*/',q:'"\''};
+  if(/^(html?|xml)$/.test(ext))return {bs:'<!--',be:'-->',q:'"\'',tags:1};
+  if(ext==='log')return {log:1};
+  return null;
+}
+function hlLine(l,st,c){
+  var o='',i=0,n=l.length,m,sp=function(k,t){return '<i class="'+k+'">'+esc(t)+'</i>'};
+  if(c.log){
+    return esc(l).replace(/^(\[?\d{4}-\d\d-\d\d[T ][\d:.,]+Z?\]?|\d\d:\d\d:\d\d(?:[.,]\d+)?)/,'<i class="hc">$1</i>')
+      .replace(/\b(ERROR|ERR|FATAL|FAIL(?:ED)?|Error|错误|失败)\b/g,'<i class="he">$1</i>').replace(/\b(WARN(?:ING)?|警告)\b/g,'<i class="hw">$1</i>');
+  }
+  if(c.kv&&!st.bc){
+    if((m=/^(\s*)(\[[^\]]*\])(\s*)$/.exec(l)))return esc(m[1])+sp('hk',m[2])+esc(m[3]);   // [段名]
+    if((m=/^(\s*-?\s*)([^\s:=#;"'][^:=#]*?)(\s*[:=])/.exec(l))){o=esc(m[1])+sp('hp',m[2])+esc(m[3]);i=m[0].length}
+  }
+  while(i<n){
+    if(st.bc){var e=l.indexOf(c.be,i),j=e<0?n:e+c.be.length;o+=sp('hc',l.slice(i,j));i=j;if(e>=0)st.bc=false;continue}
+    if(c.bs&&l.substr(i,c.bs.length)===c.bs){st.bc=true;var e2=l.indexOf(c.be,i+c.bs.length),j2=e2<0?n:e2+c.be.length;o+=sp('hc',l.slice(i,j2));i=j2;if(e2>=0)st.bc=false;continue}
+    var lc=false;if(c.lc)for(var k=0;k<c.lc.length;k++)if(l.substr(i,c.lc[k].length)===c.lc[k]&&(c.lc[k]!=='#'||!i||/\s/.test(l[i-1]))){lc=true;break}
+    if(lc){o+=sp('hc',l.slice(i));break}
+    var ch=l[i];
+    if(c.q&&c.q.indexOf(ch)>=0){var q=i+1;while(q<n&&l[q]!==ch){if(l[q]==='\\')q++;q++}q=Math.min(q+1,n);
+      var isKey=c.json&&/^\s*:/.test(l.slice(q));o+=sp(isKey?'hp':'hs',l.slice(i,q));i=q;continue}
+    if(c.tags&&ch==='<'&&(m=/^<\/?[\w:-]+/.exec(l.slice(i)))){o+=sp('hk',m[0]);i+=m[0].length;continue}
+    if(/[0-9]/.test(ch)&&(!i||!/[\w$.]/.test(l[i-1]))&&(m=/^(0x[\da-f]+|\d[\d_]*(\.\d+)?(e[+-]?\d+)?)\b/i.exec(l.slice(i)))){o+=sp('hn',m[0]);i+=m[0].length;continue}
+    if(/[A-Za-z_$]/.test(ch)&&(m=/^[A-Za-z_$][\w$]*/.exec(l.slice(i)))){var w=m[0];
+      o+=c.kw&&c.kw[c.ci?w.toLowerCase():w]||c.json&&/^(true|false|null)$/.test(w)?sp('hk',w):esc(w);i+=w.length;continue}
+    o+=esc(ch);i++;
+  }
+  return o;
+}
+function codeView(tx,ext){
+  var L=tx.replace(/\r\n?/g,'\n').split('\n');if(L.length>1&&L[L.length-1]==='')L.pop();
+  var c=tx.length<=600000?hlCfg(ext):null,st={},h=[];   // 太大的不着色，只排行号
+  for(var i=0;i<L.length;i++)h.push('<div class="cl">'+(c?hlLine(L[i],st,c):esc(L[i]))+'</div>');
+  var d=document.createElement('div');d.className='fv-code';d.style.setProperty('--lnw',String(L.length).length+'ch');d.innerHTML=h.join('');
+  return d;
+}
+// CSV / TSV：按引号规则拆成表格（只画前 2000 行）
+function csvRows(tx,sep){
+  var rows=[],row=[],f='',q=false,i=0,n=tx.length;
+  for(;i<n;i++){var ch=tx[i];
+    if(q){if(ch==='"'){if(tx[i+1]==='"'){f+='"';i++}else q=false}else f+=ch;continue}
+    if(ch==='"'&&!f){q=true;continue}
+    if(ch===sep){row.push(f);f='';continue}
+    if(ch==='\n'||ch==='\r'){if(ch==='\r'&&tx[i+1]==='\n')i++;row.push(f);f='';rows.push(row);row=[];if(rows.length>2000)break;continue}
+    f+=ch;
+  }
+  if(f||row.length){row.push(f);rows.push(row)}
+  return rows;
+}
+function csvView(tx,sep){
+  var R=csvRows(tx,sep);if(R.length<1)return null;
+  var w=0;R.forEach(function(r){if(r.length>w)w=r.length});
+  var cell=function(t,v){return '<'+t+'>'+esc(v||'')+'</'+t+'>'};
+  var h='<table><thead><tr><th class="rn"></th>';for(var k0=0;k0<w;k0++)h+=cell('th',R[0][k0]);h+='</tr></thead><tbody>';
+  for(var i=1;i<R.length&&i<=2000;i++){var r=R[i];h+='<tr><td class="rn">'+i+'</td>';for(var k=0;k<w;k++)h+=cell('td',r[k]);h+='</tr>'}
+  h+='</tbody></table>';
+  var d=document.createElement('div');d.className='fv-tbl';d.innerHTML=h;
+  if(R.length>2001){var more=document.createElement('div');more.className='fv-more';more.textContent='只显示前 2000 行';d.appendChild(more)}
+  return d;
+}
+// 预览 / 源码切换按钮（Markdown、CSV 用）
+function fvToggle(b,v,a,src,lab){
+  var tg=v.querySelector('.fv-mdt');tg.hidden=false;tg.textContent='源码';src.hidden=true;b.appendChild(a);b.appendChild(src);
+  tg.onclick=function(){var s=a.hidden;a.hidden=!s;src.hidden=s;tg.textContent=s?'源码':lab;b.scrollTop=0;b.scrollLeft=0};
+}
 function showFile(blob,name,msg,src){
   var v=$('#fview'),b=v.querySelector('.fv-b');
   if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}
   fvBlob=blob;fvName=name||'文件';v.querySelector('.fv-n').textContent=fvName;v.querySelector('.fv-share:not(.fv-mdt)').hidden=!blob;
-  b.innerHTML='';v.classList.add('on');v.querySelector('.fv-mdt').hidden=true;
-  if(!blob){var e0=document.createElement('div');e0.className='fv-empty';e0.textContent=msg||'';b.appendChild(e0);return}
-  var ext=(/\.([a-z0-9]+)$/i.exec(fvName)||[])[1]||'',t=(blob.type||'').toLowerCase();
-  if(/^svg$/i.test(ext)||t==='image/svg+xml'){   // 矢量图：当图片显示（img 里脚本不执行）
-    fvUrl=URL.createObjectURL(new Blob([blob],{type:'image/svg+xml'}));var sv=document.createElement('img');sv.src=fvUrl;sv.style.background='#fff';b.appendChild(sv);return;
+  var ic=v.querySelector('.fv-ic');ic.innerHTML='';ic.appendChild(fIcon(fvName));v.querySelector('.fv-z').textContent=blob?fmtSize(blob.size):'';
+  b.innerHTML='';b.className='fv-b';b.scrollTop=0;v.classList.add('on');v.querySelector('.fv-mdt').hidden=true;
+  if(!blob){var e0=fvNote(msg||'');if(msg==='加载中…')e0.classList.add('fv-load');b.appendChild(e0);return}
+  var ext=((/\.([a-z0-9]+)$/i.exec(fvName)||[])[1]||'').toLowerCase(),t=(blob.type||'').toLowerCase();
+  if(ext==='svg'||t==='image/svg+xml'){   // 矢量图：当图片显示（img 里脚本不执行）
+    b.classList.add('fv-img');fvUrl=URL.createObjectURL(new Blob([blob],{type:'image/svg+xml'}));var sv=document.createElement('img');sv.src=fvUrl;sv.style.background='#fff';b.appendChild(sv);return;
   }
-  if(/^text\/|json|xml|javascript/.test(t)||/^(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env)$/i.test(ext)){
-    if(blob.size>3*1048576){var e1=document.createElement('div');e1.className='fv-empty';e1.textContent='文件较大（'+fmtSize(blob.size)+'），点「'+FV_ACT+'」'+(TOUCH?'用别的 App 打开':'下载到电脑');b.appendChild(e1);return}
+  if(/^text\/|json|xml|javascript/.test(t)||/^(txt|md|markdown|log|json|csv|tsv|conf|cfg|ini|ya?ml|toml|js|mjs|ts|py|sh|sql|html?|css|xml|env)$/.test(ext)){
+    if(blob.size>3*1048576){b.appendChild(fvNote('文件较大（'+fmtSize(blob.size)+'），这里不预览'+FV_HOW,blob));return}
     blob.text().then(function(tx){
-      var pre=document.createElement('pre');pre.textContent=tx;
-      if(!/^(md|markdown)$/i.test(ext)){b.appendChild(pre);return}
-      // Markdown：默认排版后显示（和回复里一样），右上「源码 / 预览」切换
-      var dv=document.createElement('div');dv.className='md fv-md';dv.innerHTML=md(tx);pre.hidden=true;b.appendChild(dv);b.appendChild(pre);
-      var tg=v.querySelector('.fv-mdt');tg.hidden=false;tg.textContent='源码';
-      tg.onclick=function(){var src=dv.hidden;dv.hidden=!src;pre.hidden=src;tg.textContent=src?'源码':'预览';b.scrollTop=0};
+      if(fvBlob!==blob)return;
+      if(/^(md|markdown)$/.test(ext)){   // Markdown：默认排版后显示（和回复里一样），右上「源码 / 预览」切换
+        var dv=document.createElement('div');dv.className='md fv-md';dv.innerHTML=md(tx);fvToggle(b,v,dv,codeView(tx,''),'预览');return;
+      }
+      if(ext==='csv'||ext==='tsv'){var tb=csvView(tx,ext==='tsv'?'\t':',');if(tb){fvToggle(b,v,tb,codeView(tx,''),'表格');return}}
+      if(ext==='json'&&tx.length<=3e6){try{var js=JSON.stringify(JSON.parse(tx),null,2);if(js)tx=js}catch(_){}}   // 压成一行的 JSON 排开
+      b.appendChild(codeView(tx,ext||(/json/.test(t)?'json':'')));
     });
-  }else if(/^image\//.test(t)||/^(png|jpe?g|gif|webp|heic)$/i.test(ext)){
-    fvUrl=URL.createObjectURL(blob);var im=document.createElement('img');im.src=fvUrl;b.appendChild(im);
+  }else if(/^image\//.test(t)||/^(png|jpe?g|gif|webp|heic)$/.test(ext)){
+    b.classList.add('fv-img');fvUrl=URL.createObjectURL(blob);var im=document.createElement('img');im.src=fvUrl;b.appendChild(im);
     if(src)im.addEventListener('error',function(){if(im.src!==location.origin+src&&im.getAttribute('src')!==src)im.src=src},{once:true});   // 本机缓存那份坏了：直接从电脑取
-  }else if(t==='application/pdf'||/^pdf$/i.test(ext)){
-    fvUrl=URL.createObjectURL(blob.type?blob:new Blob([blob],{type:'application/pdf'}));var fr=document.createElement('iframe');fr.src=fvUrl;b.appendChild(fr);
-  }else{var e2=document.createElement('div');e2.className='fv-empty';e2.textContent=fmtSize(blob.size)+'，这里看不了这种文件，点「'+FV_ACT+'」'+(TOUCH?'存到「文件」或用别的 App 打开':'下载到电脑');b.appendChild(e2)}
+  }else if(t==='application/pdf'||ext==='pdf'){
+    b.classList.add('fv-pdf');fvUrl=URL.createObjectURL(blob.type?blob:new Blob([blob],{type:'application/pdf'}));var fr=document.createElement('iframe');fr.src=fvUrl;b.appendChild(fr);
+  }else b.appendChild(fvNote('这里看不了这种文件'+FV_HOW,blob));
 }
 $('#fview .fv-x').addEventListener('click',function(){$('#fview').classList.remove('on');$('#fview .fv-b').innerHTML='';if(fvUrl){URL.revokeObjectURL(fvUrl);fvUrl=''}fvBlob=null});
 $('#fview .fv-share:not(.fv-mdt)').addEventListener('click',function(){if(fvBlob)saveBlob(fvBlob,fvName)});
@@ -1670,21 +1762,33 @@ function dlCard(id,name,size){
   return a;
 }
 // 图片下面的一行：文件名（放不下省略）+ 大小
-function sfCap(name,size){
+function sfCap(id,name,size){
   var cap=document.createElement('figcaption');
   var n=document.createElement('span');n.className='sf-n';n.textContent=name;cap.appendChild(n);
   var z=document.createElement('span');z.className='sf-z';z.textContent=fmtSize(+size);cap.appendChild(z);
   return cap;
 }
-// 发回来的是图片：直接在聊天里显示（限高限宽），点开看大图、能保存；加载失败（过了保留期）退回下载卡片
+// 图片放进一个框：右下角叠一个下载按钮
+function sfPic(f,im,id,name,size){
+  var w=document.createElement('div');w.className='sf-pic';w.appendChild(im);
+  var b=dlBtn();b.addEventListener('click',function(e){e.stopPropagation();dlFile({id:id},name,size,b)});w.appendChild(b);
+  f.appendChild(w);f.appendChild(sfCap(id,name,size));
+}
+// 点图片：全屏看图（黑底、双指缩放、点一下关），先放已经显示着的小图，原图取到了再换上
+function imgView(sm,full,white){
+  showImage(sm);var li=lightbox.querySelector('img');if(white)li.style.background='#fff';
+  if(!full||full===sm)return;
+  var pre=new Image();pre.onload=function(){if(lightbox.classList.contains('on')&&li.getAttribute('src')===sm)li.src=full};pre.src=full;
+}
+// 发回来的是图片：直接在聊天里显示（限高限宽），点开全屏看大图；加载失败（过了保留期）退回下载卡片
 function imgCard(id,name,size){
   var src='/api/upload/file?thumb=1&id='+encodeURIComponent(id);   // 大图服务端先缩小，省流量
   var f=document.createElement('figure');f.className='sfimg';
   var im=document.createElement('img');im.src=src;im.alt=name;im.loading='lazy';
-  im.addEventListener('click',function(){openFile(id,name,size)});   // 和下载卡片一样：大图预览 + 「分享 / 保存」
+  im.addEventListener('click',function(){imgView(src,upUrl(id))});
   im.addEventListener('load',function(){scrollDown()});
   im.addEventListener('error',function(){f.replaceWith(dlCard(id,name,size))});
-  f.appendChild(im);f.appendChild(sfCap(name,size));
+  sfPic(f,im,id,name,size);
   return f;
 }
 // 发回来的是 .svg：服务器为安全一律当下载给；这里取回文本，用 blob 图片显示（图片里的脚本不执行），失败退回下载卡片
@@ -1693,9 +1797,9 @@ function svgCard(id,name,size){
   fetch(upUrl(id),{credentials:'same-origin'}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){
     var d=svgData(t);if(!d)throw 0;
     var im=document.createElement('img');im.src=d.url;im.alt=name;
-    im.addEventListener('click',function(){openFile(id,name,size)});
+    im.addEventListener('click',function(){imgView(d.url,'',true)});
     im.addEventListener('load',function(){scrollDown()});
-    f.appendChild(im);f.appendChild(sfCap(name,size));
+    sfPic(f,im,id,name,size);
   }).catch(function(){if(f.isConnected)f.replaceWith(dlCard(id,name,size))});
   return f;
 }
