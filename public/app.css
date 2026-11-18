@@ -1918,23 +1918,36 @@ select.pe-in{text-align-last:right}
 #tplay .tp-bar button:disabled{opacity:.3;cursor:default}
 #tplay .tp-bar button:not(:disabled):active{background:rgba(255,255,255,.12)}
 #tplay .tp-x,#tplay .tp-min{font-size:18px!important}
-#tplay.pip .tp-pop svg,#tplay.float .tp-pop svg{transform:scaleX(-1)}
+#tplay.float .tp-pop svg{transform:scaleX(-1)}
 /* 电影 / 只有一个：不要上一个、下一个 */
 #tplay.mv .tp-prev,#tplay.mv .tp-next{display:none}
+/* 底边拖拽条：拉大 / 缩小画面（高度记在本机）；拖的时候播放器里的 iframe 不吃鼠标，免得拖丢 */
+#tplay .tp-grip{height:12px;margin-top:-4px;position:relative;z-index:1;cursor:ns-resize;touch-action:none;background:#16181c}
+#tplay .tp-grip::after{content:"";position:absolute;left:50%;top:4px;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:rgba(255,255,255,.28)}
+#tplay .tp-grip:hover::after,#tplay.drag .tp-grip::after{background:rgba(255,255,255,.6)}
+#tplay.drag .tp-v{pointer-events:none}
+#tplay.drag{-webkit-user-select:none;user-select:none}
+#tplay.sized:not(.tp-a):not(.min):not(.float) .tp-v{height:var(--tp-h);max-height:none;max-width:none;aspect-ratio:auto}
+#tplay.tp-a .tp-grip,#tplay.min .tp-grip{display:none}
 #tplay.mv .tp-bar{padding-left:12px}
-/* 手机上弹出：浮在聊天上面的小窗口，按住标题条能拖 */
+/* 弹出：浮在聊天上面的小窗口，按住标题条能拖（电脑上大一些） */
 #tplay.float{position:fixed;right:10px;bottom:calc(150px + env(safe-area-inset-bottom,0px));left:auto;top:auto;z-index:30;width:min(64vw,360px);border-radius:12px;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.45)}
 #tplay.float.tp-a{width:min(80vw,360px)}
+@media (min-width:1000px){#tplay.float{width:min(40vw,560px);right:24px;bottom:200px}#tplay.float .tp-v{max-width:none;max-height:none}}
 #tplay.float .tp-v{max-height:none}
-#tplay.float .tp-bar{touch-action:none;cursor:grab;padding:2px 4px 2px 10px}
+#tplay.float{display:flex;flex-direction:column}
+#tplay.float .tp-bar{order:-1;touch-action:none;cursor:grab;padding:2px 4px 2px 10px}
+#tplay.float.drag .tp-bar{cursor:grabbing}
+/* 浮窗：底下的缩放条（两头是左下、右下角）+ 左右两条边框，按住拉大拉小；右下角画斜纹提示 */
+#tplay .tp-e{display:none}
+#tplay.float .tp-e{display:block;position:absolute;top:34px;bottom:0;width:8px;z-index:2;cursor:ew-resize;touch-action:none}
+#tplay.float .tp-el{left:0}#tplay.float .tp-er{right:0}
+#tplay.float .tp-e:hover,#tplay.float.drag .tp-e{background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent)}
+#tplay.float .tp-grip{margin-top:0;height:14px;cursor:ns-resize}
+#tplay.float .tp-grip::after{left:auto;right:3px;top:2px;width:10px;height:10px;margin:0;border-radius:0;background:linear-gradient(135deg,transparent 45%,rgba(255,255,255,.45) 45%,rgba(255,255,255,.45) 55%,transparent 55%,transparent 70%,rgba(255,255,255,.45) 70%,rgba(255,255,255,.45) 80%,transparent 80%)}
 #tplay.float .tp-bar button{width:32px;height:30px}
 #tplay.float .tp-prev,#tplay.float .tp-next,#tplay.float .tp-min,#tplay.float .tp-s{display:none}
 #tplay.float .tp-t{font-size:12.5px}
-body.tp-pipbody{margin:0;background:#000;overflow:hidden;display:block}
-#tplay.pip{display:flex;flex-direction:column;height:100vh;box-shadow:none}
-#tplay.pip .tp-v{flex:1;min-height:0;max-height:none;max-width:none;aspect-ratio:auto;height:auto}
-#tplay.pip .tp-pop{display:flex!important}
-#tplay.pip .tp-min{display:none}
 #tplay.min .tp-min{transform:rotate(180deg)}
 #tplay .tp-tt{flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer;line-height:1.25}
 #tplay .tp-t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

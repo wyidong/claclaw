@@ -869,7 +869,7 @@ document.addEventListener('click',function(ev){
 });
 // 回复里能播的链接（带 ▶）：点了不跳走，在聊天顶上的播放器里播；同一条消息里的其他链接就是播放列表（上一个 / 下一个，点别的标题直接换）
 function embLink(u,t){var e=embedOf(u);if(!e)return '';return '<a href="'+u+'" class="emb-l" data-kind="'+e.kind+'" target="_blank" rel="noopener noreferrer">'+(t||u)+'</a>'}
-var tp={list:[],i:-1,box:null,t:0},TPEL=null,tpPip=null;   // TPEL：播放器（弹出时在画中画窗口里，不能用 $ 找）
+var tp={list:[],i:-1,box:null,t:0},TPEL=null;   // TPEL：顶上的播放器
 function tpLinks(box){var seen={},out=[];box.querySelectorAll('a.emb-l').forEach(function(a){var e=embedOf(a.getAttribute('href'));if(e&&!seen[e.src]){seen[e.src]=1;out.push({a:a,e:e,t:a.textContent.trim()})}});return out}
 // YouTube 开 JS 接口：知道播到哪了（弹出 / 放回时接着播）、播完了（自动下一个）
 function tpSrc(x,start){var u=x.e.src;if(/youtube-nocookie\.com\/embed\//.test(u))u+='&enablejsapi=1'+(start>5?'&start='+Math.floor(start):'');return u}
@@ -902,57 +902,75 @@ function tpMsg(ev){   // YouTube 播放器发来的进度、状态
   if((d.event==='onStateChange'&&info===0)||info.playerState===0){if(!tp.movie&&tp.i<tp.list.length-1)tpPlay(tp.i+1)}   // 播完：下一个（电影不接）
 }
 window.addEventListener('message',tpMsg);
-function tpClose(){var el=TPEL;if(tpPip){tpPip.closing=1;try{tpPip.close()}catch(_){}}el.hidden=true;el.classList.remove('min');tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
+function tpClose(){var el=TPEL;el.hidden=true;el.classList.remove('min');tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
 function tpOpen(box,a){
   tp.box=box;tp.list=tpLinks(box);tp.movie=TP_MOVIE.test(box?box.textContent:'');var i=0;
   if(a)tp.list.forEach(function(y,j){if(y.a===a)i=j});
   tpPlay(i);
 }
-// 弹出：电脑上 Chrome / Edge 用「文档画中画」——总在最前的小窗口，播放器整个搬过去，列表里点片名照样换；别的浏览器开一个独立的弹窗，同样整个搬过去。
-// 手机上浮成一个小窗口压在聊天上面（能拖），边看边聊。再点一下（或关掉弹出的窗口）收回到聊天顶上，都接着当前进度播
-var TP_DESK=window.matchMedia('(min-width:1000px) and (hover:hover)');
-function tpBack(w){   // 弹出的窗口关了：放回聊天顶上（点「收回」接着播；直接关窗口就停）
-  if(tpPip!==w)return;
-  var back=w.back,closing=w.closing,t2=tp.t;tpPip=null;clearInterval(w.poll);TPEL.classList.remove('pip');feed.parentNode.insertBefore(TPEL,feed);
-  if(back&&tp.list.length)tpPlay(tp.i,t2);else if(!closing)tpClose();
-}
-function tpMove(w){   // 把播放器搬进弹出的窗口（样式一起带过去）
-  document.querySelectorAll('link[rel=stylesheet],style').forEach(function(n){w.document.head.appendChild(n.cloneNode(true))});
-  w.document.documentElement.className=document.documentElement.className;w.document.body.className='tp-pipbody';
-  var t=tp.t;tpPip=w;TPEL.classList.add('pip');TPEL.classList.remove('min');tpFloat(false);w.document.body.appendChild(TPEL);w.addEventListener('message',tpMsg);tpPlay(tp.i,t);
-  w.addEventListener('pagehide',function(){tpBack(w)});
-}
+// 弹出：在页面里浮成一个小窗口压在聊天上面（按住标题条能拖），边看边聊；再点一下收回到聊天顶上。
+// 不开独立窗口：YouTube 等在弹出的窗口里会拒绝播放（错误 153）。浮起 / 收回只改样式、不挪节点，播放不中断
 function tpFloat(on){
   var el=TPEL;if(!el||el.classList.contains('float')===!!on)return;
-  el.classList.toggle('float',!!on);el.classList.remove('min');el.style.left=el.style.top=el.style.right=el.style.bottom=''
+  el.classList.toggle('float',!!on);el.classList.remove('min');el.style.left=el.style.top=el.style.right=el.style.bottom=el.style.width='';
+  if(on){try{var fw=+localStorage.getItem('claclaw.tpFW');if(fw>=200)el.style.width=Math.min(fw,innerWidth-20)+'px'}catch(_){}tpFit()}   // 浮窗上次拉成多大
 }
-async function tpPopOut(){
-  if(tpPip){tpPip.back=1;tpPip.close();return}
-  if(TPEL.classList.contains('float')){tpFloat(false);return}
-  var x=tp.list[tp.i];if(!x)return;
-  if(!TP_DESK.matches){tpFloat(true);return}
-  var W=Math.min(1280,Math.max(640,innerWidth*.5)),H=Math.round(W*9/16+46);
-  if(window.documentPictureInPicture){try{tpMove(await documentPictureInPicture.requestWindow({width:W,height:Math.min(800,H)}));return}catch(_){}}
-  var w=window.open('','claclaw-player','popup,width='+Math.round(W)+',height='+H);
-  if(!w){tpFloat(true);return}   // 弹窗被拦：退回页面里的浮窗
-  w.document.title=x.t;tpMove(w);
-  w.poll=setInterval(function(){if(w.closed)tpBack(w)},500);   // 普通弹窗关掉时 pagehide 不一定到
+// 浮窗整个留在屏幕里：太大就缩（保持 16:9），出界就挪回来——标题条跑到屏幕外面就拖不回来了（窗口变小、记住的尺寸比现在的窗口大时）
+function tpFit(){
+  var el=TPEL;if(!el||!el.classList.contains('float'))return;
+  var r=el.getBoundingClientRect(),v=el.querySelector('.tp-v').getBoundingClientRect(),ex=r.height-v.height,mw=Math.floor(Math.min(innerWidth-8,(innerHeight-8-ex)*16/9));
+  if(r.width>mw){el.style.width=Math.max(200,mw)+'px';r=el.getBoundingClientRect()}
+  if(r.left<4||r.top<4||r.right>innerWidth-4||r.bottom>innerHeight-4){
+    el.style.left=Math.max(4,Math.min(innerWidth-r.width-4,r.left))+'px';el.style.top=Math.max(4,Math.min(innerHeight-r.height-4,r.top))+'px';el.style.right=el.style.bottom='auto';
+  }
 }
+window.addEventListener('resize',tpFit);
+function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
 (function(){
   var el=document.createElement('div');el.id='tplay';el.hidden=true;TPEL=el;
-  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成独立的小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>';
+  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>';
   feed.parentNode.insertBefore(el,feed);
   el.querySelector('.tp-prev').addEventListener('click',function(){tpPlay(tp.i-1)});
   el.querySelector('.tp-next').addEventListener('click',function(){tpPlay(tp.i+1)});
   el.querySelector('.tp-pop').addEventListener('click',tpPopOut);
-  (function(){   // 手机上的浮窗：按住标题条拖到别处
+  (function(){   // 浮窗：标题条在视频上面，按住拖到别处
     var g=null,bar=el.querySelector('.tp-bar');
-    bar.addEventListener('pointerdown',function(e){if(!el.classList.contains('float')||e.target.closest('button'))return;var r=el.getBoundingClientRect();g={x:e.clientX-r.left,y:e.clientY-r.top,m:0};try{bar.setPointerCapture(e.pointerId)}catch(_){}});
+    bar.addEventListener('pointerdown',function(e){if(!el.classList.contains('float')||e.target.closest('button'))return;var r=el.getBoundingClientRect();g={x:e.clientX-r.left,y:e.clientY-r.top,m:0};el.classList.add('drag');try{bar.setPointerCapture(e.pointerId)}catch(_){}});
     bar.addEventListener('pointermove',function(e){if(!g)return;var w=el.offsetWidth,h=el.offsetHeight,l=Math.max(4,Math.min(innerWidth-w-4,e.clientX-g.x)),t=Math.max(4,Math.min(innerHeight-h-4,e.clientY-g.y));g.m=1;el.style.left=l+'px';el.style.top=t+'px';el.style.right=el.style.bottom='auto'});
-    var up=function(){if(g&&g.m)el.dataset.drag=Date.now();g=null};bar.addEventListener('pointerup',up);bar.addEventListener('pointercancel',up);
+    var up=function(){if(g&&g.m)el.dataset.drag=Date.now();g=null;el.classList.remove('drag')};bar.addEventListener('pointerup',up);bar.addEventListener('pointercancel',up);
   })();
   el.querySelector('.tp-min').addEventListener('click',function(){el.classList.toggle('min')});   // 收起：只留标题条，声音接着放
   el.querySelector('.tp-x').addEventListener('click',tpClose);
+  (function(){   // 底边拖拽条：按住往下拉把画面做大、往上推做小；高度记在本机，双击恢复默认。
+    // 浮窗时：左、右边框和底边（含左下、右下角）都能拉大拉小整个浮窗，保持 16:9；对边 / 上边不动
+    var gp=document.createElement('div');gp.className='tp-grip';gp.title='拖动调整大小（双击恢复）';el.appendChild(gp);
+    ['l','r'].forEach(function(k){var d=document.createElement('div');d.className='tp-e tp-e'+k;d.dataset.e=k;el.appendChild(d)});
+    var K='claclaw.tpH',FK='claclaw.tpFW',set=function(h){if(h){el.style.setProperty('--tp-h',h+'px');el.classList.add('sized')}else{el.style.removeProperty('--tp-h');el.classList.remove('sized')}};
+    var g=null;
+    try{var h0=+localStorage.getItem(K);if(h0>=120)set(Math.min(h0,Math.round(innerHeight*.7)))}catch(_){}
+    var zone=function(e){var r=gp.getBoundingClientRect(),x=e.clientX-r.left;return x<24?'bl':x>r.width-24?'br':'b'};   // 底边两头 24px 算角
+    var CUR={l:'ew-resize',r:'ew-resize',b:'ns-resize',bl:'nesw-resize',br:'nwse-resize'};
+    var start=function(e,mode,tg){var v=el.querySelector('.tp-v');
+      if(mode){var r=el.getBoundingClientRect();el.style.left=r.left+'px';el.style.top=r.top+'px';el.style.right=el.style.bottom='auto';
+        g={m:mode,x:e.clientX,y:e.clientY,w:r.width,l:r.left,t:r.top,ex:r.height-v.getBoundingClientRect().height}}
+      else{g={y:e.clientY,h:v.getBoundingClientRect().height};g.max=Math.max(160,g.h+feed.clientHeight-120)}
+      el.classList.add('drag');try{tg.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault()};
+    var move=function(e){if(!g)return;
+      if(!g.m){set(Math.round(Math.max(120,Math.min(g.max,g.h+e.clientY-g.y))));return}
+      var dx=e.clientX-g.x,dy=(e.clientY-g.y)*16/9,m=g.m,left=m==='l'||m==='bl',d;
+      if(m==='l')d=-dx;else if(m==='r')d=dx;else if(m==='b')d=dy;else{var sx=left?-dx:dx;d=Math.abs(sx)>=Math.abs(dy)?sx:dy}
+      var mw=Math.min(left?g.l+g.w-4:innerWidth-g.l-4,(innerHeight-g.t-4-g.ex)*16/9),nw=Math.round(Math.max(200,Math.min(mw,g.w+d)));
+      el.style.width=nw+'px';el.style.left=(left?g.l+g.w-nw:g.l)+'px'};   // 往左拉：右边不动
+    var up=function(){if(!g)return;var fl=g.m;g=null;el.classList.remove('drag');
+      if(fl){try{localStorage.setItem(FK,String(parseInt(el.style.width,10)))}catch(_){}return}
+      var h=parseInt(el.style.getPropertyValue('--tp-h'),10);try{if(h)localStorage.setItem(K,String(h))}catch(_){}};
+    gp.addEventListener('pointerdown',function(e){start(e,el.classList.contains('float')?zone(e):'',gp)});
+    gp.addEventListener('pointermove',function(e){if(el.classList.contains('float')&&!g)gp.style.cursor=CUR[zone(e)];else if(!el.classList.contains('float'))gp.style.cursor='';move(e)});
+    el.querySelectorAll('.tp-e').forEach(function(d){d.addEventListener('pointerdown',function(e){start(e,d.dataset.e,d)});d.addEventListener('pointermove',move);d.addEventListener('pointerup',up);d.addEventListener('pointercancel',up)});
+    gp.addEventListener('pointerup',up);gp.addEventListener('pointercancel',up);
+    var reset=function(){if(el.classList.contains('float')){el.style.width='';try{localStorage.removeItem(FK)}catch(_){}return}set(0);try{localStorage.removeItem(K)}catch(_){}};
+    gp.addEventListener('dblclick',reset);el.querySelectorAll('.tp-e').forEach(function(d){d.addEventListener('dblclick',reset)});
+  })();
   el.querySelector('.tp-tt').addEventListener('click',function(){if(el.classList.contains('float')||Date.now()-(+el.dataset.drag||0)<400)return;var y=tp.list[tp.i];if(y&&document.contains(y.a))y.a.scrollIntoView({block:'center',behavior:'smooth'})});   // 点标题：滚回列表里这一项
 })();
 document.addEventListener('click',function(ev){
