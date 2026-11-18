@@ -35,6 +35,7 @@ for (let i = 0; i < argv.length; i++) {
 }
 const die = (s, code = 1) => { console.error(s); process.exit(code); };
 const USAGE = `用法：
+  claclaw-media link   video|audio "关键词" [--n 1] [--max 秒] [--src a,b]   在线播放链接（聊天里直接播放，不下载）
   claclaw-media get    video|audio|image "关键词或网址" [--n 张数] [--max 秒] [--clip 秒] [--max-mb 45] [--src a,b] [--pick 序号]
   claclaw-media find   video|audio|image "关键词" [--n 10] [--max 秒] [--src a,b]
   claclaw-media sources                      来源列表和最近的成败
@@ -301,6 +302,25 @@ async function get(kind, arg) {
   }
 }
 
+// 在线播放：只要能嵌在 claclaw 聊天里直接播放的（网页播放器能嵌入的站点、或媒体文件直链）。不下载、不转码，画质就是原站的。
+// 输出 Markdown 链接 [标题](网址)：claclaw 聊天里看到这种链接会在消息下面放一个播放卡片，点一下就在会话里播放
+const EMBEDDABLE = /^https?:\/\/(?:www\.|m\.)?(?:bilibili\.com\/video\/BV|youtube\.com\/watch|youtu\.be\/|dailymotion\.com\/video\/|vimeo\.com\/\d|archive\.org\/details\/|soundcloud\.com\/[\w-]+\/(?!sets\/)[\w-]+)/i;
+const MEDIA_FILE = /\.(mp4|webm|m4v|mov|m3u8|mp3|m4a|aac|ogg|oga|opus|wav|flac)(?:[?#]|$)/i;
+async function link(kind, q) {
+  if (kind === 'image') die('图片用 get image 下载后 send_file 发（聊天里直接显示）');
+  const n = Math.min(+opt.n || 1, 5);
+  const items = (await find(kind, q, { n: Math.max(10, n * 3), max: +opt.max || (kind === 'video' ? 1800 : 3600), src: opt.src }))
+    .map(x => ({ ...x, url: x.page && EMBEDDABLE.test(x.page) ? x.page : x.file && MEDIA_FILE.test(x.file) ? x.file : '' })).filter(x => x.url);
+  // 前几个并发核对能不能嵌入（来源有 embed 检查的才查，比如 YouTube 作者可能关了嵌入），按原排名取前 n 个
+  const ctx = { get: (u, o) => http(u, o), json: async (u, o) => JSON.parse(await http(u, o)) };
+  const head = items.slice(0, n + 4);
+  const ok = await Promise.all(head.map(x => { const s = SOURCES.find(s => s.id === x.src); return s?.embed ? s.embed(x, ctx).catch(() => false) : true; }));
+  const out = head.filter((_, i) => ok[i]).slice(0, n);
+  if (!out.length) die('没找到能在聊天里直接播放的' + KINDS[kind] + '（换个关键词，或 --src 换来源）');
+  // stdout 一行一个：Markdown 链接 \t 来源 \t 时长 \t 播放量。回复里原样贴 Markdown 链接即可
+  for (const x of out) console.log([`[${x.title.replace(/[\[\]]/g, ' ').trim()}](${x.url})`, label(x.src), fmtDur(x.dur), fmtPlays(x.plays)].join('\t'));
+}
+
 // ---------- 命令 ----------
 const kind = pos[0], arg = pos.slice(1).join(' ').trim();
 if (cmd === 'sources') {
@@ -311,6 +331,8 @@ if (cmd === 'sources') {
     console.log([s.id, s.kinds.map(k => KINDS[k]).join('/'), s.proxy ? '要' : '', `${h.ok || 0}/${h.fail || 0}`, h.ms ? (h.ms / 1000).toFixed(1) + 's' : '-',
       s.proxy && !hasProxy ? '没代理，跳过' : cooling(s.id) ? '连续失败，冷却中' : '可用'].join('\t'));
   }
+} else if (cmd === 'link' && KINDS[kind] && arg) {
+  await link(kind, arg);
 } else if ((cmd === 'find' || cmd === 'get') && KINDS[kind] && arg) {
   if (cmd === 'find') {
     const items = await find(kind, arg, { n: +opt.n || 10, max: +opt.max || 0, src: opt.src });

@@ -5,6 +5,8 @@
 //   search(q, ctx) → [{ title, page?, file?, thumb?, dur?, plays?, w?, h? }]
 //     page：视频 / 音频所在网页（用 yt-dlp 下载）；file：媒体文件直链（直接下载）；thumb：缩略图直链（原图下不来时用）
 //     ctx：{ kind, n, max, get(url, opts) → 文本, json(url, opts), ytdlp(args) → stdout, kv：get(k) / set(k, v) 跨次保存的小数据 }
+//   embed(x, ctx) → true/false（可选）：这一条能不能嵌在 claclaw 聊天里直接播放（不写 = 都能）；
+//     没有 embed 也不是 file 直链的来源（只能下载的）不会出现在 link 结果里，见 media.mjs 的 EMBEDDABLE
 // 加来源：在 SOURCES 里加一项即可，引擎负责并发、超时、排序、去重、失败降级。
 const enc = encodeURIComponent;
 const secs = s => String(s || '').split(':').reduce((a, x) => a * 60 + (+x || 0), 0);
@@ -62,12 +64,14 @@ export const SOURCES = [
       }
       return out;
     },
+    // 作者关了「允许嵌入」的，oEmbed 回 401 / 403
+    async embed(x, { get }) { try { await get('https://www.youtube.com/oembed?format=json&url=' + enc(x.page), { proxy: true, timeout: 5000 }); return true; } catch { return false; } },
   },
   {
     id: 'dailymotion', label: 'Dailymotion', kinds: ['video'], proxy: true,
     async search(q, { json, n }) {
-      const j = await json('https://api.dailymotion.com/videos?search=' + enc(q) + '&fields=id,title,duration,views_total&limit=' + Math.min(n * 2, 30), { proxy: true });
-      return (j.list || []).map(v => ({ title: v.title, page: 'https://www.dailymotion.com/video/' + v.id, dur: v.duration, plays: v.views_total }));
+      const j = await json('https://api.dailymotion.com/videos?search=' + enc(q) + '&fields=id,title,duration,views_total,allow_embed&limit=' + Math.min(n * 2, 30), { proxy: true });
+      return (j.list || []).filter(v => v.allow_embed !== false).map(v => ({ title: v.title, page: 'https://www.dailymotion.com/video/' + v.id, dur: v.duration, plays: v.views_total }));
     },
   },
   {
@@ -83,7 +87,7 @@ export const SOURCES = [
       };
       const api = async id => json(`https://api-v2.soundcloud.com/search/tracks?q=${enc(q)}&limit=${Math.min(n * 2, 30)}&client_id=${id}`, { proxy: true });
       let j; try { j = await api(await cid(false)); } catch { j = await api(await cid(true)); }
-      return (j.collection || []).filter(t => t.policy !== 'BLOCK' && t.monetization_model !== 'SUB_HIGH_TIER').map(t => ({ title: t.title, page: t.permalink_url, dur: t.full_duration ? t.full_duration / 1000 : t.duration / 1000, plays: t.playback_count }));
+      return (j.collection || []).filter(t => t.policy !== 'BLOCK' && t.monetization_model !== 'SUB_HIGH_TIER' && (t.embeddable_by || 'all') === 'all').map(t => ({ title: t.title, page: t.permalink_url, dur: t.full_duration ? t.full_duration / 1000 : t.duration / 1000, plays: t.playback_count }));
     },
   },
   {

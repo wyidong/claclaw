@@ -1,36 +1,46 @@
 ---
 name: claclaw-media
-description: 上网找视频、音频、图片发给用户：多个来源（B 站、YouTube、Dailymotion、SoundCloud、Internet Archive、Openverse、Bing / 百度 / 360 图片、Wikimedia Commons）并发检索，挑最合适的下载成手机能直接放、直接看的文件，再发到 claclaw 聊天里。用户说「找 / 发一段讲 XX 的视频」「来首 XX 的歌 / 一段 XX 的音频」「发几张 XX 的图片」「把这个链接下下来发我」时使用。
+description: 上网找视频、音频、图片给用户：视频和音频默认给能在 claclaw 聊天里直接播放的在线链接（原站画质、不下载），图片下载后发送；多个来源（B 站、YouTube、Dailymotion、SoundCloud、Internet Archive、Openverse、Bing / 百度 / 360 图片、Wikimedia Commons）并发检索，挑最合适的。用户说「找 / 发一段讲 XX 的视频」「来首 XX 的歌 / 一段 XX 的音频」「发几张 XX 的图片」「把这个链接下下来发我」时使用。
 ---
 
 # 找视频、音频、图片发给用户
 
-目标是快：一条命令搜索、挑选、下载，通常 10～20 秒完成。不要先问用户细节，按默认值直接做，发完再问要不要换。
+目标是快：一条命令搞定，通常几秒。不要先问用户细节，按默认值直接做，发完再问要不要换。
 
-## 一条命令拿到文件（首选）
+## 视频、音频：给在线播放链接（默认）
 
 ```sh
-~/.claclaw/bin/claclaw-media get video "关键词"            # 一段视频（默认 10 分钟以内）
-~/.claclaw/bin/claclaw-media get audio "关键词"            # 一段音频（默认 30 分钟以内）
-~/.claclaw/bin/claclaw-media get image "关键词" --n 3      # 几张图片
-~/.claclaw/bin/claclaw-media get video|audio|image <网址>   # 用户给了链接：直接下这个
+~/.claclaw/bin/claclaw-media link video "关键词" [--n 1] [--max 秒]
+~/.claclaw/bin/claclaw-media link audio "关键词" [--n 1]
 ```
 
 （Windows 是 `%USERPROFILE%\.claclaw\bin\claclaw-media.cmd`；没有这个命令时用 `node <claclaw 仓库>/skills/claclaw-media/media.mjs`。）
+
+- 只返回**能嵌在 claclaw 聊天里直接播放**的：B 站、YouTube、Dailymotion、Vimeo、Internet Archive、SoundCloud 的播放页（已核对没关嵌入），或媒体文件直链。不下载、不转码，画质就是原站的，2～3 秒出结果。
+- stdout 每行：`[标题](网址)  来源  时长  播放量`。**把 `[标题](网址)` 原样写进回复**：claclaw 会在这条消息下面放一个播放卡片，用户点一下就在会话里播放，不跳出 claclaw。
+- 回复写法：一两句介绍（来源、时长、为什么选它）+ Markdown 链接。一次给 1 个；用户要「几个 / 一个系列」时 `--n 3`，每个链接各自一个卡片。
+- 默认时长上限：视频 30 分钟、音频 60 分钟，用 `--max` 改。
+
+## 下载成文件（用户说「下载 / 发文件给我 / 离线看 / 存下来」时，或者图片）
+
+```sh
+~/.claclaw/bin/claclaw-media get video "关键词或网址"      # 默认 10 分钟以内
+~/.claclaw/bin/claclaw-media get audio "关键词或网址"      # 默认 30 分钟以内
+~/.claclaw/bin/claclaw-media get image "关键词" --n 3      # 图片总是下载
+```
 
 stdout 每行一个结果，制表符分隔：`文件路径  大小  来源  时长  标题  出处网址`。拿到路径后：
 
 - **Claude 会话**：用 `send_file` 工具发出文件。视频、音频在聊天里直接显示播放器，图片直接显示。
 - **没有 send_file 的 Claw**：在回复里用反引号写出文件路径。图片手机上点开能看，视频、音频只能在电脑上放，要告诉用户。
-- 回复一两句：标题、时长、来源和出处网址。
 
 常用参数：
 
 | 参数 | 作用 |
 | --- | --- |
 | `--max 300` | 只要 300 秒以内的（「短视频」用 300） |
+| `--n 3` | 给几个（link 最多 5 个；图片张数） |
 | `--clip 60` | 只要开头 60 秒（只下这一段，快、文件小） |
-| `--n 3` | 图片张数 |
 | `--src bili,youtube` | 只用这些来源 |
 | `--max-mb 45` | 视频大小上限，超了自动降清晰度或压缩（send_file 上限 50MB） |
 
@@ -38,7 +48,7 @@ stdout 每行一个结果，制表符分隔：`文件路径  大小  来源  时
 
 ```sh
 ~/.claclaw/bin/claclaw-media find video "关键词" [--n 10] [--max 秒]
-~/.claclaw/bin/claclaw-media get video "同一个关键词" --pick 3      # 下列表里第 3 个（列表缓存 30 分钟）
+~/.claclaw/bin/claclaw-media get video "同一个关键词" --pick 3      # 下载列表里第 3 个（列表缓存 30 分钟）；在线播放就直接把列表里的网址写成 [标题](网址)
 ~/.claclaw/bin/claclaw-media sources                                 # 各来源成败、耗时、是否可用
 ```
 

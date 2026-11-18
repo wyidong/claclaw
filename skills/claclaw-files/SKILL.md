@@ -39,6 +39,10 @@ description: 在 claclaw 网页（手机）里把文件交给用户看：图片�
 
 没有 send_file 工具的 Claw（DeepSeek、OpenCode、Kimi、Qwen、Codex、OpenClaw 等）只能用这种方式：做成上面能预览的格式，路径写进反引号。
 
+## 3. 在线视频 / 音频：直接写链接
+
+回复里出现 B 站、YouTube、Dailymotion、Vimeo、Internet Archive、SoundCloud 的播放页链接，或 mp4 / m3u8 / mp3 / m4a 等媒体直链时，claclaw 在这条消息下面放一个播放卡片，点一下在会话里直接播放（原站画质，不用下载）。写成 `[标题](网址)`，卡片上会显示标题。
+
 ## 不要依赖的
 
 - Markdown 图片 `![说明](地址)`：只有本站地址（`/` 开头）会自动加载，外链只显示成链接；本地文件路径不会显示成图。要给图片就用 send_file。

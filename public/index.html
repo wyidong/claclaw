@@ -787,7 +787,7 @@ function md(src){
     }
     if(/^\s*>/.test(l)){                          // 引用
       var q=[];while(i<L.length&&/^\s*>/.test(L[i])){q.push(L[i].replace(/^\s*>\s?/,''));i++}
-      out.push('<blockquote><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button>'+md(q.join('\n'))+'</blockquote>');continue;
+      mdNested++;try{out.push('<blockquote><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button>'+md(q.join('\n'))+'</blockquote>')}finally{mdNested--}continue;
     }
     if(MD_LIST.test(l)){                          // 列表（按缩进嵌套）
       var items=[],blocks=[],fm;
@@ -819,8 +819,46 @@ function md(src){
     while(i<L.length&&L[i].trim()&&!(para.length&&mdBlockStart(L[i],L[i+1]))){para.push(L[i]);i++}
     out.push('<p>'+para.map(mdInline).join('<br>')+'</p>');
   }
+  if(!mdNested)out.push(embedCards(src));
   return out.join('');
 }
+// 在线视频 / 音频：回复里出现能嵌入播放的网址（B 站、YouTube、Dailymotion、Vimeo、Internet Archive、SoundCloud、媒体直链），
+// 在这条消息后面放一个播放卡片，点一下在会话里直接播放（不跳出 claclaw）。点之前不加载外站任何东西
+var EMBED_RULES=[
+  [/^https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV[0-9A-Za-z]{10})\/?(?:\?(?:[^#\s]*&)?p=(\d+))?/,'B 站','video',function(m){return 'https://player.bilibili.com/player.html?isOutside=true&bvid='+m[1]+'&p='+(m[2]||1)+'&high_quality=1&autoplay=1'}],
+  [/^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/,'YouTube','video',function(m){return 'https://www.youtube-nocookie.com/embed/'+m[1]+'?autoplay=1&playsinline=1&rel=0'}],
+  [/^https?:\/\/(?:www\.)?(?:dailymotion\.com\/video|dai\.ly)\/([a-z0-9]+)/i,'Dailymotion','video',function(m){return 'https://www.dailymotion.com/embed/video/'+m[1]+'?autoplay=1'}],
+  [/^https?:\/\/(?:www\.)?vimeo\.com\/(\d+)/,'Vimeo','video',function(m){return 'https://player.vimeo.com/video/'+m[1]+'?autoplay=1'}],
+  [/^https?:\/\/(?:www\.)?archive\.org\/details\/([\w.-]+)/,'Internet Archive','video',function(m){return 'https://archive.org/embed/'+m[1]}],
+  [/^https?:\/\/(?:www\.|m\.)?soundcloud\.com\/[\w-]+\/(?!sets\/)[\w-]+/,'SoundCloud','audio',function(m){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(m[0])+'&auto_play=true&visual=false'}],
+  [/^https?:\/\/[^\s?#]+\.(mp4|webm|m4v|mov|m3u8)(?:[?#]\S*)?$/i,'视频','file-video',function(m){return m[0]}],
+  [/^https?:\/\/[^\s?#]+\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)(?:[?#]\S*)?$/i,'音频','file-audio',function(m){return m[0]}]
+];
+var mdNested=0;
+function embedOf(u){for(var k=0;k<EMBED_RULES.length;k++){var r=EMBED_RULES[k],m=r[0].exec(u);if(m)return {src:r[3](m),site:r[1],kind:r[2]}}return null}
+function embedCards(src){
+  var seen={},cards=[],re=/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()（）「」，。、；！？"']+)/g,m;
+  while((m=re.exec(src))&&cards.length<4){
+    var u=(m[2]||m[3]).replace(/[.,;:!?]+$/,''),e=embedOf(u);
+    if(!e||seen[e.src])continue;seen[e.src]=1;
+    var t=(m[1]||'').replace(/[*_`]/g,'').trim();
+    cards.push('<div class="emb emb-'+(e.kind==='audio'||e.kind==='file-audio'?'a':'v')+'" data-emb="'+esc(e.src)+'" data-kind="'+e.kind+'"><button type="button" class="emb-go"><span class="emb-ic">▶</span><span class="emb-t">'+esc(t||'在这里播放')+'</span><span class="emb-s">'+esc(e.site)+'</span></button></div>');
+  }
+  return cards.join('');
+}
+// 点播放卡片：换成外站播放器（或 video / audio 标签）
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest&&ev.target.closest('.emb-go');if(!b)return;
+  var c=b.parentNode,src=c.dataset.emb,k=c.dataset.kind,el;
+  ev.preventDefault();
+  if(k==='file-video'||k==='file-audio'){
+    el=document.createElement(k==='file-video'?'video':'audio');el.controls=true;el.autoplay=true;el.setAttribute('playsinline','');el.preload='auto';el.src=src;
+  }else{
+    el=document.createElement('iframe');el.src=src;el.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';el.allowFullscreen=true;
+    el.setAttribute('referrerpolicy','strict-origin-when-cross-origin');el.setAttribute('loading','eager');
+  }
+  c.classList.add('on');c.innerHTML='';c.appendChild(el);
+});
 function scrollDown(force){
   if(force)stick=true;if(stick)feed.scrollTop=feed.scrollHeight;
 }
@@ -1604,13 +1642,39 @@ function newCard(it){
 }
 // AI 用 send_file 发回来的文件：工具结果里带 [claclaw-file:id|名字|大小]，在卡片后面放一张下载卡片
 var SENT_FILE=/\[claclaw-file:([vf][0-9a-f]{16}\.[a-z0-9]{1,8})\|([^|\]]*)\|(\d+)\]/;
+// 文件类型小标：扩展名缩写（DOCX、PDF…）放在一块按类型上色的方块里，聊天里 AI 发回来的文件卡片共用
+var FT=[[/^(docx?|rtf|odt|pages|wps)$/,'#2F6BD8'],[/^(xlsx?|xlsm|csv|tsv|numbers|ods)$/,'#1F8A4C'],[/^(pptx?|key|odp)$/,'#D1592B'],[/^pdf$/,'#D33A3A'],
+  [/^(zip|rar|7z|gz|tgz|tar|bz2|xz|dmg|pkg|apk|ipa)$/,'#8A6D3B'],[/^(md|markdown)$/,'#6A5ACD'],[/^(mp3|wav|m4a|ogg|oga|aac|opus|flac)$/,'#C23D8B'],
+  [/^(mp4|webm|mov|m4v)$/,'#7A4FD6'],[/^(png|jpe?g|gif|webp|heic|svg)$/,'#168E9C'],[/^(txt|log|json|ya?ml|toml|ini|conf|cfg|env|js|mjs|ts|py|sh|sql|html?|css|xml)$/,'#56606B']];
+function fIcon(name){
+  var m=/\.([a-z0-9]{1,8})$/i.exec(name||''),x=m?m[1].toLowerCase():'',c='#6B7480';
+  for(var i=0;i<FT.length;i++)if(FT[i][0].test(x)){c=FT[i][1];break}
+  var s=document.createElement('span');s.className='f-ic';s.setAttribute('aria-hidden','true');s.style.setProperty('--fc',c);
+  s.textContent=x?x.slice(0,4).toUpperCase():'FILE';if(s.textContent.length>3)s.classList.add('f-ic4');
+  return s;
+}
+// 卡片里的一行：类型小标 + 文件名（最多两行）/ 大小 + 右边下载按钮
+function fRow(id,name,size,meta){
+  var r=document.createElement('div');r.className='f-row';r.appendChild(fIcon(name));
+  var t=document.createElement('span');t.className='f-t';
+  var n=document.createElement('span');n.className='dl-n';n.textContent=name;t.appendChild(n);
+  var m=document.createElement('span');m.className='dl-m';m.textContent=fmtSize(+size)+(meta||'');t.appendChild(m);
+  r.appendChild(t);
+  var b=dlBtn();b.addEventListener('click',function(e){e.stopPropagation();dlFile({id:id},name,size,b)});r.appendChild(b);
+  return r;
+}
 function dlCard(id,name,size){
   var pv=fvCan(name),a=document.createElement('div');a.className='dlcard'+(pv?'':' nopv');   // 不用链接：主屏幕 App 里点链接会被系统预览整页换掉、回不来
   if(pv)a.addEventListener('click',function(){openFile(id,name,size)});   // 看得了的才打开预览；看不了的只有下载按钮
-  var n=document.createElement('span');n.className='dl-n';n.textContent='📄 '+name;a.appendChild(n);
-  var m=document.createElement('span');m.className='dl-m';m.textContent=fmtSize(+size)+(pv?' · 点开预览':'');a.appendChild(m);
-  var b=dlBtn();b.addEventListener('click',function(e){e.stopPropagation();dlFile({id:id},name,size,b)});a.appendChild(b);
+  a.appendChild(fRow(id,name,size,pv?' · 点开预览':''));
   return a;
+}
+// 图片下面的一行：文件名（放不下省略）+ 大小
+function sfCap(name,size){
+  var cap=document.createElement('figcaption');
+  var n=document.createElement('span');n.className='sf-n';n.textContent=name;cap.appendChild(n);
+  var z=document.createElement('span');z.className='sf-z';z.textContent=fmtSize(+size);cap.appendChild(z);
+  return cap;
 }
 // 发回来的是图片：直接在聊天里显示（限高限宽），点开看大图、能保存；加载失败（过了保留期）退回下载卡片
 function imgCard(id,name,size){
@@ -1620,8 +1684,7 @@ function imgCard(id,name,size){
   im.addEventListener('click',function(){openFile(id,name,size)});   // 和下载卡片一样：大图预览 + 「分享 / 保存」
   im.addEventListener('load',function(){scrollDown()});
   im.addEventListener('error',function(){f.replaceWith(dlCard(id,name,size))});
-  var cap=document.createElement('figcaption');cap.textContent=name+' · '+fmtSize(+size)+' · 点开保存';
-  f.appendChild(im);f.appendChild(cap);
+  f.appendChild(im);f.appendChild(sfCap(name,size));
   return f;
 }
 // 发回来的是 .svg：服务器为安全一律当下载给；这里取回文本，用 blob 图片显示（图片里的脚本不执行），失败退回下载卡片
@@ -1632,24 +1695,22 @@ function svgCard(id,name,size){
     var im=document.createElement('img');im.src=d.url;im.alt=name;
     im.addEventListener('click',function(){openFile(id,name,size)});
     im.addEventListener('load',function(){scrollDown()});
-    var cap=document.createElement('figcaption');cap.textContent=name+' · '+fmtSize(+size)+' · 点开保存';
-    f.appendChild(im);f.appendChild(cap);
+    f.appendChild(im);f.appendChild(sfCap(name,size));
   }).catch(function(){if(f.isConnected)f.replaceWith(dlCard(id,name,size))});
   return f;
 }
-// 发回来的是音频 / 视频：直接放播放器；点播放器只管播放，点下面的说明文字才打开「分享 / 保存」；打不开（过了保留期）退回下载卡片
+// 发回来的是音频 / 视频：卡片里直接放播放器，下面（音频在上面）一行文件名 + 下载按钮（预览页放不了音视频，直接存本机）；打不开（过了保留期）退回下载卡片
 var SENT_VIDEO=/\.(mp4|webm|mov|m4v)$/i;
 function mediaCard(id,name,size){
   var src=upUrl(id),isV=SENT_VIDEO.test(id);
-  var f=document.createElement('figure');f.className='sfimg sfmedia'+(isV?' sfvideo':'');
+  var f=document.createElement('figure');f.className='sfimg sfmedia'+(isV?' sfvideo':'');f.dataset.name=name;
   var m=isV?document.createElement('video'):audioEl(src);
-  if(isV){m.controls=true;m.playsInline=true;m.setAttribute('playsinline','');m.preload='metadata';m.src=src;m.addEventListener('loadedmetadata',function(){scrollDown()})}
+  if(isV){m.controls=true;m.playsInline=true;m.setAttribute('playsinline','');m.preload='metadata';m.src=src+'#t=0.1';m.addEventListener('loadedmetadata',function(){scrollDown()})}   // #t=0.1：iPhone 上不放也显示第一帧当封面
   m.addEventListener('click',function(e){e.stopPropagation()});
   m.addEventListener('error',function(){if(f.isConnected)f.replaceWith(dlCard(id,name,size))});
   if(!isV)audioChain(f,m);
-  var cap=document.createElement('figcaption');cap.className='sf-save';cap.dataset.name=name;cap.textContent=(isV?'🎬 ':'🎵 ')+name+' · '+fmtSize(+size)+' · 点这里保存';
-  cap.addEventListener('click',function(){dlFile({id:id},name,size)});   // 直接存本机（预览页放不了音视频）
-  f.appendChild(m);f.appendChild(cap);
+  var r=fRow(id,name,size);
+  if(isV){f.appendChild(m);f.appendChild(r)}else{f.appendChild(r);f.appendChild(m)}
   return f;
 }
 // 联播：AI 连着发来的几首音频（中间只隔着工具卡片）算一组，播完一首自动接下一首。
@@ -1678,7 +1739,7 @@ function audioChain(f,au){
     playCard(nx).catch(function(){   // 被拦：放一个按钮，用户点（手势）再播
       if(f.querySelector('.sf-next'))return;
       var b=document.createElement('button');b.type='button';b.className='sf-next';
-      b.textContent='▶ 下一首：'+((nx.querySelector('figcaption')||{}).dataset||{}).name;
+      b.textContent='▶ 下一首：'+(nx.dataset.name||'');
       b.addEventListener('click',function(e){e.stopPropagation();b.remove();playCard(nx).catch(function(){})});
       f.appendChild(b);
     });

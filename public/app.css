@@ -317,6 +317,21 @@ html.solo.has-skin #sessBtn .dot .wx-cl :is(svg,img){width:14px;height:14px;back
 .md th{background:var(--code-bg);font-weight:600;white-space:nowrap}
 .md .mdh{margin:0 0 .7em;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.md [style]{max-width:100%}
 .md .mdsvg{margin:.4em 0;padding:8px;border-radius:10px;background:#fff;max-width:100%;overflow:auto;box-sizing:border-box}   /* 矢量图多半是透明底深色线条：垫白底，深色主题也看得清 */
+/* 在线视频 / 音频的播放卡片（回复里有 B 站、YouTube 等链接时）：点之前只是个按钮，点了换成原站播放器 */
+.md .emb{margin:.5em 0;max-width:560px;border-radius:12px;overflow:hidden;background:#111;position:relative}
+.md .emb-v{aspect-ratio:16/9}
+.md .emb-a{min-height:56px}
+.md .emb-a.on{height:166px}
+.md .emb-go{all:unset;box-sizing:border-box;cursor:pointer;width:100%;height:100%;min-height:56px;display:flex;align-items:center;gap:10px;padding:12px 14px;color:#fff;background:linear-gradient(135deg,#1d1f24,#2b2f38)}
+.md .emb-v .emb-go{flex-direction:column;justify-content:center;text-align:center}
+.md .emb-ic{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:18px;flex:none}
+.md .emb-a .emb-ic{width:36px;height:36px;font-size:15px}
+.md .emb-t{font-size:14px;line-height:1.35;max-width:90%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.md .emb-s{font-size:12px;opacity:.65}
+.md .emb-a .emb-s{margin-left:auto}
+.md .emb iframe,.md .emb video{display:block;width:100%;height:100%;border:0;background:#000}
+.md .emb audio{display:block;width:100%;margin:8px 0}
+.md .emb.on.emb-a:has(audio){height:auto;background:transparent}
 .md .mdsvg img{display:block;max-width:100%;height:auto;margin:0 auto}
 .md .mdsvg.fill img{width:100%;max-height:480px;object-fit:contain}   /* 只写了 viewBox 的：铺满宽度，太高的限高 */
 .md .mdsvg-src{margin:0 0 .4em;font-size:12px;color:var(--muted)}
@@ -779,27 +794,34 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 }
 @media (min-width:1000px){.ds-b{padding:16px 24px}.ds-in{max-width:1080px;margin:0 auto}.ds-tw{margin:0;padding:0}.ds-tb th,.ds-tb td{padding:6px 8px}}
 /* ════ 公共 · 聊天里的图片、文件 ════ */
-/* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最大 180）；点开才是原图 */
-.sfimg{align-self:flex-start;margin:6px 0;max-width:min(260px,80%)}
-.sfimg:not(.sfmedia){max-width:min(180px,60%)}
-.sfimg img{display:block;max-width:100%;max-height:180px;border-radius:10px;border:var(--bw) solid var(--line);cursor:zoom-in;background:var(--bg)}
-.sfmedia{width:min(300px,85%)}
-.sfmedia audio{display:block;width:100%;height:40px}
-.sfvideo video{display:block;width:100%;max-height:320px;border-radius:10px;background:#000}
-.sf-save{cursor:pointer}
-.sfmedia.playing audio{outline:2px solid var(--accent,#2F6F4F);outline-offset:2px;border-radius:20px}
-.sf-next{display:block;margin-top:6px;padding:6px 12px;border:var(--bw) solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sfimg figcaption{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dlcard{position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;cursor:pointer;align-self:flex-start;max-width:280px;margin:6px 0;padding:10px 52px 10px 12px;border:var(--bw) solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);text-decoration:none;box-sizing:border-box}
-.dlcard.nopv{cursor:default}
-/* 聊天里的文件：右边一个下载按钮，点了直接存到本机（手机弹系统分享面板，可「存储到文件」；电脑下到「下载」）；看得了的文件点卡片才打开预览 */
-.f-dl{position:absolute;right:8px;top:50%;width:36px;height:36px;margin-top:-18px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);cursor:pointer}
+/* 发回来的图片在聊天里只放缩略图（服务端大图缩成长边 540 像素，这里最高 220）；点开才是原图 */
+.sfimg{align-self:flex-start;margin:6px 0;max-width:min(240px,70%)}
+.sfimg img{display:block;max-width:100%;max-height:220px;border-radius:12px;border:var(--bw) solid var(--line);cursor:zoom-in;background:var(--bg)}
+.sfimg figcaption{display:flex;gap:6px;font-size:12px;color:var(--muted);margin-top:4px;padding:0 2px;white-space:nowrap}
+.sf-n{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sf-z{flex:none;opacity:.8}
+/* AI 发回来的文件、音频、视频：同一种卡片——类型小标 + 文件名 / 大小 + 下载按钮；音视频的播放器放在卡片里 */
+.dlcard,.sfmedia{align-self:flex-start;width:min(320px,88%);max-width:none;margin:6px 0;border:var(--bw) solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);box-sizing:border-box;overflow:hidden}
+.dlcard{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s}
+.dlcard:active{background:color-mix(in srgb,var(--surface),var(--ink) 5%)}
+.dlcard.nopv{cursor:default}.dlcard.nopv:active{background:var(--surface)}
+.f-row{display:flex;align-items:center;gap:10px;padding:10px 8px 10px 10px;min-width:0}
+.f-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.dl-n{font-size:14px;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.dl-m{font-size:12px;color:var(--muted)}
+.f-ic{flex:none;position:relative;width:36px;height:42px;display:grid;place-items:end center;padding-bottom:7px;box-sizing:border-box;border-radius:6px 12px 6px 6px;background:var(--fc,#6B7480);color:#fff;font:700 10px/1 var(--mono,ui-monospace,monospace);letter-spacing:.2px}
+.f-ic::before{content:"";position:absolute;top:0;right:0;width:11px;height:11px;border-radius:0 0 0 4px;background:rgba(255,255,255,.38)}
+.f-ic4{font-size:8.5px;letter-spacing:0}
+.sfmedia audio{display:block;width:calc(100% - 16px);height:40px;margin:0 8px 8px}
+.sfvideo video{display:block;width:100%;max-height:360px;background:#000}
+.sfmedia.playing{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.sf-next{display:block;margin:0 8px 8px;padding:6px 12px;border:var(--bw) solid var(--line);border-radius:16px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 聊天里的文件：下载按钮，点了直接存到本机（手机弹系统分享面板，可「存储到文件」；电脑下到「下载」）；看得了的文件点卡片才打开预览 */
+.f-dl{flex:none;width:36px;height:36px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);cursor:pointer}
 .f-dl:disabled{opacity:.45;cursor:default}
 .f-dl.spin svg{animation:pulse 1s infinite}
-.ufile .f-dl{top:auto;bottom:6px;margin-top:0;width:30px;height:30px}
+.ufile .f-dl{position:absolute;right:8px;bottom:6px;width:30px;height:30px}
 .ufile.nopv{cursor:default}
-.dl-n{font-size:14px;word-break:break-all}
-.dl-m{font-size:12px;color:var(--muted)}
 .ufile{display:flex;flex-direction:column;gap:2px;min-width:160px;padding:10px 12px 26px;background:var(--bg);border:var(--bw) solid var(--line);color:var(--ink)}
 .ufile-n{font-size:14px;word-break:break-all}
 .att-file{width:auto;max-width:160px;padding:6px 26px 6px 8px;display:flex;align-items:center}
