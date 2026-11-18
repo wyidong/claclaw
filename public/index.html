@@ -704,8 +704,8 @@ function mdInline(s){
     if(/^\/(?!\/)/.test(u)&&u.indexOf('\\')<0)return put('<img class="mdimg" src="'+u+'" alt="'+t+'" loading="lazy">');
     return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>');
   });
-  s=s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>'+COPY_BTN)});
-  s=s.replace(/(^|[\s(（：:，、；])(https?:\/\/[^\s<)），。、；！？」\u0000]+)/g,function(_,pre,u){return pre+put('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'+COPY_BTN)});
+  s=s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,function(_,t,u){return put(embLink(u,t)||'<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+t+'</a>'+COPY_BTN)});
+  s=s.replace(/(^|[\s(（：:，、；])(https?:\/\/[^\s<)），。、；！？」\u0000]+)/g,function(_,pre,u){return pre+put(embLink(u,'')||'<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'+COPY_BTN)});
   // 引号里的一整句（让用户转贴的话，如 "审 claclaw 033fdab…"）：后面跟复制图标，只复制引号里面的内容
   s=s.replace(/(&quot;|“|「)([^\n\u0000]{10,300}?)(&quot;|”|」)/g,function(m,o,c,e){
     if((o==='&quot;')!==(e==='&quot;')||(o==='“')!==(e==='”')||/^\s|\s$/.test(c))return m;
@@ -837,7 +837,11 @@ var EMBED_RULES=[
 var mdNested=0;
 function embedOf(u){for(var k=0;k<EMBED_RULES.length;k++){var r=EMBED_RULES[k],m=r[0].exec(u);if(m)return {src:r[3](m),site:r[1],kind:r[2]}}return null}
 function embedCards(src){
-  var seen={},cards=[],re=/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()（）「」，。、；！？"']+)/g,m;
+  var seen={},cards=[],re=/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()（）「」，。、；！？"']+)/g,m,all=0;
+  while((m=re.exec(src))){var e0=embedOf((m[2]||m[3]).replace(/[.,;:!?]+$/,''));if(e0&&!seen[e0.src]){seen[e0.src]=1;all++}}
+  // 能播的链接多（片单、播放列表）：不堆卡片，放一条「从第 1 个开始播」，标题本身点了就在顶上的播放器里播
+  if(all>3)return '<button type="button" class="emb-pl"><span class="emb-ic">▶</span><span>从第 1 个开始播 · 共 '+all+' 个，点标题切换</span></button>';
+  seen={};re.lastIndex=0;
   while((m=re.exec(src))&&cards.length<4){
     var u=(m[2]||m[3]).replace(/[.,;:!?]+$/,''),e=embedOf(u);
     if(!e||seen[e.src])continue;seen[e.src]=1;
@@ -858,6 +862,45 @@ document.addEventListener('click',function(ev){
     el.setAttribute('referrerpolicy','strict-origin-when-cross-origin');el.setAttribute('loading','eager');
   }
   c.classList.add('on');c.innerHTML='';c.appendChild(el);
+});
+// 回复里能播的链接（带 ▶）：点了不跳走，在聊天顶上的播放器里播；同一条消息里的其他链接就是播放列表（上一个 / 下一个，点别的标题直接换）
+function embLink(u,t){var e=embedOf(u);if(!e)return '';return '<a href="'+u+'" class="emb-l" data-kind="'+e.kind+'" target="_blank" rel="noopener noreferrer">'+(t||u)+'</a>'}
+var tp={list:[],i:-1,box:null};
+function tpLinks(box){var seen={},out=[];box.querySelectorAll('a.emb-l').forEach(function(a){var e=embedOf(a.getAttribute('href'));if(e&&!seen[e.src]){seen[e.src]=1;out.push({a:a,e:e,t:a.textContent.trim()})}});return out}
+function tpPlay(i){
+  var el=$('#tplay'),x=tp.list[i];if(!x)return;tp.i=i;
+  var v=el.querySelector('.tp-v'),k=x.e.kind,m;v.innerHTML='';
+  if(k==='file-video'||k==='file-audio'){m=document.createElement(k==='file-video'?'video':'audio');m.controls=true;m.autoplay=true;m.setAttribute('playsinline','');m.src=x.e.src}
+  else{m=document.createElement('iframe');m.src=x.e.src;m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin')}
+  v.appendChild(m);
+  el.className=(k==='audio'||k==='file-audio'?'tp-a':'')+(el.classList.contains('min')?' min':'');el.hidden=false;
+  el.querySelector('.tp-t').textContent=(tp.list.length>1?(i+1)+' / '+tp.list.length+'  ':'')+x.t;
+  el.querySelector('.tp-s').textContent=x.e.site;
+  el.querySelector('.tp-prev').disabled=i<=0;el.querySelector('.tp-next').disabled=i>=tp.list.length-1;
+  tp.list.forEach(function(y,j){y.a.classList.toggle('playing',j===i)});
+}
+function tpClose(){var el=$('#tplay');el.hidden=true;el.classList.remove('min');el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null}}
+function tpOpen(box,a){
+  tp.box=box;tp.list=tpLinks(box);var i=0;
+  if(a)tp.list.forEach(function(y,j){if(y.a===a)i=j});
+  tpPlay(i);
+}
+(function(){
+  var el=document.createElement('div');el.id='tplay';el.hidden=true;
+  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>';
+  feed.parentNode.insertBefore(el,feed);
+  el.querySelector('.tp-prev').addEventListener('click',function(){tpPlay(tp.i-1)});
+  el.querySelector('.tp-next').addEventListener('click',function(){tpPlay(tp.i+1)});
+  el.querySelector('.tp-min').addEventListener('click',function(){el.classList.toggle('min')});   // 收起：只留标题条，声音接着放
+  el.querySelector('.tp-x').addEventListener('click',tpClose);
+  el.querySelector('.tp-tt').addEventListener('click',function(){var y=tp.list[tp.i];if(y&&document.contains(y.a))y.a.scrollIntoView({block:'center',behavior:'smooth'})});   // 点标题：滚回列表里这一项
+})();
+document.addEventListener('click',function(ev){
+  var a=ev.target.closest&&ev.target.closest('a.emb-l'),b=!a&&ev.target.closest&&ev.target.closest('.emb-pl');
+  if(!a&&!b)return;ev.preventDefault();
+  var box=(a||b).closest('.msg,.body.md,.fv-md')||(a||b).closest('.md');
+  if(a&&tp.box===box&&tp.list.some(function(y){return y.a===a})){tp.list.forEach(function(y,j){if(y.a===a)tpPlay(j)});return}
+  tpOpen(box,a);
 });
 function scrollDown(force){
   if(force)stick=true;if(stick)feed.scrollTop=feed.scrollHeight;

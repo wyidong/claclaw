@@ -515,7 +515,8 @@ async function latestMovies(LAST) {
   writeJson(LAST, { q: '华语新片', at: Date.now(), items });
   if (opt.debug) console.error('用时', (Date.now() - t0) + 'ms');
   console.log('序号\t片名\t上映\t地区\t类型\t豆瓣\t时长\t播放\t官方频道');
-  items.forEach((x, i) => console.log([i + 1, x.key, when(x) || '?', x.db?.area || '?', x.db?.genres || '', x.db?.rating || '暂无', fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, '')].join('\t')));
+  const ml = x => `[${x.key.replace(/[\[\]]/g, ' ')}](${x.page})`;   // 片名就是播放链接：claclaw 里点了在顶上的播放器播，列表留着随时换
+  items.forEach((x, i) => console.log([i + 1, ml(x), when(x) || '?', x.db?.area || '?', x.db?.genres || '', x.db?.rating || '暂无', fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, '')].join('\t')));
 }
 async function movies(q) {
   const LAST = path.join(STATE, 'movies-last.json');
@@ -589,9 +590,9 @@ async function movies(q) {
   const items = head.filter((_, i) => ok[i]).slice(0, n);
   if (!items.length) die('没找到官方频道能直接播放的完整电影' + (year ? `（${year} 年的）` : '') + (minRate ? `（豆瓣 ${minRate} 分以上）` : '') + '：换个类型 / 片名 / 演员，或放宽条件');
   writeJson(LAST, { q, at: Date.now(), items });
-  // 片单不带链接：先给用户挑，挑好再 --pick 序号 拿播放链接
+  // 片单里片名就是播放链接（claclaw 点了在聊天顶上的播放器里播，不跳走；列表留着随时换）；--pick 序号 也还能单独拿一部
   console.log('序号\t片名\t豆瓣\t年份\t类型\t时长\t播放\t官方频道\t原标题');   // 豆瓣「暂无」= 没评分或这次没查到（限流）
-  items.forEach((x, i) => console.log([i + 1, x.name, x.db?.rating ? x.db.rating + (x.db.votes < 100 ? '（' + x.db.votes + '人评）' : '') : x.db?.imdb ? 'IMDb ' + x.db.imdb : x.db?.my ? '猫眼 ' + x.db.my : '暂无', x.db?.year || '?', [x.db?.type, x.db?.genres].filter(Boolean).join(' '), fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title].join('\t')));
+  items.forEach((x, i) => console.log([i + 1, `[${x.name.replace(/[\[\]]/g, ' ')}](${x.page})`, x.db?.rating ? x.db.rating + (x.db.votes < 100 ? '（' + x.db.votes + '人评）' : '') : x.db?.imdb ? 'IMDb ' + x.db.imdb : x.db?.my ? '猫眼 ' + x.db.my : '暂无', x.db?.year || '?', [x.db?.type, x.db?.genres].filter(Boolean).join(' '), fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title].join('\t')));
 }
 
 // ---------- 命令 ----------

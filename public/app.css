@@ -1899,3 +1899,32 @@ select.pe-in{text-align-last:right}
   html.solo #composer.busy #ta{padding-right:20px}
   body.row-drag{cursor:row-resize;user-select:none}
 }
+
+/* 聊天顶上的播放器：点回复里带 ▶ 的链接在这里播，下面的列表照常能滑、点别的标题直接换 */
+.md a.emb-l::before{content:'▶';display:inline-block;font-size:.72em;margin-right:.35em;color:var(--accent);transform:translateY(-.08em)}
+.md a.emb-l.playing{font-weight:600;background:color-mix(in srgb,var(--accent) 16%,transparent);border-radius:4px;padding:0 3px}
+.md a.emb-l.playing::before{content:'♪'}
+.md .emb-pl{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;margin:.6em 0;padding:8px 14px 8px 8px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:14px;max-width:100%}
+.md .emb-pl .emb-ic{width:28px;height:28px;font-size:13px;background:rgba(255,255,255,.25);color:inherit}
+#tplay{flex:none;background:#000;color:#fff;position:relative;z-index:3;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+#tplay[hidden]{display:none}
+#tplay .tp-v{aspect-ratio:16/9;max-height:42vh;width:100%;margin:0 auto}
+#tplay.tp-a .tp-v{aspect-ratio:auto;height:120px}
+#tplay.min .tp-v{height:0;max-height:0;overflow:hidden;aspect-ratio:auto}
+#tplay .tp-v iframe,#tplay .tp-v video{display:block;width:100%;height:100%;border:0;background:#000}
+#tplay .tp-v audio{display:block;width:100%;margin-top:32px}
+#tplay .tp-bar{display:flex;align-items:center;gap:4px;padding:4px 6px;background:#16181c}
+#tplay .tp-bar button{all:unset;cursor:pointer;width:36px;height:34px;display:flex;align-items:center;justify-content:center;font-size:22px;border-radius:8px;flex:none;color:#fff}
+#tplay .tp-bar button:disabled{opacity:.3;cursor:default}
+#tplay .tp-bar button:not(:disabled):active{background:rgba(255,255,255,.12)}
+#tplay .tp-x,#tplay .tp-min{font-size:18px!important}
+#tplay.min .tp-min{transform:rotate(180deg)}
+#tplay .tp-tt{flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer;line-height:1.25}
+#tplay .tp-t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tplay .tp-s{font-size:11px;opacity:.6}
+@media (min-width:1000px){
+  #app{grid-template-rows:auto auto auto minmax(0,1fr) auto auto}
+  #tplay{grid-column:3;grid-row:3}
+  #feed{grid-row:4}#workBar{grid-row:5}#dock{grid-row:6}
+  #tplay .tp-v{max-height:48vh;max-width:calc(48vh * 16 / 9)}
+}
