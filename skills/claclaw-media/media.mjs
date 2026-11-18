@@ -168,8 +168,9 @@ async function find(kind, q, { n = 10, max = 0, src = '' } = {}) {
       if (max && x.dur && x.dur > max) return;
       const t = x.title.toLowerCase();
       const rel = toks.length ? toks.filter(k => t.includes(k)).length / toks.length : 0;
-      let sc = rel * 3 + 1 / (1 + i * 0.3) + (x.plays ? Math.min(1, Math.log10(1 + x.plays) / 7) * 0.8 : 0.2);
+      let sc = rel * 3 + 1 / (1 + i * 0.3) + (x.plays ? Math.min(1, Math.log10(1 + x.plays) / 7) * 1.2 : 0);
       if (cjk && !SOURCES.find(s => s.id === id)?.proxy) sc += 0.4;
+      if (kind !== 'image' && /系列\s*\d{2,}|第\s*(?:\d{2,}|[二三四五六七八九]?十[一二三四五六七八九]?|百)\s*[集讲講回篇期课]|\bEP?\s*\d{2,}\b/i.test(x.title)) sc -= 0.8;   // 连续剧 / 系列课的中间一集：单看没头没尾
       if (kind !== 'image' && /合集|全集|大合集|完整版|\d+\s*小时|hours?\b|直播|预告|trailer/i.test(x.title)) sc -= 1;
       if (kind === 'image' && x.w && x.h && Math.min(x.w, x.h) < 300) sc -= 1;
       scored.push({ ...x, src: id, sc });
