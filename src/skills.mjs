@@ -73,6 +73,15 @@ export function install(name, target) {
   fs.rmSync(dest, { recursive: true, force: true });
   fs.renameSync(tmp, dest);
 }
+// 用到某个 Claw 时自动装：index.json 里 auto 列出的安装位置，这个 Claw 归哪处就装到哪处（已装 / 用户自己的同名技能不动）
+export function ensure(claw, log) {
+  if (!claw) return;
+  const target = targetOf(claw);
+  for (const s of catalog()) {
+    if (!s.auto?.includes(target) || stateAt(s.name, target) !== 'none') continue;
+    try { install(s.name, target); log?.('skill auto-installed', s.name, '→', target, claw); } catch (e) { log?.('skill auto-install failed', s.name, e.message); }
+  }
+}
 export function uninstall(name, target) {
   const t = TARGETS[target]; if (!t) throw new Error('没有这个安装位置');
   if (stateAt(name, target) !== 'ours') throw new Error('不是 claclaw 装的技能，不动它');

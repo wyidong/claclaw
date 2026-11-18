@@ -650,11 +650,9 @@ async function resolveFrom(from, cwd) {
 // 开着的会话的名字（发信人等用）
 const sessionName = (id, dflt = '会话') => { const r = runnerOf(id); return r?.info?.customTitle || r?.info?.summary || r?.title || dflt; };
 const senderLabel = fromId => sessionName(fromId) + '（' + CLAW_LABEL[clawOfId(fromId)] + ' · ' + peerShortId(fromId) + '）';
-// 用到时自动装技能（不用用户点）：非 Claude 的 Claw 一用上就装好 claclaw-peer，AI 才知道怎么找别的会话
-function ensureSkill(claw) {
-  if (!claw || claw === 'claude' || skills.stateAt('claclaw-peer', 'agents') !== 'none') return;
-  try { skills.install('claclaw-peer', 'agents'); log('skill auto-installed claclaw-peer →', claw); } catch (e) { log('skill auto-install failed', e.message); }
-}
+// 用到时自动装技能（不用用户点）：非 Claude 的 Claw 一用上就装好 claclaw-peer（AI 才知道怎么找别的会话），
+// 所有 Claw 都装 claclaw-files（怎样把文件发到手机上看）；装哪些看 skills/index.json 的 auto
+const ensureSkill = claw => skills.ensure(claw, log);
 async function peerListCore({ fromId, to } = {}) {
   const out = { ok: true };
   if (!to || isLocalTo(to)) {
@@ -3387,6 +3385,7 @@ wss.on('connection', (ws, req) => {
         return;
       }
       if (m.t === 'session.new') {
+        ensureSkill('claude');
         // 在某个会话的目录里新建一个兄弟会话：同目录、同权限模式
         const from = await claudeInfo(m.from, runners.get(m.from)?.info);
         // 目录：默认用参照会话的目录；也可以指定别的目录（新建对话框里点目录可以改）
@@ -3493,6 +3492,7 @@ wss.on('connection', (ws, req) => {
           busyFor: busyFor(r), pending: [], suggestion: null,
         });
       } else if (m.t === 'session.open') {
+        ensureSkill('claude');
         // 刚新建、还没发过消息的会话没有会话文件，从开着的 runner 里拿
         const info = await claudeInfo(m.id, runners.get(m.id)?.info);
         if (!info) return send({ t: 'error', message: '找不到这个会话' });

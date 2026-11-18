@@ -40,3 +40,19 @@ test('仓库里的技能更新后，启动时同步到装过的复制件', () =>
   skills.syncInstalled();
   assert.notEqual(fs.readFileSync(f, 'utf8'), '旧版');
 });
+
+test('用到 Claw 时按 auto 自动装：Claude 只装 claclaw-files，别的 Claw 两个都装；用户自己的同名技能不动', () => {
+  for (const t of ['claude', 'agents']) for (const n of ['claclaw-peer', 'claclaw-files']) if (skills.stateAt(n, t) === 'ours') skills.uninstall(n, t);
+  fs.rmSync(path.join(home, '.claude', 'skills', 'claclaw-peer'), { recursive: true, force: true });
+  skills.ensure('claude');
+  assert.equal(skills.stateAt('claclaw-files', 'claude'), 'ours');
+  assert.equal(skills.stateAt('claclaw-peer', 'claude'), 'none');
+  skills.ensure('qwen');
+  assert.equal(skills.stateAt('claclaw-files', 'agents'), 'ours');
+  assert.equal(skills.stateAt('claclaw-peer', 'agents'), 'ours');
+  const own = path.join(home, '.claude', 'skills', 'claclaw-files');
+  skills.uninstall('claclaw-files', 'claude');
+  fs.mkdirSync(own, { recursive: true }); fs.writeFileSync(path.join(own, 'SKILL.md'), '自己的');
+  skills.ensure('claude');
+  assert.equal(fs.readFileSync(path.join(own, 'SKILL.md'), 'utf8'), '自己的');
+});
