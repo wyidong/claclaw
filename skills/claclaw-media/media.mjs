@@ -14,7 +14,7 @@ import net from 'node:net';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { SOURCES } from './sources.mjs';
+import { SOURCES, embedded, walk } from './sources.mjs';
 
 const WIN = process.platform === 'win32';
 const HOMEDIR = process.env.CLACLAW_HOME || path.join(os.homedir(), '.claclaw');
@@ -36,7 +36,7 @@ for (let i = 0; i < argv.length; i++) {
 const die = (s, code = 1) => { console.error(s); process.exit(code); };
 const USAGE = `用法：
   claclaw-media link   video|audio "关键词" [--n 1] [--max 秒] [--src a,b]   在线播放链接（聊天里直接播放，不下载）
-  claclaw-media movies ["类型 / 片名 / 演员"] [--n 10] [--new] [--year 2026] [--since 2006] [--min 7]   官方频道免费完整电影片单（带豆瓣分）；--pick 序号 出播放链接
+  claclaw-media movies ["类型 / 片名 / 演员"] [--n 10] [--new] [--year 2026] [--since 2006] [--min 7] [--latest]   官方频道免费完整电影片单（带豆瓣分）；--pick 序号 出播放链接
   claclaw-media get    video|audio|image "关键词或网址" [--n 张数] [--max 秒] [--clip 秒] [--max-mb 45] [--src a,b] [--pick 序号]
   claclaw-media find   video|audio|image "关键词" [--n 10] [--max 秒] [--src a,b]
   claclaw-media sources                      来源列表和最近的成败
@@ -72,23 +72,23 @@ function run(bin, args, { quiet = true, timeout = 0 } = {}) {
   });
 }
 // HTTP：直连用 fetch；走代理用 curl（Node 的 fetch 不读代理设置）。binary=true 返回 Buffer
-async function http(url, { proxy: viaProxy = false, binary = false, timeout = 8000, referer, curl = false, ua = UA } = {}) {
+async function http(url, { proxy: viaProxy = false, binary = false, timeout = 8000, referer, curl = false, ua = UA, body } = {}) {   // body：POST 的 JSON 字符串
   const px = viaProxy ? await proxy() : '';
   if (viaProxy && !px) throw new Error('没有代理');
   if (!px && !curl) {   // curl=true：有的站（猫眼）认 Node fetch 的指纹、回验证页，改用 curl
-    const r = await fetch(url, { headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6', ...(referer ? { referer } : {}) }, signal: AbortSignal.timeout(timeout) });
+    const r = await fetch(url, { ...(body ? { method: 'POST', body } : {}), headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6', ...(body ? { 'content-type': 'application/json' } : {}), ...(referer ? { referer } : {}) }, signal: AbortSignal.timeout(timeout) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return binary ? Buffer.from(await r.arrayBuffer()) : r.text();
   }
   const r = await new Promise(ok => {
-    const p = spawn('curl', ['-sSL', '--compressed', '-m', String(Math.ceil(timeout / 1000)), ...(px ? ['-x', px] : []), '-A', ua, '-H', 'accept-language: zh-CN,zh;q=0.9,en;q=0.6', ...(referer ? ['-e', referer] : []), '-w', '\n%{http_code}', url]);
+    const p = spawn('curl', ['-sSL', '--compressed', '-m', String(Math.ceil(timeout / 1000)), ...(px ? ['-x', px] : []), '-A', ua, '-H', 'accept-language: zh-CN,zh;q=0.9,en;q=0.6', ...(referer ? ['-e', referer] : []), ...(body ? ['-H', 'content-type: application/json', '--data-binary', body] : []), '-w', '\n%{http_code}', url]);
     const bufs = []; p.stdout.on('data', d => bufs.push(d)); p.on('error', () => ok(null)); p.on('exit', () => ok(Buffer.concat(bufs)));
   });
   if (!r) throw new Error('curl 失败');
   const nl = r.lastIndexOf(10), code = +r.subarray(nl + 1).toString();
   if (code < 200 || code >= 300) throw new Error('HTTP ' + (code || '超时'));
-  const body = r.subarray(0, nl);
-  return binary ? body : body.toString('utf8');
+  const res = r.subarray(0, nl);
+  return binary ? res : res.toString("utf8");
 }
 
 let ytP;
@@ -111,7 +111,7 @@ async function ytdlp(args, { proxy: viaProxy = false, timeout = 0, quiet = true 
   const px = viaProxy ? await proxy() : '';
   if (viaProxy && !px) throw new Error('没有代理');
   const r = await run(await ytdlpBin(), ['--no-warnings', '--socket-timeout', '15', ...(px ? ['--proxy', px] : []), ...args], { timeout, quiet });
-  if (r.code !== 0) throw new Error(r.err.trim().split('\n').filter(l => /ERROR/.test(l)).pop() || r.err.trim().split('\n').pop() || 'yt-dlp 出错');
+  if (r.code !== 0) throw new Error((opt.debug ? 'code=' + r.code + ' ' + r.err.slice(-300) + ' ' : '') + r.err.trim().split('\n').filter(l => /ERROR/.test(l)).pop() || r.err.trim().split('\n').pop() || 'yt-dlp 出错');
   return r.out;
 }
 
@@ -325,9 +325,10 @@ async function link(kind, q) {
 // 电影：只要版权方官方频道（YouTube 认证标记，或爱奇艺 / 优酷 / 腾讯 WeTV / 芒果 / 华策 / 央视等官方影视频道）免费公开的完整版，
 // 而且能嵌在 claclaw 聊天里直接播放。先给片单（不带链接），用户挑好再 --pick 出播放链接
 const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki|緯來|Videoland|公視|PTS|東森|三立|民視|TVB|myTV SUPER|美亞|Mei Ah|寰宇|Universe Films|英皇|Emperor Motion|天映|Celestial|Fortune Star|星空華文|嘉禾|Golden Harvest|VSO|Q1Q2|CONtv|卫视/i;   // 大小平台、电视台、片商的官方频道（另外 YouTube 认证频道都算）
-const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b|综艺|年代秀|完结|動漫|动漫|短剧|短劇|精编版|\b20\d{6}\b|\d+期|hindi dubbed|】\s*[上下]\s|\bpart\s?\d/i;   // 上 / 下、Part 1：拆成几段的不算完整版
+const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b|综艺|年代秀|精華|精华|完结|動漫|动漫|短剧|短劇|精编版|\b20\d{6}\b|\d+期|hindi dubbed|】\s*[上下]\s|\bpart\s?\d/i;   // 上 / 下、Part 1：拆成几段的不算完整版
 function movieName(t) {   // 片名：《》里的；没有就用不是「Multi Sub / 4K / 类型」的【】；再不行用 [] 或去掉修饰的标题
   let m = /《#?([^》]{1,30})》/.exec(t); if (m) return m[1].trim();
+  m = /[｜|]\s*([^｜|(（]{1,20}?)\s*[(（][A-Za-z][^)）]*[)）]\s*[｜|]/.exec(t); if (m) return m[1].trim();   // 港片频道：…｜片名 (English Name)｜演员…
   for (const b of t.matchAll(/【([^】]{2,40})】/g)) if (!/multi ?sub|eng ?sub|movie|4k|1080p|完整版|电影|中字|抢先看|会员|独播|首播|新片|大片|喜剧|动作|爱情|悬疑|犯罪|冒险|剧情|奇幻|武侠|恐怖|惊悚/i.test(b[1])) return b[1].trim();
   m = /^\[([^\]]{2,40})\]/.exec(t); if (m && !/full ?movie|multi ?sub|eng ?sub|4k|1080p|movie/i.test(m[1])) return m[1].trim();
   if (!/[一-鿿]/.test(t)) {   // 外文标题：去掉年份、清晰度、「Full Movie」和后面的演员表
@@ -338,11 +339,37 @@ function movieName(t) {   // 片名：《》里的；没有就用不是「Multi 
 }
 // 官方影视频道（新片多先放这里）：--new 时直接翻它们最近上传的
 const MOVIE_CHANNELS = ['@iQIYIMOVIETHEATER', '@youkumovie', '@TencentVideoMovie'];
-async function channelLatest(h, n = 40) {
-  const o = await ytdlp(['--flat-playlist', '--playlist-end', String(n), '--print', '%(id)s\t%(duration)s\t%(view_count)s\t%(channel)s\t%(title)s', `https://www.youtube.com/${h}/videos`], { proxy: true, timeout: 45000 }).catch(() => '');
-  // 没有播放数的是还没开播的首映（预约），放不了，跳过
-  return o.split('\n').filter(Boolean).map(l => l.split('\t')).filter(([, , v]) => v && v !== 'NA').map(([id, d, v, ch, ...t]) => { return { page: 'https://www.youtube.com/watch?v=' + id, dur: +d || 0, plays: +v || undefined, channel: ch && ch !== 'NA' ? ch : h, verified: true, title: t.join('\t') }; });
+// 频道最近上传的 n 条：直接取频道「视频」页（内嵌前 30 条）+ 接口翻页，不开 yt-dlp，十几个频道并发几秒取完。
+// 会员专享、还没开播的首映、没有时长的跳过；ago = 上传了多久（秒，按「3天前」这种文字估算，排新旧用）
+const AGO = { 秒: 1, 分钟: 60, 小时: 3600, 天: 86400, 周: 604800, 个月: 2592000, 月: 2592000, 年: 31536000, second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2592000, year: 31536000 };
+async function channelLatest(h, n = 50) {
+  const out = [];
+  try {
+    const page = () => http(`https://www.youtube.com/${h}/videos?hl=zh-CN`, { proxy: true, timeout: 15000 });
+    const html = await page().catch(page);   // 偶尔超时：再试一次
+    const ver = /"INNERTUBE_CLIENT_VERSION":"([^"]+)"/.exec(html)?.[1] || '2.20261116.00.00';
+    let data = embedded(html, 'ytInitialData'), chName = /<meta property="og:title" content="([^"]+)"/.exec(html)?.[1] || h;
+    for (let page = 0; data && out.length < n && page < 8; page++) {
+      let token = null;
+      for (const l of walk(data, 'lockupViewModel')) {
+        const md = l.metadata?.lockupMetadataViewModel, js = JSON.stringify(l);
+        const parts = (md?.metadata?.contentMetadataViewModel?.metadataRows || []).flatMap(r => r.metadataParts || []).map(p => p.text?.content || '');
+        const dur = /"text":"(\d+(?::\d\d){1,2})"/.exec(js)?.[1];
+        if (!l.contentId || !dur || /BADGE_MEMBERS_ONLY|UPCOMING|首播/.test(js)) continue;
+        const ago = parts.map(t => /(\d+)\s*(秒|分钟|小时|天|周|个月|月|年|second|minute|hour|day|week|month|year)/.exec(t)).find(Boolean);
+        out.push({ page: 'https://www.youtube.com/watch?v=' + l.contentId, title: md?.title?.content || '', dur: dur.split(':').reduce((a, x) => a * 60 + +x, 0),
+          plays: num(parts.find(t => /^[\d.,]+\s*(万|亿|K|M|B)?(次观看)?$/i.test(t))), ago: ago ? +ago[1] * AGO[ago[2]] : undefined, channel: chName, verified: true });
+      }
+      // 下一页的口令在视频网格的最后一项里（页面上别的 continuation 是排序按钮的，不能用）
+      const grid = [...walk(data, 'richGridRenderer')][0]?.contents || [...walk(data, 'appendContinuationItemsAction')][0]?.continuationItems || [];
+      token = grid.at(-1)?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token || null;
+      if (!token || out.length >= n) break;
+      data = JSON.parse(await http('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', { proxy: true, timeout: 15000, body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion: ver, hl: 'zh-CN', gl: 'HK' } }, continuation: token }) }));
+    }
+  } catch (e) { if (opt.debug) console.error(h, e.message); }
+  return out.slice(0, n);
 }
+const num = s => { const m = /([\d.,]+)\s*(万|亿|K|M|B)?/i.exec(String(s || '')); if (!m) return undefined; return Math.round(parseFloat(m[1].replace(/,/g, '')) * ({ 万: 1e4, 亿: 1e8, K: 1e3, k: 1e3, M: 1e6, m: 1e6, B: 1e9, b: 1e9 }[m[2]] || 1)); };
 // Dailymotion：只收这些官方账号（它的认证标记里机器人频道很多，不能当官方看）
 const DM_OWNERS = ['chinahuacegroup', 'sztvofficial', 'MangoTV-Official'];
 async function dmMovies(q, fresh) {
@@ -404,6 +431,25 @@ async function imdbRate(name, year) {
     return v;
   } catch { return undefined; }
 }
+// 360 影视（api.so.360kan.com）：上映日期、地区、类型、豆瓣分、是不是剧集；国内直连、不限流（猫眼、豆瓣被拦时靠它）。存盘 30 天
+async function kan360(name) {
+  const c = fmCache['k3:' + name];
+  if (c && Date.now() - c.at < 30 * 86400000) return c.v;
+  try {
+    const norm = t => String(t || '').toLowerCase().replace(/[\s：:·,，.!！?？\-—]/g, '');
+    const d = JSON.parse(await http('https://api.so.360kan.com/index?force_v=1&kw=' + encodeURIComponent(name) + '&from=&pageno=1&v_ap=1&tab=all', { timeout: 8000 }));
+    const m = (d.data?.longData?.rows || []).find(x => norm(x.titleTxt) === norm(name));
+    let v = null;
+    if (m && m.cat_name !== '电影') v = { tv: true };
+    else if (m) {
+      const t = JSON.parse(await http(`https://api.web.360kan.com/v1/detail?cat=1&id=${m.en_id}`, { timeout: 8000 })).data || {};
+      const date = /^\d{4}-\d\d-\d\d/.test(t.pubdate || '') ? t.pubdate.slice(0, 10) : '';
+      v = { year: +(date || m.year).slice(0, 4) || undefined, date, area: (t.area || m.area || []).join('/'), genres: (t.moviecategory || m.tag || []).join('/'), rating: +t.doubanscore || undefined };
+    }
+    fmCache['k3:' + name] = { at: Date.now(), v }; writeJson(FILMMETA, fmCache);
+    return v;
+  } catch { return undefined; }
+}
 let doubanBlocked = false;
 // 豆瓣网页搜索（www.douban.com/search）：接口被限流时用它，目前不要登录。返回 [{ type, title, orig, year, r, n }]
 async function doubanHtml(q) {
@@ -436,6 +482,41 @@ async function doubanRate(name, year) {
     return v;
   } catch { return undefined; }
 }
+// 华语新片：翻这些官方频道最近上传的，按 360 影视的上映日期从新到旧排（只要大陆 / 香港 / 台湾的电影）
+const LATEST_CHANNELS = ['@iQIYIMOVIETHEATER', '@youkumovie', '@youkumonstermovie', '@TencentVideoMovie', '@WeTVMovie', '@iQIYIEnglish', '@huaceglobal', '@8-hkmovie', '@CinemaMeiAh', '@EmperorMotionPicturesOfficial', '@MoxiMovie', '@JetsenFilm'];
+async function latestMovies(LAST) {
+  // 1. 各频道最近上传的前 50 部电影（并发）  2. 汇总去重  3. 查上映日期 / 地区 / 评分  4. 按上映日期倒序，核对能嵌入，取前 n 部
+  const n = Math.min(+opt.n || 50, 80), per = +opt.per || 50, t0 = Date.now();
+  const lists = await Promise.all(LATEST_CHANNELS.map(h => channelLatest(h, per * 2)));
+  const best = new Map();
+  for (const x of lists.flatMap(l => l.filter(x => x.dur >= 60 * 60 && x.dur <= 4 * 3600 && !NOT_MOVIE.test(x.title)).slice(0, per))) {
+    x.src = 'youtube'; x.name = movieName(x.title);
+    const k = x.name.split(/\s*[\/／]\s*|\s+(?=[A-Za-z])/)[0], o = best.get(k);
+    if (!o || (x.ago ?? 9e9) < (o.ago ?? 9e9) || ((x.ago === o.ago) && (x.plays || 0) > (o.plays || 0))) best.set(k, { ...x, key: k });
+  }
+  const pool = [...best.values()].sort((a, b) => (a.ago ?? 9e9) - (b.ago ?? 9e9));
+  if (opt.debug) console.error('频道', lists.map((l, i) => LATEST_CHANNELS[i] + ':' + l.length).join(' '), '去重后', pool.length, (Date.now() - t0) + 'ms');
+  // 去重后的每部都查上映日期（360 影视，25 个并发；存盘 30 天，第二次起几乎不用查），没有日期的（片名认不出、剧集剪辑）不要
+  for (let i = 0; i < pool.length; i += 25) await Promise.all(pool.slice(i, i + 25).map(async x => { x.db = await kan360(x.key); }));
+  const dated = pool.filter(x => x.db?.date && !x.db.tv && /大陆|内地|香港|台湾/.test(x.db.area || '') && (!+opt.min || x.db.rating >= +opt.min))
+    .sort((a, b) => b.db.date.localeCompare(a.db.date) || (a.ago ?? 9e9) - (b.ago ?? 9e9));
+  if (opt.debug) console.error('有上映日期的', dated.length, (Date.now() - t0) + 'ms');
+  // 按上映日期从新到旧核对能不能嵌入播放，够 n 部就停
+  const yt = SOURCES.find(s => s.id === 'youtube'), ectx = { get: (u, o) => http(u, o) }, items = [];
+  for (let i = 0; i < dated.length && items.length < n; i += 25) {
+    const part = dated.slice(i, i + 25), ok = await Promise.all(part.map(x => yt.embed(x, ectx)));
+    if (opt.debug) part.forEach((x, j) => ok[j] || console.error('不能嵌入', x.key, x.page, x.channel));
+    items.push(...part.filter((_, j) => ok[j]));
+  }
+  items.length = Math.min(items.length, n);
+  if (!items.length) die('没找到能直接播放的华语新片');
+  const when = x => x.db?.date || (x.db?.year ? x.db.year + '' : '');
+  items.sort((a, b) => when(b).localeCompare(when(a)) || (a.ago ?? 9e9) - (b.ago ?? 9e9));
+  writeJson(LAST, { q: '华语新片', at: Date.now(), items });
+  if (opt.debug) console.error('用时', (Date.now() - t0) + 'ms');
+  console.log('序号\t片名\t上映\t地区\t类型\t豆瓣\t时长\t播放\t官方频道');
+  items.forEach((x, i) => console.log([i + 1, x.key, when(x) || '?', x.db?.area || '?', x.db?.genres || '', x.db?.rating || '暂无', fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, '')].join('\t')));
+}
 async function movies(q) {
   const LAST = path.join(STATE, 'movies-last.json');
   if (opt.pick) {
@@ -446,6 +527,7 @@ async function movies(q) {
     return;
   }
   if (!(await proxy())) die('找官方电影要能上 YouTube（没找到代理：设 HTTPS_PROXY 或 --proxy）');
+  if (opt.latest) return latestMovies(LAST);
   const yt = SOURCES.find(s => s.id === 'youtube'), ctx = { get: (u, o) => http(u, { timeout: 12000, ...o }) };
   const year = +opt.year || 0, minRate = +opt.min || 0, fresh = !!(opt.new || year);
   const base = q || '华语';
@@ -476,7 +558,7 @@ async function movies(q) {
   const pool = list.slice(0, year || minRate ? 120 : n + 8);
   // 猫眼并发多了会回验证页：两个一批，英文片名（猫眼查不到）跳过
   const cjkPool = pool.filter(x => x.src !== 'archive' && /[一-鿿]/.test(key(x)));
-  for (let i = 0; i < cjkPool.length; i += 2) { await Promise.all(cjkPool.slice(i, i + 2).map(async x => { x.db = await maoyan(key(x)); })); await new Promise(z => setTimeout(z, 150)); }
+  for (let i = 0; i < cjkPool.length; i += 2) { await Promise.all(cjkPool.slice(i, i + 2).map(async x => { x.db = (await kan360(key(x))) || await maoyan(key(x)); })); await new Promise(z => setTimeout(z, 150)); }
   if (opt.debug) for (const x of pool) console.error(x.db ? (x.db.tv ? 'TV' : x.db.year + ' ' + x.db.type) : 'null', x.name);
   let cand = pool.filter(x => !x.db?.tv);
   if (year) cand = cand.filter(x => x.db?.year === year);

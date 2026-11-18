@@ -14,7 +14,7 @@ const num = s => { const m = /([\d.,]+)\s*(万|亿|K|M|B)?/i.exec(String(s || ''
 const strip = s => String(s || '').replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();
 
 // 从网页里抠出 `var ytInitialData = {...};` 这类内嵌 JSON
-function embedded(html, name) {
+export function embedded(html, name) {
   const i = html.indexOf(name);
   if (i < 0) return null;
   const s = html.indexOf('{', i);
@@ -26,7 +26,7 @@ function embedded(html, name) {
   }
   return null;
 }
-function* walk(o, key) {
+export function* walk(o, key) {
   if (!o || typeof o !== 'object') return;
   if (o[key]) yield o[key];
   for (const v of Object.values(o)) yield* walk(v, key);
