@@ -324,12 +324,12 @@ async function link(kind, q) {
 
 // 电影：只要版权方官方频道（YouTube 认证标记，或爱奇艺 / 优酷 / 腾讯 WeTV / 芒果 / 华策 / 央视等官方影视频道）免费公开的完整版，
 // 而且能嵌在 claclaw 聊天里直接播放。先给片单（不带链接），用户挑好再 --pick 出播放链接
-const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki|緯來|Videoland|公視|PTS|東森|三立|民視|TVB|myTV SUPER|美亞|Mei Ah|寰宇|Universe Films|英皇|Emperor Motion|天映|Celestial|Fortune Star|星空華文|嘉禾|Golden Harvest|VSO|Q1Q2|CONtv/i;   // 大小平台、电视台、片商的官方频道（另外 YouTube 认证频道都算）
-const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b/i;
+const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki|緯來|Videoland|公視|PTS|東森|三立|民視|TVB|myTV SUPER|美亞|Mei Ah|寰宇|Universe Films|英皇|Emperor Motion|天映|Celestial|Fortune Star|星空華文|嘉禾|Golden Harvest|VSO|Q1Q2|CONtv|卫视/i;   // 大小平台、电视台、片商的官方频道（另外 YouTube 认证频道都算）
+const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b|综艺|年代秀|完结|動漫|动漫|】\s*[上下]\s|\bpart\s?\d/i;   // 上 / 下、Part 1：拆成几段的不算完整版
 function movieName(t) {   // 片名：《》里的；没有就用不是「Multi Sub / 4K / 类型」的【】；再不行用 [] 或去掉修饰的标题
   let m = /《#?([^》]{1,30})》/.exec(t); if (m) return m[1].trim();
   for (const b of t.matchAll(/【([^】]{2,40})】/g)) if (!/multi ?sub|eng ?sub|movie|4k|1080p|完整版|电影|中字|抢先看|会员|独播|首播|新片|大片|喜剧|动作|爱情|悬疑|犯罪|冒险|剧情|奇幻|武侠|恐怖|惊悚/i.test(b[1])) return b[1].trim();
-  m = /^\[([^\]]{2,40})\]/.exec(t); if (m) return m[1].trim();
+  m = /^\[([^\]]{2,40})\]/.exec(t); if (m && !/full ?movie|multi ?sub|eng ?sub|4k|1080p|movie/i.test(m[1])) return m[1].trim();
   return t.replace(/【[^】]*】|\[[^\]]*\]/g, '').replace(/[|｜#].*$/, '').trim().slice(0, 40) || t.slice(0, 40);
 }
 // 官方影视频道（新片多先放这里）：--new 时直接翻它们最近上传的
@@ -338,6 +338,27 @@ async function channelLatest(h, n = 40) {
   const o = await ytdlp(['--flat-playlist', '--playlist-end', String(n), '--print', '%(id)s\t%(duration)s\t%(view_count)s\t%(channel)s\t%(title)s', `https://www.youtube.com/${h}/videos`], { proxy: true, timeout: 45000 }).catch(() => '');
   // 没有播放数的是还没开播的首映（预约），放不了，跳过
   return o.split('\n').filter(Boolean).map(l => l.split('\t')).filter(([, , v]) => v && v !== 'NA').map(([id, d, v, ch, ...t]) => { return { page: 'https://www.youtube.com/watch?v=' + id, dur: +d || 0, plays: +v || undefined, channel: ch && ch !== 'NA' ? ch : h, verified: true, title: t.join('\t') }; });
+}
+// Dailymotion：只收这些官方账号（它的认证标记里机器人频道很多，不能当官方看）
+const DM_OWNERS = ['chinahuacegroup', 'sztvofficial', 'MangoTV-Official'];
+async function dmMovies(q, fresh) {
+  const f = '&longer_than=60&limit=40&fields=id,title,duration,views_total,owner.screenname,owner.username,allow_embed,geoblocking';
+  const urls = [`https://api.dailymotion.com/videos?owners=${DM_OWNERS.join(',')}${q ? '&search=' + encodeURIComponent(q) : ''}&sort=${fresh ? 'recent' : q ? 'relevance' : 'visited'}` + f];
+  if (q) urls.push('https://api.dailymotion.com/videos?search=' + encodeURIComponent(q + ' 电影') + f);
+  const js = await Promise.all(urls.map(u => http(u, { proxy: true, timeout: 12000 }).then(JSON.parse).catch(() => ({}))));
+  return js.flatMap(j => j.list || []).filter(v => v.allow_embed !== false && !(v.geoblocking || []).includes('deny'))
+    .filter(v => DM_OWNERS.includes(v['owner.username']) || OFFICIAL.test(v['owner.screenname'] || ''))
+    .map(v => ({ src: 'dailymotion', page: 'https://www.dailymotion.com/video/' + v.id, title: v.title, dur: v.duration, plays: v.views_total, channel: v['owner.screenname'] + '（Dailymotion）', official: true }));
+}
+// Internet Archive 的公版老电影（feature_films 合集，版权已过期或权利人放出的，合法免费）：英文关键词，或下面这些中文类型词
+const ARCHIVE_WORDS = { 喜剧: 'comedy', 恐怖: 'horror', 科幻: 'science fiction', 西部: 'western', 黑色: 'film noir', 悬疑: 'mystery', 惊悚: 'thriller', 爱情: 'romance', 战争: 'war', 犯罪: 'crime', 动画: 'animation', 默片: 'silent', 卓别林: 'chaplin', 希区柯克: 'hitchcock', 好莱坞: '', 欧美: '', 老片: '', 经典: '', 黑白: '', 公版: '' };
+async function archiveMovies(q) {
+  let w = q.replace(/[一-鿿]+/g, m => Object.entries(ARCHIVE_WORDS).filter(([k]) => m.includes(k)).map(([, v]) => v).join(' ')).trim();
+  if (q && /[一-鿿]/.test(q) && !Object.keys(ARCHIVE_WORDS).some(k => q.includes(k))) return [];   // 中文片名 / 演员：公版库里没有，不查
+  if (!q) return [];
+  const j = await http('https://archive.org/advancedsearch.php?q=' + encodeURIComponent('collection:feature_films AND mediatype:movies' + (w ? ` AND (${w})` : '')) + '&fl[]=identifier&fl[]=title&fl[]=runtime&fl[]=year&fl[]=downloads&sort[]=downloads+desc&rows=40&output=json', { proxy: true, timeout: 12000 }).then(JSON.parse).catch(() => ({}));
+  const rt = s => { s = String(s || ''); const m = /(\d+)\s*min/i.exec(s); return m ? +m[1] * 60 : s.includes(':') ? s.split(':').reduce((a, x) => a * 60 + (+x || 0), 0) : 0; };
+  return (j.response?.docs || []).filter(d => !/\bsex\b|nudist|burlesque/i.test([].concat(d.title)[0] || '')).map(d => ({ src: 'archive', page: 'https://archive.org/details/' + d.identifier, title: [].concat(d.title)[0] || d.identifier, dur: rt(d.runtime), plays: d.downloads, channel: 'Internet Archive 公版', official: true, rel: !!w, db: d.year ? { year: +String(d.year).slice(0, 4) } : undefined }));
 }
 // 片子资料：猫眼（年份、类型、是不是剧集、猫眼评分；不限流）+ 豆瓣评分（限流很紧：只给最后片单里的查，一个一个查，被拦就停）。
 // 都存盘 30 天（~/.claclaw/media/filmmeta.json），查过的不再查
@@ -392,16 +413,17 @@ async function movies(q) {
   const got = (await Promise.all([
     ...variants.map(v => yt.search(v, ctx).catch(() => [])),
     ...(fresh ? MOVIE_CHANNELS.map(h => channelLatest(h)) : []),   // 新片：官方频道最近上传的
-  ])).flat();
+    dmMovies(q, fresh), archiveMovies(q),                              // 其他能嵌入播放的：Dailymotion 官方账号、Archive 公版片
+  ])).flat().map(x => ({ src: 'youtube', ...x }));
   const toks = q ? q.toLowerCase().split(/\s+/).filter(Boolean) : [];
   const seen = new Set(), list = [];
   for (const x of got) {
     if (seen.has(x.page)) continue; seen.add(x.page);
     if (!x.dur || x.dur < 60 * 60 || x.dur > 4 * 3600) continue;             // 完整电影：1～4 小时
-    if (!(x.verified || OFFICIAL.test(x.channel || ''))) continue;          // 只要官方频道
+    if (!(x.official || x.verified || OFFICIAL.test(x.channel || ''))) continue;          // 只要官方频道
     if (NOT_MOVIE.test(x.title)) continue;
     const t = x.title.toLowerCase();
-    const sc = (toks.length ? toks.filter(k => t.includes(k)).length / toks.length * 2 : 0) + (x.plays ? Math.min(1, Math.log10(1 + x.plays) / 7) : 0) + (OFFICIAL.test(x.channel || '') ? 0.3 : 0);
+    const sc = (toks.length ? x.rel ? 1 : toks.filter(k => t.includes(k)).length / toks.length * 2 : 0)   // rel：按中文类型词换成英文搜到的，标题里没有中文词，算半贴题 + (x.plays ? Math.min(1, Math.log10(1 + x.plays) / 7) : 0) + (x.official || OFFICIAL.test(x.channel || '') ? 0.3 : 0);
     list.push({ ...x, name: movieName(x.title), sc });
   }
   list.sort((a, b) => b.sc - a.sc);
@@ -412,13 +434,14 @@ async function movies(q) {
   const n = Math.min(+opt.n || 10, 20);
   const pool = list.slice(0, year || minRate ? 120 : n + 8);
   // 猫眼并发多了会回验证页：两个一批，英文片名（猫眼查不到）跳过
-  const cjkPool = pool.filter(x => /[一-鿿]/.test(key(x)));
+  const cjkPool = pool.filter(x => x.src !== 'archive' && /[一-鿿]/.test(key(x)));
   for (let i = 0; i < cjkPool.length; i += 2) { await Promise.all(cjkPool.slice(i, i + 2).map(async x => { x.db = await maoyan(key(x)); })); await new Promise(z => setTimeout(z, 150)); }
   if (opt.debug) for (const x of pool) console.error(x.db ? (x.db.tv ? 'TV' : x.db.year + ' ' + x.db.type) : 'null', x.name);
   let cand = pool.filter(x => !x.db?.tv);
   if (year) cand = cand.filter(x => x.db?.year === year);
   // 豆瓣评分：按排名一个一个查（间隔一点，被拦就停），有评分的按评分加权（评分人数少的打折）
   for (const x of cand.slice(0, n + 6)) {
+    if (x.src === 'archive') continue;   // 公版老片豆瓣多半没有，不浪费查询额度
     const r = await doubanRate(key(x), x.db?.year);
     if (r) { x.db = { ...(x.db || {}), rating: r.r, votes: r.n }; x.sc += (r.r - 6) * 0.5 * Math.min(1, Math.log10(1 + r.n) / 3); }
     if (doubanBlocked) break;
@@ -429,7 +452,7 @@ async function movies(q) {
   cand.sort((a, b) => b.sc - a.sc);
   const ectx = { get: (u, o) => http(u, o) };
   const head = cand.slice(0, n + 6);
-  const ok = await Promise.all(head.map(x => yt.embed(x, ectx)));
+  const ok = await Promise.all(head.map(x => x.src === 'youtube' ? yt.embed(x, ectx) : true));   // Dailymotion 搜的时候已按 allow_embed 筛过；Archive 都能嵌
   const items = head.filter((_, i) => ok[i]).slice(0, n);
   if (!items.length) die('没找到官方频道能直接播放的完整电影' + (year ? `（${year} 年的）` : '') + (minRate ? `（豆瓣 ${minRate} 分以上）` : '') + '：换个类型 / 片名 / 演员，或放宽条件');
   writeJson(LAST, { q, at: Date.now(), items });
