@@ -1918,6 +1918,14 @@ select.pe-in{text-align-last:right}
 #tplay .tp-bar button:disabled{opacity:.3;cursor:default}
 #tplay .tp-bar button:not(:disabled):active{background:rgba(255,255,255,.12)}
 #tplay .tp-x,#tplay .tp-min{font-size:18px!important}
+#tplay .tp-pop{display:none!important}
+@media (min-width:1000px) and (hover:hover){#tplay .tp-pop{display:flex!important}}   /* 弹出小窗口：只在电脑上 */
+#tplay.pip .tp-pop svg{transform:scaleX(-1)}
+body.tp-pipbody{margin:0;background:#000;overflow:hidden;display:block}
+#tplay.pip{display:flex;flex-direction:column;height:100vh;box-shadow:none}
+#tplay.pip .tp-v{flex:1;min-height:0;max-height:none;max-width:none;aspect-ratio:auto;height:auto}
+#tplay.pip .tp-pop{display:flex!important}
+#tplay.pip .tp-min{display:none}
 #tplay.min .tp-min{transform:rotate(180deg)}
 #tplay .tp-tt{flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer;line-height:1.25}
 #tplay .tp-t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

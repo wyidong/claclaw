@@ -865,32 +865,64 @@ document.addEventListener('click',function(ev){
 });
 // 回复里能播的链接（带 ▶）：点了不跳走，在聊天顶上的播放器里播；同一条消息里的其他链接就是播放列表（上一个 / 下一个，点别的标题直接换）
 function embLink(u,t){var e=embedOf(u);if(!e)return '';return '<a href="'+u+'" class="emb-l" data-kind="'+e.kind+'" target="_blank" rel="noopener noreferrer">'+(t||u)+'</a>'}
-var tp={list:[],i:-1,box:null};
+var tp={list:[],i:-1,box:null,t:0},TPEL=null,tpPip=null;   // TPEL：播放器（弹出时在画中画窗口里，不能用 $ 找）
 function tpLinks(box){var seen={},out=[];box.querySelectorAll('a.emb-l').forEach(function(a){var e=embedOf(a.getAttribute('href'));if(e&&!seen[e.src]){seen[e.src]=1;out.push({a:a,e:e,t:a.textContent.trim()})}});return out}
-function tpPlay(i){
-  var el=$('#tplay'),x=tp.list[i];if(!x)return;tp.i=i;
+// YouTube 开 JS 接口：知道播到哪了（弹出 / 放回时接着播）、播完了（自动下一个）
+function tpSrc(x,start){var u=x.e.src;if(/youtube-nocookie\.com\/embed\//.test(u))u+='&enablejsapi=1'+(start>5?'&start='+Math.floor(start):'');return u}
+function tpPlay(i,start){
+  var el=TPEL,x=tp.list[i];if(!x)return;tp.i=i;tp.t=start||0;
   var v=el.querySelector('.tp-v'),k=x.e.kind,m;v.innerHTML='';
-  if(k==='file-video'||k==='file-audio'){m=document.createElement(k==='file-video'?'video':'audio');m.controls=true;m.autoplay=true;m.setAttribute('playsinline','');m.src=x.e.src}
-  else{m=document.createElement('iframe');m.src=x.e.src;m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin')}
+  if(k==='file-video'||k==='file-audio'){m=el.ownerDocument.createElement(k==='file-video'?'video':'audio');m.controls=true;m.autoplay=true;m.setAttribute('playsinline','');m.src=x.e.src;
+    if(start)m.addEventListener('loadedmetadata',function(){m.currentTime=start},{once:true});
+    m.addEventListener('timeupdate',function(){tp.t=m.currentTime});m.addEventListener('ended',function(){tpPlay(tp.i+1)})}
+  else{m=el.ownerDocument.createElement('iframe');m.src=tpSrc(x,start);m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
+    m.addEventListener('load',function(){try{m.contentWindow.postMessage('{"event":"listening","id":1,"channel":"widget"}','*')}catch(_){}})}
   v.appendChild(m);
-  el.className=(k==='audio'||k==='file-audio'?'tp-a':'')+(el.classList.contains('min')?' min':'');el.hidden=false;
+  el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.hidden=false;
   el.querySelector('.tp-t').textContent=(tp.list.length>1?(i+1)+' / '+tp.list.length+'  ':'')+x.t;
   el.querySelector('.tp-s').textContent=x.e.site;
   el.querySelector('.tp-prev').disabled=i<=0;el.querySelector('.tp-next').disabled=i>=tp.list.length-1;
   tp.list.forEach(function(y,j){y.a.classList.toggle('playing',j===i)});
 }
-function tpClose(){var el=$('#tplay');el.hidden=true;el.classList.remove('min');el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null}}
+function tpMsg(ev){   // YouTube 播放器发来的进度、状态
+  var f=TPEL&&TPEL.querySelector('.tp-v iframe');if(!f||ev.source!==f.contentWindow)return;
+  var d;try{d=typeof ev.data==='string'?JSON.parse(ev.data):ev.data}catch(_){return}
+  var info=d&&d.info;if(!info)return;
+  if(typeof info.currentTime==='number')tp.t=info.currentTime;
+  if((d.event==='onStateChange'&&info===0)||info.playerState===0){if(tp.i<tp.list.length-1)tpPlay(tp.i+1)}   // 播完：下一个
+}
+window.addEventListener('message',tpMsg);
+function tpClose(){var el=TPEL;if(tpPip){tpPip.closing=1;try{tpPip.close()}catch(_){}}el.hidden=true;el.classList.remove('min');el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
 function tpOpen(box,a){
   tp.box=box;tp.list=tpLinks(box);var i=0;
   if(a)tp.list.forEach(function(y,j){if(y.a===a)i=j});
   tpPlay(i);
 }
+// 电脑上弹出：Chrome / Edge 用「文档画中画」——总在最前的小窗口，播放器连同上一个 / 下一个整个搬过去，列表里点片名照样换；
+// 别的浏览器开一个普通弹窗（只放这一部）。弹出、放回都接着当前进度播
+async function tpPopOut(){
+  if(tpPip){tpPip.back=1;tpPip.close();return}
+  var x=tp.list[tp.i];if(!x)return;
+  if(window.documentPictureInPicture){
+    var w=await documentPictureInPicture.requestWindow({width:Math.min(1280,Math.max(640,innerWidth*.5)),height:Math.min(800,Math.max(400,innerWidth*.5*9/16+46))});
+    document.querySelectorAll('link[rel=stylesheet],style').forEach(function(n){w.document.head.appendChild(n.cloneNode(true))});
+    w.document.documentElement.className=document.documentElement.className;w.document.body.className='tp-pipbody';
+    tpPip=w;var t=tp.t;TPEL.classList.add('pip');TPEL.classList.remove('min');w.document.body.appendChild(TPEL);w.addEventListener('message',tpMsg);tpPlay(tp.i,t);
+    w.addEventListener('pagehide',function(){
+      var back=w.back,closing=w.closing,t2=tp.t;tpPip=null;TPEL.classList.remove('pip');feed.parentNode.insertBefore(TPEL,feed);
+      if(back&&tp.list.length)tpPlay(tp.i,t2);else if(!closing)tpClose();   // 点「放回」：回到聊天顶上接着播；关掉小窗口：停
+    });
+  }else{
+    window.open(tpSrc(x,tp.t),'claclaw-player','popup,width=960,height=540');tpClose();
+  }
+}
 (function(){
-  var el=document.createElement('div');el.id='tplay';el.hidden=true;
-  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>';
+  var el=document.createElement('div');el.id='tplay';el.hidden=true;TPEL=el;
+  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-pop" aria-label="弹出小窗口" title="弹出成小窗口（总在最前）"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>';
   feed.parentNode.insertBefore(el,feed);
   el.querySelector('.tp-prev').addEventListener('click',function(){tpPlay(tp.i-1)});
   el.querySelector('.tp-next').addEventListener('click',function(){tpPlay(tp.i+1)});
+  el.querySelector('.tp-pop').addEventListener('click',tpPopOut);
   el.querySelector('.tp-min').addEventListener('click',function(){el.classList.toggle('min')});   // 收起：只留标题条，声音接着放
   el.querySelector('.tp-x').addEventListener('click',tpClose);
   el.querySelector('.tp-tt').addEventListener('click',function(){var y=tp.list[tp.i];if(y&&document.contains(y.a))y.a.scrollIntoView({block:'center',behavior:'smooth'})});   // 点标题：滚回列表里这一项
