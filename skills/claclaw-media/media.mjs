@@ -36,7 +36,7 @@ for (let i = 0; i < argv.length; i++) {
 const die = (s, code = 1) => { console.error(s); process.exit(code); };
 const USAGE = `用法：
   claclaw-media link   video|audio "关键词" [--n 1] [--max 秒] [--src a,b]   在线播放链接（聊天里直接播放，不下载）
-  claclaw-media movies ["类型 / 片名 / 演员"] [--n 10]                       官方频道免费完整电影片单；--pick 序号 出播放链接
+  claclaw-media movies ["类型 / 片名 / 演员"] [--n 10] [--new] [--year 2026] [--min 7]   官方频道免费完整电影片单（带豆瓣分）；--pick 序号 出播放链接
   claclaw-media get    video|audio|image "关键词或网址" [--n 张数] [--max 秒] [--clip 秒] [--max-mb 45] [--src a,b] [--pick 序号]
   claclaw-media find   video|audio|image "关键词" [--n 10] [--max 秒] [--src a,b]
   claclaw-media sources                      来源列表和最近的成败
@@ -72,16 +72,16 @@ function run(bin, args, { quiet = true, timeout = 0 } = {}) {
   });
 }
 // HTTP：直连用 fetch；走代理用 curl（Node 的 fetch 不读代理设置）。binary=true 返回 Buffer
-async function http(url, { proxy: viaProxy = false, binary = false, timeout = 8000, referer } = {}) {
+async function http(url, { proxy: viaProxy = false, binary = false, timeout = 8000, referer, curl = false, ua = UA } = {}) {
   const px = viaProxy ? await proxy() : '';
   if (viaProxy && !px) throw new Error('没有代理');
-  if (!px) {
+  if (!px && !curl) {   // curl=true：有的站（猫眼）认 Node fetch 的指纹、回验证页，改用 curl
     const r = await fetch(url, { headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6', ...(referer ? { referer } : {}) }, signal: AbortSignal.timeout(timeout) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return binary ? Buffer.from(await r.arrayBuffer()) : r.text();
   }
   const r = await new Promise(ok => {
-    const p = spawn('curl', ['-sSL', '--compressed', '-m', String(Math.ceil(timeout / 1000)), '-x', px, '-A', UA, '-H', 'accept-language: zh-CN,zh;q=0.9,en;q=0.6', ...(referer ? ['-e', referer] : []), '-w', '\n%{http_code}', url]);
+    const p = spawn('curl', ['-sSL', '--compressed', '-m', String(Math.ceil(timeout / 1000)), ...(px ? ['-x', px] : []), '-A', ua, '-H', 'accept-language: zh-CN,zh;q=0.9,en;q=0.6', ...(referer ? ['-e', referer] : []), '-w', '\n%{http_code}', url]);
     const bufs = []; p.stdout.on('data', d => bufs.push(d)); p.on('error', () => ok(null)); p.on('exit', () => ok(Buffer.concat(bufs)));
   });
   if (!r) throw new Error('curl 失败');
@@ -328,24 +328,71 @@ const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|�
 const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b/i;
 function movieName(t) {   // 片名：《》里的；没有就用不是「Multi Sub / 4K / 类型」的【】；再不行用 [] 或去掉修饰的标题
   let m = /《#?([^》]{1,30})》/.exec(t); if (m) return m[1].trim();
-  for (const b of t.matchAll(/【([^】]{2,24})】/g)) if (!/multi ?sub|eng ?sub|movie|4k|1080p|完整版|电影|中字|抢先看|会员|独播|首播|新片|大片|喜剧|动作|爱情|悬疑|犯罪|冒险|剧情|奇幻|武侠|恐怖|惊悚/i.test(b[1])) return b[1].trim();
+  for (const b of t.matchAll(/【([^】]{2,40})】/g)) if (!/multi ?sub|eng ?sub|movie|4k|1080p|完整版|电影|中字|抢先看|会员|独播|首播|新片|大片|喜剧|动作|爱情|悬疑|犯罪|冒险|剧情|奇幻|武侠|恐怖|惊悚/i.test(b[1])) return b[1].trim();
   m = /^\[([^\]]{2,40})\]/.exec(t); if (m) return m[1].trim();
   return t.replace(/【[^】]*】|\[[^\]]*\]/g, '').replace(/[|｜#].*$/, '').trim().slice(0, 40) || t.slice(0, 40);
+}
+// 官方影视频道（新片多先放这里）：--new 时直接翻它们最近上传的
+const MOVIE_CHANNELS = ['@iQIYIMOVIETHEATER', '@youkumovie', '@TencentVideoMovie'];
+async function channelLatest(h, n = 40) {
+  const o = await ytdlp(['--flat-playlist', '--playlist-end', String(n), '--print', '%(id)s\t%(duration)s\t%(view_count)s\t%(channel)s\t%(title)s', `https://www.youtube.com/${h}/videos`], { proxy: true, timeout: 45000 }).catch(() => '');
+  // 没有播放数的是还没开播的首映（预约），放不了，跳过
+  return o.split('\n').filter(Boolean).map(l => l.split('\t')).filter(([, , v]) => v && v !== 'NA').map(([id, d, v, ch, ...t]) => { return { page: 'https://www.youtube.com/watch?v=' + id, dur: +d || 0, plays: +v || undefined, channel: ch && ch !== 'NA' ? ch : h, verified: true, title: t.join('\t') }; });
+}
+// 片子资料：猫眼（年份、类型、是不是剧集、猫眼评分；不限流）+ 豆瓣评分（限流很紧：只给最后片单里的查，一个一个查，被拦就停）。
+// 都存盘 30 天（~/.claclaw/media/filmmeta.json），查过的不再查
+const FILMMETA = path.join(STATE, 'filmmeta.json');
+const fmCache = readJson(FILMMETA, {});
+const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148';
+async function maoyan(name) {
+  const c = fmCache['my:' + name];
+  if (c && Date.now() - c.at < 30 * 86400000) return c.v;
+  try {
+    let d = null;
+    for (let t = 0; t < 2 && !d; t++) {   // 偶尔回验证页（不是 JSON）：歇一下再试一次
+      d = await http('https://m.maoyan.com/ajax/search?cityId=1&stype=-1&kw=' + encodeURIComponent(name), { curl: true, ua: MOBILE_UA, timeout: 6000 }).then(t => JSON.parse(t)).catch(() => null);
+      if (!d) await new Promise(z => setTimeout(z, 800));
+    }
+    if (!d) return null;
+    const m = (d.movies?.list || []).find(x => x.nm === name || x.nm?.replace(/[：:·\s]/g, '') === name.replace(/[：:·\s]/g, ''));
+    const v = !m ? null : /剧/.test(m.movieTypeDesc || '') ? { tv: true }
+      : { year: +String(m.rt || m.pubDesc || '').slice(0, 4) || undefined, genres: (m.cat || '').replace(/,/g, '/'), type: m.movieTypeDesc || '', my: m.sc > 0 ? m.sc : undefined };
+    fmCache['my:' + name] = { at: Date.now(), v }; writeJson(FILMMETA, fmCache);
+    return v;
+  } catch { return null; }
+}
+let doubanBlocked = false;
+async function doubanRate(name, year) {
+  const c = fmCache['db:' + name];
+  if (c && Date.now() - c.at < 30 * 86400000) return c.v;
+  if (doubanBlocked) return undefined;
+  try {
+    const d = await fetch('https://m.douban.com/rexxar/api/v2/search/movie?count=5&q=' + encodeURIComponent(name), { headers: { 'user-agent': MOBILE_UA, referer: 'https://m.douban.com/search/' }, signal: AbortSignal.timeout(6000) }).then(r => r.json());
+    if (d.code || d.msg) { doubanBlocked = true; return undefined; }   // need_login 之类：被限流了，这次不再查
+    const m = (d.items || []).map(it => it.target || {}).find(x => x.title === name && (!year || !x.year || Math.abs(+x.year - year) <= 1));
+    const v = m?.rating?.count ? { r: m.rating.value, n: m.rating.count } : null;
+    fmCache['db:' + name] = { at: Date.now(), v }; writeJson(FILMMETA, fmCache);
+    return v;
+  } catch { return undefined; }
 }
 async function movies(q) {
   const LAST = path.join(STATE, 'movies-last.json');
   if (opt.pick) {
     const last = readJson(LAST, null), x = last?.items?.[+opt.pick - 1];
     if (!x) die('没有第 ' + opt.pick + ' 部（先 movies "关键词" 看片单）');
-    // stdout：Markdown 链接 \t 时长 \t 播放 \t 频道。回复里原样贴 Markdown 链接，claclaw 在消息下面放播放卡片
-    console.log([`[${x.name}](${x.page})`, fmtDur(x.dur), fmtPlays(x.plays), x.channel].join('\t'));
+    // stdout：Markdown 链接 \t 时长 \t 播放 \t 频道 \t 豆瓣。回复里原样贴 Markdown 链接，claclaw 在消息下面放播放卡片
+    console.log([`[${x.name}](${x.page})`, fmtDur(x.dur), fmtPlays(x.plays), x.channel, x.db?.rating ? '豆瓣 ' + x.db.rating : x.db?.my ? '猫眼 ' + x.db.my : ''].join('\t'));
     return;
   }
   if (!(await proxy())) die('找官方电影要能上 YouTube（没找到代理：设 HTTPS_PROXY 或 --proxy）');
   const yt = SOURCES.find(s => s.id === 'youtube'), ctx = { get: (u, o) => http(u, { timeout: 12000, ...o }) };
+  const year = +opt.year || 0, minRate = +opt.min || 0, fresh = !!(opt.new || year);
   const base = q || '华语';
   const variants = [base + ' 电影 完整版', base + ' full movie', base + ' 电影 Full Movie Multi Sub'];
-  const got = (await Promise.all(variants.map(v => yt.search(v, ctx).catch(() => [])))).flat();
+  const got = (await Promise.all([
+    ...variants.map(v => yt.search(v, ctx).catch(() => [])),
+    ...(fresh ? MOVIE_CHANNELS.map(h => channelLatest(h)) : []),   // 新片：官方频道最近上传的
+  ])).flat();
   const toks = q ? q.toLowerCase().split(/\s+/).filter(Boolean) : [];
   const seen = new Set(), list = [];
   for (const x of got) {
@@ -359,18 +406,36 @@ async function movies(q) {
   }
   list.sort((a, b) => b.sc - a.sc);
   // 同一部片在几个官方频道（各语种频道）都有：片名一样、或时长差不到 8 秒的，只留排在前面的（播放多的）
-  const key = x => x.name.split(/\s*[\/／]\s*|\s+(?=[A-Za-z])/)[0];
+  const key = x => /^[^A-Za-z]*[一-鿿]/.test(x.name) ? x.name.split(/\s*[\/／]\s*|\s+(?=[A-Za-z])/)[0] : x.name;   // 中文片名去掉后面的英文名
   for (let i = list.length - 1; i > 0; i--) if (list.slice(0, i).some(y => Math.abs(y.dur - list[i].dur) <= 8 || (key(y) === key(list[i]) && Math.abs(y.dur - list[i].dur) < 180))) list.splice(i, 1);
+  // 查猫眼：年份、类型；剧集剪成的「电影版」去掉。按年份 / 评分筛时多查一些
   const n = Math.min(+opt.n || 10, 20);
+  const pool = list.slice(0, year || minRate ? 120 : n + 8);
+  // 猫眼并发多了会回验证页：两个一批，英文片名（猫眼查不到）跳过
+  const cjkPool = pool.filter(x => /[一-鿿]/.test(key(x)));
+  for (let i = 0; i < cjkPool.length; i += 2) { await Promise.all(cjkPool.slice(i, i + 2).map(async x => { x.db = await maoyan(key(x)); })); await new Promise(z => setTimeout(z, 150)); }
+  if (opt.debug) for (const x of pool) console.error(x.db ? (x.db.tv ? 'TV' : x.db.year + ' ' + x.db.type) : 'null', x.name);
+  let cand = pool.filter(x => !x.db?.tv);
+  if (year) cand = cand.filter(x => x.db?.year === year);
+  // 豆瓣评分：按排名一个一个查（间隔一点，被拦就停），有评分的按评分加权（评分人数少的打折）
+  for (const x of cand.slice(0, n + 6)) {
+    const r = await doubanRate(key(x), x.db?.year);
+    if (r) { x.db = { ...(x.db || {}), rating: r.r, votes: r.n }; x.sc += (r.r - 6) * 0.5 * Math.min(1, Math.log10(1 + r.n) / 3); }
+    if (doubanBlocked) break;
+    if (r === undefined) continue;
+    await new Promise(z => setTimeout(z, 400));
+  }
+  if (minRate) cand = cand.filter(x => (x.db?.rating || x.db?.my || 0) >= minRate);
+  cand.sort((a, b) => b.sc - a.sc);
   const ectx = { get: (u, o) => http(u, o) };
-  const head = list.slice(0, n + 6);
+  const head = cand.slice(0, n + 6);
   const ok = await Promise.all(head.map(x => yt.embed(x, ectx)));
   const items = head.filter((_, i) => ok[i]).slice(0, n);
-  if (!items.length) die('没找到官方频道能直接播放的完整电影（换个类型 / 片名 / 演员试试）');
+  if (!items.length) die('没找到官方频道能直接播放的完整电影' + (year ? `（${year} 年的）` : '') + (minRate ? `（豆瓣 ${minRate} 分以上）` : '') + '：换个类型 / 片名 / 演员，或放宽条件');
   writeJson(LAST, { q, at: Date.now(), items });
   // 片单不带链接：先给用户挑，挑好再 --pick 序号 拿播放链接
-  console.log('序号\t片名\t时长\t播放\t官方频道\t原标题');
-  items.forEach((x, i) => console.log([i + 1, x.name, fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title].join('\t')));
+  console.log('序号\t片名\t豆瓣\t年份\t类型\t时长\t播放\t官方频道\t原标题');   // 豆瓣「暂无」= 没评分或这次没查到（限流）
+  items.forEach((x, i) => console.log([i + 1, x.name, x.db?.rating ? x.db.rating + (x.db.votes < 100 ? '（' + x.db.votes + '人评）' : '') : x.db?.my ? '猫眼 ' + x.db.my : '暂无', x.db?.year || '?', [x.db?.type, x.db?.genres].filter(Boolean).join(' '), fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title].join('\t')));
 }
 
 // ---------- 命令 ----------
