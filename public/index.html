@@ -862,7 +862,7 @@ document.addEventListener('click',function(ev){
   if(k==='file-video'||k==='file-audio'){
     el=document.createElement(k==='file-video'?'video':'audio');el.controls=true;el.autoplay=true;el.setAttribute('playsinline','');el.preload='auto';el.src=src;
   }else{
-    el=document.createElement('iframe');el.src=src;el.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';el.allowFullscreen=true;
+    el=document.createElement('iframe');tpSandbox(el,src);el.src=src;el.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';el.allowFullscreen=true;
     el.setAttribute('referrerpolicy','strict-origin-when-cross-origin');el.setAttribute('loading','eager');
   }
   c.classList.add('on');c.innerHTML='';c.appendChild(el);
@@ -884,7 +884,7 @@ function tpPlay(i,start){
   if(k==='file-video'||k==='file-audio'){m=el.ownerDocument.createElement(k==='file-video'?'video':'audio');m.controls=true;m.autoplay=true;m.setAttribute('playsinline','');m.src=x.e.src;
     if(start)m.addEventListener('loadedmetadata',function(){m.currentTime=start},{once:true});
     m.addEventListener('loadedmetadata',function(){tpDur(m.duration)});m.addEventListener('timeupdate',function(){tp.t=m.currentTime});m.addEventListener('ended',function(){if(!tp.movie)tpPlay(tp.i+1)})}
-  else{m=el.ownerDocument.createElement('iframe');m.src=tpSrc(x,start);m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
+  else{m=el.ownerDocument.createElement('iframe');tpSandbox(m,x.e.src);m.src=tpSrc(x,start);m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
     m.addEventListener('load',function(){try{m.contentWindow.postMessage('{"event":"listening","id":1,"channel":"widget"}','*')}catch(_){}})}
   v.appendChild(m);
   el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.hidden=false;
@@ -892,6 +892,38 @@ function tpPlay(i,start){
   el.querySelector('.tp-s').textContent=x.e.site;
   el.querySelector('.tp-prev').disabled=i<=0;el.querySelector('.tp-next').disabled=i>=tp.list.length-1;
   tp.list.forEach(function(y,j){y.a.classList.toggle('playing',j===i)});
+  el.classList.toggle('norel',!tpRelUrl());if(el.classList.contains('rel'))tpRel(true);
+}
+// B 站播放器结尾那排推荐、角上的 B 站标志点了是开新窗口跳到 B 站：给它加 sandbox（不给 allow-popups）就跳不走了，
+// 相关视频统一从播放器条上的「相关」点，在 claclaw 里接着播。YouTube 不加（沙箱里有的视频会拒绝播放）
+function tpSandbox(f,src){if(/^https:\/\/player\.bilibili\.com\//.test(src))f.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation')}
+// 相关：正在播的 B 站 / YouTube 视频的相关视频（服务器用 claclaw-media 技能查），横着一排；点了插在当前这个后面播，‹ 能回到原来那个。
+// 换了视频、面板开着就换成新视频的相关（像视频网站那样一路往下看）
+var TP_REL=/^https?:\/\/(?:www\.|m\.)?(?:bilibili\.com\/video\/|youtube\.com\/|youtu\.be\/)/;
+function tpRelUrl(){var x=tp.list[tp.i],u=x&&x.a.getAttribute('href');return u&&TP_REL.test(u)?u:''}
+function tpHms(d){d=Math.round(d);var h=Math.floor(d/3600),m=Math.floor(d%3600/60),s=d%60;return (h?h+':'+(m<10?'0':''):'')+m+':'+(s<10?'0':'')+s}
+function tpRel(show){
+  var el=TPEL,p=el.querySelector('.tp-rel'),u=tpRelUrl();
+  if(show===undefined)show=p.hidden;
+  if(!show||!u){p.hidden=true;el.classList.remove('rel');return}
+  p.hidden=false;el.classList.add('rel');tpFit();
+  if(p.dataset.u===u)return;p.dataset.u=u;p.scrollLeft=0;
+  p.innerHTML='<div class="tp-rel-m">正在找相关视频…</div>';
+  getJson('/api/related?u='+encodeURIComponent(u)).then(function(j){
+    if(p.dataset.u!==u)return;
+    var items=(j&&j.items||[]).filter(function(r){return embedOf(r.url)});
+    if(!items.length){p.innerHTML='<div class="tp-rel-m">'+(j&&j.error?'相关视频没取到':'没找到相关视频')+'</div>';if(j&&j.error)p.dataset.u='';return}
+    p.innerHTML='';
+    items.forEach(function(r){var b=document.createElement('button');b.type='button';b.className='tp-ri';b.title=r.title;
+      b.innerHTML='<span class="tp-rp">'+(r.pic?'<img referrerpolicy="no-referrer" src="'+esc(r.pic)+'" alt="">':'')+(r.dur?'<i>'+tpHms(r.dur)+'</i>':'')+'</span><span class="tp-rt">'+esc(r.title)+'</span><span class="tp-rb">'+esc(r.by||'')+'</span>';
+      b.addEventListener('click',function(){tpAdd(r)});p.appendChild(b)});
+  },function(){if(p.dataset.u===u){p.innerHTML='<div class="tp-rel-m">相关视频没取到</div>';p.dataset.u=''}});
+}
+function tpAdd(r){
+  var e=embedOf(r.url),j=-1;if(!e)return;
+  tp.list.forEach(function(y,k){if(y.e.src===e.src)j=k});
+  if(j<0){var a=document.createElement('a');a.href=r.url;a.textContent=r.title;j=tp.i+1;tp.list.splice(j,0,{a:a,e:e,t:r.title})}
+  tpPlay(j);
 }
 function tpMsg(ev){   // YouTube 播放器发来的进度、状态
   var f=TPEL&&TPEL.querySelector('.tp-v iframe');if(!f||ev.source!==f.contentWindow)return;
@@ -899,10 +931,10 @@ function tpMsg(ev){   // YouTube 播放器发来的进度、状态
   var info=d&&d.info;if(!info)return;
   if(typeof info.currentTime==='number')tp.t=info.currentTime;
   if(typeof info.duration==='number')tpDur(info.duration);
-  if((d.event==='onStateChange'&&info===0)||info.playerState===0){if(!tp.movie&&tp.i<tp.list.length-1)tpPlay(tp.i+1)}   // 播完：下一个（电影不接）
+  if((d.event==='onStateChange'&&info===0)||info.playerState===0){if(!tp.movie&&tp.i<tp.list.length-1)tpPlay(tp.i+1);else tpRel(true)}   // 没有下一个：摊开相关视频   // 播完：下一个（电影不接）
 }
 window.addEventListener('message',tpMsg);
-function tpClose(){var el=TPEL;el.hidden=true;el.classList.remove('min');tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
+function tpClose(){var el=TPEL,p=el.querySelector('.tp-rel');el.hidden=true;el.classList.remove('min','rel');p.hidden=true;p.dataset.u='';p.innerHTML='';tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
 function tpOpen(box,a){
   tp.box=box;tp.list=tpLinks(box);tp.movie=TP_MOVIE.test(box?box.textContent:'');var i=0;
   if(a)tp.list.forEach(function(y,j){if(y.a===a)i=j});
@@ -928,11 +960,12 @@ window.addEventListener('resize',tpFit);
 function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
 (function(){
   var el=document.createElement('div');el.id='tplay';el.hidden=true;TPEL=el;
-  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>';
+  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-rb-btn" aria-label="相关视频" title="相关视频：点了在这里接着播">相关</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div><div class="tp-rel" hidden></div>';
   feed.parentNode.insertBefore(el,feed);
   el.querySelector('.tp-prev').addEventListener('click',function(){tpPlay(tp.i-1)});
   el.querySelector('.tp-next').addEventListener('click',function(){tpPlay(tp.i+1)});
   el.querySelector('.tp-pop').addEventListener('click',tpPopOut);
+  el.querySelector('.tp-rb-btn').addEventListener('click',function(){tpRel()});
   (function(){   // 浮窗：标题条在视频上面，按住拖到别处
     var g=null,bar=el.querySelector('.tp-bar');
     bar.addEventListener('pointerdown',function(e){if(!el.classList.contains('float')||e.target.closest('button'))return;var r=el.getBoundingClientRect();g={x:e.clientX-r.left,y:e.clientY-r.top,m:0};el.classList.add('drag');try{bar.setPointerCapture(e.pointerId)}catch(_){}});

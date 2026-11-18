@@ -37,6 +37,7 @@ const die = (s, code = 1) => { console.error(s); process.exit(code); };
 const USAGE = `用法：
   claclaw-media link   video|audio "关键词" [--n 1] [--max 秒] [--src a,b]   在线播放链接（聊天里直接播放，不下载）
   claclaw-media movies ["类型 / 片名 / 演员"] [--n 10] [--new] [--year 2026] [--since 2006] [--min 7] [--latest]   官方频道免费完整电影片单（带豆瓣分）；--pick 序号 出播放链接
+  claclaw-media related "B 站 / YouTube 视频网址" [--n 20] [--json]   这个视频的相关视频（能在聊天里直接播的）
   claclaw-media get    video|audio|image "关键词或网址" [--n 张数] [--max 秒] [--clip 秒] [--max-mb 45] [--src a,b] [--pick 序号]
   claclaw-media find   video|audio|image "关键词" [--n 10] [--max 秒] [--src a,b]
   claclaw-media sources                      来源列表和最近的成败
@@ -595,6 +596,35 @@ async function movies(q) {
   items.forEach((x, i) => console.log([i + 1, `[${x.name.replace(/[\[\]]/g, ' ')}](${x.page})`, x.db?.rating ? x.db.rating + (x.db.votes < 100 ? '（' + x.db.votes + '人评）' : '') : x.db?.imdb ? 'IMDb ' + x.db.imdb : x.db?.my ? '猫眼 ' + x.db.my : '暂无', x.db?.year || '?', [x.db?.type, x.db?.genres].filter(Boolean).join(' '), fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title].join('\t')));
 }
 
+// ---------- 相关推荐（claclaw 播放器里的「相关」：B 站 / YouTube 正在播的这个视频的相关视频，点了在 claclaw 里接着播） ----------
+async function related(u) {
+  let m, out = [];
+  if ((m = /bilibili\.com\/video\/(BV[0-9A-Za-z]{10})/.exec(u))) {
+    const j = JSON.parse(await http('https://api.bilibili.com/x/web-interface/archive/related?bvid=' + m[1], { timeout: 8000, referer: 'https://www.bilibili.com/' }));
+    out = (j.data || []).filter(x => x.bvid && x.title && !(x.state < 0) && !/视频已失效/.test(x.title)).map(x => ({ url: 'https://www.bilibili.com/video/' + x.bvid, title: x.title, dur: x.duration || 0, by: x.owner?.name || '', plays: x.stat?.view,
+      pic: x.pic ? x.pic.replace(/^http:/, 'https:') + '@320w_180h_1c.jpg' : '' }));
+  } else if ((m = /(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/.exec(u))) {
+    const d = JSON.parse(await http('https://www.youtube.com/youtubei/v1/next?prettyPrint=false', { proxy: true, timeout: 12000,
+      body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion: '2.20261116.00.00', hl: 'zh-CN', gl: 'HK' } }, videoId: m[1] }) }));
+    for (const l of walk(d, 'lockupViewModel')) {
+      if (l.contentType !== 'LOCKUP_CONTENT_TYPE_VIDEO' || !l.contentId) continue;
+      const md = l.metadata?.lockupMetadataViewModel, js = JSON.stringify(l);
+      const dur = /"text":"(\d+(?::\d\d){1,2})"/.exec(js)?.[1];
+      if (!dur || /BADGE_MEMBERS_ONLY|UPCOMING|首播/.test(js)) continue;   // 直播、会员专享、首播不要
+      const parts = (md?.metadata?.contentMetadataViewModel?.metadataRows || []).map(r => (r.metadataParts || []).map(p => p.text?.content || ''));
+      out.push({ url: 'https://www.youtube.com/watch?v=' + l.contentId, title: md?.title?.content || '', dur: dur.split(':').reduce((a, x) => a * 60 + +x, 0),
+        by: parts[0]?.[0] || '', plays: num((parts[1] || [])[0]), pic: 'https://i.ytimg.com/vi/' + l.contentId + '/mqdefault.jpg' });
+    }
+    // 关了嵌入的（在 claclaw 里放不了）去掉
+    const yt = SOURCES.find(s => s.id === 'youtube'), ectx = { get: (u, o) => http(u, o) };
+    const ok = await Promise.all(out.map(x => yt.embed({ page: x.url }, ectx).catch(() => true)));
+    out = out.filter((_, i) => ok[i]);
+  } else die('只支持 B 站、YouTube 视频网址');
+  out = out.slice(0, +opt.n || 20);
+  if (opt.json) console.log(JSON.stringify(out));
+  else out.forEach((x, i) => console.log([i + 1, `[${x.title.replace(/[\[\]]/g, ' ')}](${x.url})`, fmtDur(x.dur), fmtPlays(x.plays), x.by].join('\t')));
+}
+
 // ---------- 命令 ----------
 const kind = pos[0], arg = pos.slice(1).join(' ').trim();
 if (cmd === 'sources') {
@@ -607,6 +637,8 @@ if (cmd === 'sources') {
   }
 } else if (cmd === 'movies') {
   await movies(pos.join(' ').trim());
+} else if (cmd === 'related' && pos[0]) {
+  await related(pos[0]);
 } else if (cmd === 'link' && KINDS[kind] && arg) {
   await link(kind, arg);
 } else if ((cmd === 'find' || cmd === 'get') && KINDS[kind] && arg) {

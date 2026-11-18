@@ -1949,6 +1949,23 @@ select.pe-in{text-align-last:right}
 #tplay.float .tp-prev,#tplay.float .tp-next,#tplay.float .tp-min,#tplay.float .tp-s{display:none}
 #tplay.float .tp-t{font-size:12.5px}
 #tplay.min .tp-min{transform:rotate(180deg)}
+#tplay .tp-bar .tp-rb-btn{width:auto;padding:0 9px;font-size:13px;height:26px;border:1px solid rgba(255,255,255,.35);border-radius:13px;margin:0 2px}
+#tplay.rel .tp-bar .tp-rb-btn{background:#fff;color:#000;border-color:#fff}
+#tplay.norel .tp-rb-btn,#tplay.tp-a .tp-rb-btn,#tplay.min .tp-rel{display:none}
+#tplay .tp-rel{display:flex;gap:10px;overflow-x:auto;padding:8px 10px 10px;background:#16181c;scrollbar-width:thin;overscroll-behavior-x:contain}
+#tplay .tp-rel[hidden]{display:none}
+#tplay .tp-rel-m{font-size:13px;opacity:.7;padding:6px 2px}
+#tplay .tp-ri{all:unset;cursor:pointer;flex:none;width:136px;display:flex;flex-direction:column;gap:3px}
+#tplay .tp-rp{position:relative;width:136px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#2a2d33}
+#tplay .tp-rp img{width:100%;height:100%;object-fit:cover;display:block}
+#tplay .tp-rp i{position:absolute;right:4px;bottom:4px;font-style:normal;font-size:11px;padding:1px 5px;border-radius:4px;background:rgba(0,0,0,.72)}
+#tplay .tp-rt{font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#tplay .tp-rb{font-size:11px;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tplay .tp-ri:hover .tp-rt{text-decoration:underline}
+#tplay.float .tp-ri,#tplay.float .tp-rp{width:128px}
+/* 相关摊开时画面让出地方，聊天区至少留一截（拖过高度的也一样） */
+#tplay.rel:not(.float):not(.tp-a) .tp-v{max-height:28vh!important}
+#tplay.rel:not(.float) .tp-grip{display:none}
 #tplay .tp-tt{flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer;line-height:1.25}
 #tplay .tp-t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tplay .tp-s{font-size:11px;opacity:.6}
@@ -1957,4 +1974,5 @@ select.pe-in{text-align-last:right}
   #tplay{grid-column:3;grid-row:3}
   #feed{grid-row:4}#workBar{grid-row:5}#dock{grid-row:6}
   #tplay .tp-v{max-height:48vh;max-width:calc(48vh * 16 / 9)}
+  #tplay.rel:not(.float):not(.tp-a) .tp-v{max-width:calc(28vh * 16 / 9)}
 }

@@ -73,10 +73,11 @@ stdout 每行一个结果，制表符分隔：`文件路径  大小  来源  时
 ```sh
 ~/.claclaw/bin/claclaw-media find video "关键词" [--n 10] [--max 秒]
 ~/.claclaw/bin/claclaw-media get video "同一个关键词" --pick 3      # 下载列表里第 3 个（列表缓存 30 分钟）；在线播放就直接把列表里的网址写成 [标题](网址)
+~/.claclaw/bin/claclaw-media related "B 站 / YouTube 视频网址" [--n 10]  # 这个视频的相关视频（都能在聊天里直接播）
 ~/.claclaw/bin/claclaw-media sources                                 # 各来源成败、耗时、是否可用
 ```
 
-用户要「换一个」「要别的来源的」时用 `find` 看列表，再 `--pick`；或 `--src` 换来源。
+用户要「换一个」「要别的来源的」时用 `find` 看列表，再 `--pick`；或 `--src` 换来源。用户要「类似的 / 相关的 / 还有吗」时用 `related` 给原视频网址。claclaw 顶上的播放器条上也有「相关」按钮，用户自己点开就能挑着看。
 
 ## 关键词怎么写
 

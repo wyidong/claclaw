@@ -60,6 +60,27 @@ import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, r
 import { saveVideo, videoFile, videoDuration, videoThumb, imageThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './src/video.mjs';
 const STARTED_AT = Date.now();
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+
+// 相关视频：按视频 id 缓存半小时（最多 200 个），并发的同一个请求只跑一次
+const relatedCache = new Map();
+function relatedKey(u) {
+  let m = /^https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV[0-9A-Za-z]{10})/.exec(u);
+  if (m) return 'https://www.bilibili.com/video/' + m[1];
+  m = /^https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/.exec(u);
+  return m ? 'https://www.youtube.com/watch?v=' + m[1] : '';
+}
+function relatedOf(u) {
+  const c = relatedCache.get(u);
+  if (c && Date.now() - c.at < 30 * 60_000) return c.p;
+  const p = new Promise((ok, no) => execFile(process.execPath, [path.join(ROOT, 'skills', 'claclaw-media', 'media.mjs'), 'related', u, '--json', '--n', '20'], { timeout: 25000, maxBuffer: 2 << 20 }, (e, out, err) => {
+    if (e) return no(new Error((String(err || '').trim().split('\n').pop() || e.message).slice(0, 200)));
+    try { ok(JSON.parse(String(out).trim().split('\n').pop() || '[]')); } catch { no(new Error('相关视频解析失败')); }
+  }));
+  relatedCache.set(u, { at: Date.now(), p });
+  p.catch(() => relatedCache.delete(u));
+  if (relatedCache.size > 200) relatedCache.delete(relatedCache.keys().next().value);
+  return p;
+}
 const HOME = os.homedir();
 setTimeout(() => { try { trimTrash(); } catch {} }, 5000);   // 回收站：启动时也清一次过期备份
 setTimeout(() => slowInfo(ROOT).catch(() => {}), 3000);
@@ -2780,6 +2801,12 @@ const handler = async (req, res) => {
       const b = await jsonBody(req, 1024);
       if (String(b?.claw || '') !== 'openclaw') return sendJson(res, 400, { error: '这个 Claw 不用启动' });
       try { return sendJson(res, 200, await ocStartGateway(childEnv(), log)); } catch (e) { return sendJson(res, 500, { error: e.message }); }
+    }
+    // 顶上播放器的「相关」：正在播的 B 站 / YouTube 视频的相关视频（claclaw-media 技能的 related 命令查，半小时内同一个视频不重查）
+    if (url.pathname === '/api/related' && req.method === 'GET') {
+      const id = relatedKey(String(url.searchParams.get('u') || ''));
+      if (!id) return sendJson(res, 400, { ok: false, error: '只支持 B 站、YouTube 视频' });
+      try { return sendJson(res, 200, { ok: true, items: await relatedOf(id) }); } catch (e) { return sendJson(res, 502, { ok: false, error: e.message }); }
     }
     if (url.pathname === '/api/claws') {
       // running：装了但没启动的（OpenClaw 网关没开）灰着显示，带「启动」（canStart）；其他 Claw 用的时候才拉起进程，装了就算可用
