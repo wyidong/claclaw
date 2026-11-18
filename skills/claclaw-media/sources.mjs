@@ -65,7 +65,7 @@ export const SOURCES = [
       return out;
     },
     // 作者关了「允许嵌入」的，oEmbed 回 401 / 403
-    async embed(x, { get }) { try { await get('https://www.youtube.com/oembed?format=json&url=' + enc(x.page), { proxy: true, timeout: 5000 }); return true; } catch { return false; } },
+    async embed(x, { get }) { try { await get('https://www.youtube.com/oembed?format=json&url=' + enc(x.page), { proxy: true, timeout: 6000 }); return true; } catch (e) { return !/HTTP 40[134]/.test(e.message); } },   // 只有明确回 401 / 403 / 404 才算不能嵌入；网络慢、超时不冤枉它
   },
   {
     id: 'dailymotion', label: 'Dailymotion', kinds: ['video'], proxy: true,

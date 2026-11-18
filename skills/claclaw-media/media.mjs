@@ -314,7 +314,7 @@ async function link(kind, q) {
   // 前几个并发核对能不能嵌入（来源有 embed 检查的才查，比如 YouTube 作者可能关了嵌入），按原排名取前 n 个
   const ctx = { get: (u, o) => http(u, o), json: async (u, o) => JSON.parse(await http(u, o)) };
   const head = items.slice(0, n + 4);
-  const ok = await Promise.all(head.map(x => { const s = SOURCES.find(s => s.id === x.src); return s?.embed ? s.embed(x, ctx).catch(() => false) : true; }));
+  const ok = await Promise.all(head.map(x => { const s = SOURCES.find(s => s.id === x.src); return s?.embed ? s.embed(x, ctx).then(r => { if (!r && opt.debug) console.error("不能嵌入", x.page); return r; }, () => false) : true; }));
   const out = head.filter((_, i) => ok[i]).slice(0, n);
   if (!out.length) die('没找到能在聊天里直接播放的' + KINDS[kind] + '（换个关键词，或 --src 换来源）');
   // stdout 一行一个：Markdown 链接 \t 来源 \t 时长 \t 播放量。回复里原样贴 Markdown 链接即可
