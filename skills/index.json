@@ -35,9 +35,9 @@
     ]
   },
   {
-    "name": "claclaw-video",
-    "title": "找视频发到手机",
-    "desc": "按主题搜 B 站 / YouTube，下载成手机能放的 mp4 发到聊天里",
+    "name": "claclaw-media",
+    "title": "找视频、音频、图片发到手机",
+    "desc": "多个来源并发检索视频、音频、图片，下载成手机能直接放、直接看的文件发到聊天里",
     "scene": "sessions",
     "claws": [
       "claude",

@@ -28,6 +28,7 @@ description: 在 claclaw 网页（手机）里把文件交给用户看：图片�
   例：`ffmpeg -i in.mov -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart out.mp4`
 - html / svg / xml 为安全一律当下载给（svg 例外：聊天里会作为图片显示）。
 - 不要只在回复里贴路径代替发送：用户要「发给我」，就用 send_file。
+- 要上网找视频、音频、图片：用 claclaw-media 技能。
 
 ## 2. 在回复里写文件路径（所有 Claw 都行）
 
