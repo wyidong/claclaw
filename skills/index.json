@@ -33,5 +33,24 @@
       "claude",
       "agents"
     ]
+  },
+  {
+    "name": "claclaw-video",
+    "title": "找视频发到手机",
+    "desc": "按主题搜 B 站 / YouTube，下载成手机能放的 mp4 发到聊天里",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw"
+    ],
+    "auto": [
+      "claude",
+      "agents"
+    ]
   }
 ]
