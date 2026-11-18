@@ -60,7 +60,9 @@ export const SOURCES = [
       const out = [];
       for (const v of walk(embedded(html, 'ytInitialData'), 'videoRenderer')) {
         if (!v.videoId || !v.lengthText) continue;   // 没有时长的是直播
-        out.push({ title: v.title?.runs?.map(r => r.text).join('') || '', page: 'https://www.youtube.com/watch?v=' + v.videoId, dur: secs(v.lengthText.simpleText), plays: num(v.viewCountText?.simpleText) });
+        out.push({ title: v.title?.runs?.map(r => r.text).join('') || '', page: 'https://www.youtube.com/watch?v=' + v.videoId, dur: secs(v.lengthText.simpleText), plays: num(v.viewCountText?.simpleText),
+          channel: (v.ownerText || v.longBylineText)?.runs?.map(r => r.text).join('') || '',
+          verified: (v.ownerBadges || []).some(b => /VERIFIED/.test(b.metadataBadgeRenderer?.style || '')) });   // 频道名、认证标记（找官方电影用）
       }
       return out;
     },

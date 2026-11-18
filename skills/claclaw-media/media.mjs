@@ -36,6 +36,7 @@ for (let i = 0; i < argv.length; i++) {
 const die = (s, code = 1) => { console.error(s); process.exit(code); };
 const USAGE = `用法：
   claclaw-media link   video|audio "关键词" [--n 1] [--max 秒] [--src a,b]   在线播放链接（聊天里直接播放，不下载）
+  claclaw-media movies ["类型 / 片名 / 演员"] [--n 10]                       官方频道免费完整电影片单；--pick 序号 出播放链接
   claclaw-media get    video|audio|image "关键词或网址" [--n 张数] [--max 秒] [--clip 秒] [--max-mb 45] [--src a,b] [--pick 序号]
   claclaw-media find   video|audio|image "关键词" [--n 10] [--max 秒] [--src a,b]
   claclaw-media sources                      来源列表和最近的成败
@@ -321,6 +322,57 @@ async function link(kind, q) {
   for (const x of out) console.log([`[${x.title.replace(/[\[\]]/g, ' ').trim()}](${x.url})`, label(x.src), fmtDur(x.dur), fmtPlays(x.plays)].join('\t'));
 }
 
+// 电影：只要版权方官方频道（YouTube 认证标记，或爱奇艺 / 优酷 / 腾讯 WeTV / 芒果 / 华策 / 央视等官方影视频道）免费公开的完整版，
+// 而且能嵌在 claclaw 聊天里直接播放。先给片单（不带链接），用户挑好再 --pick 出播放链接
+const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki/i;
+const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b/i;
+function movieName(t) {   // 片名：《》里的；没有就用不是「Multi Sub / 4K / 类型」的【】；再不行用 [] 或去掉修饰的标题
+  let m = /《#?([^》]{1,30})》/.exec(t); if (m) return m[1].trim();
+  for (const b of t.matchAll(/【([^】]{2,24})】/g)) if (!/multi ?sub|eng ?sub|movie|4k|1080p|完整版|电影|中字|抢先看|会员|独播|首播|新片|大片|喜剧|动作|爱情|悬疑|犯罪|冒险|剧情|奇幻|武侠|恐怖|惊悚/i.test(b[1])) return b[1].trim();
+  m = /^\[([^\]]{2,40})\]/.exec(t); if (m) return m[1].trim();
+  return t.replace(/【[^】]*】|\[[^\]]*\]/g, '').replace(/[|｜#].*$/, '').trim().slice(0, 40) || t.slice(0, 40);
+}
+async function movies(q) {
+  const LAST = path.join(STATE, 'movies-last.json');
+  if (opt.pick) {
+    const last = readJson(LAST, null), x = last?.items?.[+opt.pick - 1];
+    if (!x) die('没有第 ' + opt.pick + ' 部（先 movies "关键词" 看片单）');
+    // stdout：Markdown 链接 \t 时长 \t 播放 \t 频道。回复里原样贴 Markdown 链接，claclaw 在消息下面放播放卡片
+    console.log([`[${x.name}](${x.page})`, fmtDur(x.dur), fmtPlays(x.plays), x.channel].join('\t'));
+    return;
+  }
+  if (!(await proxy())) die('找官方电影要能上 YouTube（没找到代理：设 HTTPS_PROXY 或 --proxy）');
+  const yt = SOURCES.find(s => s.id === 'youtube'), ctx = { get: (u, o) => http(u, { timeout: 12000, ...o }) };
+  const base = q || '华语';
+  const variants = [base + ' 电影 完整版', base + ' full movie', base + ' 电影 Full Movie Multi Sub'];
+  const got = (await Promise.all(variants.map(v => yt.search(v, ctx).catch(() => [])))).flat();
+  const toks = q ? q.toLowerCase().split(/\s+/).filter(Boolean) : [];
+  const seen = new Set(), list = [];
+  for (const x of got) {
+    if (seen.has(x.page)) continue; seen.add(x.page);
+    if (!x.dur || x.dur < 60 * 60 || x.dur > 4 * 3600) continue;             // 完整电影：1～4 小时
+    if (!(x.verified || OFFICIAL.test(x.channel || ''))) continue;          // 只要官方频道
+    if (NOT_MOVIE.test(x.title)) continue;
+    const t = x.title.toLowerCase();
+    const sc = (toks.length ? toks.filter(k => t.includes(k)).length / toks.length * 2 : 0) + (x.plays ? Math.min(1, Math.log10(1 + x.plays) / 7) : 0) + (OFFICIAL.test(x.channel || '') ? 0.3 : 0);
+    list.push({ ...x, name: movieName(x.title), sc });
+  }
+  list.sort((a, b) => b.sc - a.sc);
+  // 同一部片在几个官方频道（各语种频道）都有：片名一样、或时长差不到 8 秒的，只留排在前面的（播放多的）
+  const key = x => x.name.split(/\s*[\/／]\s*|\s+(?=[A-Za-z])/)[0];
+  for (let i = list.length - 1; i > 0; i--) if (list.slice(0, i).some(y => Math.abs(y.dur - list[i].dur) <= 8 || (key(y) === key(list[i]) && Math.abs(y.dur - list[i].dur) < 180))) list.splice(i, 1);
+  const n = Math.min(+opt.n || 10, 20);
+  const ectx = { get: (u, o) => http(u, o) };
+  const head = list.slice(0, n + 6);
+  const ok = await Promise.all(head.map(x => yt.embed(x, ectx)));
+  const items = head.filter((_, i) => ok[i]).slice(0, n);
+  if (!items.length) die('没找到官方频道能直接播放的完整电影（换个类型 / 片名 / 演员试试）');
+  writeJson(LAST, { q, at: Date.now(), items });
+  // 片单不带链接：先给用户挑，挑好再 --pick 序号 拿播放链接
+  console.log('序号\t片名\t时长\t播放\t官方频道\t原标题');
+  items.forEach((x, i) => console.log([i + 1, x.name, fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title].join('\t')));
+}
+
 // ---------- 命令 ----------
 const kind = pos[0], arg = pos.slice(1).join(' ').trim();
 if (cmd === 'sources') {
@@ -331,6 +383,8 @@ if (cmd === 'sources') {
     console.log([s.id, s.kinds.map(k => KINDS[k]).join('/'), s.proxy ? '要' : '', `${h.ok || 0}/${h.fail || 0}`, h.ms ? (h.ms / 1000).toFixed(1) + 's' : '-',
       s.proxy && !hasProxy ? '没代理，跳过' : cooling(s.id) ? '连续失败，冷却中' : '可用'].join('\t'));
   }
+} else if (cmd === 'movies') {
+  await movies(pos.join(' ').trim());
 } else if (cmd === 'link' && KINDS[kind] && arg) {
   await link(kind, arg);
 } else if ((cmd === 'find' || cmd === 'get') && KINDS[kind] && arg) {
