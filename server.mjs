@@ -72,7 +72,7 @@ function relatedKey(u) {
 function relatedOf(u) {
   const c = relatedCache.get(u);
   if (c && Date.now() - c.at < 30 * 60_000) return c.p;
-  const p = new Promise((ok, no) => execFile(process.execPath, [path.join(ROOT, 'skills', 'claclaw-media', 'media.mjs'), 'related', u, '--json', '--n', '20'], { timeout: 25000, maxBuffer: 2 << 20 }, (e, out, err) => {
+  const p = new Promise((ok, no) => execFile(process.execPath, [path.join(ROOT, 'skills', 'claw-video', 'video.mjs'), 'related', u, '--json', '--n', '20'], { timeout: 25000, maxBuffer: 2 << 20 }, (e, out, err) => {
     if (e) return no(new Error((String(err || '').trim().split('\n').pop() || e.message).slice(0, 200)));
     try { ok(JSON.parse(String(out).trim().split('\n').pop() || '[]')); } catch { no(new Error('相关视频解析失败')); }
   }));
@@ -621,7 +621,7 @@ function quotaHit(text) {
   return { resets: m ? m[1].trim() : '' };
 }
 // ---------- 会话找会话：本机各个 Claw 之间、以及跨电脑（协同）----------
-// Claude 会话的 peer_sessions / peer_send 工具、本机命令 claclaw-peer 共用这一套。
+// Claude 会话的 peer_sessions / peer_send 工具、本机命令 claw-interconnect 共用这一套。
 // 发起方必须认得出是哪个会话（fromId）：本机命令没带 --from 时，按「命令在哪个目录跑 + 哪个会话正在回复」自动认；认不出就拒绝。
 // 规矩：本机的会话之间都能互相找；找另一台电脑，发起的会话要在协同池里，且只能找开放了它的对方。
 // （这是用法上的规矩，不是安全边界：本机以你的身份运行的程序本来就读得到 claclaw 的数据。）
@@ -671,8 +671,8 @@ async function resolveFrom(from, cwd) {
 // 开着的会话的名字（发信人等用）
 const sessionName = (id, dflt = '会话') => { const r = runnerOf(id); return r?.info?.customTitle || r?.info?.summary || r?.title || dflt; };
 const senderLabel = fromId => sessionName(fromId) + '（' + CLAW_LABEL[clawOfId(fromId)] + ' · ' + peerShortId(fromId) + '）';
-// 用到时自动装技能（不用用户点）：非 Claude 的 Claw 一用上就装好 claclaw-peer（AI 才知道怎么找别的会话），
-// 所有 Claw 都装 claclaw-files（怎样把文件发到手机上看）；装哪些看 skills/index.json 的 auto
+// 用到时自动装技能（不用用户点）：非 Claude 的 Claw 一用上就装好 claw-interconnect（AI 才知道怎么找别的会话），
+// 所有 Claw 都装 claw-file（怎样把文件发到手机上看）；装哪些看 skills/index.json 的 auto
 const ensureSkill = claw => skills.ensure(claw, log);
 async function peerListCore({ fromId, to } = {}) {
   const out = { ok: true };
@@ -826,10 +826,10 @@ async function peerDeliver(info, text, from, peerId, { local = false, fromId = n
   const r = await peerRunner(info);
   if (Array.isArray(r)) return r;
   if (r.busy) return [409, { ok: false, error: '这个会话正在忙，稍后再发' }];
-  // 开头写明它自己的会话 ID 和主动找别的会话的办法：Claude 会话用内置工具，其他 Claw 用 claclaw-peer 技能（用到时自动装好）
+  // 开头写明它自己的会话 ID 和主动找别的会话的办法：Claude 会话用内置工具，其他 Claw 用 claw-interconnect 技能（用到时自动装好）
   const claw = info.claw || clawOfId(id);
   ensureSkill(claw);
-  const how = claw === 'claude' ? 'peer_send 工具' : 'claclaw-peer 技能';
+  const how = claw === 'claude' ? 'peer_send 工具' : 'claw-interconnect 技能';
   // oneWay：发件箱送进来的（排队消息送到后对方当场给的回复、送不到的通知）——这一轮的回复没人收
   const hint = '你的会话 ID：' + id + '；' + (oneWay ? '这一轮的回复不会传回去' : '这一轮的回复会自动传回给' + (local ? '它' : '对方')) + '，要主动找别的会话用 ' + how + '；';
   const ghint = group && '你的会话 ID：' + id + '；这是群聊「' + group.name + '」' + (group.self ? '，你在群里叫「' + group.self + '」' : '') + '，你这一轮的回复会自动贴回群里；' + (group.host ? '你是本群主理人：用户没 @ 人的消息由你接，需要别的成员做的就 @ 它；' : '') + '要往群里发图片或文件，就在回复里单独一行写 [群附件:文件的绝对路径]（一行一个，单个不超过 12MB）；' + (group.log ? '群聊记录在 ' + group.log + '（每条以「#序号 时间 谁：」开头，新的在后面），要前文就去读，只读需要的部分；' : '') + '找本群其他成员就在回复里写 @它的名字（成员：' + (group.members || []).join('、') + '；写了 @ 对方就会被叫来回一轮，不需要它回就别写 @），不要用 ' + how + '；';
@@ -2562,7 +2562,7 @@ const handler = async (req, res) => {
       const si = await slowInfo(ROOT).catch(() => ({}));
       return sendJson(res, 200, { app: 'claclaw', name: si.name || os.hostname(), version: si.commit || '' });
     }
-    // 本机命令（技能里的 claclaw-peer 等）：只认本机 + ~/.claclaw/local.json 里的令牌，不走登录
+    // 本机命令（技能里的 claw-interconnect 等）：只认本机 + ~/.claclaw/local.json 里的令牌，不走登录
     if (url.pathname.startsWith('/api/local/')) return handleLocal(req, res, url);
     if (url.pathname === '/api/setup' && req.method === 'POST') return handleSetup(req, res);
     if (url.pathname === '/api/login' && req.method === 'POST') return handleLogin(req, res);
@@ -2802,7 +2802,7 @@ const handler = async (req, res) => {
       if (String(b?.claw || '') !== 'openclaw') return sendJson(res, 400, { error: '这个 Claw 不用启动' });
       try { return sendJson(res, 200, await ocStartGateway(childEnv(), log)); } catch (e) { return sendJson(res, 500, { error: e.message }); }
     }
-    // 顶上播放器的「相关」：正在播的 B 站 / YouTube 视频的相关视频（claclaw-media 技能的 related 命令查，半小时内同一个视频不重查）
+    // 顶上播放器的「相关」：正在播的 B 站 / YouTube 视频的相关视频（claw-video 技能的 related 命令查，半小时内同一个视频不重查）
     if (url.pathname === '/api/related' && req.method === 'GET') {
       const id = relatedKey(String(url.searchParams.get('u') || ''));
       if (!id) return sendJson(res, 400, { ok: false, error: '只支持 B 站、YouTube 视频' });
@@ -3362,7 +3362,7 @@ wss.on('connection', (ws, req) => {
       // 新建对话框勾了「随机头像和网名」：建好就给新会话随机配一套（「最近」里显示）
       const newSkin = (id) => { if (m.t === 'session.new' && m.skin === true) try { skins.random(id); } catch (e) { log('skin random', e.message); } };
       if (m.t === 'session.new' && (isOc(m.from) || m.claw === 'openclaw')) {
-        ensureSkill('openclaw');   // 用上这个 Claw 就装好 claclaw-peer 技能（AI 才知道怎么找别的会话）
+        ensureSkill('openclaw');   // 用上这个 Claw 就装好 claw-interconnect 技能（AI 才知道怎么找别的会话）
         // OpenClaw：网关新建会话（没有目录的概念），建好直接打开
         const title = String(m.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
         let id;

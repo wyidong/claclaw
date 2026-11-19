@@ -1,5 +1,5 @@
 ---
-name: claclaw-tv
+name: claw-tv
 description: 看电视直播：用户说「打开 / 看 / 播 四川卫视」「湖南台」「CCTV5 / 央视五套 / 央视新闻」「凤凰卫视」「TVBS」「有哪些卫视 / 电视台 / 能看哪些台」时使用。给出官方直播网页的频道卡片（点了去官网看）；YouTube 上的官方 24 小时直播、CGTN 官方直播流在 claclaw 聊天里直接播。
 ---
 
@@ -10,13 +10,13 @@ description: 看电视直播：用户说「打开 / 看 / 播 四川卫视」「
 ## 命令
 
 ```sh
-~/.claclaw/bin/claclaw-tv "四川卫视"      # 找一个台：台名、简称都行（湖南台、芒果台、CCTV5、央视五套、凤凰、TVBS……）
-~/.claclaw/bin/claclaw-tv platforms       # 有哪些平台、各有几个台（平台卡片）
-~/.claclaw/bin/claclaw-tv list            # 全部，按平台分组（央视网、YouTube、各台官网……）
-~/.claclaw/bin/claclaw-tv list 卫视       # 只列某一类台（仍按平台分组），也可以写平台名（list 央视网）：央视 卫视 少儿 地方 香港 澳门 台湾 海外（华人台） 国际（外语台）
+~/.claclaw/bin/claw-tv "四川卫视"      # 找一个台：台名、简称都行（湖南台、芒果台、CCTV5、央视五套、凤凰、TVBS……）
+~/.claclaw/bin/claw-tv platforms       # 有哪些平台、各有几个台（平台卡片）
+~/.claclaw/bin/claw-tv list            # 全部，按平台分组（央视网、YouTube、各台官网……）
+~/.claclaw/bin/claw-tv list 卫视       # 只列某一类台（仍按平台分组），也可以写平台名（list 央视网）：央视 卫视 少儿 地方 香港 澳门 台湾 海外（华人台） 国际（外语台）
 ```
 
-（Windows 是 `%USERPROFILE%\.claclaw\bin\claclaw-tv.cmd`；没有这个命令时用 `node <claclaw 仓库>/skills/claclaw-tv/tv.mjs`。）
+（Windows 是 `%USERPROFILE%\.claclaw\bin\claw-tv.cmd`；没有这个命令时用 `node <claclaw 仓库>/skills/claw-tv/tv.mjs`。）
 
 ## 怎么回复
 

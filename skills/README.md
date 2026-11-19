@@ -1,7 +1,7 @@
 # claclaw 技能规范
 
 写给做 claclaw 技能的人和 AI。新技能照这里做，旧技能改动时顺手对齐。
-示例看 `claclaw-tv`（最规整），复杂的看 `claclaw-media`。
+示例看 `claw-tv`（最规整）；几个技能共用一套代码的看影音组（`claw-video` 等 + `_lib/media/`）。
 
 ## 1. 技能是什么
 
@@ -17,27 +17,39 @@
 ```
 skills/
   index.json              技能登记表（claclaw 按它安装、显示）
-  claclaw-<名>/
+  _lib/<名>/              几个技能共用的代码（不是技能，不登记、不安装）
+  claw-<名>/
     SKILL.md              必有
-    <名>.mjs              命令入口（文件名 = 技能名去掉 claclaw-），没有命令的技能可以不要
+    <名>.mjs              命令入口（文件名 = 技能名去掉 claw-），没有命令的技能可以不要
     *.json                事先核对好的数据（平台表、频道表……）
     *.mjs                 其他模块（来源适配 sources.mjs 等）
 ```
 
-- **命令入口**：claclaw 启动时生成 `~/.claclaw/bin/claclaw-<名>`（Windows 再生成一个 `.cmd`），用 claclaw 自己的 node 跑。AI 的终端里不一定有 node。
+- **命令入口**：claclaw 启动时生成 `~/.claclaw/bin/claw-<名>`（Windows 再生成一个 `.cmd`），用 claclaw 自己的 node 跑。AI 的终端里不一定有 node。
 - **依赖**：只用 Node 内置模块和系统自带的 `curl`，不 `npm install`。外部工具（yt-dlp、ffmpeg）用到时再下载到 `~/.claclaw/tools/`。
 - **缓存和状态**：放 `~/.claclaw/<名>/`，不写进技能目录。各 Claw 用的是复制件，claclaw 启动时会用仓库里的版本覆盖。
-- **登记**：在 `index.json` 加一条，字段是 `name`、`title`、`desc`、`scene`、`claws`、`auto`。
+- **登记**：在 `index.json` 加一条，字段是 `name`、`title`、`desc`、`group`、`scene`、`claws`、`auto`。
+  - `group`：技能大组，技能页按它分组显示。现有「通用」（peer、files）、「影音」（video、music、movie、image、tv）。
   - `claws`：默认写全部会跑命令的 Claw（claude deepseek opencode kimi qwen codex openclaw glm iflow minimax codebuddy qoder copilot）。
   - `auto`：默认写全部四个安装位置（claude agents iflow codebuddy），用到哪个 Claw 就自动装到哪。
   - Mini 不调工具，用不了技能。
 - **同步**：改了 `skills/` 下的文件不用手动重装。claclaw 启动时按内容哈希，把各 Claw 目录里的复制件同步成新版。
+- **复制件只给 AI 看 SKILL.md**：命令总是由 `~/.claclaw/bin/` 跑仓库里的脚本，所以脚本可以用相对路径引 `../_lib/`。
 
-## 3. SKILL.md 的结构（固定顺序）
+## 3. 拆分和分组
+
+- **一个技能管一件事**：用户的说法、命令、回复方式有一样不同，就拆成两个。比如影音拆成视频、歌、电影、图片、电视五个，各自的 description 只写自己的说法，AI 一句话就能选对。
+- **写清边界**：description 最后一句点名兄弟技能，比如「电影用 claw-movie，歌用 claw-audio」。容易混的说法（「XX 的 MV」算歌，「纪录片片段」算视频）写进对应技能的说法里。
+- **同类放一个大组**：`index.json` 的 `group` 相同。
+- **公共代码放 `_lib/<名>/`**：搜索、下载、代理这类几个技能都要的，只写一份。技能自己的 `<名>.mjs` 只做一件事：把自己的命令翻译成公共代码的调用（见 `_lib/media/cli.mjs`）。
+- **命令形式统一**：`claw-<名> "关键词"` 是最常用的默认动作；其余动作用第一个词做子命令（`find`、`get`、`related`、`sources`、`list`…），选项用 `--xxx`。
+- **改名、拆分**：在 `src/skills.mjs` 的 `RETIRED` 里写「旧名 → 接替的新名」。claclaw 启动时会删掉旧的复制件和命令，在原位置装上新的；用户自己的同名技能不碰。
+
+## 4. SKILL.md 的结构（固定顺序）
 
 ```markdown
 ---
-name: claclaw-<名>
+name: claw-<名>
 description: <做什么>：用户说「<原话 1>」「<原话 2>」「<原话 3>」时使用。<结果是什么样的>。
 ---
 
@@ -57,9 +69,9 @@ description: <做什么>：用户说「<原话 1>」「<原话 2>」「<原话 3
 
 - **description**：决定 AI 会不会用这个技能。要写 3～6 句用户的原话，让 AI 一句话就能判断该不该用。
 - **用词**：中文，祈使句，一条一件事。不写背景故事，不写「可能」「建议」这类含糊的话。
-- **场景多的技能**：比如 media 有视频、电影、下载几种场景，就按场景分节，每节先写命令再写回复规则。
+- **场景多的技能**：先考虑拆（见第 3 节）；同一件事的几种做法（比如视频的「直接播」和「下载」）留在一个技能里，按场景分节。
 
-## 4. 输出约定（技能和 claclaw 页面之间的接口）
+## 5. 输出约定（技能和 claclaw 页面之间的接口）
 
 | 要给用户的东西 | 命令输出 / 回复里怎么写 | claclaw 显示成 |
 |---|---|---|
@@ -73,7 +85,7 @@ description: <做什么>：用户说「<原话 1>」「<原话 2>」「<原话 3
 - **给程序用的输出**：加 `--json`（服务器接口会调用，比如 `/api/related`）。
 - **新的卡片类型**：在 `public/index.html` 的 `md()` 里给新的代码块语言加一个渲染函数（照 `mdTv` 写），样式写进 `app.css`。旧页面不认识这种块时会显示成代码块，也要看得懂，所以一行一条、字段用 `|` 分开。
 
-## 5. 数据和来源
+## 6. 数据和来源
 
 - **只用官方、有授权或公版的来源**。不用盗版，不绕过 DRM、登录、地区限制和签名。做不到的老实写进「说明」。
 - **先平台，再内容**：数据按平台（来源）组织，每个平台下面挂它的内容（`platforms.json`）。
@@ -85,14 +97,14 @@ description: <做什么>：用户说「<原话 1>」「<原话 2>」「<原话 3
 - **要快**：来源并发查，结果缓存约 30 分钟，元数据长期缓存。常见请求控制在几秒以内，慢就是要优化的地方。
 - **中文优先**：claclaw 的用户以华人为主，推荐和排序都先给中文内容。
 
-## 6. 多 Claw
+## 7. 多 Claw
 
 - 不要依赖 Claude 专属的工具。用到 `send_file` 这类工具时，写清楚没有它的 Claw 该怎么做。
-- 命令路径统一写 `~/.claclaw/bin/claclaw-<名>`，各 Claw 都能跑。
+- 命令路径统一写 `~/.claclaw/bin/claw-<名>`，各 Claw 都能跑。
 
-## 7. 验收（提交前）
+## 8. 验收（提交前）
 
-1. 用几句典型的说法真跑一遍：`node skills/claclaw-<名>/<名>.mjs …`。
+1. 用几句典型的说法真跑一遍：`node skills/claw-<名>/<名>.mjs …`。
 2. 纯逻辑（匹配、解析）写 `test/<名>.test.mjs`，跑 `npm test`。
 3. 改了页面显示：
    - 起一个临时实例：`HOME=<临时目录> CLACLAW_DATA=<临时目录> CLACLAW_HOST=127.0.0.1 node server.mjs --port 8799`，在临时 HOME 的 `.claude/projects` 里放一个假会话。

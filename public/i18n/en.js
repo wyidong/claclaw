@@ -445,6 +445,8 @@ var I18N={dict:{
 "没有适用于它的技能":"No skills apply to it",
 "这台电脑上没有用得上它的 Agent":"No agent on this computer can use it",
 "返回技能":"Back to skills",
+"通用":"General",
+"影音":"Media",
 "技能是给 AI 用的说明和命令，用到时自动安装。共用一个技能目录的几个 Agent，装 / 卸一起变。":"Skills are instructions and commands for the AI, installed automatically when needed. Agents that share a skill folder are installed / uninstalled together.",
 "技能是给 AI 用的说明和命令，用到相关场景时自动安装；点进去能单独装 / 卸。":"Skills are instructions and commands for the AI, installed automatically when needed. Tap one to install / uninstall it.",
 "Claw（切换 Claw、模型管理）":"Claw (switch Claw, model management)",

@@ -61,7 +61,7 @@ clarelay 是可选的第三方中继。在「设置 → 宿主 → 网络 → cl
 
 - **开启**：「宿主 → 网络 → claclaw 协同」，选要加入的会话，点「开启协同」（端口 8788）。
 - **配对**：「附近的 claclaw」里点对方「申请配对」；对方点「同意」后看到两位数配对码，口头告诉你，填上即配好。配好后两边都能主动找对方。
-- **怎么用**：Claude 会话直接说「问一下对方……」（内置 `peer_sessions` / `peer_send` 工具）；其他 Claw 用自动装好的 claclaw-peer 技能。
+- **怎么用**：Claude 会话直接说「问一下对方……」（内置 `peer_sessions` / `peer_send` 工具）；其他 Claw 用自动装好的 claw-interconnect 技能。
 - **不在一个网络**：自动走 clarelay 中继或打洞直连（都加密）。
 - **安全**：对方的消息当作别人的指令。不管会话是什么权限模式，有风险的操作（改项目外的文件、读密钥、联网、删除、push……）都要你确认，只读命令和项目内改文件直接放行。配对钥匙只存哈希，不会明文发到公网地址。
 
@@ -76,7 +76,7 @@ clarelay 是可选的第三方中继。在「设置 → 宿主 → 网络 → cl
 
 ### 技能
 
-`skills/` 里预备了 Agent Skills（claclaw-peer：找别的会话；claclaw-files：把图片、视频、文档发到手机上看；claclaw-media：从多个网站找视频、音频、图片发过来），用到相关功能时自动装进 `~/.claude/skills` 和 `~/.agents/skills`，所有 Claw 都能用；在「设置 → 宿主 → 技能」里能看、能装、能卸，不会碰你自己的同名技能。
+`skills/` 里预备了 Agent Skills（claw-interconnect：找别的会话；claw-file：把图片、视频、文档发到手机上看；影音组的 claw-video / claw-audio / claw-movie / claw-image / claw-tv：从多个网站找视频、歌、官方免费电影、图片，看电视直播），用到相关功能时自动装进 `~/.claude/skills` 和 `~/.agents/skills`，所有 Claw 都能用；在「设置 → 宿主 → 技能」里能看、能装、能卸，不会碰你自己的同名技能。
 
 ## 安全提示
 

@@ -1,5 +1,5 @@
 ---
-name: claclaw-peer
+name: claw-interconnect
 description: 和其他 AI 会话对话：本机 claclaw 里的会话（Claude、DeepSeek、Kimi、Qwen、Codex 等各个 Claw），或另一台电脑上已配对的会话（claclaw 协同）。用户让你「问问 / 告诉 / 交给别的会话、另一个 Claw、另一台电脑」时使用。
 ---
 
@@ -10,11 +10,11 @@ description: 和其他 AI 会话对话：本机 claclaw 里的会话（Claude、
 ## 命令
 
 ```sh
-~/.claclaw/bin/claclaw-peer whoami                       # 我是哪个会话、能不能找另一台电脑
-~/.claclaw/bin/claclaw-peer list                         # 能找的会话：本机的、对方电脑的
-~/.claclaw/bin/claclaw-peer send --to 本机 --session <会话ID> "消息"   # 发给本机的会话
-~/.claclaw/bin/claclaw-peer send [--to <对方名字>] [--session <会话ID>] "消息"   # 发给另一台电脑
-~/.claclaw/bin/claclaw-peer result <任务号>               # 取之前没等到的回复
+~/.claclaw/bin/claw-interconnect whoami                       # 我是哪个会话、能不能找另一台电脑
+~/.claclaw/bin/claw-interconnect list                         # 能找的会话：本机的、对方电脑的
+~/.claclaw/bin/claw-interconnect send --to 本机 --session <会话ID> "消息"   # 发给本机的会话
+~/.claclaw/bin/claw-interconnect send [--to <对方名字>] [--session <会话ID>] "消息"   # 发给另一台电脑
+~/.claclaw/bin/claw-interconnect result <任务号>               # 取之前没等到的回复
 ```
 
 - 先 `list` 看有哪些会话和它们的 ID，再 `send`。

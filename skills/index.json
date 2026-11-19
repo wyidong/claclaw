@@ -1,8 +1,9 @@
 [
   {
-    "name": "claclaw-peer",
+    "name": "claw-interconnect",
     "title": "claclaw 会话互找",
     "desc": "让 AI 会话找本机其他 Claw 的会话、或另一台电脑上的会话，发消息、拿回复",
+    "group": "通用",
     "scene": "sessions",
     "claws": [
       "claude",
@@ -23,9 +24,10 @@
     ]
   },
   {
-    "name": "claclaw-files",
+    "name": "claw-file",
     "title": "claclaw 里给用户看文件",
     "desc": "告诉 AI 怎样把图片、视频、音频、PDF、Markdown、文本发到手机上、哪些能直接预览",
+    "group": "通用",
     "scene": "sessions",
     "claws": [
       "claude",
@@ -50,9 +52,10 @@
     ]
   },
   {
-    "name": "claclaw-media",
-    "title": "找视频、音频、图片发到手机",
-    "desc": "多个来源并发检索视频、音频、图片，下载成手机能直接放、直接看的文件发到聊天里",
+    "name": "claw-video",
+    "title": "找视频",
+    "desc": "找能在聊天里直接播的视频（B 站、YouTube 等），要文件时下载成 mp4",
+    "group": "影音",
     "scene": "sessions",
     "claws": [
       "claude",
@@ -77,9 +80,94 @@
     ]
   },
   {
-    "name": "claclaw-tv",
-    "title": "claclaw 看电视直播",
+    "name": "claw-audio",
+    "title": "找歌、找音频",
+    "desc": "找歌、白噪音、有声内容，聊天里直接播，要文件时下载成 m4a",
+    "group": "影音",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
+  },
+  {
+    "name": "claw-movie",
+    "title": "找电影",
+    "desc": "官方频道免费公开的完整电影和公版老片，出片单，点哪部播哪部",
+    "group": "影音",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
+  },
+  {
+    "name": "claw-image",
+    "title": "找图片",
+    "desc": "多个图片来源一起搜，下载后发到聊天里直接显示",
+    "group": "影音",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
+  },
+  {
+    "name": "claw-tv",
+    "title": "看电视直播",
     "desc": "用户说「打开四川卫视 / 看 CCTV5」时给官方直播的频道卡片：点了去官网看，YouTube 官方 24 小时直播在聊天里直接播",
+    "group": "影音",
     "scene": "sessions",
     "claws": [
       "claude",

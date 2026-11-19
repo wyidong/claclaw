@@ -11,47 +11,47 @@ process.env.USERPROFILE = home;
 const skills = await import('../src/skills.mjs');
 
 test('技能装到共用目录、标记为 claclaw 装的，卸载只删自己装的', () => {
-  assert.equal(skills.stateAt('claclaw-peer', 'agents'), 'none');
-  skills.install('claclaw-peer', 'agents');
-  const dest = path.join(home, '.agents', 'skills', 'claclaw-peer');
+  assert.equal(skills.stateAt('claw-interconnect', 'agents'), 'none');
+  skills.install('claw-interconnect', 'agents');
+  const dest = path.join(home, '.agents', 'skills', 'claw-interconnect');
   assert.ok(fs.existsSync(path.join(dest, 'SKILL.md')));
-  assert.equal(skills.stateAt('claclaw-peer', 'agents'), 'ours');
-  assert.ok(skills.installedFor('claclaw-peer', 'openclaw'));
-  assert.ok(!skills.installedFor('claclaw-peer', 'claude'));
-  skills.uninstall('claclaw-peer', 'agents');
-  assert.equal(skills.stateAt('claclaw-peer', 'agents'), 'none');
+  assert.equal(skills.stateAt('claw-interconnect', 'agents'), 'ours');
+  assert.ok(skills.installedFor('claw-interconnect', 'openclaw'));
+  assert.ok(!skills.installedFor('claw-interconnect', 'claude'));
+  skills.uninstall('claw-interconnect', 'agents');
+  assert.equal(skills.stateAt('claw-interconnect', 'agents'), 'none');
 });
 
 test('用户自己的同名技能不覆盖、不删除', () => {
-  const dest = path.join(home, '.claude', 'skills', 'claclaw-peer');
+  const dest = path.join(home, '.claude', 'skills', 'claw-interconnect');
   fs.mkdirSync(dest, { recursive: true });
   fs.writeFileSync(path.join(dest, 'SKILL.md'), '自己的');
-  assert.equal(skills.stateAt('claclaw-peer', 'claude'), 'foreign');
-  assert.throws(() => skills.install('claclaw-peer', 'claude'), /同名技能/);
-  assert.throws(() => skills.uninstall('claclaw-peer', 'claude'), /不是 claclaw 装的/);
+  assert.equal(skills.stateAt('claw-interconnect', 'claude'), 'foreign');
+  assert.throws(() => skills.install('claw-interconnect', 'claude'), /同名技能/);
+  assert.throws(() => skills.uninstall('claw-interconnect', 'claude'), /不是 claclaw 装的/);
   assert.equal(fs.readFileSync(path.join(dest, 'SKILL.md'), 'utf8'), '自己的');
 });
 
 test('仓库里的技能更新后，启动时同步到装过的复制件', () => {
-  skills.install('claclaw-peer', 'agents');
-  const f = path.join(home, '.agents', 'skills', 'claclaw-peer', 'SKILL.md');
-  fs.writeFileSync(path.join(home, '.agents', 'skills', 'claclaw-peer', '.claclaw-skill'), JSON.stringify({ from: 'claclaw', version: 'old' }));
+  skills.install('claw-interconnect', 'agents');
+  const f = path.join(home, '.agents', 'skills', 'claw-interconnect', 'SKILL.md');
+  fs.writeFileSync(path.join(home, '.agents', 'skills', 'claw-interconnect', '.claclaw-skill'), JSON.stringify({ from: 'claclaw', version: 'old' }));
   fs.writeFileSync(f, '旧版');
   skills.syncInstalled();
   assert.notEqual(fs.readFileSync(f, 'utf8'), '旧版');
 });
 
-test('用到 Claw 时按 auto 自动装：Claude 只装 claclaw-files，别的 Claw 两个都装；用户自己的同名技能不动', () => {
-  for (const t of ['claude', 'agents']) for (const n of ['claclaw-peer', 'claclaw-files']) if (skills.stateAt(n, t) === 'ours') skills.uninstall(n, t);
-  fs.rmSync(path.join(home, '.claude', 'skills', 'claclaw-peer'), { recursive: true, force: true });
+test('用到 Claw 时按 auto 自动装：Claude 只装 claw-file，别的 Claw 两个都装；用户自己的同名技能不动', () => {
+  for (const t of ['claude', 'agents']) for (const n of ['claw-interconnect', 'claw-file']) if (skills.stateAt(n, t) === 'ours') skills.uninstall(n, t);
+  fs.rmSync(path.join(home, '.claude', 'skills', 'claw-interconnect'), { recursive: true, force: true });
   skills.ensure('claude');
-  assert.equal(skills.stateAt('claclaw-files', 'claude'), 'ours');
-  assert.equal(skills.stateAt('claclaw-peer', 'claude'), 'none');
+  assert.equal(skills.stateAt('claw-file', 'claude'), 'ours');
+  assert.equal(skills.stateAt('claw-interconnect', 'claude'), 'none');
   skills.ensure('qwen');
-  assert.equal(skills.stateAt('claclaw-files', 'agents'), 'ours');
-  assert.equal(skills.stateAt('claclaw-peer', 'agents'), 'ours');
-  const own = path.join(home, '.claude', 'skills', 'claclaw-files');
-  skills.uninstall('claclaw-files', 'claude');
+  assert.equal(skills.stateAt('claw-file', 'agents'), 'ours');
+  assert.equal(skills.stateAt('claw-interconnect', 'agents'), 'ours');
+  const own = path.join(home, '.claude', 'skills', 'claw-file');
+  skills.uninstall('claw-file', 'claude');
   fs.mkdirSync(own, { recursive: true }); fs.writeFileSync(path.join(own, 'SKILL.md'), '自己的');
   skills.ensure('claude');
   assert.equal(fs.readFileSync(path.join(own, 'SKILL.md'), 'utf8'), '自己的');
@@ -63,9 +63,30 @@ test('各 Claw 装到它自己读的目录：GLM → ~/.claude/skills，iFlow、
   assert.equal(skills.targetOf('codebuddy'), 'codebuddy');
   for (const c of ['deepseek', 'kimi', 'qwen', 'codex', 'openclaw', 'minimax', 'qoder', 'copilot']) assert.equal(skills.targetOf(c), 'agents');
   skills.ensure('iflow');
-  assert.ok(fs.existsSync(path.join(home, '.iflow', 'skills', 'claclaw-media', 'SKILL.md')));
+  assert.ok(fs.existsSync(path.join(home, '.iflow', 'skills', 'claw-video', 'SKILL.md')));
   skills.ensure('codebuddy');
-  assert.ok(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'claclaw-files', 'SKILL.md')));
+  assert.ok(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'claw-file', 'SKILL.md')));
   const all = ['claude', 'deepseek', 'opencode', 'kimi', 'qwen', 'codex', 'openclaw', 'glm', 'iflow', 'minimax', 'codebuddy', 'qoder', 'copilot'];
-  for (const n of ['claclaw-files', 'claclaw-media']) assert.deepEqual(skills.catalog().find(s => s.name === n).claws, all);
+  for (const n of ['claw-file', 'claw-video', 'claw-audio', 'claw-movie', 'claw-image', 'claw-tv']) assert.deepEqual(skills.catalog().find(s => s.name === n).claws, all);
+});
+
+test('拆掉的旧技能（claclaw-media）：启动同步时删掉我们装的复制件，原位置装上接替的四个；用户自己的同名技能不碰', () => {
+  const ours = path.join(home, '.codebuddy', 'skills', 'claclaw-media');
+  fs.rmSync(path.join(home, '.codebuddy', 'skills'), { recursive: true, force: true });
+  fs.mkdirSync(ours, { recursive: true });
+  fs.writeFileSync(path.join(ours, 'SKILL.md'), '旧的'); fs.writeFileSync(path.join(ours, '.claclaw-skill'), '{"from":"claclaw"}');
+  const theirs = path.join(home, '.iflow', 'skills', 'claclaw-media');
+  fs.mkdirSync(theirs, { recursive: true }); fs.writeFileSync(path.join(theirs, 'SKILL.md'), '自己的');
+  skills.syncInstalled();
+  assert.ok(!fs.existsSync(ours));
+  for (const n of skills.RETIRED['claclaw-media']) assert.equal(skills.stateAt(n, 'codebuddy'), 'ours');
+  assert.equal(fs.readFileSync(path.join(theirs, 'SKILL.md'), 'utf8'), '自己的');
+});
+
+test('影音技能都有命令入口，并按 group 分组', () => {
+  for (const n of ['claw-video', 'claw-audio', 'claw-movie', 'claw-image']) {
+    const s = skills.catalog().find(x => x.name === n);
+    assert.equal(s.group, '影音');
+    assert.ok(fs.existsSync(path.join(import.meta.dirname, '..', 'skills', n, n.replace('claw-', '') + '.mjs')));
+  }
 });

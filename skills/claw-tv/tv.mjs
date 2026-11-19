@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// claclaw-tv：电视直播入口。先平台、再频道（和电影技能一样）：
+// claw-tv：电视直播入口。先平台、再频道（和电影技能一样）：
 //   platforms.json 是平台表（央视网、各省台的官方平台、YouTube……），每个平台下面挂它能看的台；
 //   YouTube 平台下面是各台的官方频道，正在播哪几场用的时候现查。
 // 输出 ```tv 代码块：claclaw 画成频道卡片（点了去官网看；YouTube 直播、CGTN 官方流在聊天里直接播）。
-//   claclaw-tv "四川卫视"            找台（模糊匹配：湖南台、央视五套、CCTV5、凤凰、TVBS……）
-//   claclaw-tv platforms             有哪些平台、各有几个台
-//   claclaw-tv list [分组|平台名]     列出全部（按平台分组），或某一类台 / 某个平台的台
+//   claw-tv "四川卫视"            找台（模糊匹配：湖南台、央视五套、CCTV5、凤凰、TVBS……）
+//   claw-tv platforms             有哪些平台、各有几个台
+//   claw-tv list [分组|平台名]     列出全部（按平台分组），或某一类台 / 某个平台的台
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
@@ -140,5 +140,5 @@ if (cmd === 'platforms') {
   const out = (await Promise.all(pick.map(c => one && c.yt ? allLives(c) : fresh(c).then(x => [x])))).flat();
   console.log(block(out, false));
 } else {
-  console.log('用法：claclaw-tv "台名"              找台（四川卫视、湖南台、CCTV5、央视五套、凤凰、TVBS……）\n      claclaw-tv platforms            有哪些平台\n      claclaw-tv list [分组|平台名]    全部台（按平台分组）；分组：' + GROUPS.join(' '));
+  console.log('用法：claw-tv "台名"              找台（四川卫视、湖南台、CCTV5、央视五套、凤凰、TVBS……）\n      claw-tv platforms            有哪些平台\n      claw-tv list [分组|平台名]    全部台（按平台分组）；分组：' + GROUPS.join(' '));
 }

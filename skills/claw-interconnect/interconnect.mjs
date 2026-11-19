@@ -9,11 +9,11 @@ import path from 'node:path';
 
 const HOME_DIR = process.env.CLACLAW_HOME || path.join(os.homedir(), '.claclaw');
 const USAGE = `用法：
-  claclaw-peer whoami
-  claclaw-peer list [--to 本机|对方名字]
-  claclaw-peer send --to 本机 --session 会话ID [--wait 秒] "消息"
-  claclaw-peer send [--to 对方名字] [--session 对方会话ID] [--wait 秒] "消息"
-  claclaw-peer result <任务号> [--wait 秒]
+  claw-interconnect whoami
+  claw-interconnect list [--to 本机|对方名字]
+  claw-interconnect send --to 本机 --session 会话ID [--wait 秒] "消息"
+  claw-interconnect send [--to 对方名字] [--session 对方会话ID] [--wait 秒] "消息"
+  claw-interconnect result <任务号> [--wait 秒]
   （认不出你是哪个会话时，加 --from 你的会话ID）`;
 
 function die(msg, code = 1) { process.stdout.write(msg.replace(/\n?$/, '\n')); process.exit(code); }
@@ -56,7 +56,7 @@ async function call(pathname, body, waitSec) {
 }
 
 function done(j) {
-  if (j.pending) die('对方还在处理。任务号 ' + j.job + '，过一会儿运行：~/.claclaw/bin/claclaw-peer result ' + j.job, 2);
+  if (j.pending) die('对方还在处理。任务号 ' + j.job + '，过一会儿运行：~/.claclaw/bin/claw-interconnect result ' + j.job, 2);
   if (!j.ok) die('出错：' + (j.error || '未知错误') + (j.resets ? '（' + j.resets + ' 恢复）' : ''));
   die((j.peer ? '【' + j.peer + ' 的回复】\n' : '') + (j.reply || '（对方这一轮没有文字回复）'), 0);
 }

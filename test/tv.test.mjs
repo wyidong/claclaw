@@ -1,8 +1,8 @@
-// claclaw-tv 技能：找台的匹配（不联网：只测不在 YouTube 上的台）
+// claw-tv 技能：找台的匹配（不联网：只测不在 YouTube 上的台）
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-const run = (...a) => execFileSync(process.execPath, ['skills/claclaw-tv/tv.mjs', ...a], { encoding: 'utf8' });
+const run = (...a) => execFileSync(process.execPath, ['skills/claw-tv/tv.mjs', ...a], { encoding: 'utf8' });
 const names = out => out.split('\n').filter(l => l.includes(' | ')).map(l => l.split(' | ')[2]);
 
 test('央视几套、CCTV 编号：五套带上 5+，13 不会匹配到 1，cctv5 不会匹配到「中视」(ctv)', () => {
@@ -20,5 +20,5 @@ test('输出是 ```tv 块，每行 5 段；没有的台退出码 2', () => {
   const out = run('四川卫视');
   assert.match(out, /^```tv\n/);
   for (const l of out.split('\n').filter(l => l.includes(' | '))) assert.equal(l.split(' | ').length, 5);
-  assert.equal(spawnSync(process.execPath, ['skills/claclaw-tv/tv.mjs', '不存在的台xyz']).status, 2);
+  assert.equal(spawnSync(process.execPath, ['skills/claw-tv/tv.mjs', '不存在的台xyz']).status, 2);
 });

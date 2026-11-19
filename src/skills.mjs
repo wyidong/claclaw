@@ -26,6 +26,15 @@ const TARGETS = {
   iflow: { dir: path.join(HOME, '.iflow', 'skills'), claws: ['iflow'], label: 'iFlow' },
   codebuddy: { dir: path.join(HOME, '.codebuddy', 'skills'), claws: ['codebuddy'], label: 'CodeBuddy' },
 };
+// 改名 / 拆分后不再用的技能 → 接替它的。启动时删掉我们装过的旧复制件和旧命令，在它原来装过的位置装上接替的
+// （用户自己的同名技能不碰）
+const MEDIA4 = ['claw-video', 'claw-audio', 'claw-movie', 'claw-image'];
+export const RETIRED = {
+  'claclaw-media': MEDIA4,   // 2026-11 拆成四个
+  // 2026-11 技能统一改名 claw-*
+  'claclaw-peer': ['claw-interconnect'], 'claclaw-files': ['claw-file'], 'claclaw-tv': ['claw-tv'],
+  'claclaw-video': ['claw-video'], 'claclaw-music': ['claw-audio'], 'claclaw-movie': ['claw-movie'], 'claclaw-image': ['claw-image'],
+};
 const OWN = { claude: 'claude', glm: 'claude', iflow: 'iflow', codebuddy: 'codebuddy' };   // 其余 Claw 都归 ~/.agents/skills
 export const targetOf = claw => OWN[claw] || 'agents';
 
@@ -95,6 +104,14 @@ export function uninstall(name, target) {
 }
 // 启动时：我们装过的复制件跟上仓库里的最新版
 export function syncInstalled(log) {
+  for (const [old, next] of Object.entries(RETIRED)) for (const target of Object.keys(TARGETS)) {
+    if (stateAt(old, target) !== 'ours') continue;
+    try {
+      fs.rmSync(path.join(TARGETS[target].dir, old), { recursive: true, force: true });
+      for (const n of next) if (stateAt(n, target) === 'none') install(n, target);
+      log?.('skill retired', old, '→', next.join(','), target);
+    } catch (e) { log?.('skill retire failed', old, target, e.message); }
+  }
   for (const s of catalog()) for (const target of Object.keys(TARGETS)) {
     if (stateAt(s.name, target) !== 'ours') continue;
     const m = markOf(path.join(TARGETS[target].dir, s.name));
@@ -112,9 +129,10 @@ export function setupLocal(port, log) {
     localToken = crypto.randomBytes(24).toString('base64url');
     fs.mkdirSync(path.join(CLACLAW_HOME, 'bin'), { recursive: true, mode: 0o700 });
     writeJsonAtomic(path.join(CLACLAW_HOME, 'local.json'), { url: 'http://127.0.0.1:' + port, token: localToken, pid: process.pid }, 0);
+    for (const old of Object.keys(RETIRED)) for (const f of [old, old + '.cmd']) fs.rmSync(path.join(CLACLAW_HOME, 'bin', f), { force: true });
     // 命令入口：用 claclaw 自己的 node 跑仓库里的脚本（AI 的终端里不一定有 node）
     for (const s of catalog()) {
-      const js = path.join(SRC, s.name, s.name.replace(/^claclaw-/, '') + '.mjs');
+      const js = path.join(SRC, s.name, s.name.replace(/^claw-/, '') + '.mjs');
       if (!fs.existsSync(js)) continue;
       const bin = path.join(CLACLAW_HOME, 'bin', s.name);
       fs.writeFileSync(bin, '#!/bin/sh\nexec ' + JSON.stringify(process.execPath) + ' ' + JSON.stringify(js) + ' "$@"\n', { mode: 0o755 });

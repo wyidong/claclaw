@@ -737,7 +737,7 @@ function mdSvg(src){
   var d=svgData(src);if(!d)return mdCode(src);
   return '<figure class="mdsvg'+(d.fill?' fill':'')+'"><img src="'+esc(d.url)+'" alt="SVG 图" loading="lazy"></figure><details class="mdsvg-src"><summary>SVG 源码</summary>'+mdCode(src)+'</details>';
 }
-// 电视频道卡片：```tv 代码块，一行一个频道「分组 | 台标字 | 台名 | 网址 | 说明」（claclaw-tv 技能生成）。
+// 电视频道卡片：```tv 代码块，一行一个频道「分组 | 台标字 | 台名 | 网址 | 说明」（claw-tv 技能生成）。
 // 点卡片新开页面去官网看；能在 claclaw 里直接播的（YouTube 直播）卡片带 ▶，点了进顶上的播放器
 var TV_COLOR={'央视':'#d7262b','卫视':'#1f6fd1','地方':'#0d8f86','少儿':'#ef8a00','香港':'#7b3fd1','澳门':'#0e9f9a','台湾':'#16a34a','海外':'#b45309','国际':'#334155'};
 // 一张卡片：左上台标 / 编号，中间一块电视屏（能播的 ▶，不能播的 ↗ 去官网），下面台名和说明居中
@@ -793,7 +793,7 @@ function md(src){
       var fence=m[1],lang=m[2].toLowerCase(),code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
       i++;var cj=code.join('\n');
-      if(lang==='tv'&&i<=L.length){out.push(mdTv(cj));continue}   // 电视频道卡片（claclaw-tv 技能）
+      if(lang==='tv'&&i<=L.length){out.push(mdTv(cj));continue}   // 电视频道卡片（claw-tv 技能）
       out.push((lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))&&i<=L.length?mdSvg(cj):mdCode(cj));continue;   // 还没收尾（流式输出中）的照代码显示
     }
     if(SVG_SRC.test(l)){                           // 回复里整段 <svg>…</svg>：到 </svg> 为止画成图；还没收尾的照代码显示
@@ -932,7 +932,7 @@ function tpPlay(i,start){
 // B 站播放器结尾那排推荐、角上的 B 站标志点了是开新窗口跳到 B 站：给它加 sandbox（不给 allow-popups）就跳不走了，
 // 相关视频统一从播放器条上的「相关」点，在 claclaw 里接着播。YouTube 不加（沙箱里有的视频会拒绝播放）
 function tpSandbox(f,src){if(/^https:\/\/player\.bilibili\.com\//.test(src))f.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation')}
-// 相关：正在播的 B 站 / YouTube 视频的相关视频（服务器用 claclaw-media 技能查），横着一排；点了插在当前这个后面播，‹ 能回到原来那个。
+// 相关：正在播的 B 站 / YouTube 视频的相关视频（服务器用 claw-video 技能查），横着一排；点了插在当前这个后面播，‹ 能回到原来那个。
 // 换了视频、面板开着就换成新视频的相关（像视频网站那样一路往下看）
 var TP_REL=/^https?:\/\/(?:www\.|m\.)?(?:bilibili\.com\/video\/|youtube\.com\/|youtu\.be\/)/;
 function tpRelUrl(){var x=tp.list[tp.i],u=x&&x.a.getAttribute('href');return u&&TP_REL.test(u)?u:''}
@@ -3478,7 +3478,7 @@ function pgHd(attrs,label,title){return '<div class="pg-hd"><button type="button
 // 技能页：顶上切「按技能 / 按 Agent」。按技能：每个技能一张卡，下面一排装了它的 Agent 图标；按 Agent：每个 Agent 一行写装了几个。
 // 点进去是子页：技能 → 各 Agent 装没装（装 / 卸）；Agent → 各技能装没装。共用一个技能目录的几个 Agent 装 / 卸一起变，子页里写明
 var skBy='skill',skSel='';try{skBy=localStorage.getItem('claclaw.skBy')==='agent'?'agent':'skill'}catch(_){}
-var SK_IC={'claclaw-peer':['🤝','#4F7CFF'],'claclaw-files':['📎','#13A07A'],'claclaw-media':['🎬','#E0663A'],'claclaw-tv':['📺','#8B5CF6']};
+var SK_IC={'claw-interconnect':['🤝','#4F7CFF'],'claw-file':['📎','#13A07A'],'claw-video':['🎞️','#E0663A'],'claw-audio':['🎵','#E0457B'],'claw-movie':['🎬','#D97706'],'claw-image':['🖼️','#0EA5B7'],'claw-tv':['📺','#8B5CF6']};
 function skIcon(n){var c=SK_IC[n]||['🧩','#6B7480'];return '<span class="sk-badge" style="--skc:'+c[1]+'" aria-hidden="true">'+c[0]+'</span>'}
 function skAgents(){   // 所有出现过的 Agent（按第一次出现的顺序）
   var seen={},out=[];(skillsSt||[]).forEach(function(s){s.targets.forEach(function(t){(t.claws||[]).forEach(function(k){if(!seen[k]){seen[k]=1;out.push(k)}})})});return out}
@@ -3531,14 +3531,17 @@ function renderSkills(){
   var ags=skAgents();
   h+='<div class="sk-seg" role="tablist"><button type="button" role="tab" data-act="sk-by" data-by="skill" aria-selected="'+(skBy==='skill')+'">按技能 · '+skillsSt.length+'</button><button type="button" role="tab" data-act="sk-by" data-by="agent" aria-selected="'+(skBy==='agent')+'">按 Agent · '+ags.length+'</button></div>';
   if(skBy==='skill'){
-    h+='<div class="h-card sk-list">'+skillsSt.map(function(s){
+    // 按 index.json 的 group 分组（通用、影音……），组名做小标题；没有 group 的放最后一组（都没有就不出小标题）
+    var grp=[],gi={};skillsSt.forEach(function(s){var g=s.group||'';if(!(g in gi)){gi[g]=grp.length;grp.push({g:g,l:[]})}grp[gi[g]].l.push(s)});
+    grp.sort(function(a,b){return (a.g?0:1)-(b.g?0:1)});
+    h+=grp.map(function(G){return '<div>'+(grp.length>1||G.g?'<div class="h-h">'+esc(G.g||'其他')+'</div>':'')+'<div class="h-card sk-list">'+G.l.map(function(s){
       var inst=skInstalled(s),all=skAll(s);
       return '<div class="h-row h-link sk-item" data-act="sk-open" data-sel="s:'+esc(s.name)+'">'+skIcon(s.name)+
         '<div class="sk-m"><div class="sk-t"><span class="sk-tn">'+esc(s.title||s.name)+'</span><span class="sk-cnt'+(inst.length?' on':'')+'">'+inst.length+' / '+all+'</span></div>'+
         (s.desc?'<div class="sk-d">'+esc(s.desc)+'</div>':'')+
         '<div class="sk-ags">'+(inst.length?inst.map(function(k){return '<span class="sk-ag" title="'+esc(CLAW_NAMES[k]||k)+'">'+clawIcon(k)+'</span>'}).join(''):'<span class="sk-none">还没装到任何 Agent</span>')+'</div></div>'+
         '<span class="chev" aria-hidden="true"></span></div>';
-    }).join('')+'</div>';
+    }).join('')+'</div></div>'}).join('');
   }else{
     h+='<div class="h-card sk-list">'+ags.map(function(k){
       var mine=skillsSt.filter(function(s){return skTarget(s,k)}),on=mine.filter(function(s){return skTarget(s,k).state==='ours'});

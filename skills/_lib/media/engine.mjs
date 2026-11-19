@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// claclaw-media：上网找视频 / 音频 / 图片，下载成手机能直接放、直接看的文件。用法见同目录 SKILL.md。
+// 影音技能共用的引擎：上网找视频 / 音频 / 图片 / 电影。不直接给 AI 用，由各技能的入口调用：
+//   claw-video（视频）、claw-audio（歌 / 音频）、claw-movie（电影）、claw-image（图片），见 skills/_lib/media/cli.mjs。
+// 入口把自己的命令翻译成下面 USAGE 里的形式（process.argv），再 import 这个文件。
 //
 // 机制（三类共用一套）：
 //   1. 来源都在 sources.mjs，每类多个来源（国内直连的 + 要出墙的），可随时加
@@ -34,7 +36,7 @@ for (let i = 0; i < argv.length; i++) {
   else opt[m[1]] = argv[++i];
 }
 const die = (s, code = 1) => { console.error(s); process.exit(code); };
-const USAGE = `用法：
+const USAGE = process.env.CLACLAW_MEDIA_USAGE || `用法：
   claclaw-media link   video|audio "关键词" [--n 1] [--max 秒] [--src a,b]   在线播放链接（聊天里直接播放，不下载）
   claclaw-media movies ["类型 / 片名 / 演员"] [--n 10] [--new] [--year 2026] [--since 2006] [--min 7] [--latest]   官方频道免费完整电影片单（带豆瓣分）；--pick 序号 出播放链接
   claclaw-media related "B 站 / YouTube 视频网址" [--n 20] [--json]   这个视频的相关视频（能在聊天里直接播的）
@@ -280,7 +282,7 @@ async function get(kind, arg) {
     const items = await find(kind, arg, { n: Math.max(10, n * 3), max: +opt.max || (kind === 'video' ? 600 : kind === 'audio' ? 1800 : 0), src: opt.src });
     if (opt.pick) { const x = items[+opt.pick - 1]; if (!x) die('没有第 ' + opt.pick + ' 个（先 find 看列表）'); cands = [x]; } else cands = items;
   }
-  if (!cands.length) die('没找到合适的' + KINDS[kind] + '（换个关键词、放宽 --max，或 --src 指定来源）');
+  if (!cands.length) die('没找到合适的' + KINDS[kind] + '（换个关键词、放宽 --max，或 --src 指定来源）', 2);
   const done = [];
   if (kind === 'image') {
     // 图片：按排名一批 6 个并发下，够数就停
@@ -295,7 +297,7 @@ async function get(kind, arg) {
       catch (e) { console.error(`跳过（${label(x.src)}）${x.title.slice(0, 40)}：${e.message.slice(0, 120)}`); }
     }
   }
-  if (!done.length) die(KINDS[kind] + '都没下下来（换个关键词或 --src 换来源）');
+  if (!done.length) die(KINDS[kind] + '都没下下来（换个关键词或 --src 换来源）', 2);
   for (const { x, f } of done) {
     const mb = fs.statSync(f).size / 1048576;
     // stdout 一行一个：文件路径 \t 大小 \t 来源 \t 时长 \t 标题 \t 出处
@@ -309,7 +311,7 @@ async function get(kind, arg) {
 const EMBEDDABLE = /^https?:\/\/(?:www\.|m\.)?(?:bilibili\.com\/video\/BV|youtube\.com\/watch|youtu\.be\/|dailymotion\.com\/video\/|vimeo\.com\/\d|archive\.org\/details\/|soundcloud\.com\/[\w-]+\/(?!sets\/)[\w-]+)/i;
 const MEDIA_FILE = /\.(mp4|webm|m4v|mov|m3u8|mp3|m4a|aac|ogg|oga|opus|wav|flac)(?:[?#]|$)/i;
 async function link(kind, q) {
-  if (kind === 'image') die('图片用 get image 下载后 send_file 发（聊天里直接显示）');
+  if (kind === 'image') die('图片要下载后发文件（claw-image）');
   const n = Math.min(+opt.n || 1, 5);
   const items = (await find(kind, q, { n: Math.max(10, n * 3), max: +opt.max || (kind === 'video' ? 1800 : 3600), src: opt.src }))
     .map(x => ({ ...x, url: x.page && EMBEDDABLE.test(x.page) ? x.page : x.file && MEDIA_FILE.test(x.file) ? x.file : '' })).filter(x => x.url);
@@ -318,7 +320,7 @@ async function link(kind, q) {
   const head = items.slice(0, n + 4);
   const ok = await Promise.all(head.map(x => { const s = SOURCES.find(s => s.id === x.src); return s?.embed ? s.embed(x, ctx).then(r => { if (!r && opt.debug) console.error("不能嵌入", x.page); return r; }, () => false) : true; }));
   const out = head.filter((_, i) => ok[i]).slice(0, n);
-  if (!out.length) die('没找到能在聊天里直接播放的' + KINDS[kind] + '（换个关键词，或 --src 换来源）');
+  if (!out.length) die('没找到能在聊天里直接播放的' + KINDS[kind] + '（换个关键词，或 --src 换来源）', 2);
   // stdout 一行一个：Markdown 链接 \t 来源 \t 时长 \t 播放量。回复里原样贴 Markdown 链接即可
   for (const x of out) console.log([`[${x.title.replace(/[\[\]]/g, ' ').trim()}](${x.url})`, label(x.src), fmtDur(x.dur), fmtPlays(x.plays)].join('\t'));
 }
@@ -510,7 +512,7 @@ async function latestMovies(LAST) {
     items.push(...part.filter((_, j) => ok[j]));
   }
   items.length = Math.min(items.length, n);
-  if (!items.length) die('没找到能直接播放的华语新片');
+  if (!items.length) die('没找到能直接播放的华语新片', 2);
   const when = x => x.db?.date || (x.db?.year ? x.db.year + '' : '');
   items.sort((a, b) => when(b).localeCompare(when(a)) || (a.ago ?? 9e9) - (b.ago ?? 9e9));
   writeJson(LAST, { q: '华语新片', at: Date.now(), items });
@@ -523,7 +525,7 @@ async function movies(q) {
   const LAST = path.join(STATE, 'movies-last.json');
   if (opt.pick) {
     const last = readJson(LAST, null), x = last?.items?.[+opt.pick - 1];
-    if (!x) die('没有第 ' + opt.pick + ' 部（先 movies "关键词" 看片单）');
+    if (!x) die('没有第 ' + opt.pick + ' 部（先搜片单）');
     // stdout：Markdown 链接 \t 时长 \t 播放 \t 频道 \t 豆瓣。回复里原样贴 Markdown 链接，claclaw 在消息下面放播放卡片
     console.log([`[${x.name}](${x.page})`, fmtDur(x.dur), fmtPlays(x.plays), x.channel, x.db?.rating ? '豆瓣 ' + x.db.rating : x.db?.imdb ? 'IMDb ' + x.db.imdb : x.db?.my ? '猫眼 ' + x.db.my : ''].join('\t'));
     return;
@@ -589,7 +591,7 @@ async function movies(q) {
   const head = cand.slice(0, n + 6);
   const ok = await Promise.all(head.map(x => x.src === 'youtube' ? yt.embed(x, ectx) : true));   // Dailymotion 搜的时候已按 allow_embed 筛过；Archive 都能嵌
   const items = head.filter((_, i) => ok[i]).slice(0, n);
-  if (!items.length) die('没找到官方频道能直接播放的完整电影' + (year ? `（${year} 年的）` : '') + (minRate ? `（豆瓣 ${minRate} 分以上）` : '') + '：换个类型 / 片名 / 演员，或放宽条件');
+  if (!items.length) die('没找到官方频道能直接播放的完整电影' + (year ? `（${year} 年的）` : '') + (minRate ? `（豆瓣 ${minRate} 分以上）` : '') + '：换个类型 / 片名 / 演员，或放宽条件', 2);
   writeJson(LAST, { q, at: Date.now(), items });
   // 片单里片名就是播放链接（claclaw 点了在聊天顶上的播放器里播，不跳走；列表留着随时换）；--pick 序号 也还能单独拿一部
   console.log('序号\t片名\t豆瓣\t年份\t类型\t时长\t播放\t官方频道\t原标题');   // 豆瓣「暂无」= 没评分或这次没查到（限流）
@@ -644,7 +646,7 @@ if (cmd === 'sources') {
 } else if ((cmd === 'find' || cmd === 'get') && KINDS[kind] && arg) {
   if (cmd === 'find') {
     const items = await find(kind, arg, { n: +opt.n || 10, max: +opt.max || 0, src: opt.src });
-    if (!items.length) die('没找到（换个关键词、放宽 --max，或 --src 换来源）');
+    if (!items.length) die('没找到（换个关键词、放宽 --max，或 --src 换来源）', 2);
     console.log(kind === 'image' ? '序号\t来源\t尺寸\t标题\t地址' : '序号\t来源\t时长\t播放\t标题\t网址');
     items.slice(0, Math.max(+opt.n || 10, 1)).forEach((x, i) => console.log(kind === 'image'
       ? [i + 1, label(x.src), x.w && x.h ? x.w + 'x' + x.h : '?', x.title, x.page || x.file].join('\t')
