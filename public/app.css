@@ -1978,20 +1978,25 @@ select.pe-in{text-align-last:right}
   #tplay.rel:not(.float):not(.tp-a) .tp-v{max-width:calc(28vh * 16 / 9)}
 }
 
-/* 电视频道 / 片单卡片（```tv 代码块、片单编号列表）：方块卡片两列排（宽屏多列），台标 / 编号在左上，▶ / ↗ 在右上，台名片名在下 */
+/* 电视频道 / 片单卡片（```tv 代码块、片单编号列表）：方块卡片两列排（宽屏多列）；左上台标 / 编号，中间一块电视屏（能播 ▶ / 去官网 ↗ 居中，按钮同一个样子，只图标不同），下面台名、说明居中 */
 .tvg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:10px 0}
-.md a.tvc{position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0;min-height:120px;padding:14px;border-radius:16px;background:var(--surface);border:1px solid var(--line,rgba(127,127,127,.18));box-shadow:0 1px 2px rgba(0,0,0,.04),0 2px 8px rgba(0,0,0,.04);color:var(--ink);text-decoration:none;transition:transform .12s,box-shadow .12s,border-color .12s}
+.md a.tvc{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:9px;min-width:0;padding:11px 11px 13px;border-radius:16px;background:var(--surface);border:1px solid var(--line,rgba(127,127,127,.18));box-shadow:0 1px 2px rgba(0,0,0,.04),0 2px 8px rgba(0,0,0,.04);color:var(--ink);text-decoration:none;text-align:center;transition:transform .12s,box-shadow .12s,border-color .12s}
 .md a.tvc::before{content:none}
 .md a.tvc:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);box-shadow:0 6px 18px rgba(0,0,0,.09);transform:translateY(-1px)}
 .md a.tvc:active{transform:scale(.97)}
-.tvc-l{flex:none;width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;font-weight:800;font-size:18px;line-height:1.05;letter-spacing:-.3px;background:linear-gradient(150deg,color-mix(in srgb,var(--c) 70%,#fff),var(--c) 55%,color-mix(in srgb,var(--c) 78%,#000));box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 2px 6px color-mix(in srgb,var(--c) 30%,transparent)}
-.tvc-l.s{font-size:12px;padding:0 3px;word-break:break-all}
-.tvc-m{width:100%;min-width:0;display:flex;flex-direction:column;gap:3px}
-.tvc-m b{font-size:15px;font-weight:650;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
-.tvc-m small{font-size:12px;line-height:1.4;color:var(--muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
-.tvc-go{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--muted);background:color-mix(in srgb,var(--muted) 12%,transparent);font-size:11px}
-.md a.tvc.emb-l .tvc-go{color:#fff;background:#16a34a;padding-left:2px;box-sizing:border-box}
-.md a.tvc.playing{border-color:#16a34a;background:color-mix(in srgb,#16a34a 8%,var(--surface));box-shadow:0 0 0 1px #16a34a;padding:14px;border-radius:16px;font-weight:inherit}
+.tvc-l{align-self:flex-start;max-width:100%;box-sizing:border-box;min-width:22px;height:20px;padding:0 6px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb,var(--c) 85%,var(--ink));font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;background:color-mix(in srgb,var(--c) 11%,transparent)}
+.tvc-l.s{font-size:11px;padding:0 5px}
+.tvc-tv{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;margin:0 2px 8px;border-radius:10px;background:radial-gradient(120% 100% at 28% 18%,color-mix(in srgb,var(--c) 42%,#1b1e26),#0c0e13 72%);box-shadow:inset 0 0 0 3px #2b2f39,0 3px 8px rgba(0,0,0,.16)}
+.tvc-tv::before{content:"";position:absolute;inset:3px;border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,0) 42%);pointer-events:none}
+.tvc-tv::after{content:"";position:absolute;left:50%;bottom:-8px;width:34%;height:6px;transform:translateX(-50%);background:#2b2f39;clip-path:polygon(12% 0,88% 0,100% 100%,0 100%);border-radius:0 0 3px 3px}
+.tvc-go{position:relative;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);box-sizing:border-box;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:transform .15s}
+.md a.tvc.emb-l .tvc-go{background:none;border:0;backdrop-filter:none;-webkit-backdrop-filter:none}   /* 能播的：不要圈，只一个亮绿色三角（三角本身已按视觉重心偏右，不再另加偏移） */
+.md a.tvc.emb-l .tvc-go svg{width:34px;height:34px;color:#4ade80;filter:drop-shadow(0 0 6px rgba(74,222,128,.65))}
+.md a.tvc:hover .tvc-go{transform:scale(1.08)}
+.tvc-m{min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tvc-m b{max-width:100%;font-size:15px;font-weight:650;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.tvc-m small{max-width:100%;font-size:12px;line-height:1.4;color:var(--muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.md a.tvc.playing{border-color:#16a34a;background:color-mix(in srgb,#16a34a 8%,var(--surface));box-shadow:0 0 0 1px #16a34a;padding:11px 11px 13px;border-radius:16px;font-weight:inherit}
 .md a.tvc.emb-l.playing::before{content:none}
-.md a.tvc.playing .tvc-go{animation:tvpulse 1.6s ease-in-out infinite}
-@keyframes tvpulse{50%{box-shadow:0 0 0 5px color-mix(in srgb,#16a34a 22%,transparent)}}
+.md a.tvc.playing .tvc-go svg{animation:tvpulse 1.6s ease-in-out infinite}
+@keyframes tvpulse{50%{transform:scale(1.15);filter:drop-shadow(0 0 10px rgba(74,222,128,.9))}}
