@@ -80,9 +80,37 @@
     ]
   },
   {
+    "name": "claw-music",
+    "title": "听歌（纯音频）",
+    "desc": "只放声音的歌：网易云免费 mp3、B 站官方 / 无损音轨（最高 320k）、CC 和公版音乐，按原曲时长挑完整版",
+    "group": "影音",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
+  },
+  {
     "name": "claw-audio",
-    "title": "找歌、找音频",
-    "desc": "找歌、白噪音、有声内容，聊天里直接播，要文件时下载成 m4a",
+    "title": "找 MV、音频视频",
+    "desc": "带画面的歌（MV、现场）和音频类视频，聊天里直接播，要文件时下载成 m4a",
     "group": "影音",
     "scene": "sessions",
     "claws": [

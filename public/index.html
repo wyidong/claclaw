@@ -859,6 +859,9 @@ function md(src){
 // 在线视频 / 音频：回复里出现能嵌入播放的网址（B 站、YouTube、Dailymotion、Vimeo、Internet Archive、SoundCloud、媒体直链），
 // 在这条消息后面放一个播放卡片，点一下在会话里直接播放（不跳出 claclaw）。点之前不加载外站任何东西
 var EMBED_RULES=[
+  // 纯音频（claw-music 技能）：B 站视频网址后面带 #audio = 只放它的音轨；网易云官方外链 = 免费歌的 mp3。都由服务器 /api/aud 转（B 站要 Referer，网易云的 mp3 是 http）
+  [/^https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV[0-9A-Za-z]{10})\/?(?:\?(?:[^#\s]*&)?p=(\d+))?[^#\s]*#audio$/,'B 站音轨','file-audio',function(m){return '/api/aud?bv='+m[1]+'&p='+(m[2]||1)}],
+  [/^https?:\/\/music\.163\.com\/song\/media\/outer\/url\?id=(\d+)/,'网易云','file-audio',function(m){return '/api/aud?ne='+m[1]}],
   [/^https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV[0-9A-Za-z]{10})\/?(?:\?(?:[^#\s]*&)?p=(\d+))?/,'B 站','video',function(m){return 'https://player.bilibili.com/player.html?isOutside=true&bvid='+m[1]+'&p='+(m[2]||1)+'&high_quality=1&autoplay=1'}],
   [/^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/,'YouTube','video',function(m){return 'https://www.youtube-nocookie.com/embed/'+m[1]+'?autoplay=1&playsinline=1&rel=0'}],
   [/^https?:\/\/(?:www\.)?(?:dailymotion\.com\/video|dai\.ly)\/([a-z0-9]+)/i,'Dailymotion','video',function(m){return 'https://www.dailymotion.com/embed/video/'+m[1]+'?autoplay=1'}],
@@ -922,7 +925,7 @@ function tpPlay(i,start){
   else{m=el.ownerDocument.createElement('iframe');tpSandbox(m,x.e.src);m.src=tpSrc(x,start);m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
     m.addEventListener('load',function(){try{m.contentWindow.postMessage('{"event":"listening","id":1,"channel":"widget"}','*')}catch(_){}})}
   v.appendChild(m);
-  el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.hidden=false;
+  el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.classList.toggle('tp-fa',k==='file-audio');el.hidden=false;
   tpMovie(tp.movie);
   el.querySelector('.tp-s').textContent=x.e.site;
   el.querySelector('.tp-prev').disabled=i<=0;el.querySelector('.tp-next').disabled=i>=tp.list.length-1;
@@ -3478,7 +3481,7 @@ function pgHd(attrs,label,title){return '<div class="pg-hd"><button type="button
 // 技能页：顶上切「按技能 / 按 Agent」。按技能：每个技能一张卡，下面一排装了它的 Agent 图标；按 Agent：每个 Agent 一行写装了几个。
 // 点进去是子页：技能 → 各 Agent 装没装（装 / 卸）；Agent → 各技能装没装。共用一个技能目录的几个 Agent 装 / 卸一起变，子页里写明
 var skBy='skill',skSel='';try{skBy=localStorage.getItem('claclaw.skBy')==='agent'?'agent':'skill'}catch(_){}
-var SK_IC={'claw-interconnect':['🤝','#4F7CFF'],'claw-file':['📎','#13A07A'],'claw-video':['🎞️','#E0663A'],'claw-audio':['🎵','#E0457B'],'claw-movie':['🎬','#D97706'],'claw-image':['🖼️','#0EA5B7'],'claw-tv':['📺','#8B5CF6']};
+var SK_IC={'claw-interconnect':['🤝','#4F7CFF'],'claw-file':['📎','#13A07A'],'claw-video':['🎞️','#E0663A'],'claw-music':['🎧','#2563EB'],'claw-audio':['🎤','#E0457B'],'claw-movie':['🎬','#D97706'],'claw-image':['🖼️','#0EA5B7'],'claw-tv':['📺','#8B5CF6']};
 function skIcon(n){var c=SK_IC[n]||['🧩','#6B7480'];return '<span class="sk-badge" style="--skc:'+c[1]+'" aria-hidden="true">'+c[0]+'</span>'}
 function skAgents(){   // 所有出现过的 Agent（按第一次出现的顺序）
   var seen={},out=[];(skillsSt||[]).forEach(function(s){s.targets.forEach(function(t){(t.claws||[]).forEach(function(k){if(!seen[k]){seen[k]=1;out.push(k)}})})});return out}

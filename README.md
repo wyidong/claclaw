@@ -76,7 +76,7 @@ clarelay 是可选的第三方中继。在「设置 → 宿主 → 网络 → cl
 
 ### 技能
 
-`skills/` 里预备了 Agent Skills（claw-interconnect：找别的会话；claw-file：把图片、视频、文档发到手机上看；影音组的 claw-video / claw-audio / claw-movie / claw-image / claw-tv：从多个网站找视频、歌、官方免费电影、图片，看电视直播），用到相关功能时自动装进 `~/.claude/skills` 和 `~/.agents/skills`，所有 Claw 都能用；在「设置 → 宿主 → 技能」里能看、能装、能卸，不会碰你自己的同名技能。
+`skills/` 里预备了 Agent Skills（claw-interconnect：找别的会话；claw-file：把图片、视频、文档发到手机上看；影音组的 claw-video / claw-music / claw-audio / claw-movie / claw-image / claw-tv：从多个网站找视频、纯音频的歌、MV、官方免费电影、图片，看电视直播），用到相关功能时自动装进 `~/.claude/skills` 和 `~/.agents/skills`，所有 Claw 都能用；在「设置 → 宿主 → 技能」里能看、能装、能卸，不会碰你自己的同名技能。
 
 ## 安全提示
 

@@ -1,6 +1,6 @@
 ---
 name: claw-video
-description: 找视频给用户看：用户说「找 / 发一段讲 XX 的视频」「来个 XX 的短视频」「有没有 XX 的教程 / 纪录片片段」「再来几个类似的」「把这个视频链接下下来发我」时使用。给能在 claclaw 聊天里直接播的视频链接（B 站、YouTube 等原站画质），要文件时下载成 mp4。电影用 claw-movie，歌和音频用 claw-audio，电视直播用 claw-tv。
+description: 找视频给用户看：用户说「找 / 发一段讲 XX 的视频」「来个 XX 的短视频」「有没有 XX 的教程 / 纪录片片段」「再来几个类似的」「把这个视频链接下下来发我」时使用。给能在 claclaw 聊天里直接播的视频链接（B 站、YouTube 等原站画质），要文件时下载成 mp4。电影用 claw-movie，听歌用 claw-music，MV 用 claw-audio，电视直播用 claw-tv。
 ---
 
 # 找视频

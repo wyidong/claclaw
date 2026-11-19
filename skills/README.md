@@ -29,7 +29,7 @@ skills/
 - **依赖**：只用 Node 内置模块和系统自带的 `curl`，不 `npm install`。外部工具（yt-dlp、ffmpeg）用到时再下载到 `~/.claclaw/tools/`。
 - **缓存和状态**：放 `~/.claclaw/<名>/`，不写进技能目录。各 Claw 用的是复制件，claclaw 启动时会用仓库里的版本覆盖。
 - **登记**：在 `index.json` 加一条，字段是 `name`、`title`、`desc`、`group`、`scene`、`claws`、`auto`。
-  - `group`：技能大组，技能页按它分组显示。现有「通用」（peer、files）、「影音」（video、music、movie、image、tv）。
+  - `group`：技能大组，技能页按它分组显示。现有「通用」（interconnect、file）、「影音」（video、music、audio、movie、image、tv）。
   - `claws`：默认写全部会跑命令的 Claw（claude deepseek opencode kimi qwen codex openclaw glm iflow minimax codebuddy qoder copilot）。
   - `auto`：默认写全部四个安装位置（claude agents iflow codebuddy），用到哪个 Claw 就自动装到哪。
   - Mini 不调工具，用不了技能。
@@ -38,8 +38,8 @@ skills/
 
 ## 3. 拆分和分组
 
-- **一个技能管一件事**：用户的说法、命令、回复方式有一样不同，就拆成两个。比如影音拆成视频、歌、电影、图片、电视五个，各自的 description 只写自己的说法，AI 一句话就能选对。
-- **写清边界**：description 最后一句点名兄弟技能，比如「电影用 claw-movie，歌用 claw-audio」。容易混的说法（「XX 的 MV」算歌，「纪录片片段」算视频）写进对应技能的说法里。
+- **一个技能管一件事**：用户的说法、命令、回复方式有一样不同，就拆成两个。比如影音拆成视频、纯音频的歌、MV、电影、图片、电视六个，各自的 description 只写自己的说法，AI 一句话就能选对。
+- **写清边界**：description 最后一句点名兄弟技能，比如「电影用 claw-movie，听歌用 claw-music」。容易混的说法（「来首歌」算 claw-music 纯音频，「XX 的 MV」算 claw-audio，「纪录片片段」算视频）写进对应技能的说法里。
 - **同类放一个大组**：`index.json` 的 `group` 相同。
 - **公共代码放 `_lib/<名>/`**：搜索、下载、代理这类几个技能都要的，只写一份。技能自己的 `<名>.mjs` 只做一件事：把自己的命令翻译成公共代码的调用（见 `_lib/media/cli.mjs`）。
 - **命令形式统一**：`claw-<名> "关键词"` 是最常用的默认动作；其余动作用第一个词做子命令（`find`、`get`、`related`、`sources`、`list`…），选项用 `--xxx`。
@@ -76,6 +76,7 @@ description: <做什么>：用户说「<原话 1>」「<原话 2>」「<原话 3
 | 要给用户的东西 | 命令输出 / 回复里怎么写 | claclaw 显示成 |
 |---|---|---|
 | 能在线播的视频、音频 | `[标题](网址)` | 带 ▶ 的链接，点了在顶上的播放器播 |
+| 只放声音（纯音频） | 音频文件直链（.mp3 / .m4a…），或 claclaw 认得的两种：B 站视频网址加 `#audio`、网易云外链 `music.163.com/song/media/outer/url?id=…` | 顶上的音频条，没有画面（后两种由服务器 `/api/aud` 转） |
 | 片单 / 列表 | 编号列表 `1. [片名](网址) · 年份 · 类型 · 时长 · 来源` | 一条消息里超过 3 个能播的链接就成为播放列表 |
 | 频道 / 入口卡片 | ```` ```tv ```` 块，一行一个：`分组 \| 台标字 \| 名称 \| 网址 \| 说明` | 卡片：能播的带 ▶，其余点了新开页面 |
 | 文件 | `send_file` 工具，或反引号里写路径 | 文件卡片 / 预览 |

@@ -57,6 +57,7 @@ import { classify, nextDelay, isoLocal, lateText, DiskMap, RETRY_MAX_AGE, SEEN_T
 import { peerJudge } from './src/peer/peerjudge.mjs';
 import { storeNow as libStoreNow, claudeLibProviders, parseLibPick, claudeLibEnv, noProxyAdd } from './src/modelpick.mjs';
 import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './src/modelstore.mjs';
+import { serveAud } from './src/audproxy.mjs';
 import { saveVideo, videoFile, videoDuration, videoThumb, imageThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './src/video.mjs';
 const STARTED_AT = Date.now();
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -2803,6 +2804,8 @@ const handler = async (req, res) => {
       try { return sendJson(res, 200, await ocStartGateway(childEnv(), log)); } catch (e) { return sendJson(res, 500, { error: e.message }); }
     }
     // 顶上播放器的「相关」：正在播的 B 站 / YouTube 视频的相关视频（claw-video 技能的 related 命令查，半小时内同一个视频不重查）
+    // 纯音频（claw-music 技能）：B 站视频的单独音轨、网易云免费歌的 mp3，服务器取来转给手机的 <audio>
+    if (url.pathname === '/api/aud' && (req.method === 'GET' || req.method === 'HEAD')) return serveAud(req, res, url.searchParams, log);
     if (url.pathname === '/api/related' && req.method === 'GET') {
       const id = relatedKey(String(url.searchParams.get('u') || ''));
       if (!id) return sendJson(res, 400, { ok: false, error: '只支持 B 站、YouTube 视频' });

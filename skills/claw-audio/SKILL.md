@@ -1,9 +1,9 @@
 ---
 name: claw-audio
-description: 找歌和音频给用户听：用户说「来首 XX 的歌」「放一首周杰伦的晴天」「我想听 XX」「来段雨声 / 白噪音 / 轻音乐」「找个 XX 的有声书 / 相声」「XX 的 MV」「把这首歌下下来」时使用。给能在 claclaw 聊天里直接播的链接（B 站、YouTube、SoundCloud 等），要文件时下载成 m4a。普通视频用 claw-video，电影用 claw-movie。
+description: 找带画面的歌和音频视频：用户说「XX 的 MV」「看 XX 的现场 / 演唱会片段」「来段雨声 / 白噪音视频」「找个 XX 的有声书 / 相声视频」「把这个 MV 下下来」时使用。给能在 claclaw 聊天里直接播的链接（B 站、YouTube、SoundCloud 等，带画面），要文件时下载成 m4a。只听歌、不要画面用 claw-music，普通视频用 claw-video，电影用 claw-movie。
 ---
 
-# 找歌、找音频
+# 找 MV、音频视频
 
 从 B 站、YouTube、SoundCloud、Internet Archive、Openverse 并发搜，只给**能嵌在 claclaw 聊天里直接播**的链接，通常 2～3 秒。**只用这个命令，不要自己编链接。** 不先问用户细节，直接给，发完再问要不要换版本。
 

@@ -90,3 +90,9 @@ test('影音技能都有命令入口，并按 group 分组', () => {
     assert.ok(fs.existsSync(path.join(import.meta.dirname, '..', 'skills', n, n.replace('claw-', '') + '.mjs')));
   }
 });
+
+test('claw-music：纯音频技能登记在影音组，有命令入口', () => {
+  const s = skills.catalog().find(x => x.name === 'claw-music');
+  assert.equal(s.group, '影音');
+  assert.ok(fs.existsSync(path.join(import.meta.dirname, '..', 'skills', 'claw-music', 'music.mjs')));
+});
