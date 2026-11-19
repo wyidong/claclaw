@@ -5747,9 +5747,7 @@ function ttsPickVoice(){
   if(tts.want&&vcOff(tts.want)){var nx=srv[0]?'srv:'+srv[0].name:vs[0]?vs[0].voiceURI:'';if(nx&&nx!==tts.want){tts.want=nx;lsSet('claclaw.ttsVoice',nx)}}
   tts.voice=vs.find(function(v){return v.voiceURI===tts.want})||vs[0]||null;
   var sel=$('#setTtsVoice');if(!sel)return;
-  var dev=vs.map(function(v){return '<option value="'+esc(v.voiceURI)+'">'+esc(vcAlias(v.voiceURI)||ttsLabel(v))+'</option>'}).join('');
-  var pc=srv.map(function(v){return '<option value="srv:'+esc(v.name)+'">'+esc(vcAlias('srv:'+v.name)||srvLabel(v))+'</option>'}).join('');
-  sel.innerHTML=(pc?'<optgroup label="电脑合成">'+pc+'</optgroup>':'')+(dev?'<optgroup label="这台设备自带">'+dev+'</optgroup>':'')||'<option value="">没有中文语音</option>';
+  sel.innerHTML=ttsOpts(ttsChoices())||'<option value="">没有中文语音</option>';
   sel.value=ttsSrvVoice()?'srv:'+ttsSrvVoice():tts.voice?tts.voice.voiceURI:'';
   $('#setTtsVoiceSub').textContent=srv.length?'选了试听；电脑合成的更自然':'选了试听';
 }
@@ -6356,6 +6354,13 @@ function ttsChoices(){
   var L=ttsLists(),vs=L.vs,srv=L.srv;
   return srv.map(function(v){return {id:'srv:'+v.name,label:vcAlias('srv:'+v.name)||srvLabel(v)}}).concat(vs.map(function(v){return {id:v.voiceURI,label:vcAlias(v.voiceURI)||ttsLabel(v)}}));
 }
+// 声音下拉框：按来源（豆包 / 微软 / 本机）分成几组，组名就是来源，组里的名字去掉「豆包 · 」「微软 · 」只留性别
+function ttsSrc(id){return /^srv:volc:/.test(id)?'豆包':/^srv:edge:/.test(id)?'微软':/^srv:/.test(id)?'电脑':'本机'}
+function ttsOptLab(l){return String(l).replace(/（(豆包|微软)(?: · )?/,'（').replace(/（）$/,'')}
+function ttsOpts(list){
+  var gs=[],by={};list.forEach(function(c){var g=ttsSrc(c.id);if(!by[g]){by[g]=[];gs.push(g)}by[g].push(c)});
+  return gs.map(function(g){return '<optgroup label="'+g+'">'+by[g].map(function(c){return '<option value="'+esc(c.id)+'">'+esc(ttsOptLab(c.label))+'</option>'}).join('')+'</optgroup>'}).join('');
+}
 // 用当前会话的声音、语速念一句（选完声音 / 调完语速试听）
 function devSpeak(t,rate,voice,lang){var u=new SpeechSynthesisUtterance(t);u.lang=lang||'zh-CN';u.rate=rate;if(voice)u.voice=voice;speechSynthesis.speak(u)}   // 用这台设备自带的语音念一句（试听）
 function ttsTapUnlock(){tts.unlocked=true;tts.srvUnlocked=false;if(ttsSrvVoice()||ttsWantSrv())srvUnlock(true)}   // 这次点击就是 iPhone 要的「用户手势」：顺手解锁朗读
@@ -6368,7 +6373,7 @@ function renderCfgTts(){
     if(!session||session.id!==sid)return;
     var list=ttsChoices(),cur=ttsSessV[sid]||'',def=list.find(function(c){return c.id===tts.want});
     if(cur&&!list.some(function(c){return c.id===cur}))list.unshift({id:cur,label:cur.replace(/^srv:\w+:/,'')});   // 单独选过、后来在语音管理里取消勾选的：也列出来
-    sel.innerHTML='<option value="">跟随默认'+(def?'（'+esc(def.label)+'）':'')+'</option>'+list.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.label)+'</option>'}).join('');
+    sel.innerHTML='<option value="">跟随默认'+(def?' · '+esc(ttsOptLab(def.label).replace(/（[^（）]*）$/,'')):'')+'</option>'+ttsOpts(list);
     sel.value=cur;
   };
   if(tts.srv)go();else ttsLoadSrv().then(go,go);
