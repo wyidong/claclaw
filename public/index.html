@@ -3475,24 +3475,80 @@ function vcEngGet(){return fetch('/api/tts/engines').then(function(r){return r.o
 vcEngGet().catch(function(){});
 var BACK_SVG='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
 function pgHd(attrs,label,title){return '<div class="pg-hd"><button type="button" class="pe-back" '+attrs+' aria-label="'+label+'">'+BACK_SVG+'</button><div class="pg-t">'+esc(title||'')+'</div></div>'}
+// 技能页：顶上切「按技能 / 按 Agent」。按技能：每个技能一张卡，下面一排装了它的 Agent 图标；按 Agent：每个 Agent 一行写装了几个。
+// 点进去是子页：技能 → 各 Agent 装没装（装 / 卸）；Agent → 各技能装没装。共用一个技能目录的几个 Agent 装 / 卸一起变，子页里写明
+var skBy='skill',skSel='';try{skBy=localStorage.getItem('claclaw.skBy')==='agent'?'agent':'skill'}catch(_){}
+var SK_IC={'claclaw-peer':['🤝','#4F7CFF'],'claclaw-files':['📎','#13A07A'],'claclaw-media':['🎬','#E0663A'],'claclaw-tv':['📺','#8B5CF6']};
+function skIcon(n){var c=SK_IC[n]||['🧩','#6B7480'];return '<span class="sk-badge" style="--skc:'+c[1]+'" aria-hidden="true">'+c[0]+'</span>'}
+function skAgents(){   // 所有出现过的 Agent（按第一次出现的顺序）
+  var seen={},out=[];(skillsSt||[]).forEach(function(s){s.targets.forEach(function(t){(t.claws||[]).forEach(function(k){if(!seen[k]){seen[k]=1;out.push(k)}})})});return out}
+function skTarget(s,k){for(var i=0;i<s.targets.length;i++)if((s.targets[i].claws||[]).indexOf(k)>=0)return s.targets[i];return null}
+function skInstalled(s){var out=[];s.targets.forEach(function(t){if(t.state==='ours')(t.claws||[]).forEach(function(k){out.push(k)})});return out}
+function skAll(s){var n=0;s.targets.forEach(function(t){n+=(t.claws||[]).length});return n}
+function skStateTxt(t){return t.state==='ours'?'已安装':t.state==='foreign'?'有同名技能（不是 claclaw 装的）':'未安装'}
+function skBtn(s,t){
+  return t.state==='ours'?'<button type="button" class="pe-btn sk-b" data-act="skill-remove" data-name="'+esc(s.name)+'" data-target="'+esc(t.id)+'">卸载</button>':
+    t.state==='none'?'<button type="button" class="pe-btn pri sk-b" data-act="skill-install" data-name="'+esc(s.name)+'" data-target="'+esc(t.id)+'">安装</button>':'';
+}
+function skShare(t,k){var o=(t.claws||[]).filter(function(x){return x!==k});return o.length?'和 '+o.map(function(x){return CLAW_NAMES[x]||x}).join('、')+' 共用一份':''}
 function renderSkills(){
   if(hostView!=='skills')return;
-  var h=pgHd('data-act="peer-back"','返回宿主','技能');
+  var h;
+  if(skSel&&skillsSt){
+    var sk=skSel.slice(0,2)==='s:'?skillsSt.find(function(s){return s.name===skSel.slice(2)}):null,ag=skSel.slice(0,2)==='a:'?skSel.slice(2):'';
+    if(!sk&&!ag){skSel=''}
+    else{
+      h=pgHd('data-act="sk-back"','返回技能',sk?(sk.title||sk.name):(CLAW_NAMES[ag]||ag));
+      if(skillMsg.err)h+='<div class="pe-err">'+esc(skillMsg.err)+'</div>';
+      if(sk){   // 技能子页：说明 + 每个 Agent 装没装
+        var inst=skInstalled(sk);
+        h+='<div class="sk-hero">'+skIcon(sk.name)+'<div class="sk-ht"><div class="sk-hn">'+esc(sk.title||sk.name)+'</div><div class="sk-hid">'+esc(sk.name)+'</div></div><span class="sk-cnt'+(inst.length?' on':'')+'">'+inst.length+' / '+skAll(sk)+'</span></div>';
+        if(sk.desc)h+='<div class="sk-desc">'+esc(sk.desc)+'</div>';
+        var rows=function(want){var r='';sk.targets.forEach(function(t){if((t.state==='ours')!==want)return;var cs=t.claws||[];if(!cs.length)return;
+          var fo=t.state==='foreign'?'<small class="sk-sub">'+skStateTxt(t)+'</small>':'';
+          if(cs.length===1){r+='<div class="h-row sk-row"><span class="sk-ic">'+clawIcon(cs[0])+'</span><span class="k">'+esc(CLAW_NAMES[cs[0]]||cs[0])+fo+'</span>'+skBtn(sk,t)+'</div>';return}
+          // 几个 Agent 共用一个技能目录：合成一行，一排图标 + 名字，一个按钮
+          r+='<div class="h-row sk-row sk-grp"><span class="k"><span class="sk-gt">'+cs.length+' 个 Agent 共用一份</span><span class="sk-ags">'+cs.map(function(k){return '<span class="sk-ag" title="'+esc(CLAW_NAMES[k]||k)+'">'+clawIcon(k)+'</span>'}).join('')+'</span>'+
+            '<small class="sk-sub sk-names">'+cs.map(function(k){return '<span>'+esc(CLAW_NAMES[k]||k)+'</span>'}).join('、')+'</small>'+fo+'</span>'+skBtn(sk,t)+'</div>'});return r};
+        var on=rows(true),off=rows(false);
+        if(on)h+='<div class="h-h">已安装</div><div class="h-card">'+on+'</div>';
+        if(off)h+='<div class="h-h">未安装</div><div class="h-card">'+off+'</div>';
+        if(!on&&!off)h+='<div class="h-card"><div class="h-row"><span class="v">这台电脑上没有用得上它的 Agent</span></div></div>';
+      }else{   // Agent 子页：每个技能装没装
+        var mine=skillsSt.filter(function(s){return skTarget(s,ag)}),n=mine.filter(function(s){return skTarget(s,ag).state==='ours'}).length;
+        var t0=mine.length?skTarget(mine[0],ag):null,sh0=t0?skShare(t0,ag):'';
+        h+='<div class="sk-hero"><span class="sk-ic sk-big">'+clawIcon(ag)+'</span><div class="sk-ht"><div class="sk-hn">'+esc(CLAW_NAMES[ag]||ag)+'</div><div class="sk-hid">已装 '+n+' 个技能'+(sh0?' · '+esc(sh0):'')+'</div></div><span class="sk-cnt'+(n?' on':'')+'">'+n+' / '+mine.length+'</span></div>';
+        h+='<div class="h-card">'+(mine.map(function(s){var t=skTarget(s,ag);
+          return '<div class="h-row sk-row">'+skIcon(s.name)+'<span class="k">'+esc(s.title||s.name)+'<small class="sk-sub'+(t.state==='ours'?' on':'')+'">'+skStateTxt(t)+'</small></span>'+skBtn(s,t)+'</div>'}).join('')||'<div class="h-row"><span class="v">没有适用于它的技能</span></div>')+'</div>';
+      }
+      h+='<div class="pe-note">技能是给 AI 用的说明和命令，用到时自动安装。共用一个技能目录的几个 Agent，装 / 卸一起变。</div>';
+      $('#hostBody').innerHTML=h;return;
+    }
+  }
+  h=pgHd('data-act="peer-back"','返回宿主','技能');
   if(skillMsg.err)h+='<div class="pe-err">'+esc(skillMsg.err)+'</div>';
-  if(!skillsSt)h+=LOADING;
-  else h+=skillsSt.map(function(s){
-    return '<div><div class="h-h">'+esc(s.title||s.name)+'</div><div class="h-card">'+
-      '<div class="h-row"><span class="v" style="text-align:left">'+esc(s.desc||'')+'</span></div>'+
-      (s.targets.length?s.targets.map(function(t){
-        var st=t.state==='ours'?'已安装':t.state==='foreign'?'已有同名技能（不是 claclaw 装的）':'未安装';
-        var btn=t.state==='ours'?'<button type="button" class="pe-btn" data-act="skill-remove" data-name="'+esc(s.name)+'" data-target="'+esc(t.id)+'">卸载</button>':
-          t.state==='none'?'<button type="button" class="pe-btn pri" data-act="skill-install" data-name="'+esc(s.name)+'" data-target="'+esc(t.id)+'">安装</button>':'';
-        var cs=t.claws&&t.claws.length?t.claws:null;   // 一行一个 Claw；共用一处的几个，装 / 卸一起变
-        if(!cs)return '<div class="h-row sk-row"><span class="k">'+esc(t.label)+'<br><small style="color:var(--muted)">'+st+'</small></span>'+btn+'</div>';
-        return cs.map(function(k){return '<div class="h-row sk-row"><span class="sk-ic">'+clawIcon(k)+'</span><span class="k">'+esc(CLAW_NAMES[k]||k)+'<br><small style="color:var(--muted)">'+st+'</small></span>'+btn+'</div>'}).join('');
-      }).join(''):'<div class="h-row"><span class="v">这台电脑上没有用得上它的 Claw</span></div>')+
-      '</div></div>';
-  }).join('')+'<div class="pe-note">技能是给 AI 用的说明和命令，用到时自动安装；除 Claude Code 外各 Agent 共用一份。</div>';
+  if(!skillsSt){$('#hostBody').innerHTML=h+LOADING;return}
+  var ags=skAgents();
+  h+='<div class="sk-seg" role="tablist"><button type="button" role="tab" data-act="sk-by" data-by="skill" aria-selected="'+(skBy==='skill')+'">按技能 · '+skillsSt.length+'</button><button type="button" role="tab" data-act="sk-by" data-by="agent" aria-selected="'+(skBy==='agent')+'">按 Agent · '+ags.length+'</button></div>';
+  if(skBy==='skill'){
+    h+='<div class="h-card sk-list">'+skillsSt.map(function(s){
+      var inst=skInstalled(s),all=skAll(s);
+      return '<div class="h-row h-link sk-item" data-act="sk-open" data-sel="s:'+esc(s.name)+'">'+skIcon(s.name)+
+        '<div class="sk-m"><div class="sk-t"><span class="sk-tn">'+esc(s.title||s.name)+'</span><span class="sk-cnt'+(inst.length?' on':'')+'">'+inst.length+' / '+all+'</span></div>'+
+        (s.desc?'<div class="sk-d">'+esc(s.desc)+'</div>':'')+
+        '<div class="sk-ags">'+(inst.length?inst.map(function(k){return '<span class="sk-ag" title="'+esc(CLAW_NAMES[k]||k)+'">'+clawIcon(k)+'</span>'}).join(''):'<span class="sk-none">还没装到任何 Agent</span>')+'</div></div>'+
+        '<span class="chev" aria-hidden="true"></span></div>';
+    }).join('')+'</div>';
+  }else{
+    h+='<div class="h-card sk-list">'+ags.map(function(k){
+      var mine=skillsSt.filter(function(s){return skTarget(s,k)}),on=mine.filter(function(s){return skTarget(s,k).state==='ours'});
+      return '<div class="h-row h-link sk-item sk-agent" data-act="sk-open" data-sel="a:'+esc(k)+'"><span class="sk-ic">'+clawIcon(k)+'</span>'+
+        '<div class="sk-m"><div class="sk-t"><span class="sk-tn">'+esc(CLAW_NAMES[k]||k)+'</span><span class="sk-cnt'+(on.length?' on':'')+'">'+on.length+' / '+mine.length+'</span></div>'+
+        '<div class="sk-ags">'+(on.length?on.map(function(s){return skIcon(s.name)}).join(''):'<span class="sk-none">还没装技能</span>')+'</div></div>'+
+        '<span class="chev" aria-hidden="true"></span></div>';
+    }).join('')+'</div>';
+  }
+  h+='<div class="pe-note">技能是给 AI 用的说明和命令，用到相关场景时自动安装；点进去能单独装 / 卸。</div>';
   $('#hostBody').innerHTML=h;
 }
 // ---------- 模型管理：以 Key 为单位登记、按供应商分组，入口在 Claw 页顶部和宿主页的 Claw 区 ----------
@@ -3733,7 +3789,10 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='pool-del'){poolSave((peerCfg.sessions||[]).filter(function(x){return x!==a.dataset.id}));return}
   if(act==='peer-back'&&peerFromList){subBack();return}
   if(act==='peer-back'){peerWatch(false);$('#railPeer').classList.remove('on');$('#railSet').classList.add('on');hostHome();return}
-  if(act==='skills'){hostView='skills';skillMsg={};renderSkills();loadSkills();return}
+  if(act==='skills'){hostView='skills';skillMsg={};skSel='';renderSkills();loadSkills();return}
+  if(act==='sk-by'){skBy=a.dataset.by==='agent'?'agent':'skill';try{localStorage.setItem('claclaw.skBy',skBy)}catch(_){}renderSkills();return}
+  if(act==='sk-open'){skSel=a.dataset.sel||'';skillMsg={};renderSkills();$('#hostBody').scrollTop=0;return}
+  if(act==='sk-back'){skSel='';skillMsg={};renderSkills();return}
   if(act==='models'){openModels('host');return}
   if(/^mdl-/.test(act)){mdlAct(act,a);return}
   if(/^vc-/.test(act)){vcAct(act,a);return}
