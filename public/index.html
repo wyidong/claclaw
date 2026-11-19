@@ -3366,6 +3366,16 @@ function vcSec(name,tag,hint,rows,ids){
   var on=ids.filter(function(id){return !vcOff(id)}).length;
   var all=ids.length?'<label class="vc-all"><input type="checkbox" class="vc-grp" data-grp="'+esc(name)+'"'+(on===ids.length?' checked':'')+(on&&on<ids.length?' data-mixed="1"':'')+'><span>全选</span></label>':'';
   return '<div><div class="h-h">'+esc(name)+' <span class="vc-tag'+(tag==='付费'?' paid':'')+'">'+tag+'</span></div><div class="h-card"><div class="h-row vc-hint"><span class="vc-ht">'+esc(hint)+'</span>'+all+'</div>'+rows+'</div></div>'}
+// 一家的声音：带分组（豆包：青年女声 / 成熟男声 / 少年…）的按组排，每组一个小标题和自己的「全选」
+function vcRows(eng,list){
+  var gs=[],by={};list.forEach(function(v){var g=v.group||'';if(!by[g]){by[g]=[];gs.push(g)}by[g].push(v)});
+  return gs.map(function(g){
+    var vs=by[g],ids=vs.map(function(v){return 'srv:'+v.name}),rows=vs.map(function(v){return vcRow('srv:'+v.name,srvLabel(v))}).join('');
+    if(!g||gs.length<2)return rows;
+    var k=eng+' · '+g,on=ids.filter(function(id){return !vcOff(id)}).length;vcGroups[k]=ids;
+    return '<div class="h-row vc-sg"><span class="vc-ht">'+esc(g)+' <span class="vc-n">'+ids.length+'</span></span><label class="vc-all"><input type="checkbox" class="vc-grp" data-grp="'+esc(k)+'"'+(on===ids.length?' checked':'')+(on&&on<ids.length?' data-mixed="1"':'')+'><span>全选</span></label></div>'+rows;
+  }).join('');
+}
 function renderVoices(){
   if(hostView!=='voices')return;
   var h=pgHd('data-act="vc-back"',peerFromList?'返回':'返回设置','语音管理')+'<div class="pe-err"'+(vcMsg?'':' hidden')+'>'+esc(vcMsg)+'</div>';
@@ -3384,7 +3394,7 @@ function renderVoices(){
       else top='<div class="h-row md-f"><label class="md-lb" for="vcKey">API Key</label><textarea id="vcKey" rows="1" class="md-in mono md-secret" maxlength="1000" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴 API Key（火山控制台 → 豆包语音 → API Key 管理）"></textarea></div>'+
         '<div class="pe-btns"><button type="button" class="pe-btn pri" data-act="vc-key-save">保存</button>'+(k.set?'<button type="button" class="pe-btn" data-act="vc-key-cancel">取消</button>':'')+'</div>';
     }else if(!e.ready)top='<div class="h-row vc-hint">电脑上还没装（在电脑上运行 tools/setup-edge-tts.sh）</div>';
-    h+=vcSec(e.name,e.free?'免费':'付费',e.hint,top+list.map(function(v){return vcRow('srv:'+v.name,srvLabel(v))}).join(''),list.map(function(v){return 'srv:'+v.name}));
+    h+=vcSec(e.name,e.free?'免费':'付费',e.hint,top+vcRows(e.name,list),list.map(function(v){return 'srv:'+v.name}));
   });
   $('#hostBody').innerHTML=h;mdGrow();
   document.querySelectorAll('#hostBody .vc-grp[data-mixed]').forEach(function(c){c.indeterminate=true});
@@ -3422,6 +3432,7 @@ $('#hostBody').addEventListener('change',function(e){
   (vcGroups[t.dataset.grp]||[]).forEach(function(id){vcSetOn(id,t.checked)});
   vcSave();
   document.querySelectorAll('#hostBody .vc-on').forEach(function(c){if((vcGroups[t.dataset.grp]||[]).indexOf(c.dataset.id)>=0){c.checked=t.checked;c.closest('.vc-row').classList.toggle('off',!t.checked)}});
+  vcGrpSync();   // 整家的「全选」和各小组的「全选」互相跟着变
 });
 function vcGrpSync(){document.querySelectorAll('#hostBody .vc-grp').forEach(function(g){var ids=vcGroups[g.dataset.grp]||[],on=ids.filter(function(id){return !vcOff(id)}).length;g.checked=on===ids.length;g.indeterminate=on>0&&on<ids.length})}
 $('#setVoices').addEventListener('click',openVoices);

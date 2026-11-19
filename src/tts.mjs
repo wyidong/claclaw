@@ -73,19 +73,49 @@ const run = (cmd, args, ms = 20000) => new Promise((ok, no) =>
 // ---------- 火山引擎豆包语音（付费，新版控制台 API Key） ----------
 // 接口：POST https://openspeech.bytedance.com/api/v3/tts/unidirectional，头 X-Api-Key + X-Api-Resource-Id；
 // 回的是一串 JSON（code 0 的 data 是 base64 音频块，20000000 是结束）。文档：volcengine.com/docs/6561/1598757
-// 音色和资源要对上：*_uranus_bigtts 是 2.0（seed-tts-2.0），其余是 1.0（seed-tts-1.0），对不上报 45000000。
+// 音色和资源要对上：ID 里带 _uranus_ 的（zh_*_uranus_bigtts、ICL_uranus_*_tob）是 2.0（seed-tts-2.0），其余是 1.0（seed-tts-1.0），对不上报 45000000。
 // 账号开通了哪个就列哪个：保存 Key 时两种各试一句，记下能用的。Key 存 data/volc-tts.json（600），网页只看到末 4 位
 const VOLC_FILE = path.join(DATA, 'volc-tts.json');
 const VOLC_URL = 'https://openspeech.bytedance.com/api/v3/tts/unidirectional';
+// 音色：[ID, 名字, 性别, 分组]。2.0（uranus）音色都用账号的 seed-tts-2.0 试过能合成；官方列表 volcengine.com/docs/6561/1257544
+// 并发上限约 20 路（超了报 45000292 quota exceeded for types: concurrency）
 const VOLC_VOICES = [
-  ['zh_female_vv_uranus_bigtts', 'Vivi', 'Female'], ['zh_female_xiaohe_uranus_bigtts', '小何', 'Female'],
-  ['zh_female_shuangkuaisisi_uranus_bigtts', '爽快思思', 'Female'], ['zh_female_qingxinnvsheng_uranus_bigtts', '清新女声', 'Female'],
-  ['zh_male_m191_uranus_bigtts', '云舟', 'Male'], ['zh_male_taocheng_uranus_bigtts', '小天', 'Male'], ['zh_male_ruyayichen_uranus_bigtts', '儒雅逸辰', 'Male'],
+  ['zh_female_vv_uranus_bigtts', 'Vivi', 'Female', '青年女声'], ['zh_female_xiaohe_uranus_bigtts', '小何', 'Female', '青年女声'], ['zh_female_shuangkuaisisi_uranus_bigtts', '爽快思思', 'Female', '青年女声'],
+  ['zh_female_qingxinnvsheng_uranus_bigtts', '清新女声', 'Female', '青年女声'], ['zh_female_linjianvhai_uranus_bigtts', '邻家女孩', 'Female', '青年女声'], ['zh_female_tianmeitaozi_uranus_bigtts', '甜美桃子', 'Female', '青年女声'],
+  ['zh_female_tianmeiyueyue_uranus_bigtts', '甜美悦悦', 'Female', '青年女声'], ['zh_female_tianmeixiaoyuan_uranus_bigtts', '甜美小源', 'Female', '青年女声'], ['zh_female_qingchezizi_uranus_bigtts', '清澈梓梓', 'Female', '青年女声'],
+  ['zh_female_qiaopinv_uranus_bigtts', '俏皮女声', 'Female', '青年女声'], ['zh_female_wenrouxiaoya_uranus_bigtts', '温柔小雅', 'Female', '青年女声'], ['zh_female_meilinvyou_uranus_bigtts', '魅力女友', 'Female', '青年女声'],
+  ['zh_female_roumeinvyou_uranus_bigtts', '柔美女友', 'Female', '青年女声'], ['zh_female_linxiao_uranus_bigtts', '林潇', 'Female', '青年女声'], ['zh_female_tiexinnvsheng_uranus_bigtts', '贴心女声', 'Female', '青年女声'],
+  ['zh_female_qinqienv_uranus_bigtts', '亲切女声', 'Female', '青年女声'], ['ICL_uranus_zh_female_chuliannvyou_tob', '初恋女友', 'Female', '青年女声'], ['ICL_uranus_zh_female_wenroubaiyueguang_tob', '温柔白月光', 'Female', '青年女声'],
+  ['zh_female_zhixingnv_uranus_bigtts', '知性女声', 'Female', '成熟女声'], ['zh_female_wenroushunv_uranus_bigtts', '温柔淑女', 'Female', '成熟女声'], ['zh_female_gaolengyujie_uranus_bigtts', '高冷御姐', 'Female', '成熟女声'],
+  ['zh_female_kailangjiejie_uranus_bigtts', '开朗姐姐', 'Female', '成熟女声'], ['zh_female_sophie_uranus_bigtts', '魅力苏菲', 'Female', '成熟女声'], ['zh_female_cancan_uranus_bigtts', '知性灿灿', 'Female', '成熟女声'],
+  ['zh_female_kefunvsheng_uranus_bigtts', '暖阳女声', 'Female', '成熟女声'], ['zh_female_liuchangnv_uranus_bigtts', '流畅女声', 'Female', '成熟女声'], ['zh_female_tvbnv_uranus_bigtts', 'TVB 女声', 'Female', '成熟女声'],
+  ['ICL_uranus_zh_female_chengshuwenrou_tob', '成熟温柔', 'Female', '成熟女声'], ['ICL_uranus_zh_female_wenrouwenya_tob', '温柔文雅', 'Female', '成熟女声'], ['ICL_uranus_zh_female_zhixinjiejie_tob', '知心姐姐', 'Female', '成熟女声'],
+  ['zh_female_wenroumama_uranus_bigtts', '温柔妈妈', 'Female', '成熟女声'],
+  ['zh_male_taocheng_uranus_bigtts', '小天', 'Male', '青年男声'], ['zh_male_qingshuangnanda_uranus_bigtts', '清爽男大', 'Male', '青年男声'], ['zh_male_kailangxuezhang_uranus_bigtts', '开朗学长', 'Male', '青年男声'],
+  ['zh_male_yangguangqingnian_uranus_bigtts', '阳光青年', 'Male', '青年男声'], ['zh_male_wenrouxiaoge_uranus_bigtts', '温柔小哥', 'Male', '青年男声'], ['zh_male_huolixiaoge_uranus_bigtts', '活力小哥', 'Male', '青年男声'],
+  ['zh_male_linjiananhai_uranus_bigtts', '邻家男孩', 'Male', '青年男声'], ['zh_male_fanjuanqingnian_uranus_bigtts', '反卷青年', 'Male', '青年男声'], ['zh_male_kuailexiaodong_uranus_bigtts', '快乐小东', 'Male', '青年男声'],
+  ['zh_male_ruyaqingnian_uranus_bigtts', '儒雅青年', 'Male', '青年男声'], ['ICL_uranus_zh_male_siwenqingnian_tob', '斯文青年', 'Male', '青年男声'], ['ICL_uranus_zh_male_satuoqingnian_tob', '洒脱青年', 'Male', '青年男声'],
+  ['ICL_uranus_zh_male_jilingxiaohuo_tob', '机灵小伙', 'Male', '青年男声'], ['ICL_uranus_zh_male_nuanxintitie_tob', '暖心体贴', 'Male', '青年男声'], ['ICL_uranus_zh_male_wenrounanyou_tob', '温柔男友', 'Male', '青年男声'],
+  ['zh_male_aojiaobazong_uranus_bigtts', '傲娇霸总', 'Male', '青年男声'],
+  ['zh_male_m191_uranus_bigtts', '云舟', 'Male', '成熟男声'], ['zh_male_ruyayichen_uranus_bigtts', '儒雅逸辰', 'Male', '成熟男声'], ['zh_male_shenyeboke_uranus_bigtts', '深夜播客', 'Male', '成熟男声'],
+  ['zh_male_cixingjieshuonan_uranus_bigtts', '磁性解说', 'Male', '成熟男声'], ['zh_male_youyoujunzi_uranus_bigtts', '悠悠君子', 'Male', '成熟男声'], ['zh_male_gaolengchenwen_uranus_bigtts', '高冷沉稳', 'Male', '成熟男声'],
+  ['zh_male_dongfanghaoran_uranus_bigtts', '东方浩然', 'Male', '成熟男声'], ['zh_male_jieshuoxiaoming_uranus_bigtts', '解说小明', 'Male', '成熟男声'], ['zh_male_liufei_uranus_bigtts', '刘飞', 'Male', '成熟男声'],
+  ['zh_male_dayi_uranus_bigtts', '大壹', 'Male', '成熟男声'], ['zh_male_yizhipiannan_uranus_bigtts', '译制片男声', 'Male', '成熟男声'], ['ICL_uranus_zh_male_cixingnansang_tob', '磁性男嗓', 'Male', '成熟男声'],
+  ['ICL_uranus_zh_male_neiliancaijun_tob', '内敛才俊', 'Male', '成熟男声'], ['ICL_uranus_zh_male_diyinchenyu_tob', '低音沉郁', 'Male', '成熟男声'], ['ICL_uranus_zh_male_chenwenmingzai_tob', '沉稳明仔', 'Male', '成熟男声'],
+  ['zh_male_wennuanahu_uranus_bigtts', '温暖阿虎', 'Male', '成熟男声'],
+  ['zh_male_shaonianzixin_uranus_bigtts', '少年梓辛', 'Male', '少年'], ['zh_male_kailangdidi_uranus_bigtts', '开朗弟弟', 'Male', '少年'], ['ICL_uranus_zh_male_wennuanshaonian_tob', '温暖少年', 'Male', '少年'],
+  ['ICL_uranus_zh_female_chunzhenshaonv_tob', '纯真少女', 'Female', '少年'], ['zh_female_mengyatou_uranus_bigtts', '萌丫头', 'Female', '少年'], ['ICL_uranus_zh_female_tiexinmeimei_tob', '贴心妹妹', 'Female', '少年'],
+  ['zh_female_sajiaoxuemei_uranus_bigtts', '撒娇学妹', 'Female', '少年'],
+  ['zh_male_tiancaitongsheng_uranus_bigtts', '天才童声', 'Male', '儿童'], ['zh_male_naiqimengwa_uranus_bigtts', '奶气萌娃', 'Male', '儿童'], ['zh_female_xiaoxue_uranus_bigtts', '儿童绘本', 'Female', '儿童'],
+  ['zh_female_shaoergushi_uranus_bigtts', '少儿故事', 'Female', '儿童'],
+  ['zh_male_yuanboxiaoshu_uranus_bigtts', '渊博小叔', 'Male', '中老年'], ['zh_male_baqiqingshu_uranus_bigtts', '霸气青叔', 'Male', '中老年'], ['ICL_uranus_zh_male_youmodaye_tob', '幽默大爷', 'Male', '中老年'],
+  ['zh_female_popo_uranus_bigtts', '婆婆', 'Female', '中老年'], ['ICL_uranus_zh_female_heainainai_tob', '和蔼奶奶', 'Female', '中老年'],
   // 方言：音色 ID 后面接 @方言。只有 Vivi 有官方方言参数（explicit_dialect：东北 / 陕西 / 四川）。
   // 男声试过用语音指令（context_texts「请用四川话说」）：实听还是普通话，不提供
-  ['zh_female_vv_uranus_bigtts@sichuan', 'Vivi · 四川话', 'Female'],
-  ['zh_female_shuangkuaisisi_moon_bigtts', '爽快思思 1.0', 'Female'], ['zh_female_tianmeitaozi_mars_bigtts', '甜美桃子', 'Female'],
-  ['zh_female_qinqienvsheng_moon_bigtts', '亲切女声', 'Female'], ['zh_male_qingyiyuxuan_mars_bigtts', '清逸宇轩', 'Male'],
+  ['zh_female_vv_uranus_bigtts@sichuan', 'Vivi · 四川话', 'Female', '方言'],
+  // 只开通了 1.0 的账号用这几个
+  ['zh_female_shuangkuaisisi_moon_bigtts', '爽快思思 1.0', 'Female', '1.0 音色'], ['zh_female_tianmeitaozi_mars_bigtts', '甜美桃子 1.0', 'Female', '1.0 音色'], ['zh_female_qinqienvsheng_moon_bigtts', '亲切女声 1.0', 'Female', '1.0 音色'],
+  ['zh_male_qingyiyuxuan_mars_bigtts', '清逸宇轩 1.0', 'Male', '1.0 音色'],
 ];
 const volcRes = speaker => /_uranus_/.test(speaker) ? 'seed-tts-2.0' : 'seed-tts-1.0';
 const DIALECT = { sichuan: '四川话', dongbei: '东北话', shaanxi: '陕西话' };
@@ -160,7 +190,7 @@ export async function volcSetKey(key) {
 function volcVoices() {
   const { set, res } = volcInfo();
   if (!set) return [];
-  return VOLC_VOICES.filter(([sp]) => res.includes(volcRes(sp))).map(([sp, label, gender]) => ({ name: 'volc:' + sp, label, lang: 'zh-CN', gender, engine: 'volc' }));
+  return VOLC_VOICES.filter(([sp]) => res.includes(volcRes(sp))).map(([sp, label, gender, group]) => ({ name: 'volc:' + sp, label, lang: 'zh-CN', gender, group, engine: 'volc' }));
 }
 
 // 语音平台（语音管理页用）：本机（设备自带）由网页自己列；这里给电脑合成的几家。以后加平台在这里加一项

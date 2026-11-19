@@ -1493,6 +1493,7 @@ select.pe-in{text-align-last:right}
 .vc-tip{margin:0 4px 10px;font-size:13px;color:var(--muted)}
 .vc-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:6px;background:var(--surface);font-size:11px;line-height:18px;color:var(--muted)}.vc-tag.paid{color:#b45309}
 .h-row.vc-hint{font-size:13px;color:var(--muted);min-height:0}.vc-ht{flex:1;min-width:0}
+.h-row.vc-sg{min-height:0;padding-top:12px;padding-bottom:6px;font-size:13px;font-weight:600;color:var(--ink);background:var(--surface)}.vc-n{font-weight:400;color:var(--muted);font-size:12px}
 .vc-all{flex:none;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer}.vc-all input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
 /* 一个声音一行：勾选框 · 名字（就是别名输入框，看着像字，点了才像输入框）+ 下面一行小字（平台 · 性别 · 原名）· 试听圆钮 */
 .h-row.vc-row{gap:12px;min-height:0;padding:10px 14px}
