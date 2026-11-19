@@ -1,0 +1,1999 @@
+[
+ {
+  "site": "央视网",
+  "home": "https://tv.cctv.com/live/",
+  "channels": [
+   {
+    "name": "CCTV-1 综合",
+    "aliases": [
+     "央视一套",
+     "中央一台",
+     "cctv1",
+     "一套"
+    ],
+    "group": "央视",
+    "label": "1",
+    "url": "https://tv.cctv.com/live/cctv1/"
+   },
+   {
+    "name": "CCTV-2 财经",
+    "aliases": [
+     "央视二套",
+     "cctv2",
+     "财经频道"
+    ],
+    "group": "央视",
+    "label": "2",
+    "url": "https://tv.cctv.com/live/cctv2/"
+   },
+   {
+    "name": "CCTV-3 综艺",
+    "aliases": [
+     "央视三套",
+     "cctv3",
+     "综艺频道"
+    ],
+    "group": "央视",
+    "label": "3",
+    "url": "https://tv.cctv.com/live/cctv3/"
+   },
+   {
+    "name": "CCTV-4 中文国际",
+    "aliases": [
+     "央视四套",
+     "cctv4",
+     "中文国际",
+     "中文国际亚洲"
+    ],
+    "group": "央视",
+    "label": "4",
+    "url": "https://tv.cctv.com/live/cctv4/"
+   },
+   {
+    "name": "CCTV-5 体育",
+    "aliases": [
+     "央视五套",
+     "cctv5",
+     "体育频道",
+     "央视体育"
+    ],
+    "group": "央视",
+    "label": "5",
+    "url": "https://tv.cctv.com/live/cctv5/"
+   },
+   {
+    "name": "CCTV-5+ 体育赛事",
+    "aliases": [
+     "cctv5+",
+     "cctv5plus",
+     "五套加",
+     "体育赛事"
+    ],
+    "group": "央视",
+    "label": "5+",
+    "url": "https://tv.cctv.com/live/cctv5plus/"
+   },
+   {
+    "name": "CCTV-6 电影",
+    "aliases": [
+     "央视六套",
+     "cctv6",
+     "电影频道"
+    ],
+    "group": "央视",
+    "label": "6",
+    "url": "https://tv.cctv.com/live/cctv6/"
+   },
+   {
+    "name": "CCTV-7 国防军事",
+    "aliases": [
+     "央视七套",
+     "cctv7",
+     "军事频道",
+     "国防军事"
+    ],
+    "group": "央视",
+    "label": "7",
+    "url": "https://tv.cctv.com/live/cctv7/"
+   },
+   {
+    "name": "CCTV-8 电视剧",
+    "aliases": [
+     "央视八套",
+     "cctv8",
+     "电视剧频道"
+    ],
+    "group": "央视",
+    "label": "8",
+    "url": "https://tv.cctv.com/live/cctv8/"
+   },
+   {
+    "name": "CCTV-9 纪录",
+    "aliases": [
+     "央视九套",
+     "cctv9",
+     "纪录频道",
+     "记录频道"
+    ],
+    "group": "央视",
+    "label": "9",
+    "url": "https://tv.cctv.com/live/cctvjilu/"
+   },
+   {
+    "name": "CCTV-10 科教",
+    "aliases": [
+     "央视十套",
+     "cctv10",
+     "科教频道"
+    ],
+    "group": "央视",
+    "label": "10",
+    "url": "https://tv.cctv.com/live/cctv10/"
+   },
+   {
+    "name": "CCTV-11 戏曲",
+    "aliases": [
+     "央视十一套",
+     "cctv11",
+     "戏曲频道"
+    ],
+    "group": "央视",
+    "label": "11",
+    "url": "https://tv.cctv.com/live/cctv11/"
+   },
+   {
+    "name": "CCTV-12 社会与法",
+    "aliases": [
+     "央视十二套",
+     "cctv12",
+     "社会与法",
+     "法制频道"
+    ],
+    "group": "央视",
+    "label": "12",
+    "url": "https://tv.cctv.com/live/cctv12/"
+   },
+   {
+    "name": "CCTV-13 新闻",
+    "aliases": [
+     "央视十三套",
+     "cctv13",
+     "央视新闻",
+     "新闻频道",
+     "新闻联播"
+    ],
+    "group": "央视",
+    "label": "13",
+    "url": "https://tv.cctv.com/live/cctv13/"
+   },
+   {
+    "name": "CCTV-14 少儿",
+    "aliases": [
+     "央视十四套",
+     "cctv14",
+     "少儿频道",
+     "央视少儿"
+    ],
+    "group": "央视",
+    "label": "14",
+    "url": "https://tv.cctv.com/live/cctvchild/"
+   },
+   {
+    "name": "CCTV-15 音乐",
+    "aliases": [
+     "央视十五套",
+     "cctv15",
+     "音乐频道"
+    ],
+    "group": "央视",
+    "label": "15",
+    "url": "https://tv.cctv.com/live/cctv15/"
+   },
+   {
+    "name": "CCTV-16 奥林匹克",
+    "aliases": [
+     "央视十六套",
+     "cctv16",
+     "奥运频道",
+     "奥林匹克"
+    ],
+    "group": "央视",
+    "label": "16",
+    "url": "https://tv.cctv.com/live/cctv16/"
+   },
+   {
+    "name": "CCTV-17 农业农村",
+    "aliases": [
+     "央视十七套",
+     "cctv17",
+     "农业农村",
+     "农业频道"
+    ],
+    "group": "央视",
+    "label": "17",
+    "url": "https://tv.cctv.com/live/cctv17/"
+   },
+   {
+    "name": "CCTV-4 中文国际（欧洲）",
+    "aliases": [
+     "cctv4欧洲",
+     "中文国际欧洲"
+    ],
+    "group": "央视",
+    "label": "4欧",
+    "url": "https://tv.cctv.com/live/cctveurope/"
+   },
+   {
+    "name": "CCTV-4 中文国际（美洲）",
+    "aliases": [
+     "cctv4美洲",
+     "中文国际美洲"
+    ],
+    "group": "央视",
+    "label": "4美",
+    "url": "https://tv.cctv.com/live/cctvamerica/"
+   }
+  ],
+  "note": "免费，不用登录"
+ },
+ {
+  "site": "CGTN 官方直播流",
+  "home": "https://english-livebkali.cgtn.com/live/encgtn.m3u8",
+  "channels": [
+   {
+    "name": "CGTN 英语新闻",
+    "aliases": [
+     "cgtn",
+     "中国国际电视台",
+     "cgtn英语"
+    ],
+    "group": "央视",
+    "label": "CGTN",
+    "url": "https://english-livebkali.cgtn.com/live/encgtn.m3u8",
+    "note": "聊天里直接播，国内不用翻墙"
+   }
+  ]
+ },
+ {
+  "site": "芒果TV",
+  "home": "https://www.mgtv.com/live/",
+  "channels": [
+   {
+    "name": "湖南卫视",
+    "aliases": [
+     "湖南台",
+     "芒果台",
+     "湖南电视台"
+    ],
+    "group": "卫视",
+    "region": "湖南",
+    "url": "https://www.mgtv.com/live/",
+    "note": "进去后选「湖南卫视」"
+   }
+  ]
+ },
+ {
+  "site": "中国蓝新闻",
+  "home": "https://www.cztv.com/liveTV",
+  "channels": [
+   {
+    "name": "浙江卫视",
+    "aliases": [
+     "浙江台",
+     "中国蓝",
+     "浙江电视台"
+    ],
+    "group": "卫视",
+    "region": "浙江",
+    "url": "https://www.cztv.com/liveTV",
+    "note": "进去后选「浙江卫视」"
+   }
+  ]
+ },
+ {
+  "site": "看看新闻",
+  "home": "https://live.kankanews.com/huikan",
+  "channels": [
+   {
+    "name": "东方卫视",
+    "aliases": [
+     "东方台",
+     "上海卫视",
+     "上海台",
+     "东方电视台",
+     "dragon tv"
+    ],
+    "group": "卫视",
+    "region": "上海",
+    "url": "https://live.kankanews.com/huikan",
+    "note": "默认就是东方卫视"
+   }
+  ]
+ },
+ {
+  "site": "荔枝网",
+  "home": "https://live.jstv.com/",
+  "channels": [
+   {
+    "name": "江苏卫视",
+    "aliases": [
+     "江苏台",
+     "荔枝台",
+     "江苏电视台"
+    ],
+    "group": "卫视",
+    "region": "江苏",
+    "url": "https://live.jstv.com/",
+    "note": "免费"
+   }
+  ]
+ },
+ {
+  "site": "触电新闻",
+  "home": "https://www.gdtv.cn/tvChannelDetail/43",
+  "channels": [
+   {
+    "name": "广东卫视",
+    "aliases": [
+     "广东台",
+     "广东电视台"
+    ],
+    "group": "卫视",
+    "region": "广东",
+    "url": "https://www.gdtv.cn/tvChannelDetail/43",
+    "note": "免费"
+   }
+  ]
+ },
+ {
+  "site": "北京时间",
+  "home": "https://www.btime.com/live",
+  "channels": [
+   {
+    "name": "北京卫视",
+    "aliases": [
+     "北京台",
+     "北京电视台",
+     "brtv"
+    ],
+    "group": "卫视",
+    "region": "北京",
+    "url": "https://www.btime.com/live",
+    "note": "进去后选「北京卫视」"
+   }
+  ]
+ },
+ {
+  "site": "壹深圳",
+  "home": "https://www.sztv.com.cn/dianshi.shtml",
+  "channels": [
+   {
+    "name": "深圳卫视",
+    "aliases": [
+     "深圳台",
+     "深圳电视台"
+    ],
+    "group": "卫视",
+    "region": "深圳",
+    "url": "https://www.sztv.com.cn/dianshi.shtml",
+    "note": "进去后选「深圳卫视」"
+   }
+  ]
+ },
+ {
+  "site": "齐鲁网",
+  "home": "https://v.iqilu.com/live/sdtv/",
+  "channels": [
+   {
+    "name": "山东卫视",
+    "aliases": [
+     "山东台",
+     "齐鲁台",
+     "山东电视台"
+    ],
+    "group": "卫视",
+    "region": "山东",
+    "url": "https://v.iqilu.com/live/sdtv/",
+    "note": "免费"
+   }
+  ]
+ },
+ {
+  "site": "四川观察",
+  "home": "https://www.sctv.com/channelLive",
+  "channels": [
+   {
+    "name": "四川卫视",
+    "aliases": [
+     "四川台",
+     "四川电视台",
+     "sctv"
+    ],
+    "group": "卫视",
+    "region": "四川",
+    "url": "https://www.sctv.com/channelLive",
+    "note": "进去后选「四川卫视」"
+   }
+  ]
+ },
+ {
+  "site": "安徽网络台",
+  "home": "https://www.ahtv.cn/",
+  "channels": [
+   {
+    "name": "安徽卫视",
+    "aliases": [
+     "安徽台",
+     "安徽电视台"
+    ],
+    "group": "卫视",
+    "region": "安徽",
+    "url": "https://www.ahtv.cn/",
+    "note": "首页进「直播」"
+   }
+  ]
+ },
+ {
+  "site": "大象网",
+  "home": "https://www.hntv.tv/",
+  "channels": [
+   {
+    "name": "河南卫视",
+    "aliases": [
+     "河南台",
+     "河南电视台"
+    ],
+    "group": "卫视",
+    "region": "河南",
+    "url": "https://www.hntv.tv/",
+    "note": "首页进「直播」"
+   }
+  ]
+ },
+ {
+  "site": "香港电台 RTHK",
+  "home": "https://www.rthk.hk/",
+  "note": "免费 · 个别节目因版权限香港",
+  "channels": [
+   {
+    "name": "港台电视 31",
+    "aliases": [
+     "港台電視31",
+     "RTHK 31",
+     "RTHK TV 31"
+    ],
+    "group": "香港",
+    "label": "港台",
+    "url": "https://www.rthk.hk/tv/dtt31",
+    "note": "免费"
+   },
+   {
+    "name": "港台电视 32",
+    "aliases": [
+     "港台電視32",
+     "RTHK 32",
+     "立法會直播"
+    ],
+    "group": "香港",
+    "label": "港台",
+    "url": "https://www.rthk.hk/tv/dtt32",
+    "note": "免费 · 立法会/特别直播"
+   },
+   {
+    "name": "港台电视 33",
+    "aliases": [
+     "港台電視33",
+     "RTHK 33"
+    ],
+    "group": "香港",
+    "label": "港台",
+    "url": "https://www.rthk.hk/tv/dtt33",
+    "note": "转播央视综合频道 · 可能限香港"
+   }
+  ]
+ },
+ {
+  "site": "ViuTV",
+  "home": "https://viu.tv/",
+  "note": "免费 · 只在香港能看",
+  "channels": [
+   {
+    "name": "ViuTV 99台",
+    "aliases": [
+     "ViuTV",
+     "ViuTV 99"
+    ],
+    "group": "香港",
+    "label": "Viu",
+    "url": "https://viu.tv/ch/99",
+    "note": "免费 · 只在香港能看"
+   },
+   {
+    "name": "ViuTVsix 96台",
+    "aliases": [
+     "ViuTVsix",
+     "ViuTV 96"
+    ],
+    "group": "香港",
+    "label": "Viu",
+    "url": "https://viu.tv/ch/96",
+    "note": "免费 · 只在香港能看"
+   }
+  ]
+ },
+ {
+  "site": "Now 新闻",
+  "home": "https://news.now.com/",
+  "note": "免费 · 可能限香港",
+  "channels": [
+   {
+    "name": "Now 332 新闻台",
+    "aliases": [
+     "Now新聞台",
+     "Now 332",
+     "now新闻"
+    ],
+    "group": "香港",
+    "label": "Now",
+    "url": "https://news.now.com/home/live",
+    "note": "官网 24 小时直播 · 免费 · 可能限香港"
+   },
+   {
+    "name": "Now 331 直播台",
+    "aliases": [
+     "Now直播台",
+     "Now 331"
+    ],
+    "group": "香港",
+    "label": "Now",
+    "url": "https://news.now.com/home/live331a",
+    "note": "免费 · 可能限香港"
+   }
+  ]
+ },
+ {
+  "site": "TVB",
+  "home": "https://www.tvb.com/",
+  "note": "无线新闻台网页免费；myTV SUPER 只限香港；海外用 TVB Anywhere（付费）",
+  "channels": [
+   {
+    "name": "无线新闻台 83",
+    "aliases": [
+     "無綫新聞台",
+     "TVB新聞台",
+     "TVB News 83"
+    ],
+    "group": "香港",
+    "label": "TVB",
+    "url": "https://news.tvb.com/tc/live/C",
+    "note": "官网 24 小时直播 · 免费 · 可能限香港"
+   },
+   {
+    "name": "翡翠台 81（myTV SUPER）",
+    "aliases": [
+     "翡翠台",
+     "TVB Jade",
+     "myTV SUPER"
+    ],
+    "group": "香港",
+    "label": "TVB",
+    "url": "https://www.mytvsuper.com/tc/live/81/",
+    "note": "官网 · 免费频道 · 只在香港能看（海外提示地区不适用）"
+   },
+   {
+    "name": "TVB Anywhere（海外）",
+    "aliases": [
+     "TVB Anywhere",
+     "TVB海外"
+    ],
+    "group": "香港",
+    "label": "TVB",
+    "url": "https://www.tvbanywhere.com/",
+    "note": "TVB 海外官方平台 · 付费订阅 · 不对香港/台湾/内地开放"
+   }
+  ]
+ },
+ {
+  "site": "HOY TV（有线/开电视）",
+  "home": "https://hoy.tv/",
+  "note": "免费 · 只在香港能看（海外加载不了视频）",
+  "channels": [
+   {
+    "name": "HOY 76",
+    "aliases": [
+     "HOY 76台",
+     "HOY International"
+    ],
+    "group": "香港",
+    "label": "HOY",
+    "url": "https://hoy.tv/live?channel_no=76",
+    "note": "免费 · 只在香港能看"
+   },
+   {
+    "name": "HOY 77",
+    "aliases": [
+     "HOY 77台",
+     "開電視",
+     "开电视"
+    ],
+    "group": "香港",
+    "label": "HOY",
+    "url": "https://hoy.tv/live?channel_no=77",
+    "note": "免费 · 只在香港能看"
+   },
+   {
+    "name": "HOY 78 有线新闻",
+    "aliases": [
+     "HOY 78台",
+     "有線新聞台",
+     "i-Cable 新聞"
+    ],
+    "group": "香港",
+    "label": "HOY",
+    "url": "https://hoy.tv/live?channel_no=78",
+    "note": "免费 · 只在香港能看"
+   }
+  ]
+ },
+ {
+  "site": "澳广视 TDM",
+  "home": "https://www.tdm.com.mo/",
+  "note": "免费；页面内可切换 澳视葡文/澳门资讯/体育/综艺/Macau 台",
+  "channels": [
+   {
+    "name": "澳视澳门 91台",
+    "aliases": [
+     "澳視澳門",
+     "澳門台",
+     "TDM 中文台",
+     "澳广视"
+    ],
+    "group": "澳门",
+    "label": "澳视",
+    "url": "https://www.tdm.com.mo/zh-hant/live?Channel=1&type=tv",
+    "note": "免费"
+   }
+  ]
+ },
+ {
+  "site": "客家电视台",
+  "home": "https://www.hakkatv.org.tw/",
+  "note": "免费",
+  "channels": [
+   {
+    "name": "客家电视台",
+    "aliases": [
+     "客家電視",
+     "客家電視台",
+     "Hakka TV"
+    ],
+    "group": "台湾",
+    "label": "客家",
+    "url": "https://www.hakkatv.org.tw/live",
+    "note": "官网 24 小时直播 · 免费"
+   }
+  ]
+ },
+ {
+  "site": "台视 TouchTTV",
+  "home": "https://www.touchttv.com/",
+  "note": "免费 · 可能限台湾",
+  "channels": [
+   {
+    "name": "台视主频",
+    "aliases": [
+     "台視",
+     "台視主頻",
+     "TTV"
+    ],
+    "group": "台湾",
+    "label": "台视",
+    "url": "https://www.touchttv.com/touchttv/liveTTVplay.aspx?view=1",
+    "note": "免费 · 可能限台湾"
+   },
+   {
+    "name": "台视新闻台",
+    "aliases": [
+     "台視新聞台",
+     "TTV News"
+    ],
+    "group": "台湾",
+    "label": "台视",
+    "url": "https://www.touchttv.com/touchttv/liveTTVplay.aspx?view=2",
+    "note": "免费"
+   }
+  ]
+ },
+ {
+  "site": "非凡电视",
+  "home": "https://www.ustv.com.tw/",
+  "note": "免费",
+  "channels": [
+   {
+    "name": "非凡新闻台",
+    "aliases": [
+     "非凡新聞台",
+     "非凡新聞",
+     "USTV"
+    ],
+    "group": "台湾",
+    "label": "非凡",
+    "url": "https://news.ustv.com.tw/livevideo",
+    "note": "免费"
+   },
+   {
+    "name": "非凡商业台",
+    "aliases": [
+     "非凡商業台"
+    ],
+    "group": "台湾",
+    "label": "非凡",
+    "url": "https://biz.ustv.com.tw/livevideo",
+    "note": "免费"
+   }
+  ]
+ },
+ {
+  "site": "三立新闻网",
+  "home": "https://www.setn.com/",
+  "note": "免费",
+  "channels": [
+   {
+    "name": "三立新闻直播",
+    "aliases": [
+     "三立新聞直播",
+     "SETN Live"
+    ],
+    "group": "台湾",
+    "label": "三立",
+    "url": "https://live.setn.com/Live/358",
+    "note": "官网 24 小时直播 · 免费"
+   }
+  ]
+ },
+ {
+  "site": "大爱电视",
+  "home": "https://www.daai.tv/",
+  "note": "免费 · 全球可看",
+  "channels": [
+   {
+    "name": "大爱一台",
+    "aliases": [
+     "大愛一臺",
+     "大愛電視",
+     "Da Ai TV"
+    ],
+    "group": "台湾",
+    "label": "大爱",
+    "url": "https://www.daai.tv/channel/1",
+    "note": "官网 24 小时直播 · 免费"
+   },
+   {
+    "name": "大爱二台",
+    "aliases": [
+     "大愛二臺",
+     "Da Ai 2"
+    ],
+    "group": "台湾",
+    "label": "大爱",
+    "url": "https://www.daai.tv/channel/3",
+    "note": "官网 24 小时直播 · 免费"
+   }
+  ]
+ },
+ {
+  "site": "华视新闻网",
+  "home": "https://news.cts.com.tw/",
+  "note": "免费",
+  "channels": [
+   {
+    "name": "华视新闻直播",
+    "aliases": [
+     "華視新聞直播",
+     "CTS Live"
+    ],
+    "group": "台湾",
+    "label": "华视",
+    "url": "https://news.cts.com.tw/live",
+    "note": "官网（内嵌 YouTube）· 免费"
+   }
+  ]
+ },
+ {
+  "site": "meWATCH（新加坡 Mediacorp）",
+  "home": "https://www.mewatch.sg/",
+  "note": "免费 · 要登录 · 只在新加坡能看",
+  "channels": [
+   {
+    "name": "新传媒 8频道",
+    "aliases": [
+     "8頻道",
+     "Channel 8",
+     "Mediacorp 8",
+     "8视界"
+    ],
+    "group": "海外",
+    "label": "8频道",
+    "url": "https://www.mewatch.sg/channels/channel-8/97104",
+    "note": "免费 · 要登录 · 只在新加坡能看"
+   },
+   {
+    "name": "新传媒 U频道",
+    "aliases": [
+     "U頻道",
+     "Channel U"
+    ],
+    "group": "海外",
+    "label": "U频道",
+    "url": "https://www.mewatch.sg/channels/channel-u/97129",
+    "note": "免费 · 要登录 · 只在新加坡能看"
+   }
+  ]
+ },
+ {
+  "site": "8视界 8world",
+  "home": "https://www.8world.com/",
+  "note": "免费 · 只在新闻时段直播",
+  "channels": [
+   {
+    "name": "8频道新闻直播室",
+    "aliases": [
+     "8視界新聞",
+     "8world News",
+     "8频道新闻"
+    ],
+    "group": "海外",
+    "label": "8视界",
+    "url": "https://www.8world.com/livestream",
+    "note": "官网 · 定时新闻直播（1点新闻/狮城有约/晚间新闻）"
+   }
+  ]
+ },
+ {
+  "site": "YouTube",
+  "home": "https://www.youtube.com/",
+  "channels": [
+   {
+    "name": "TVBS 新闻台",
+    "aliases": [
+     "TVBS",
+     "TVBS新聞",
+     "TVBS NEWS",
+     "tvbs新闻"
+    ],
+    "group": "台湾",
+    "label": "TVBS",
+    "yt": "@TVBSNEWS01",
+    "ucid": "UC5nwNW4KdC0SzrhF9BXEYOQ",
+    "id": "2mCSYvcfhtc",
+    "always": true
+   },
+   {
+    "name": "TVBS 选新闻（TVBS 56 频道）",
+    "aliases": [
+     "TVBS選新聞",
+     "TVBS 56台",
+     "TVBS政經說"
+    ],
+    "group": "台湾",
+    "label": "TVBS",
+    "yt": "@TVBSNEWS02",
+    "ucid": "UCL0_NxCvkcXwZHpvqgMZY-A",
+    "id": "o_-hSMgpAzs",
+    "always": true
+   },
+   {
+    "name": "TVBS 优选频道 T观点",
+    "aliases": [
+     "TVBS優選頻道",
+     "T觀點",
+     "TVBS政論"
+    ],
+    "group": "台湾",
+    "label": "TVBS",
+    "yt": "@tvbschannel",
+    "ucid": "UCmgDmqjxbkqIXu4rNbrKodA",
+    "id": "eEvMO8zGIeI",
+    "always": true
+   },
+   {
+    "name": "TVBS 财经",
+    "aliases": [
+     "TVBS財經",
+     "TVBS Finance"
+    ],
+    "group": "台湾",
+    "label": "TVBS",
+    "yt": "@TVBSFinanceLive",
+    "ucid": "UCYDaGPmMfSXViITpPYDKIcw",
+    "id": "0an9taQ7OYM",
+    "always": true
+   },
+   {
+    "name": "少康战情室",
+    "aliases": [
+     "少康戰情室",
+     "TVBS Situation Room"
+    ],
+    "group": "台湾",
+    "label": "TVBS",
+    "yt": "@tvbssituationroom",
+    "ucid": "UCLZBXiS9ZrIXgKBs_SMfGBQ",
+    "id": "Cb5MRzy0aiQ",
+    "always": true
+   },
+   {
+    "name": "TVBS 剧在一起",
+    "aliases": [
+     "TVBS劇在一起",
+     "TVBS戏剧",
+     "TVBS歡樂台"
+    ],
+    "group": "台湾",
+    "label": "TVBS",
+    "yt": "@tvbsdrama",
+    "ucid": "UCjs-hZfVAKEfrP_6y8cz2dA",
+    "id": "OZsZJRRkr8g",
+    "always": true
+   },
+   {
+    "name": "东森新闻",
+    "aliases": [
+     "東森新聞",
+     "東森",
+     "EBC",
+     "東森新聞51台"
+    ],
+    "group": "台湾",
+    "label": "东森",
+    "yt": "@newsebc",
+    "ucid": "UCR3asjvr_WAaxwJYEDV_Bfw",
+    "id": "V1p33hqPrUk",
+    "always": true
+   },
+   {
+    "name": "东森财经新闻",
+    "aliases": [
+     "東森財經新聞",
+     "東森財經",
+     "EBC Finance"
+    ],
+    "group": "台湾",
+    "label": "东森",
+    "yt": "@57ETFN",
+    "ucid": "UCuzqko_GKcj9922M1gUo__w",
+    "id": "1I2iq41Akmo",
+    "always": true
+   },
+   {
+    "name": "东森财经台 财富达给厚",
+    "aliases": [
+     "東森財經台",
+     "財富達給厚"
+    ],
+    "group": "台湾",
+    "label": "东森",
+    "yt": "@57money57",
+    "ucid": "UCYo8FANgeH2ONA898HbzHKg",
+    "id": "LTIlNkmTQos",
+    "always": true
+   },
+   {
+    "name": "东森综合台",
+    "aliases": [
+     "東森綜合台",
+     "EBC Variety"
+    ],
+    "group": "台湾",
+    "label": "东森",
+    "yt": "@ettv32",
+    "ucid": "UCet3uxeYnTk3n1acNCNlJgA",
+    "id": "cimbpAZUjzw",
+    "always": true
+   },
+   {
+    "name": "东森幼幼台 YOYOTV",
+    "aliases": [
+     "東森幼幼台",
+     "YOYOTV",
+     "幼幼台"
+    ],
+    "group": "台湾",
+    "label": "YOYO",
+    "yt": "@yoyotvebc",
+    "ucid": "UCiWRSesvSYmY7YOyz0tv_zQ",
+    "id": "BjY_jXI15ks",
+    "always": true
+   },
+   {
+    "name": "三立新闻台",
+    "aliases": [
+     "三立新聞",
+     "三立LIVE新聞",
+     "SET News",
+     "三立54台"
+    ],
+    "group": "台湾",
+    "label": "三立",
+    "yt": "@setnews-ch54",
+    "ucid": "UC2TuODJhC03pLgd6MpWP0iw",
+    "id": "yeYC0mbSIOo",
+    "always": true
+   },
+   {
+    "name": "三立新闻网 SETN（海外版）",
+    "aliases": [
+     "三立新聞網",
+     "SETN",
+     "三立海外版"
+    ],
+    "group": "台湾",
+    "label": "三立",
+    "yt": "@setn",
+    "ucid": "UCIU8ha-NHmLjtUwU7dFiXUA",
+    "id": "XYSkOnlFads",
+    "always": true
+   },
+   {
+    "name": "三立财经 iNEWS",
+    "aliases": [
+     "三立財經iNEWS",
+     "三立iNEWS",
+     "SET iNEWS"
+    ],
+    "group": "台湾",
+    "label": "三立",
+    "yt": "@三立財經iNEWS",
+    "ucid": "UCoNYj9OFHZn3ACmmeRCPwbA",
+    "id": "pF507BLtbqU",
+    "always": true
+   },
+   {
+    "name": "三立戏剧",
+    "aliases": [
+     "三立戲劇",
+     "SET Drama",
+     "三立台灣台",
+     "三立都會台"
+    ],
+    "group": "台湾",
+    "label": "三立",
+    "yt": "@SETdrama",
+    "ucid": "UC0Bp71S54Jsw9XsapPoUVFQ",
+    "id": "SxBgI8CWpCA",
+    "always": true
+   },
+   {
+    "name": "三立娱乐",
+    "aliases": [
+     "三立娛樂",
+     "SET TV"
+    ],
+    "group": "台湾",
+    "label": "三立",
+    "yt": "@SETTV",
+    "ucid": "UCPARDnYdJQBJID-qyefVKcw",
+    "id": "BmMw93cWGfI",
+    "always": true
+   },
+   {
+    "name": "民视新闻",
+    "aliases": [
+     "民視新聞",
+     "民視",
+     "FTV News"
+    ],
+    "group": "台湾",
+    "label": "民视",
+    "yt": "@FTV_News",
+    "ucid": "UC2VmWn8dAqkzlQqvy02E1PA",
+    "id": "ylYJSBUgaMA",
+    "always": true
+   },
+   {
+    "name": "民视戏剧馆",
+    "aliases": [
+     "民視戲劇館",
+     "民視台灣台",
+     "FTV Drama"
+    ],
+    "group": "台湾",
+    "label": "民视",
+    "yt": "@FTVDRAMA",
+    "ucid": "UCiMiEL1XRXANaypB2wEdr5w",
+    "id": "K2qsju6byIg",
+    "always": true
+   },
+   {
+    "name": "华视新闻",
+    "aliases": [
+     "華視新聞",
+     "華視",
+     "CTS News",
+     "華視52台"
+    ],
+    "group": "台湾",
+    "label": "华视",
+    "yt": "@CtsTw",
+    "ucid": "UCDCJyLpbfgeVE9iZiEam-Kg",
+    "id": "wM0g8EoUZ_E",
+    "always": true
+   },
+   {
+    "name": "华视怀旧频道",
+    "aliases": [
+     "華視懷舊頻道",
+     "CTS Classic"
+    ],
+    "group": "台湾",
+    "label": "华视",
+    "yt": "@cts_arch",
+    "ucid": "UC0Zi0dK3QPXLblM6lQwtbag",
+    "id": "ebLlyHucF2U",
+    "always": true
+   },
+   {
+    "name": "华视综艺频道",
+    "aliases": [
+     "華視綜藝頻道",
+     "CTS Show"
+    ],
+    "group": "台湾",
+    "label": "华视",
+    "yt": "@CTSSHOW",
+    "ucid": "UCdpxNQgqL3276yjrK03gMXA",
+    "id": "0ePhPlTJbGo",
+    "always": true
+   },
+   {
+    "name": "华视戏剧频道",
+    "aliases": [
+     "華視戲劇頻道",
+     "CTS Drama",
+     "包青天"
+    ],
+    "group": "台湾",
+    "label": "华视",
+    "yt": "@cts_drama",
+    "ucid": "UCwaaEghUjz2Xb23yxm85rCw",
+    "id": "6ZowCmLBcMY",
+    "always": true
+   },
+   {
+    "name": "公视新闻",
+    "aliases": [
+     "公視新聞",
+     "公視",
+     "PTS News",
+     "公共電視"
+    ],
+    "group": "台湾",
+    "label": "公视",
+    "yt": "@PNNPTS",
+    "ucid": "UCexpzYDEnfmAvPSfG4xbcjA",
+    "id": "hg4nYb3jE9A",
+    "always": true
+   },
+   {
+    "name": "公视台语台",
+    "aliases": [
+     "公視台語台",
+     "PTS Taigi",
+     "台語台"
+    ],
+    "group": "台湾",
+    "label": "台语",
+    "yt": "@ptstaigitai",
+    "ucid": "UCX6SRupi5lTDbIFJEOpReCQ",
+    "id": "6KlRR_DGhmI",
+    "always": true,
+    "noembed": true
+   },
+   {
+    "name": "公视台语台新闻",
+    "aliases": [
+     "公視台語台新聞",
+     "台語新聞"
+    ],
+    "group": "台湾",
+    "label": "台语",
+    "yt": "@taigitaiPTS",
+    "ucid": "UCNQ4H3GxXOpvXEDSSd7NVOg",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "公视网路直播频道",
+    "aliases": [
+     "公視網路直播",
+     "公視直播",
+     "PTS Live"
+    ],
+    "group": "台湾",
+    "label": "公视",
+    "yt": "@ptslivestream",
+    "ucid": "UCXgIO9jJVsX5_2ideiSkfvA",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "中视新闻台",
+    "aliases": [
+     "中視新聞",
+     "中視",
+     "CTV News"
+    ],
+    "group": "台湾",
+    "label": "中视",
+    "yt": "@twctvnews",
+    "ucid": "UCmH4q-YjeazayYCVHHkGAMA",
+    "id": "TCnaIE_SAtM",
+    "always": true
+   },
+   {
+    "name": "中视新闻（二）",
+    "aliases": [
+     "中視新聞",
+     "CTV"
+    ],
+    "group": "台湾",
+    "label": "中视",
+    "yt": "@chinatvnews",
+    "ucid": "UCO3bfz4KY6zGT5IOaFJuxpA",
+    "id": "baDV1O5EBP0",
+    "always": true
+   },
+   {
+    "name": "中视经典戏剧",
+    "aliases": [
+     "中視經典戲劇",
+     "CTV Drama"
+    ],
+    "group": "台湾",
+    "label": "中视",
+    "yt": "@ctvdrama_classic",
+    "ucid": "UCnDaL2EvcjzQkeSOYUJ-_Pg",
+    "id": "qZ1sr-gvc54",
+    "always": true
+   },
+   {
+    "name": "中视经典综艺",
+    "aliases": [
+     "中視經典綜藝",
+     "豬哥亮"
+    ],
+    "group": "台湾",
+    "label": "中视",
+    "yt": "@ctvent_classic",
+    "ucid": "UCcpJdrLttBz5bDBormbgwiw",
+    "id": "ADDSmXoPDY8",
+    "always": true
+   },
+   {
+    "name": "台视新闻台",
+    "aliases": [
+     "台視新聞",
+     "台視",
+     "TTV News"
+    ],
+    "group": "台湾",
+    "label": "台视",
+    "yt": "@TTV_NEWS",
+    "ucid": "UC8ROUUjHzEQm-ndb69CX8Ww",
+    "id": "9iRAqBMakXY",
+    "always": true,
+    "noembed": true
+   },
+   {
+    "name": "台视直播",
+    "aliases": [
+     "台視直播",
+     "TTV LIVE"
+    ],
+    "group": "台湾",
+    "label": "台视",
+    "yt": "@TTVLIVE",
+    "ucid": "UCzZe-zMu-YgVFQfDmsFG_VQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "台视时光机",
+    "aliases": [
+     "台視時光機",
+     "TTV Time Machine",
+     "台視經典"
+    ],
+    "group": "台湾",
+    "label": "台视",
+    "yt": "@TTVClassic",
+    "ucid": "UCsxBbjyp60aPApMEz42V0aA",
+    "id": "sGdUaM5pJ9Y",
+    "always": true,
+    "noembed": true
+   },
+   {
+    "name": "台视台语台",
+    "aliases": [
+     "台視台語台",
+     "TTV Taigi",
+     "楊麗花歌仔戲"
+    ],
+    "group": "台湾",
+    "label": "台视",
+    "yt": "@TTVTaigi",
+    "ucid": "UCm1ZWHRUI8ergLCknsI9uiw",
+    "id": "HEYnMz9zGhY",
+    "always": true,
+    "noembed": true
+   },
+   {
+    "name": "中天新闻",
+    "aliases": [
+     "中天新聞",
+     "中天",
+     "中天電視",
+     "CTi News",
+     "CtiTv"
+    ],
+    "group": "台湾",
+    "label": "中天",
+    "yt": "@中天電視CtiTv",
+    "ucid": "UC5l1Yto5oOIgRXlI4p4VKbw",
+    "id": "vr3XyVCR4T0",
+    "always": true
+   },
+   {
+    "name": "寰宇新闻",
+    "aliases": [
+     "寰宇新聞",
+     "寰宇新聞台灣台",
+     "Global News TV"
+    ],
+    "group": "台湾",
+    "label": "寰宇",
+    "yt": "@globalnewstw",
+    "ucid": "UCp2f7tGJGN6R9Muxipem8Nw",
+    "id": "6IquAgfvYmc",
+    "always": true
+   },
+   {
+    "name": "寰宇财经新闻",
+    "aliases": [
+     "寰宇財經",
+     "寰宇新聞財經台"
+    ],
+    "group": "台湾",
+    "label": "寰宇",
+    "yt": "@globalmoneytv",
+    "ucid": "UCSZwcE1d1SAGyc1yvQGSOjQ",
+    "id": "yAUQQ0DhPxI",
+    "always": true
+   },
+   {
+    "name": "寰宇全视界",
+    "aliases": [
+     "寰宇全視界"
+    ],
+    "group": "台湾",
+    "label": "寰宇",
+    "yt": "@globalvisiontalk",
+    "ucid": "UCiOR3zQCU-tLza5g1MuqABA",
+    "id": "LqIMxdJiztU",
+    "always": true
+   },
+   {
+    "name": "镜新闻",
+    "aliases": [
+     "鏡新聞",
+     "鏡電視",
+     "MNews"
+    ],
+    "group": "台湾",
+    "label": "镜",
+    "yt": "@mnews-tw",
+    "ucid": "UC4LjkybVKXCDlneVXlKAbmw",
+    "id": "5n0y6b0Q25o",
+    "always": true
+   },
+   {
+    "name": "年代新闻",
+    "aliases": [
+     "年代新聞",
+     "年代",
+     "ERA News"
+    ],
+    "group": "台湾",
+    "label": "年代",
+    "yt": "@年代新聞CH50",
+    "ucid": "UCHBv5vSp3pETSLq8oWTsmqA",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "壹电视",
+    "aliases": [
+     "壹電視",
+     "壹電視新聞",
+     "NEXT TV"
+    ],
+    "group": "台湾",
+    "label": "壹",
+    "yt": "@壹電視NEXTTV",
+    "ucid": "UC6hWBu1hfbNNk8Yeokd5aZQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "非凡电视（非凡新闻）",
+    "aliases": [
+     "非凡電視",
+     "非凡新聞",
+     "非凡新聞台",
+     "USTV"
+    ],
+    "group": "台湾",
+    "label": "非凡",
+    "yt": "@ustv",
+    "ucid": "UCYIVkruUoN04UjV9pkBTswg",
+    "id": "wAUx3pywTt8",
+    "always": true
+   },
+   {
+    "name": "非凡商业台",
+    "aliases": [
+     "非凡商業台",
+     "投資看非凡",
+     "USTV Biz"
+    ],
+    "group": "台湾",
+    "label": "非凡",
+    "yt": "@ustvbiz",
+    "ucid": "UCLHsQL4YChylDX-06BCuNQA",
+    "id": "xLqt2p6Dowo",
+    "always": true
+   },
+   {
+    "name": "大爱电视",
+    "aliases": [
+     "大愛電視",
+     "大愛一臺",
+     "大愛二臺",
+     "Da Ai TV",
+     "慈濟"
+    ],
+    "group": "台湾",
+    "label": "大爱",
+    "yt": "@DaAiVideo",
+    "ucid": "UClrEYreVkBee7ZQYei_6Jqg",
+    "id": "pM-1ytfQhos",
+    "always": true
+   },
+   {
+    "name": "GOOD TV 好消息电视台",
+    "aliases": [
+     "好消息電視台",
+     "GOOD TV",
+     "好消息"
+    ],
+    "group": "台湾",
+    "label": "好消息",
+    "yt": "@goodtv",
+    "ucid": "UCpHgvLfY23_S6jvT8BuZ3kQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "客家电视 网路直播",
+    "aliases": [
+     "客家電視",
+     "客家電視台",
+     "Hakka TV",
+     "Hakka Live"
+    ],
+    "group": "台湾",
+    "label": "客家",
+    "yt": "@hakkalive",
+    "ucid": "UCdqg95tSArchPfQaAWquDwg",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "原视新闻（原住民族电视台）",
+    "aliases": [
+     "原視新聞",
+     "原住民族電視台",
+     "原視",
+     "TITV"
+    ],
+    "group": "台湾",
+    "label": "原视",
+    "yt": "@TITVNews16",
+    "ucid": "UCkceO_uT0eWlMhX-04rxAMQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "龙华电视",
+    "aliases": [
+     "龍華電視",
+     "LTV"
+    ],
+    "group": "台湾",
+    "label": "龙华",
+    "yt": "@ltv_tw",
+    "ucid": "UCOO5e4L6GqEw7K8_Vt2FcJw",
+    "id": "h3A3Yo2GGiU",
+    "always": true
+   },
+   {
+    "name": "八大剧乐部",
+    "aliases": [
+     "八大劇樂部",
+     "八大電視",
+     "GTV Drama"
+    ],
+    "group": "台湾",
+    "label": "八大",
+    "yt": "@gtv-drama",
+    "ucid": "UCZ2EoLNz4EzAnAIKCGhiRzQ",
+    "id": "AkmfD7H_tAk",
+    "always": true
+   },
+   {
+    "name": "四季线上 4gTV",
+    "aliases": [
+     "四季線上",
+     "4gTV"
+    ],
+    "group": "台湾",
+    "label": "4gTV",
+    "yt": "@4gTV_online",
+    "ucid": "UCFvYg-djlLS2pDmdmflyNFg",
+    "id": "GjXBXz5dl6E",
+    "always": true
+   },
+   {
+    "name": "国会频道（立法院）",
+    "aliases": [
+     "國會頻道",
+     "立法院直播",
+     "議事轉播"
+    ],
+    "group": "台湾",
+    "label": "国会",
+    "yt": "@parliamentarytv",
+    "ucid": "UCBVkoTHzszNtJsG7fWaHbsg",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "momo 亲子台",
+    "aliases": [
+     "momo親子台",
+     "momokids",
+     "MOMO這一家"
+    ],
+    "group": "台湾",
+    "label": "momo",
+    "yt": "@momokidsYT",
+    "ucid": "UCbHD6HX38bufVR1pF076Z0g",
+    "id": "cnxRAfxwWqo",
+    "always": true
+   },
+   {
+    "name": "生命电视台",
+    "aliases": [
+     "生命電視台",
+     "Life TV"
+    ],
+    "group": "台湾",
+    "label": "生命",
+    "yt": "@LIFETV_HaiTao",
+    "ucid": "UCG4MlGukHK3CM7pwaUWjlKw",
+    "id": "YyOrp1NBkDM",
+    "always": true
+   },
+   {
+    "name": "正德电视台",
+    "aliases": [
+     "正德電視台"
+    ],
+    "group": "台湾",
+    "label": "正德",
+    "yt": "@chengteTV",
+    "ucid": "UCEaOL55dVM5xg-oX-Gs0DlQ",
+    "id": "wIicpuUDgv4",
+    "always": true
+   },
+   {
+    "name": "华藏卫视",
+    "aliases": [
+     "華藏衛視",
+     "HZTV"
+    ],
+    "group": "台湾",
+    "label": "华藏",
+    "yt": "@hztv2212",
+    "ucid": "UC0D4u31or8aGenc86eMB6wA",
+    "id": "eHkFgEVwefI",
+    "always": true
+   },
+   {
+    "name": "十方法界弘法卫星电视台",
+    "aliases": [
+     "十方法界",
+     "CBTV"
+    ],
+    "group": "台湾",
+    "label": "法界",
+    "yt": "@cbtv2525",
+    "ucid": "UCyi1TDk38dg5YrmCORsq9Gg",
+    "id": "rH35SlYg5Ww",
+    "always": true
+   },
+   {
+    "name": "凤凰卫视",
+    "aliases": [
+     "鳳凰衛視",
+     "凤凰",
+     "凤凰资讯台",
+     "凤凰中文台",
+     "Phoenix TV"
+    ],
+    "group": "香港",
+    "label": "凤凰",
+    "yt": "@phoenixtvglobal",
+    "ucid": "UC4vnLYInDvXtLKGOZieMeMw",
+    "id": "Ry--eMIjYLQ",
+    "always": true
+   },
+   {
+    "name": "香港电台 RTHK",
+    "aliases": [
+     "香港電台",
+     "港台",
+     "RTHK",
+     "港台電視31"
+    ],
+    "group": "香港",
+    "label": "港台",
+    "yt": "@RTHK",
+    "ucid": "UC6of7UYhctnYmqABjUqzuxw",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "香港电台新闻",
+    "aliases": [
+     "香港電台新聞",
+     "RTHK News"
+    ],
+    "group": "香港",
+    "label": "港台",
+    "yt": "@RTHK_news",
+    "ucid": "UCwuTCNZqSMfaiP63cGDb8LQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "HOY 78 有线新闻",
+    "aliases": [
+     "有線新聞",
+     "HOY 78",
+     "i-Cable News",
+     "有線"
+    ],
+    "group": "香港",
+    "label": "有线",
+    "yt": "@hoy78cablenews",
+    "ucid": "UC_q7e5XYJB0JDGagcF0KW0w",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "无线新闻 TVB News",
+    "aliases": [
+     "無綫新聞",
+     "TVB新聞",
+     "無綫新聞台",
+     "TVB News"
+    ],
+    "group": "香港",
+    "label": "TVB",
+    "yt": "@tvbnewsofficial",
+    "ucid": "UC_ifDTtFAcsj-wJ5JfM27CQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "TVB 娱乐新闻台",
+    "aliases": [
+     "TVB 娛樂新聞台",
+     "TVB Entertainment News"
+    ],
+    "group": "香港",
+    "label": "TVB",
+    "yt": "@TVBENews",
+    "ucid": "UC5dp6FxyIJmXLQv-9RYOTfA",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "欢乐 APM（TVB）",
+    "aliases": [
+     "歡樂APM",
+     "愛回家",
+     "TVB劇集"
+    ],
+    "group": "香港",
+    "label": "TVB",
+    "yt": "@Happy_APM",
+    "ucid": "UC-KhFFcpmCaF6d57gZ-F-fQ",
+    "id": "NwzIbifdF6Y",
+    "always": true
+   },
+   {
+    "name": "ViuTV",
+    "aliases": [
+     "ViuTV 99台",
+     "ViuTVsix"
+    ],
+    "group": "香港",
+    "label": "Viu",
+    "yt": "@ViuTV",
+    "ucid": "UCHOmxBZKt6uCFqoCvRHnSgQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "澳广视 TDM",
+    "aliases": [
+     "澳廣視",
+     "澳視",
+     "TDM",
+     "Macau TDM"
+    ],
+    "group": "澳门",
+    "label": "澳视",
+    "yt": "@TDM_MACAU",
+    "ucid": "UCMGAKqWLzQa8K-0LSDPK6sg",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "澳门有线电视",
+    "aliases": [
+     "澳門有線電視",
+     "Macau Cable TV",
+     "MCTV"
+    ],
+    "group": "澳门",
+    "label": "澳有线",
+    "yt": "@MacauCabletv",
+    "ucid": "UCzS08qiq3v0OCRQ7DHEaHqw",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "八度空间华语新闻（马来西亚）",
+    "aliases": [
+     "八度空間華語新聞",
+     "8TV",
+     "8TV Mandarin News",
+     "八度空间"
+    ],
+    "group": "海外",
+    "label": "8TV",
+    "yt": "@8tvmandarinnews",
+    "ucid": "UCJZTvwnKU0PBH4dhDJkFyZw",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "新时代电视（加拿大）",
+    "aliases": [
+     "新時代電視",
+     "Fairchild TV",
+     "FTV Canada"
+    ],
+    "group": "海外",
+    "label": "新时代",
+    "yt": "@Fairchildtv",
+    "ucid": "UC9zAWCXPFjk_h_k_BdHYvsQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "美国之音中文",
+    "aliases": [
+     "美國之音",
+     "VOA中文",
+     "VOA Chinese"
+    ],
+    "group": "海外",
+    "label": "VOA",
+    "yt": "@voachinese",
+    "ucid": "UCt5zpwa264A0B-gaYtv1IpA",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "CCTV 中文（央视）",
+    "aliases": [
+     "CCTV中文",
+     "央視中文",
+     "中文国际"
+    ],
+    "group": "海外",
+    "label": "央视",
+    "yt": "@CCTVCH",
+    "ucid": "UCnAsZ46UTeFEgwOEwMezngQ",
+    "id": null,
+    "always": false
+   },
+   {
+    "name": "半岛电视台 Al Jazeera",
+    "aliases": [
+     "半岛",
+     "al jazeera",
+     "aljazeera"
+    ],
+    "group": "国际",
+    "label": "AJ",
+    "yt": "@aljazeeraenglish",
+    "id": "gCNeDWCI0vo",
+    "always": true
+   },
+   {
+    "name": "德国之声 DW News",
+    "aliases": [
+     "德国之声",
+     "dw",
+     "dw news"
+    ],
+    "group": "国际",
+    "label": "DW",
+    "yt": "@dwnews",
+    "id": "LuKwFajn37U",
+    "always": true
+   },
+   {
+    "name": "法国24 France 24",
+    "aliases": [
+     "法国24",
+     "france24",
+     "france 24"
+    ],
+    "group": "国际",
+    "label": "F24",
+    "yt": "@France24_en",
+    "id": "HvZt-nh9sGg",
+    "always": true
+   },
+   {
+    "name": "天空新闻 Sky News",
+    "aliases": [
+     "天空新闻",
+     "sky",
+     "sky news"
+    ],
+    "group": "国际",
+    "label": "SKY",
+    "yt": "@SkyNews",
+    "id": "53SxFKpbKDE",
+    "always": true
+   },
+   {
+    "name": "澳洲 ABC 新闻",
+    "aliases": [
+     "abc澳洲",
+     "abc australia",
+     "澳大利亚广播"
+    ],
+    "group": "国际",
+    "label": "ABC",
+    "yt": "@abcnewsaustralia",
+    "id": "vOTiJkg1voo",
+    "always": true
+   },
+   {
+    "name": "NHK WORLD-JAPAN",
+    "aliases": [
+     "nhk",
+     "nhk world",
+     "日本nhk"
+    ],
+    "group": "国际",
+    "label": "NHK",
+    "yt": "@NHKWORLDJAPAN",
+    "id": "IimtbuqYIE8",
+    "always": true
+   },
+   {
+    "name": "彭博 Bloomberg",
+    "aliases": [
+     "彭博",
+     "bloomberg"
+    ],
+    "group": "国际",
+    "label": "BBG",
+    "yt": "@markets",
+    "id": "QB5BNdBFujE",
+    "always": true
+   },
+   {
+    "name": "欧洲新闻 Euronews",
+    "aliases": [
+     "欧洲新闻",
+     "euronews"
+    ],
+    "group": "国际",
+    "label": "EN",
+    "yt": "@euronews",
+    "id": "pykpO5kQJ98",
+    "always": true
+   },
+   {
+    "name": "亚洲新闻台 CNA",
+    "aliases": [
+     "cna",
+     "亚洲新闻台",
+     "新加坡亚洲新闻台"
+    ],
+    "group": "国际",
+    "label": "CNA",
+    "yt": "@channelnewsasia",
+    "id": "-PWMxjBgr0k",
+    "always": true
+   },
+   {
+    "name": "TRT World",
+    "aliases": [
+     "trt"
+    ],
+    "group": "国际",
+    "label": "TRT",
+    "yt": "@trtworld",
+    "id": "JV5w1MhzcfQ",
+    "always": true
+   },
+   {
+    "name": "ABC News 美国",
+    "aliases": [
+     "abc news",
+     "abc美国"
+    ],
+    "group": "国际",
+    "label": "ABC",
+    "yt": "@ABCNews",
+    "id": "KQhNZQ_Uag8",
+    "always": true
+   },
+   {
+    "name": "CBS News",
+    "aliases": [
+     "cbs"
+    ],
+    "group": "国际",
+    "label": "CBS",
+    "yt": "@CBSNews",
+    "id": "ToNKKYWVQdE",
+    "always": true
+   },
+   {
+    "name": "CGTN（YouTube）",
+    "aliases": [
+     "cgtn youtube"
+    ],
+    "group": "国际",
+    "label": "CGTN",
+    "yt": "@cgtn",
+    "id": "0i7n3r01L2U",
+    "always": true
+   }
+  ],
+  "kind": "youtube",
+  "note": "官方频道直播 · 聊天里直接播（要翻墙）"
+ }
+]

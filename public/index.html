@@ -737,6 +737,20 @@ function mdSvg(src){
   var d=svgData(src);if(!d)return mdCode(src);
   return '<figure class="mdsvg'+(d.fill?' fill':'')+'"><img src="'+esc(d.url)+'" alt="SVG 图" loading="lazy"></figure><details class="mdsvg-src"><summary>SVG 源码</summary>'+mdCode(src)+'</details>';
 }
+// 电视频道卡片：```tv 代码块，一行一个频道「分组 | 台标字 | 台名 | 网址 | 说明」（claclaw-tv 技能生成）。
+// 点卡片新开页面去官网看；能在 claclaw 里直接播的（YouTube 直播）卡片带 ▶，点了进顶上的播放器
+var TV_COLOR={'央视':'#d7262b','卫视':'#1f6fd1','地方':'#0d8f86','少儿':'#ef8a00','香港':'#7b3fd1','澳门':'#0e9f9a','台湾':'#16a34a','海外':'#b45309','国际':'#334155'};
+function mdTv(src){
+  var cards=src.split('\n').map(function(l){
+    var f=l.split('|').map(function(x){return x.trim()});if(f.length<4||!/^https?:\/\/\S+$/.test(f[3]))return '';
+    var u=f[3],e=embedOf(u),lab=f[1]||f[2].slice(0,2),c=TV_COLOR[f[0]]||'#475569';
+    return '<a class="tvc'+(e?' emb-l':'')+'" href="'+esc(u)+'" target="_blank" rel="noopener noreferrer"'+(e?' data-kind="'+e.kind+'"':'')+' title="'+esc(f[2]+(e?' · 在这里播放':' · 打开官网直播'))+'">'
+      +'<span class="tvc-l'+(lab.length>3?' s':'')+'" style="--c:'+c+'">'+esc(lab)+'</span>'
+      +'<span class="tvc-m"><b>'+esc(f[2])+'</b><small>'+esc(f[4]||f[0])+'</small></span>'
+      +'<span class="tvc-go">'+(e?'▶':'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>')+'</span></a>';
+  }).join('');
+  return cards?'<div class="tvg">'+cards+'</div>':mdCode(src);
+}
 function mdCode(code){return '<div class="cb"><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code)+'</code></pre></div>'}
 // 列表项内容：普通行用 <br> 连起来；\u0001n 是嵌在这一项里的第 n 个代码块
 function mdLi(text,blocks){
@@ -748,8 +762,23 @@ function mdLi(text,blocks){
   });
   return out;
 }
+// 片单 / 视频单：每项都以能在这里播的 [片名](网址) 开头的编号列表，画成和电视频道一样的方块卡片（编号 + 片名 + 年份类型等），点了在顶上的播放器里播。
+// 不加载外站封面（点之前不连外站）
+var MV_COLOR={'YouTube':'#e0262b','B 站':'#f0608e','Dailymotion':'#1f6fd1','Vimeo':'#0e9fc9','Internet Archive':'#475569'};
+function mdMovies(items,tiles){
+  if(items.length<2||items.some(function(it){return it.tag!=='ol'||it.ind>0||it.text.indexOf('\u0001')>=0}))return '';
+  var re=/^\s*(?:\*\*)?\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)(?:\*\*)?([^]*)$/,rows=[];
+  for(var k=0;k<items.length;k++){var mm=items[k].text.match(re),e=mm&&embedOf(mm[2]);if(!e||e.kind!=='video')return '';rows.push([mm[1].replace(/[*_`]/g,'').trim(),mm[2],e,mm[3].replace(/\n/g,' · ').replace(/^[\s·:：—–|-]+/,'').replace(/[*_`]/g,'').trim()])}
+  var n0=items[0].start||1;
+  return '<div class="tvg mvg">'+rows.map(function(r,k){
+    tiles[r[2].src]=1;var no=String(n0+k);
+    return '<a class="tvc mvc emb-l" href="'+esc(r[1])+'" data-kind="video" target="_blank" rel="noopener noreferrer" title="'+esc(r[0]+' · 在这里播放')+'">'
+      +'<span class="tvc-l'+(no.length>2?' s':'')+'" style="--c:'+(MV_COLOR[r[2].site]||'#475569')+'">'+no+'</span>'
+      +'<span class="tvc-m"><b>'+esc(r[0])+'</b><small>'+esc(r[3]||r[2].site)+'</small></span><span class="tvc-go">▶</span></a>';
+  }).join('')+'</div>';
+}
 function md(src){
-  var L=String(src).replace(/\r\n?/g,'\n').split('\n'),out=[],i=0,m;
+  var L=String(src).replace(/\r\n?/g,'\n').split('\n'),out=[],i=0,m,tiles={};
   while(i<L.length){
     var l=L[i];
     if(!l.trim()){i++;continue}
@@ -761,6 +790,7 @@ function md(src){
       var fence=m[1],lang=m[2].toLowerCase(),code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
       i++;var cj=code.join('\n');
+      if(lang==='tv'&&i<=L.length){out.push(mdTv(cj));continue}   // 电视频道卡片（claclaw-tv 技能）
       out.push((lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))&&i<=L.length?mdSvg(cj):mdCode(cj));continue;   // 还没收尾（流式输出中）的照代码显示
     }
     if(SVG_SRC.test(l)){                           // 回复里整段 <svg>…</svg>：到 </svg> 为止画成图；还没收尾的照代码显示
@@ -803,6 +833,7 @@ function md(src){
         if(L[i].trim()&&/^\s{2,}/.test(L[i])&&items.length){items[items.length-1].text+='\n'+L[i].trim();i++;continue}
         break;
       }
+      var mvg=mdMovies(items,tiles);if(mvg){out.push(mvg);continue}
       var h='',st=[];
       items.forEach(function(it){
         while(st.length&&it.ind<st[st.length-1].ind){h+='</li></'+st.pop().tag+'>'}
@@ -819,7 +850,7 @@ function md(src){
     while(i<L.length&&L[i].trim()&&!(para.length&&mdBlockStart(L[i],L[i+1]))){para.push(L[i]);i++}
     out.push('<p>'+para.map(mdInline).join('<br>')+'</p>');
   }
-  if(!mdNested)out.push(embedCards(src));
+  if(!mdNested)out.push(embedCards(src,tiles));
   return out.join('');
 }
 // 在线视频 / 音频：回复里出现能嵌入播放的网址（B 站、YouTube、Dailymotion、Vimeo、Internet Archive、SoundCloud、媒体直链），
@@ -836,7 +867,8 @@ var EMBED_RULES=[
 ];
 var mdNested=0;
 function embedOf(u){for(var k=0;k<EMBED_RULES.length;k++){var r=EMBED_RULES[k],m=r[0].exec(u);if(m)return {src:r[3](m),site:r[1],kind:r[2]}}return null}
-function embedCards(src){
+function embedCards(src,tiles){
+  src=String(src).replace(/^\s*```tv[^\n]*\n[\s\S]*?^\s*```/gm,'');   // 电视频道卡片自己就能点，不再另放播放卡片
   var seen={},cards=[],re=/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()（）「」，。、；！？"']+)/g,m,all=0;
   while((m=re.exec(src))){var e0=embedOf((m[2]||m[3]).replace(/[.,;:!?]+$/,''));if(e0&&!seen[e0.src]){seen[e0.src]=1;all++}}
   // 能播的链接多（片单、播放列表）：不堆卡片，放一条「从第 1 个开始播」，标题本身点了就在顶上的播放器里播
@@ -844,7 +876,7 @@ function embedCards(src){
   seen={};re.lastIndex=0;
   while((m=re.exec(src))&&cards.length<4){
     var u=(m[2]||m[3]).replace(/[.,;:!?]+$/,''),e=embedOf(u);
-    if(!e||seen[e.src])continue;seen[e.src]=1;
+    if(!e||seen[e.src]||tiles&&tiles[e.src])continue;seen[e.src]=1;
     var t=(m[1]||'').replace(/[*_`]/g,'').trim();
     cards.push('<div class="emb emb-'+(e.kind==='audio'||e.kind==='file-audio'?'a':'v')+'" data-emb="'+esc(e.src)+'" data-kind="'+e.kind+'"><button type="button" class="emb-go"><span class="emb-ic">▶</span><span class="emb-t">'+esc(t||'在这里播放')+'</span><span class="emb-s">'+esc(e.site)+'</span></button></div>');
   }
@@ -870,7 +902,7 @@ document.addEventListener('click',function(ev){
 // 回复里能播的链接（带 ▶）：点了不跳走，在聊天顶上的播放器里播；同一条消息里的其他链接就是播放列表（上一个 / 下一个，点别的标题直接换）
 function embLink(u,t){var e=embedOf(u);if(!e)return '';return '<a href="'+u+'" class="emb-l" data-kind="'+e.kind+'" target="_blank" rel="noopener noreferrer">'+(t||u)+'</a>'}
 var tp={list:[],i:-1,box:null,t:0},TPEL=null;   // TPEL：顶上的播放器
-function tpLinks(box){var seen={},out=[];box.querySelectorAll('a.emb-l').forEach(function(a){var e=embedOf(a.getAttribute('href'));if(e&&!seen[e.src]){seen[e.src]=1;out.push({a:a,e:e,t:a.textContent.trim()})}});return out}
+function tpLinks(box){var seen={},out=[];box.querySelectorAll('a.emb-l').forEach(function(a){var e=embedOf(a.getAttribute('href'));if(e&&!seen[e.src]){seen[e.src]=1;out.push({a:a,e:e,t:(a.querySelector('.tvc-m b')||a).textContent.trim()})}});return out}
 // YouTube 开 JS 接口：知道播到哪了（弹出 / 放回时接着播）、播完了（自动下一个）
 function tpSrc(x,start){var u=x.e.src;if(/youtube-nocookie\.com\/embed\//.test(u))u+='&enablejsapi=1'+(start>5?'&start='+Math.floor(start):'');return u}
 // 电影：一部就是一整场，不要上一部 / 下一部、播完也不自动接下一部（列表里点别的片名照样换）。

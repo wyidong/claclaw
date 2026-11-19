@@ -75,5 +75,32 @@
       "iflow",
       "codebuddy"
     ]
+  },
+  {
+    "name": "claclaw-tv",
+    "title": "claclaw 看电视直播",
+    "desc": "用户说「打开四川卫视 / 看 CCTV5」时给官方直播的频道卡片：点了去官网看，YouTube 官方 24 小时直播在聊天里直接播",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
   }
 ]
