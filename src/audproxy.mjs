@@ -3,6 +3,8 @@
 //   而且要 Referer 是 B 站，手机直接放不了，所以服务器带上来源页去取、原样转给手机（支持 Range，能拖进度）。
 // - 网易云：官方外链 music.163.com/song/media/outer/url?id=… 只对免费歌有效（VIP 歌会 302 到 /404）；
 //   跳到的 mp3 是 http 的，https 页面里放不了，也由服务器转。
+// - Free-Stock-Music、ccMixter（CC 授权的免费音乐站）：mp3 直链要求来源页是它们自己（防盗链），也由服务器带上来源页转；
+//   只认这两个站固定目录下的 .mp3（u=完整地址），别的地址一律不转，不当通用代理。
 // 解析出的地址缓存 20 分钟（B 站的签名约 2 小时过期）；上游回 403 / 404 / 410 就重新解析一次。
 import { Readable } from 'node:stream';
 
@@ -40,11 +42,20 @@ async function neAudio(id) {
   return { url: loc, type: 'audio/mpeg', referer: '' };
 }
 
+// 要带来源页才给放的 CC 音乐站：[地址规则, 来源页]
+const REF_SITES = [
+  [/^https:\/\/www\.free-stock-music\.com\/music\/[\w-]+\/mp3\/[\w-]+\.mp3$/, 'https://www.free-stock-music.com/'],
+  [/^https:\/\/ccmixter\.org\/content\/[\w-]+\/[\w%()'!,~.-]+\.mp3$/, 'https://ccmixter.org/'],
+];
+const refSite = u => !/\.\.|%2e%2e|%2f/i.test(u) && REF_SITES.find(([re]) => re.test(u));
+
 // 查询参数 → 缓存键；不合格返回 ''
 export function audKey(q) {
   const bv = q.get('bv') || '', ne = q.get('ne') || '', p = Math.max(1, Math.min(999, +q.get('p') || 1));
   if (/^BV[0-9A-Za-z]{10}$/.test(bv)) return 'bv:' + bv + ':' + p;
   if (/^\d{1,15}$/.test(ne)) return 'ne:' + ne;
+  const u = q.get('u') || '';
+  if (u.length < 400 && refSite(u)) return 'u:' + u;
   return '';
 }
 // 给命令行（claw-music get 下载）用：解析出真正的音频地址和要带的 Referer
@@ -52,8 +63,10 @@ export async function audSource(key) { return resolve(key, true); }
 async function resolve(key, fresh) {
   const c = cache.get(key);
   if (!fresh && c && Date.now() - c.at < TTL) return c;
-  const [k, id, p] = key.split(':');
-  const r = { at: Date.now(), ...(k === 'bv' ? await biliAudio(id, +p) : await neAudio(id)) };
+  const k = key.slice(0, key.indexOf(':')), rest = key.slice(k.length + 1);
+  const r = { at: Date.now(), ...(k === 'bv' ? await biliAudio(rest.split(':')[0], +rest.split(':')[1])
+    : k === 'ne' ? await neAudio(rest)
+    : { url: rest, type: 'audio/mpeg', referer: refSite(rest)[1] }) };
   cache.set(key, r);
   if (cache.size > 300) cache.delete(cache.keys().next().value);
   return r;
