@@ -18,6 +18,7 @@ import { z } from 'zod';
 import * as push from './src/push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured, useDevice } from './src/peer/devnotify.mjs';
 import { makeRelayDev } from './src/peer/relaydev.mjs';
+import { makeShop, serveShopImg } from './src/shop.mjs';
 import { libDir, libImport } from './src/peer/vendor.mjs';
 import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './src/claws/kimi.mjs';
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './src/claws/qwen.mjs';
@@ -760,6 +761,7 @@ async function handleLocal(req, res, url) {
   if (!isDirectLocal(req) || req.headers['x-forwarded-proto'] || req.headers.forwarded || !skills.checkLocal(req.headers['x-claclaw-local'])) return sendJson(res, 403, { ok: false, error: '只接受本机带令牌的请求' });
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
+  if (url.pathname === '/api/local/shop/search' && req.method === 'POST') return sendJson(res, 200, await shop.search(await jsonBody(req, 4096, {})));   // claw-shopping 技能
   if (url.pathname === '/api/local/theme') {   // claw-theme 技能：GET 现在的主题，POST {theme} 换主题
     if (req.method !== 'POST') return sendJson(res, 200, { ok: true, ...themeState() });
     const b = await jsonBody(req, 4096, null);
@@ -2050,6 +2052,7 @@ startDevNotify({ log, onOnline: async () => {
 // 内置的 clarelay 电脑端（宿主页「网络 › clarelay」）；主端口占到后才自动连（见下面 listen）
 const peerOpen = () => { const c = loadPeer(); return c.enabled ? { [PEER_BASE]: 'http://127.0.0.1:' + c.port } : {}; };   // clarelay 门卫对协同路径放行，转给本机协同端口
 const relayDev = makeRelayDev({ port: PORT, DATA, log, getOff: () => !!settings().clarelayOff, setOff: v => saveSettings({ clarelayOff: !!v }), onDevice: d => { useDevice(d); setTimeout(refreshOurExtra, 3000); }, getOpen: peerOpen, onLib: () => reloadRelayTunnels() });
+const shop = makeShop({ DATA, log });   // claw-shopping 技能：搜拼多多商品（问公开的商品服务）
 // 协同地址里 clarelay 能补的几样（每分钟看一次）：子域名地址（https://<label>.<域名>/claclaw-peer）、打洞用的 STUN（中继的排第一，第三方的留作备用）
 // 不再探测、公布「外网直连」（公网 IP:协同端口，明文 http）：请求头里的钥匙会明文过公网
 async function refreshOurExtra() {
@@ -2831,6 +2834,7 @@ const handler = async (req, res) => {
     // 纯音频（claw-music 技能）：B 站视频的单独音轨、网易云免费歌的 mp3，服务器取来转给手机的 <audio>
     if (url.pathname === '/api/aud' && (req.method === 'GET' || req.method === 'HEAD')) return serveAud(req, res, url.searchParams, log);
     if (url.pathname === '/api/cover' && (req.method === 'GET' || req.method === 'HEAD')) return serveCover(req, res, url.searchParams.get('u'));
+    if (url.pathname === '/api/shop/img' && (req.method === 'GET' || req.method === 'HEAD')) return serveShopImg(req, res, url.searchParams.get('u'));   // 商品卡片的图（只代理拼多多图片域名）
     if (url.pathname === '/api/lyric' && req.method === 'GET') return serveLyric(res, url.searchParams);
     if (url.pathname === '/api/related' && req.method === 'GET') {
       const id = relatedKey(String(url.searchParams.get('u') || ''));

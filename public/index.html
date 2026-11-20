@@ -766,6 +766,20 @@ function mdTv(src){
   }).join('');
   return cards?'<div class="tvg">'+cards+'</div>':mdCode(src);
 }
+// 商品卡片：```shop 代码块，一行一个「平台 | 图片地址 | 标题 | 券后价 | 说明 | 链接」（claw-shopping 技能生成）。图走 /api/shop/img（只代理拼多多图片），点卡片跳平台（拼多多短链会直接拉起 App）
+var SHOP_COLOR={'拼多多':'#E02E24'};
+function mdShop(src){
+  var n=0,cards=src.split('\n').map(function(l){
+    var f=l.split('|').map(function(x){return x.trim()});if(f.length<6||!/^https:\/\/\S+$/.test(f[5]))return '';
+    n++;var img=/^https:\/\/\S+$/.test(f[1])?'<img class="shc-img" src="/api/shop/img?u='+encodeURIComponent(f[1])+'" alt="" loading="lazy" decoding="async">':'';
+    return '<a class="shc" href="'+esc(f[5])+'" target="_blank" rel="noopener noreferrer" title="'+esc(f[2]+' · 去'+f[0]+'看看')+'">'
+      +'<span class="shc-p">'+img+'<span class="shc-n">'+n+'</span><span class="shc-tag" style="--c:'+(SHOP_COLOR[f[0]]||'#475569')+'">'+esc(f[0])+'</span></span>'
+      +'<span class="shc-m"><b>'+esc(f[2])+'</b><span class="shc-pr">¥<em>'+esc(f[3])+'</em></span>'+(f[4]?'<small>'+esc(f[4])+'</small>':'')+'</span></a>';
+  }).join('');
+  return cards?'<div class="shg">'+cards+'</div><div class="shg-note">商品链接为推广链接，价格以平台页面为准</div>':mdCode(src);
+}
+document.addEventListener('load',function(ev){var t=ev.target;if(t.classList&&t.classList.contains('shc-img'))t.classList.add('ok')},true);
+document.addEventListener('error',function(ev){var t=ev.target;if(t.classList&&t.classList.contains('shc-img'))t.remove()},true);
 // 主题卡片：```theme 代码块，一行一个「主题 id | 名字 | 说明」（claw-theme 技能生成）。卡片上画一小块那个主题的界面，点了马上换上（别的设备也跟着换）
 // id：auto / light / dark / ziwei / shichen（按时辰轮流）/ shichen@0～11（固定一个时辰）。颜色取自 app.css 各主题的 --bg / --surface / --accent / --ink
 var THP={light:['#F1F3F5','#FFFFFF','#12864A','#14181C'],dark:['#0E1115','#161B21','#3FCB86','#E7EBEF'],ziwei:['#F2F0F8','#FFFFFF','#5B21B6','#1F1B2D'],
@@ -846,6 +860,7 @@ function md(src){
       i++;var cj=code.join('\n');
       if(lang==='tv'&&i<=L.length){out.push(mdTv(cj));continue}   // 电视频道卡片（claw-tv 技能）
       if(lang==='theme'&&i<=L.length){out.push(mdTheme(cj));continue}   // 主题卡片（claw-theme 技能）
+      if(lang==='shop'&&i<=L.length){out.push(mdShop(cj));continue}   // 商品卡片（claw-shopping 技能）
       out.push((lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))&&i<=L.length?mdSvg(cj):mdCode(cj));continue;   // 还没收尾（流式输出中）的照代码显示
     }
     if(SVG_SRC.test(l)){                           // 回复里整段 <svg>…</svg>：到 </svg> 为止画成图；还没收尾的照代码显示

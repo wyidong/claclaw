@@ -2128,6 +2128,24 @@ select.pe-in{text-align-last:right}
 .md a.tvc.playing .tvc-go svg{animation:tvpulse 1.6s ease-in-out infinite}
 @keyframes tvpulse{50%{transform:scale(1.15);filter:drop-shadow(0 0 10px rgba(74,222,128,.9))}}
 
+/* 商品卡片（```shop 代码块，claw-shopping 技能）：方图（左上编号、右下平台）、两行标题、券后价、原价 / 券 / 销量；点了跳平台 */
+.shg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:10px 0 4px}
+.md a.shc{display:flex;flex-direction:column;min-width:0;border-radius:14px;overflow:hidden;background:var(--surface);border:1px solid var(--line,rgba(127,127,127,.18));box-shadow:0 1px 2px rgba(0,0,0,.04);color:var(--ink);text-decoration:none;transition:transform .15s,box-shadow .15s}
+.md a.shc::before{content:none}
+.md a.shc:hover{box-shadow:0 6px 18px rgba(0,0,0,.09);transform:translateY(-1px)}
+.md a.shc:active{transform:scale(.97)}
+.shc-p{position:relative;display:block;aspect-ratio:1;background:color-mix(in srgb,var(--ink) 6%,var(--surface))}
+.shc-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .25s}
+.shc-img.ok{opacity:1}
+.shc-n{position:absolute;left:6px;top:6px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;font-weight:600;line-height:20px;text-align:center}
+.shc-tag{position:absolute;right:6px;bottom:6px;padding:1px 6px;border-radius:6px;background:var(--c);color:#fff;font-size:11px;font-weight:600;line-height:18px}
+.shc-m{display:flex;flex-direction:column;gap:3px;padding:8px 9px 10px;min-width:0}
+.shc-m b{font-size:13.5px;font-weight:550;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all}
+.shc-pr{color:#E02E24;font-size:12px;font-weight:650}
+.shc-pr em{font-style:normal;font-size:18px;margin-left:1px}
+.shc-m small{font-size:11.5px;line-height:1.35;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.shg-note{font-size:11px;color:var(--muted);margin:0 0 8px}
+
 /* 主题卡片（```theme 代码块，claw-theme 技能）：一排 2～3 张，上面画一小块那个主题的界面（底色、标题栏、两条消息、按钮），下面名字和颜色说明；正在用的描边打勾，点了马上换 */
 .thg{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;margin:10px 0}
 .md .thc{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:7px;min-width:0;padding:7px 7px 9px;border-radius:14px;background:var(--surface);border:1px solid var(--line,rgba(127,127,127,.18));box-shadow:0 1px 2px rgba(0,0,0,.04);transition:transform .12s,box-shadow .12s,border-color .12s}

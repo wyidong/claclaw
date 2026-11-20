@@ -246,5 +246,33 @@
       "iflow",
       "codebuddy"
     ]
+  },
+  {
+    "name": "claw-shopping",
+    "title": "购物",
+    "desc": "让 AI 在拼多多帮你挑商品：给商品卡片（图、券后价、销量），点了跳拼多多下单",
+    "group": "生活",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
   }
 ]
