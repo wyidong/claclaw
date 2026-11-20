@@ -77,7 +77,7 @@ html.lc body{--line:color-mix(in srgb,color-mix(in srgb,var(--line0),var(--surfa
 :root[data-theme="shichen"]{--surface:#FFFFFF;--ink:#1F1B2D;--muted:#64748B;--strip:var(--bg);--rail-on:var(--surface);--allow:var(--accent);--on-allow:var(--accent-ink)}
 :root:is([data-theme="ziwei"],[data-theme="shichen"]) .claw-card{background:var(--user-bg)}   /* Agent 卡片：都用浅色底，选中的靠强调色边框区分 */
 /* 时辰背景选「图片」：图铺在整页最底下；列表 / 设置 / 宿主页的底变透明露出图，顶栏 / 底栏 / 左栏是半透明的淡底毛玻璃，卡片仍是白底 */
-:root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/cover no-repeat}
+:root[data-theme="shichen"].sc-img #app.m-list,:root[data-theme="shichen"].sc-img body{background:var(--sc-b) var(--sc-img) center/var(--sc-fit,cover) no-repeat}
 :root[data-theme="shichen"].sc-img #app.m-list #sheet,:root[data-theme="shichen"].sc-img #app.m-list .sheet-p,:root[data-theme="shichen"].sc-img #app.m-list #hostPane{background:transparent!important}
 :root[data-theme="shichen"].sc-img{--strip:transparent}   /* 图原样显示，不压淡底、不雾化（像桌面壁纸） */
 :root:is([data-theme="ziwei"],[data-theme="shichen"]:not(.sc-dark)):not(.sc-img) #sTop :is(#sNew,#gNew,#sPeer,#sVoice,#sTheme,#sAcct,#sReload,#rClear):not(:hover):not([aria-pressed="true"]):not(.reconn){color:color-mix(in srgb,var(--accent) 45%,var(--muted))}   /* 紫微、时辰浅色：灰色是统一的石板灰，顶部快捷图标掺进主题色，跟着主题走（深色时辰的灰本来就带色） */
@@ -129,7 +129,7 @@ html.lc body{--line:color-mix(in srgb,color-mix(in srgb,var(--line0),var(--surfa
       :is(#app #sTop,#app #setTop,#hostPane .pg-hd){background:linear-gradient(var(--sc-veil),var(--sc-veil)),var(--sc-in)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}   /* 钉在顶上的标题条：内容会从它下面滚过——铺上和内圈同一张图（都按窗口定位，接缝看不出），看着和聊天标题栏一样透明，又挡住下面滚过的内容 */
       #app::after{border-color:transparent}
         /* 图片背景：图只铺在内圈（列表 + 聊天这一块，圆角），外圈（左栏、四周留边）是纯色 --sc-out；图原样显示，不压淡底 */
-      #app{background:var(--sc-out)!important;isolation:isolate;--sc-veil:color-mix(in srgb,var(--surface) 30%,transparent);--sc-in:var(--sc-b) var(--sc-img) center/cover no-repeat fixed}
+      #app{background:var(--sc-out)!important;isolation:isolate;--sc-veil:color-mix(in srgb,var(--surface) 30%,transparent);--sc-in:var(--sc-b) var(--sc-img) center/var(--sc-fit,cover) no-repeat fixed}
       #app::before{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border-radius:12px;z-index:-1;pointer-events:none;background:var(--sc-in)}
     }
   }

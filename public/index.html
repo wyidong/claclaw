@@ -28,13 +28,17 @@ window.__sc=(function(){
   var N=['子 · 少阳胆 🦶','丑 · 厥阴肝 🦶','寅 · 太阴肺 ✋','卯 · 阳明大肠 ✋','辰 · 阳明胃 🦶','巳 · 太阴脾 🦶','午 · 少阴心 ✋','未 · 太阳小肠 ✋','申 · 太阳膀胱 🦶','酉 · 少阴肾 🦶','戌 · 厥阴心包 ✋','亥 · 少阳三焦 ✋'];   // 12 个时辰主题的名字（地支 · 当令的经络，🦶 足经 / ✋ 手经），设置下拉、快捷方块、流变时辰的选项名都用这份
   // 时辰壁纸（设置里「时辰背景：图片」时用，只有 6 阳（腑）用；6 阴（脏）是纯色）：/sc-bg/<地支序号>.jpg，图放在电脑的 data/sc-bg/ 下；这个时辰没有图就仍用纯色
   var ok={},SCV='5';   // 换了图就把 SCV 加一：图片缓存一天，不加的话手机上还是旧图
+  // 用户自己的背景图（claw-theme bg，claclaw.bg = data/bg/ 下的文件名）：换掉时辰自带的图，12 个时辰都铺；claclaw.bgFit=center 原尺寸居中，默认按比例拉伸铺满
   function img(z){
-    var r=document.documentElement,on=false;try{on=localStorage.getItem('claclaw.scImg')==='1'}catch(_){}
-    if(YIN[z])on=false;   // 6 阴（脏）只用纯色深底，不铺图；6 阳（腑）才用图
-    if(on&&ok[z]===true){r.style.setProperty('--sc-img','url("/sc-bg/'+z+'.jpg?v='+SCV+'")');r.classList.add('sc-img');return}
-    r.classList.remove('sc-img');if(!on||ok[z]===false)return;
-    var im=new Image();im.onload=function(){ok[z]=true;if(now().z===z){img(z);if(window.__scTop)window.__scTop()}};
-    im.onerror=function(){ok[z]=false};im.src='/sc-bg/'+z+'.jpg?v='+SCV;   // 图后到：状态栏 / 外壳顶栏跟着换
+    var r=document.documentElement,on=false,mine='',fit='';try{on=localStorage.getItem('claclaw.scImg')==='1';mine=localStorage.getItem('claclaw.bg')||'';fit=localStorage.getItem('claclaw.bgFit')||''}catch(_){}
+    if(!/^[0-9a-f]{12}\.(jpg|png|webp)$/.test(mine))mine='';
+    if(YIN[z]&&!mine)on=false;   // 6 阴（脏）只用纯色深底，不铺图；6 阳（腑）才用图（用户自己的图除外）
+    var src=mine?'/bg/'+mine:'/sc-bg/'+z+'.jpg?v='+SCV;
+    r.style.setProperty('--sc-fit',fit==='center'?'auto':'cover');
+    if(on&&ok[src]===true){r.style.setProperty('--sc-img','url("'+src+'")');r.classList.add('sc-img');return}
+    r.classList.remove('sc-img');if(!on||ok[src]===false)return;
+    var im=new Image();im.onload=function(){ok[src]=true;if(now().z===z){img(z);if(window.__scTop)window.__scTop()}};
+    im.onerror=function(){ok[src]=false};im.src=src;   // 图后到：状态栏 / 外壳顶栏跟着换
   }
   function now(d){
     d=d||new Date();var x=d.getHours()>=23?new Date(d.getTime()+36e5):d;
@@ -68,10 +72,10 @@ window.__sc=(function(){
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
 (function(){
-  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsSessVoice','ttsSessRate','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang','lineW','lineC','scZ'],ls,pend={},n=0,t=0;
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsSessVoice','ttsSessRate','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang','lineW','lineC','scZ','bg','bgFit'],ls,pend={},n=0,t=0;
   try{ls=localStorage}catch(_){return}
   // 主题在对话里（claw-theme）或别的设备上点主题卡片换过：电脑上那份比本机看到过的新，就用电脑上的（不然本机的旧主题会把它盖回去）
-  try{if(P&&P.themeAt&&P.themeAt!==ls.getItem('claclaw.themeAt')){['theme','scZ'].forEach(function(k){if(typeof P[k]==='string')ls.setItem('claclaw.'+k,P[k]);else ls.removeItem('claclaw.'+k)});ls.setItem('claclaw.themeAt',P.themeAt)}}catch(_){}
+  try{if(P&&P.themeAt&&P.themeAt!==ls.getItem('claclaw.themeAt')){['theme','scZ','scImg','bg','bgFit'].forEach(function(k){if(typeof P[k]==='string')ls.setItem('claclaw.'+k,P[k]);else ls.removeItem('claclaw.'+k)});ls.setItem('claclaw.themeAt',P.themeAt)}}catch(_){}
   function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
   function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
   try{K.forEach(function(k){var v=ls.getItem('claclaw.'+k),s=P&&typeof P[k]==='string'?P[k]:null;
@@ -2540,7 +2544,9 @@ $('#bAlways').addEventListener('click',function(){reply('allow_session')});
 
 function onEvent(m){
   if(m.t==='login.update'){loginEvent(m);return}
-  if(m.t==='theme'){thSet(m.theme?m.theme+(m.scZ!=null?'@'+m.scZ:''):'auto');try{localStorage.setItem('claclaw.themeAt',String(m.at||''))}catch(_){}return}   // 对话里换了主题（claw-theme）/ 别的设备点了主题卡片
+  if(m.t==='theme'){if(m.bg!=null){lsPut('claclaw.bg',m.bg);lsPut('claclaw.bgFit',m.fit||'');if(window.__sc&&document.documentElement.getAttribute('data-theme')==='shichen')window.__sc.apply()}   // 自己的背景图、铺法
+    if(m.img!=null){var im=document.getElementById('setScImg');if(im&&im.value!==m.img){im.value=m.img;im.dispatchEvent(new Event('change'))}}   // 背景图开关先换，下面换主题时按新的来
+    thSet(m.theme?m.theme+(m.scZ!=null?'@'+m.scZ:''):'auto');try{localStorage.setItem('claclaw.themeAt',String(m.at||''))}catch(_){}return}   // 对话里换了主题（claw-theme）/ 别的设备点了主题卡片
   if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
   if(/^(user|ai\.|tool\.|peer$|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;   // 放在过滤别的会话之后；peer$：配对申请 peer.pair 不算聊天内容

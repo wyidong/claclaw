@@ -32,6 +32,7 @@ import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText, attKind, ATT_MA
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './src/claws/copilot.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate, ocStartGateway } from './src/claws/openclaw.mjs';
 import { hostInfo, slowInfo } from './src/host.mjs';
+import { makeTheme } from './src/theme.mjs';
 import { ttsVoices, ttsSynth, ttsWarm, volcInfo, volcKey, volcSetKey, ttsEngines, ttsJob, ttsJobInfo, ttsStream } from './src/tts.mjs';
 import { ADDRS_HEADER, parseAddrsHeader, setOurExtra, ourAddrs, addrKind } from './src/peer/peer.mjs';
 import { approvePending, RELAY_ADDR, markLast, nextPeerNo, ourBaseName, ourInbox, ourRelays, peerRelays, relayOf as relayOfPeer, RELAYS_HEADER, parseRelaysHeader, applyAdvert, discover, peerCall, loadPeer, savePeer, myName, newToken, hashToken, newId, findPeerByToken, lanIp, ourBase, PAIR_TTL, pendingList, addPending, getPending, dropPending, applyListener, peerStatus, callPeer, probeRelay, peerRoute, notePairFail, clearPairFails, pairHoldState, PEER_BASE, DIRECT, setDirect, probeChan, peerLanUrls, chanList, noteChan, forgetPeer } from './src/peer/peer.mjs';
@@ -759,9 +760,9 @@ async function handleLocal(req, res, url) {
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
   if (url.pathname === '/api/local/theme') {   // claw-theme 技能：GET 现在的主题，POST {theme} 换主题
-    if (req.method !== 'POST') return sendJson(res, 200, { ok: true, theme: clientTheme() });
-    const b = await jsonBody(req, 1024, null);
-    return sendJson(res, 200, setClientTheme(b && b.theme));
+    if (req.method !== 'POST') return sendJson(res, 200, { ok: true, ...themeState() });
+    const b = await jsonBody(req, 4096, null);
+    return sendJson(res, 200, setClientTheme(b));
   }
   if (url.pathname === '/api/local/peer/result') return sendJson(res, 200, await waitJob(q.get('job') || '', wait));
   if (url.pathname === '/api/local/peer/whoami' || url.pathname === '/api/local/peer/list') {
@@ -1865,27 +1866,15 @@ function saveSettings(patch) {
 }
 // 手机网页的个人设置（语音档位、压缩提示阈值、主题……）也在电脑上存一份：clarelay 外壳里 claclaw 嵌在别的网址里，
 // iOS 杀掉 App 后嵌入页的 localStorage 会丢。页面下发时塞进去，本机没有的项由页面补回
-const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsVoices', 'ttsSessVoice', 'ttsSessRate', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang', 'lineW', 'lineC', 'scZ', 'themeAt'];   // themeAt：主题是从对话（claw-theme）或聊天里的主题卡片换的时间，网页打开时比它新就改用电脑上这份
+const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsVoices', 'ttsSessVoice', 'ttsSessRate', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang', 'lineW', 'lineC', 'scZ', 'themeAt', 'bg', 'bgFit'];   // themeAt：主题是从对话（claw-theme）或聊天里的主题卡片换的时间，网页打开时比它新就改用电脑上这份
 function clientPrefs() {
   const p = settings().clientPrefs, out = {};
   if (p && typeof p === 'object') for (const k of PREF_KEYS) if (typeof p[k] === 'string') out[k] = p[k];
   return out;
 }
-// 换主题（claw-theme 技能、聊天里的主题卡片）：v 是 auto / light / dark / ziwei / shichen / shichen@0～11。
-// 存进 clientPrefs，再通知所有打开着的网页马上换（ws 事件 theme）
-const THEME_RE = /^(auto|light|dark|ziwei|shichen)(?:@(\d{1,2}))?$/;
-function setClientTheme(v) {
-  const m = THEME_RE.exec(String(v || ''));
-  if (!m || (m[2] != null && (m[1] !== 'shichen' || +m[2] > 11))) return { ok: false, error: '没有这个主题：' + v };
-  const next = clientPrefs(), theme = m[1] === 'auto' ? '' : m[1], scZ = m[2] != null ? String(+m[2]) : null, at = String(Date.now());
-  if (theme) next.theme = theme; else delete next.theme;
-  if (scZ != null) next.scZ = scZ; else delete next.scZ;
-  next.themeAt = at;
-  saveSettings({ clientPrefs: next });
-  broadcast({ t: 'theme', theme, scZ, at });
-  return { ok: true, theme: m[1] + (scZ != null ? '@' + scZ : '') };
-}
-function clientTheme() { const p = clientPrefs(); return (p.theme || 'auto') + (p.theme === 'shichen' && /^\d+$/.test(p.scZ || '') ? '@' + p.scZ : ''); }
+// 换主题 / 背景图（claw-theme 技能、聊天里的主题卡片）：见 src/theme.mjs
+const themeCtl = makeTheme({ dir: path.join(DATA, 'bg'), prefs: clientPrefs, save: next => saveSettings({ clientPrefs: next }), notify: o => broadcast(o) });
+const setClientTheme = themeCtl.set, themeState = themeCtl.state, BG_DIR = themeCtl.dir;
 const SOUND_DIR = process.platform === 'win32' ? path.join(process.env.WINDIR || 'C:\\Windows', 'Media') : '/System/Library/Sounds';
 const SOUND_EXT = process.platform === 'win32' ? '.wav' : '.aiff';
 const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.toLowerCase().endsWith(SOUND_EXT)).map(f => f.slice(0, -SOUND_EXT.length)).sort(); } catch { return []; } })() : [];
@@ -2541,6 +2530,13 @@ const handler = async (req, res) => {
       const cc = scBg[3] === 'webp' && url.searchParams.get('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=' + (scBg[3] === 'webp' ? 3600 : 86400);
       return sendFile(res, f, { 'content-type': 'image/' + (scBg[3] === 'webp' ? 'webp' : 'jpeg'), 'cache-control': cc });
     }
+    // 用户自己的背景图（claw-theme bg）：data/bg/<内容哈希>.jpg，名字随内容变，长期缓存
+    const ubg = url.pathname.match(/^\/bg\/([0-9a-f]{12})\.(jpg|png|webp)$/);
+    if (ubg) {
+      const f = path.join(BG_DIR, ubg[1] + '.' + ubg[2]);
+      if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
+      return sendFile(res, f, { 'content-type': 'image/' + (ubg[2] === 'jpg' ? 'jpeg' : ubg[2]), 'cache-control': 'public, max-age=31536000, immutable' });
+    }
     // 有哪些经络图、各自的版本：{ "2": { s: 小图版本, l: 大图版本 }, "4b": {…} }，页面据此拼带版本的地址（没有图的时辰不去请求）
     if (url.pathname === '/sc-mer/index.json' && req.method === 'GET') {
       const out = {};
@@ -2689,7 +2685,7 @@ const handler = async (req, res) => {
     if (url.pathname === '/api/theme' && req.method === 'POST') {   // 聊天里的主题卡片点了：换上，并通知别的设备
       if (notJson(req, res)) return;
       const b = await jsonBody(req, 1024, null);
-      const r = setClientTheme(b && b.theme);
+      const r = setClientTheme({ theme: b && b.theme });   // 网页上的卡片只换主题，不收文件路径
       return sendJson(res, r.ok ? 200 : 400, r);
     }
     if (url.pathname === '/api/prefs' && req.method === 'POST') {   // 手机网页的个人设置备份（见 clientPrefs）
@@ -3622,6 +3618,7 @@ wss.on('connection', (ws, req) => {
           if (!IMAGE_TYPES.includes(i?.media_type) || typeof i.data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(i.data)) return fail({ t: 'error', message: '图片格式不支持（只支持 JPEG / PNG / GIF / WebP）' });
           if (i.data.length > MAX_IMAGE_B64) return fail({ t: 'error', message: '图片太大了' });
         }
+        if (images.length) themeCtl.lastImage(images[images.length - 1]);   // 用户最近发的一张图：claw-theme bg last 用它当背景
         if (m.video) {
           // 视频：原文件已经传到 data/uploads/；这里截帧当图片，并把原文件路径告诉 AI
           const file = videoFile(UPLOADS, m.video.id);
