@@ -3629,7 +3629,7 @@ function renderSkills(){
         var t0=mine.length?skTarget(mine[0],ag):null,sh0=t0?skShare(t0,ag):'';
         h+='<div class="sk-hero"><span class="sk-ic sk-big">'+clawIcon(ag)+'</span><div class="sk-ht"><div class="sk-hn">'+esc(CLAW_NAMES[ag]||ag)+'</div><div class="sk-hid">已装 '+n+' 个技能'+(sh0?' · '+esc(sh0):'')+'</div></div><span class="sk-cnt'+(n?' on':'')+'">'+n+' / '+mine.length+'</span></div>';
         h+='<div class="h-card">'+(mine.map(function(s){var t=skTarget(s,ag);
-          return '<div class="h-row sk-row">'+skIcon(s.name)+'<span class="k">'+esc(s.title||s.name)+'<small class="sk-sub'+(t.state==='ours'?' on':'')+'">'+skStateTxt(t)+'</small></span>'+skBtn(s,t)+'</div>'}).join('')||'<div class="h-row"><span class="v">没有适用于它的技能</span></div>')+'</div>';
+          return '<div class="h-row sk-row">'+skIcon(s.name)+'<span class="k">'+esc(s.title||s.name)+(s.title?'<code class="sk-id">'+esc(s.name)+'</code>':'')+'<small class="sk-sub'+(t.state==='ours'?' on':'')+'">'+skStateTxt(t)+'</small></span>'+skBtn(s,t)+'</div>'}).join('')||'<div class="h-row"><span class="v">没有适用于它的技能</span></div>')+'</div>';
       }
       h+='<div class="pe-note">技能是给 AI 用的说明和命令，用到时自动安装。共用一个技能目录的几个 Agent，装 / 卸一起变。</div>';
       $('#hostBody').innerHTML=h;return;
@@ -3647,7 +3647,7 @@ function renderSkills(){
     h+=grp.map(function(G){return '<div>'+(grp.length>1||G.g?'<div class="h-h">'+esc(G.g||'其他')+'</div>':'')+'<div class="h-card sk-list">'+G.l.map(function(s){
       var inst=skInstalled(s),all=skAll(s);
       return '<div class="h-row h-link sk-item" data-act="sk-open" data-sel="s:'+esc(s.name)+'">'+skIcon(s.name)+
-        '<div class="sk-m"><div class="sk-t"><span class="sk-tn">'+esc(s.title||s.name)+'</span><span class="sk-cnt'+(inst.length?' on':'')+'">'+inst.length+' / '+all+'</span></div>'+
+        '<div class="sk-m"><div class="sk-t"><span class="sk-tn">'+esc(s.title||s.name)+'</span><span class="sk-cnt'+(inst.length?' on':'')+'">'+inst.length+' / '+all+'</span></div>'+(s.title?'<code class="sk-id">'+esc(s.name)+'</code>':'')+
         (s.desc?'<div class="sk-d">'+esc(s.desc)+'</div>':'')+
         '<div class="sk-ags">'+(inst.length?inst.map(function(k){return '<span class="sk-ag" title="'+esc(CLAW_NAMES[k]||k)+'">'+clawIcon(k)+'</span>'}).join(''):'<span class="sk-none">还没装到任何 Agent</span>')+'</div></div>'+
         '<span class="chev" aria-hidden="true"></span></div>';
