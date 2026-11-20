@@ -2110,6 +2110,11 @@ select.pe-in{text-align-last:right}
 .tvc-l.s{font-size:11px;padding:0 5px}
 .tvc-tv{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;margin:0 2px 8px;border-radius:10px;background:radial-gradient(120% 100% at 28% 18%,color-mix(in srgb,var(--c) 42%,#1b1e26),#0c0e13 72%);box-shadow:inset 0 0 0 3px #2b2f39,0 3px 8px rgba(0,0,0,.16)}
 .tvc-tv::before{content:"";position:absolute;inset:3px;border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,0) 42%);pointer-events:none}
+.tvc-cv{position:absolute;inset:3px;width:calc(100% - 6px);height:calc(100% - 6px);object-fit:cover;border-radius:8px;opacity:0;transition:opacity .25s}
+.tvc-cv.ok{opacity:1}
+.tvc-tv::before{z-index:1}
+.tvc-go{z-index:2}
+.md a.tvc.emb-l .tvc-tv:has(.tvc-cv.ok) .tvc-go svg{filter:drop-shadow(0 1px 3px rgba(0,0,0,.75)) drop-shadow(0 0 6px rgba(74,222,128,.55))}   /* 封面上：三角加一圈暗影，亮的画面上也看得清 */
 .tvc-tv::after{content:"";position:absolute;left:50%;bottom:-8px;width:34%;height:6px;transform:translateX(-50%);background:#2b2f39;clip-path:polygon(12% 0,88% 0,100% 100%,0 100%);border-radius:0 0 3px 3px}
 .tvc-go{position:relative;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);box-sizing:border-box;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:transform .15s}
 .md a.tvc.emb-l .tvc-go{background:none;border:0;backdrop-filter:none;-webkit-backdrop-filter:none}   /* 能播的：不要圈，只一个亮绿色三角（三角本身已按视觉重心偏右，不再另加偏移） */

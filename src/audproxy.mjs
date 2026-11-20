@@ -63,7 +63,7 @@ async function kwAudio(id) {
 }
 // 要出墙的页面：先直连，不通再走本机代理（环境变量或 Clash 7890 / 7897）
 const portOpen = port => new Promise(ok => { const s = net.connect({ host: '127.0.0.1', port }); s.once('connect', () => { s.destroy(); ok(true); }); s.once('error', () => ok(false)); s.setTimeout(400, () => { s.destroy(); ok(false); }); });
-async function proxyUrl() {
+export async function proxyUrl() {
   const e = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.ALL_PROXY || process.env.all_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
   if (e) return e;
   for (const p of [7890, 7897]) if (await portOpen(p)) return 'http://127.0.0.1:' + p;
