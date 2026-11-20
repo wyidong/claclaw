@@ -975,6 +975,7 @@ function tpAuSync(ev){
   el.classList.toggle('on',!a.paused&&!a.ended);el.classList.toggle('err',!!a.error);
   var d=a.duration,ok=isFinite(d)&&d>0;
   el.querySelector('.tp-dt').textContent=ok?tpHms(d):(a.error?'放不了':'--:--');
+  tpLySync(a.currentTime);
   if(tpSeeking)return;
   var p=ok?Math.min(1,a.currentTime/d):0;el.style.setProperty('--tp-p',(p*100).toFixed(2)+'%');
   el.querySelector('.tp-sk').value=Math.round(p*1000);el.querySelector('.tp-ct').textContent=tpHms(a.currentTime||0);
@@ -986,6 +987,18 @@ function tpMedia(x){
   try{navigator.mediaSession.metadata=new MediaMetadata({title:x.t,artist:x.e.site,album:'claclaw'})}catch(_){}
   try{navigator.mediaSession.setActionHandler('previoustrack',function(){if(tp.i>0)tpPlay(tp.i-1)});navigator.mediaSession.setActionHandler('nexttrack',function(){if(tp.i<tp.list.length-1)tpPlay(tp.i+1)})}catch(_){}
 }
+// 歌词：放纯音频时去服务器找（网易云按歌曲 ID，别的按标题 + 时长），唱到哪句就在播放条中间显示哪句；找不到、纯音乐、节目就不显示
+function tpLyric(x,m){
+  var el=TPEL;tp.ly=null;tp.lyi=-1;el.querySelector('.tp-ly').textContent='';el.classList.remove('ly');if(!m)return;
+  var ne=/[?&]ne=(\d+)/.exec(x.e.src),go=function(){var d=Math.round(m.duration)||0;if(d>1200)return;
+    fetch('/api/lyric?'+(ne?'ne='+ne[1]+'&':'')+'t='+encodeURIComponent(x.t)+'&d='+d).then(function(r){return r.json()}).then(function(j){
+      if(tp.list[tp.i]!==x||!j||!j.lines||!j.lines.length)return;tp.ly=j.lines;el.classList.add('ly');tpLySync(m.currentTime)}).catch(function(){})};
+  if(isFinite(m.duration)&&m.duration>0)go();else m.addEventListener('loadedmetadata',go,{once:true});
+}
+function tpLySync(t){
+  var L=tp.ly,i=-1;if(!L)return;for(var k=0;k<L.length&&L[k][0]<=t+0.3;k++)i=k;if(i===tp.lyi)return;tp.lyi=i;
+  var ly=TPEL.querySelector('.tp-ly');ly.textContent=i<0?'':L[i][1];ly.title=ly.textContent;ly.classList.remove('in');void ly.offsetWidth;ly.classList.add('in');
+}
 function tpDur(d){if(d>=2400&&!tp.movie)tpMovie(true)}
 function tpPlay(i,start){
   var el=TPEL,x=tp.list[i];if(!x)return;tp.i=i;tp.t=start||0;
@@ -996,7 +1009,7 @@ function tpPlay(i,start){
     m.addEventListener('loadedmetadata',function(){tpDur(m.duration)});m.addEventListener('timeupdate',function(){tp.t=m.currentTime});m.addEventListener('ended',function(){if(!tp.movie)tpPlay(tp.i+1)})}
   else{m=el.ownerDocument.createElement('iframe');tpSandbox(m,x.e.src);m.src=tpSrc(x,start);m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
     m.addEventListener('load',function(){try{m.contentWindow.postMessage('{"event":"listening","id":1,"channel":"widget"}','*')}catch(_){}})}
-  v.appendChild(m);
+  v.appendChild(m);tpLyric(x,k==='file-audio'?m:null);
   el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.classList.toggle('tp-fa',k==='file-audio');el.classList.remove('on','err');el.hidden=false;
   tpMovie(tp.movie);
   el.querySelector('.tp-ap').disabled=i<=0&&k!=='file-audio';el.querySelector('.tp-an').disabled=i>=tp.list.length-1;
@@ -1075,7 +1088,7 @@ function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
       I_PAUSE='<svg class="i-pause" width="22" height="22" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/></svg>',
       I_PREV='<svg width="20" height="20" viewBox="0 0 24 24"><rect x="5" y="5.5" width="2.6" height="13" rx="1" fill="currentColor"/><path d="M19 6.6v10.8a1 1 0 0 1-1.52.85L9.3 13.2a1.4 1.4 0 0 1 0-2.4l8.18-5.05A1 1 0 0 1 19 6.6Z" fill="currentColor"/></svg>';
   // 纯音频（歌、节目）不用视频那一套：顶上是一条浅色的「正在播放」——左边转动的唱片、歌名，下面一排 上一首 / 播放暂停 / 下一首 和进度条；收起后只剩一行（带播放暂停和细进度线）
-  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><span class="tp-disc" aria-hidden="true"></span><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-rb-btn" aria-label="相关视频" title="相关视频：点了在这里接着播">相关</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-bp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>'
+  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><span class="tp-disc" aria-hidden="true"></span><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><span class="tp-ly" aria-live="off"></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-rb-btn" aria-label="相关视频" title="相关视频：点了在这里接着播">相关</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-bp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>'
     +'<div class="tp-ac"><button type="button" class="tp-ap" aria-label="上一首">'+I_PREV+'</button><button type="button" class="tp-pp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-an" aria-label="下一首">'+I_PREV+'</button>'
     +'<span class="tp-ct">0:00</span><input class="tp-sk" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度"><span class="tp-dt">--:--</span></div><div class="tp-rel" hidden></div>';
   feed.parentNode.insertBefore(el,feed);

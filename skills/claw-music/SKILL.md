@@ -23,6 +23,7 @@ Windows 用 `%USERPROFILE%\.claclaw\bin\claw-music.cmd`；没有这个命令时�
 ## 怎么回复
 
 - 每行是 `[标题](链接)  来源 · 音质  时长`。**把 `[标题](链接)` 原样写进回复**，前面一句说是谁唱的、哪个版本。claclaw 点了只放声音（顶上的播放器是音频条，没有画面）。
+- **标题也照抄**：claclaw 放的时候按链接文字（歌名、歌手）和时长去找歌词，在播放条中间唱到哪句显示哪句；标题改成别的就可能找不到歌词。
 - **链接不要改**：B 站的链接后面带 `#audio`，网易云的是 `music.163.com/song/media/outer/url?id=…`，5sing（`5sing.kugou.com/yc/…html`）、酷我（`kuwo.cn/play_detail/…`）是歌曲页，Bandcamp 是曲目页后面加 `#audio`，Free-Stock-Music / ccMixter / Incompetech 是它们的 mp3 地址，claclaw 靠这些写法认出「只放声音」。去掉 `#audio` 就会变成放 MV。
 - 一次给 1 首；用户要「几首 / 歌单」时每首歌各跑一次（或 `--n 5` 给同一首的几个版本），写成编号列表 `1. [歌名 - 歌手](链接) · 时长 · 来源`，超过 3 首时 claclaw 会连着放。
 - 推荐歌单时，先自己想好歌名和歌手，再逐首用命令查；查不到的那首就换一首，不要编。
