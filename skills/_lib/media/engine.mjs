@@ -308,7 +308,7 @@ async function get(kind, arg) {
 
 // 在线播放：只要能嵌在 claclaw 聊天里直接播放的（网页播放器能嵌入的站点、或媒体文件直链）。不下载、不转码，画质就是原站的。
 // 输出 Markdown 链接 [标题](网址)：claclaw 聊天里看到这种链接会在消息下面放一个播放卡片，点一下就在会话里播放
-const EMBEDDABLE = /^https?:\/\/(?:www\.|m\.)?(?:bilibili\.com\/video\/BV|youtube\.com\/watch|youtu\.be\/|dailymotion\.com\/video\/|vimeo\.com\/\d|archive\.org\/details\/|soundcloud\.com\/[\w-]+\/(?!sets\/)[\w-]+)/i;
+const EMBEDDABLE = /^https?:\/\/(?:www\.|m\.)?(?:nfb\.ca\/film\/|bilibili\.com\/video\/BV|youtube\.com\/watch|youtu\.be\/|dailymotion\.com\/video\/|vimeo\.com\/\d|archive\.org\/details\/|soundcloud\.com\/[\w-]+\/(?!sets\/)[\w-]+)/i;
 const MEDIA_FILE = /\.(mp4|webm|m4v|mov|m3u8|mp3|m4a|aac|ogg|oga|opus|wav|flac)(?:[?#]|$)/i;
 async function link(kind, q) {
   if (kind === 'image') die('图片要下载后发文件（claw-image）');
@@ -327,8 +327,8 @@ async function link(kind, q) {
 
 // 电影：只要版权方官方频道（YouTube 认证标记，或爱奇艺 / 优酷 / 腾讯 WeTV / 芒果 / 华策 / 央视等官方影视频道）免费公开的完整版，
 // 而且能嵌在 claclaw 聊天里直接播放。先给片单（不带链接），用户挑好再 --pick 出播放链接
-const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki|緯來|Videoland|公視|PTS|東森|三立|民視|TVB|myTV SUPER|美亞|Mei Ah|寰宇|Universe Films|英皇|Emperor Motion|天映|Celestial|Fortune Star|星空華文|嘉禾|Golden Harvest|VSO|Q1Q2|CONtv|卫视/i;   // 大小平台、电视台、片商的官方频道（另外 YouTube 认证频道都算）
-const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b|综艺|年代秀|精華|精华|完结|動漫|动漫|短剧|短劇|精编版|\b20\d{6}\b|\d+期|hindi dubbed|】\s*[上下]\s|\bpart\s?\d/i;   // 上 / 下、Part 1：拆成几段的不算完整版
+const OFFICIAL = /爱奇艺|iQIYI|YOUKU|优酷|WeTV|腾讯视频|Tencent Video|企鹅影视|企鹅大影院|Mango ?TV|芒果|华策|Huace|CCTV|央视|中国电影频道|1905电影|Fandor|FilmRise|Popcornflix|Moviedome|Shout! ?Studios|Sony Pictures|Paramount|Lionsgate|Viki|緯來|Videoland|公視|PTS|東森|三立|民視|TVB|myTV SUPER|美亞|Mei Ah|寰宇|Universe Films|英皇|Emperor Motion|天映|Celestial|Fortune Star|星空華文|嘉禾|Golden Harvest|VSO|Q1Q2|CONtv|卫视|Мосфильм|Mosfilm|Киностудия Горького|Gorky Film|한국고전영화|Korean Classic Film|Korean Film Archive|Grjngo|National Film Board|\bNFB\b/i;   // 大小平台、电视台、片商的官方频道（另外 YouTube 认证频道都算）
+const NOT_MOVIE = /预告|trailer|teaser|解说|速看|说电影|看电影|剪辑|混剪|合集|全集|集锦|专辑|小品|晚会|春晚|片段|花絮|reaction|review|recap|explained|episode|\bEP\s?\d|第\s*\d+\s*[集期]|MV\b|综艺|年代秀|精華|精华|完结|動漫|动漫|短剧|短劇|精编版|(?:^|[^\d])20\d{6}(?!\d)|直播港澳台|新闻|\d+期|hindi dubbed|】\s*[上下]\s|\bpart\s?\d/i;   // 上 / 下、Part 1：拆成几段的不算完整版
 function movieName(t) {   // 片名：《》里的；没有就用不是「Multi Sub / 4K / 类型」的【】；再不行用 [] 或去掉修饰的标题
   let m = /《#?([^》]{1,30})》/.exec(t); if (m) return m[1].trim();
   m = /[｜|]\s*([^｜|(（]{1,20}?)\s*[(（][A-Za-z][^)）]*[)）]\s*[｜|]/.exec(t); if (m) return m[1].trim();   // 港片频道：…｜片名 (English Name)｜演员…
@@ -340,6 +340,13 @@ function movieName(t) {   // 片名：《》里的；没有就用不是「Multi 
   }
   return t.replace(/【[^】]*】|\[[^\]]*\]/g, '').replace(/[|｜#].*$/, '').trim().slice(0, 40) || t.slice(0, 40);
 }
+// 小而专的官方片库频道：关键词说到这些（苏联 / 韩国老片 / 西部片…）时直接翻它们的上传列表，一搜就是整部的正版老片
+// Mosfilm、高尔基电影制片厂（苏联 / 俄罗斯官方，多带字幕）；韩国电影资料馆「韩国古典电影」（带英文字幕）；Grjngo（西部片片商）
+const THEME_CHANNELS = [
+  [/苏联|俄罗斯|俄国|前苏|soviet|russian|mosfilm/i, ['user/mosfilm', '@GorkyFilmStudio']],
+  [/韩国|韩影|朝鲜|korean/i, ['@KoreanFilm']],
+  [/西部|牛仔|western|cowboy/i, ['@GrjngoWesternMovies']],
+];
 // 官方影视频道（新片多先放这里）：--new 时直接翻它们最近上传的
 const MOVIE_CHANNELS = ['@iQIYIMOVIETHEATER', '@youkumovie', '@TencentVideoMovie'];
 // 频道最近上传的 n 条：直接取频道「视频」页（内嵌前 30 条）+ 接口翻页，不开 yt-dlp，十几个频道并发几秒取完。
@@ -386,6 +393,18 @@ async function dmMovies(q, fresh) {
 }
 // Internet Archive 的公版老电影（feature_films 合集，版权已过期或权利人放出的，合法免费）：英文关键词，或下面这些中文类型词
 const ARCHIVE_WORDS = { 喜剧: 'comedy', 恐怖: 'horror', 科幻: 'science fiction', 西部: 'western', 黑色: 'film noir', 悬疑: 'mystery', 惊悚: 'thriller', 爱情: 'romance', 战争: 'war', 犯罪: 'crime', 动画: 'animation', 默片: 'silent', 卓别林: 'chaplin', 希区柯克: 'hitchcock', 好莱坞: '', 欧美: '', 老片: '', 经典: '', 黑白: '', 公版: '' };
+// NFB 加拿大国家电影局（nfb.ca）：公益片库，公开接口不用 key，纪录片、动画、剧情片都免费看，播放器允许嵌入。
+// 只收公开（is_public）、不锁区、一小时以上的；英文关键词，或上面那些中文类型词 / 纪录片 / 加拿大
+const NFB_WORDS = { ...ARCHIVE_WORDS, 纪录片: 'documentary', 记录片: 'documentary', 加拿大: '', 原住民: 'indigenous', 历史: 'history', 自然: 'nature' };
+async function nfbMovies(q) {
+  if (!q) return [];
+  const hasCjk = /[一-鿿]/.test(q);
+  if (hasCjk && !/加拿大|nfb/i.test(q) && !Object.keys(NFB_WORDS).some(k => q.includes(k))) return [];
+  const w = q.replace(/[一-鿿]+/g, m => Object.entries(NFB_WORDS).filter(([k]) => m.includes(k)).map(([, v]) => v).join(' ')).replace(/\bnfb\b/ig, '').trim();
+  const j = await http('https://publicapi.nfb.ca/api/v5/films?locale=en&subset=nfb%2Fpublished&safe_search=true&page=1&size=60&query=' + encodeURIComponent(w || 'feature'), { timeout: 12000 }).then(JSON.parse).catch(() => ({}));
+  return (j.items || []).filter(f => f.availability?.is_public && !f.geoblocked && f.duration >= 3600 && f.slug)
+    .map(f => ({ src: 'nfb', page: 'https://www.nfb.ca/film/' + f.slug + '/', title: f.title + (f.year ? ' (' + f.year + ')' : ''), dur: Math.round(f.duration), channel: 'NFB 加拿大国家电影局', official: true, rel: hasCjk, db: f.year ? { year: f.year } : undefined }));
+}
 async function archiveMovies(q) {
   let w = q.replace(/[一-鿿]+/g, m => Object.entries(ARCHIVE_WORDS).filter(([k]) => m.includes(k)).map(([, v]) => v).join(' ')).trim();
   if (q && /[一-鿿]/.test(q) && !Object.keys(ARCHIVE_WORDS).some(k => q.includes(k))) return [];   // 中文片名 / 演员：公版库里没有，不查
@@ -539,7 +558,8 @@ async function movies(q) {
   const got = (await Promise.all([
     ...variants.map(v => yt.search(v, ctx).catch(() => [])),
     ...(fresh ? MOVIE_CHANNELS.map(h => channelLatest(h)) : []),   // 新片：官方频道最近上传的
-    dmMovies(q, fresh), archiveMovies(q),                              // 其他能嵌入播放的：Dailymotion 官方账号、Archive 公版片
+    dmMovies(q, fresh), archiveMovies(q), nfbMovies(q),                // 其他能嵌入播放的：Dailymotion 官方账号、Archive 公版片、NFB 片库
+    ...THEME_CHANNELS.filter(([re]) => re.test(q)).flatMap(([, hs]) => hs.map(h => channelLatest(h, 60).then(l => l.map(x => ({ ...x, rel: true }))))),   // 小片库频道整个翻
   ])).flat().map(x => ({ src: 'youtube', ...x }));
   const toks = q ? q.toLowerCase().split(/\s+/).filter(Boolean) : [];
   const seen = new Set(), list = [];
@@ -561,7 +581,7 @@ async function movies(q) {
   const n = Math.min(+opt.n || 10, 20);
   const pool = list.slice(0, year || minRate ? 120 : n + 8);
   // 猫眼并发多了会回验证页：两个一批，英文片名（猫眼查不到）跳过
-  const cjkPool = pool.filter(x => x.src !== 'archive' && /[一-鿿]/.test(key(x)));
+  const cjkPool = pool.filter(x => x.src !== 'archive' && x.src !== 'nfb' && /[一-鿿]/.test(key(x)));
   for (let i = 0; i < cjkPool.length; i += 2) { await Promise.all(cjkPool.slice(i, i + 2).map(async x => { x.db = (await kan360(key(x))) || await maoyan(key(x)); })); await new Promise(z => setTimeout(z, 150)); }
   if (opt.debug) for (const x of pool) console.error(x.db ? (x.db.tv ? 'TV' : x.db.year + ' ' + x.db.type) : 'null', x.name);
   let cand = pool.filter(x => !x.db?.tv);
@@ -569,7 +589,7 @@ async function movies(q) {
   // 豆瓣评分：按排名一个一个查（间隔一点，被拦就停），有评分的按评分加权（评分人数少的打折）
   const since = +opt.since || 0;
   for (const x of cand.slice(0, since || minRate ? 60 : n + 6)) {   // 按评分 / 年份筛时多查一些
-    if (x.src === 'archive' && !since) continue;   // 公版老片豆瓣多半没有，不浪费查询额度
+    if ((x.src === 'archive' || x.src === 'nfb') && !since) continue;   // 公版老片、NFB 片库豆瓣多半没有，不浪费查询额度
     if (!/[一-鿿]/.test(key(x))) {   // 外文片名：查 IMDb
       const im = await imdbRate(key(x), x.db?.year);
       if (im) { x.db = { ...(x.db || {}), imdb: im.r, year: x.db?.year || im.year, genres: x.db?.genres || im.genres }; x.sc += (im.r - 6) * 0.4; }

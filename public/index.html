@@ -921,6 +921,7 @@ var EMBED_RULES=[
   [/^https?:\/\/(?:www\.)?(?:dailymotion\.com\/video|dai\.ly)\/([a-z0-9]+)/i,'Dailymotion','video',function(m){return 'https://www.dailymotion.com/embed/video/'+m[1]+'?autoplay=1'}],
   [/^https?:\/\/(?:www\.)?vimeo\.com\/(\d+)/,'Vimeo','video',function(m){return 'https://player.vimeo.com/video/'+m[1]+'?autoplay=1'}],
   [/^https?:\/\/(?:www\.)?archive\.org\/details\/([\w.-]+)/,'Internet Archive','video',function(m){return 'https://archive.org/embed/'+m[1]}],
+  [/^https?:\/\/(?:www\.)?(?:nfb|onf)\.ca\/film\/([\w-]+)\/?(?:[?#]\S*)?$/,'NFB','video',function(m){return 'https://www.nfb.ca/film/'+m[1]+'/embed/player/?player_mode=&embed_mode=0&context_type=film'}],
   [/^https?:\/\/(?:www\.|m\.)?soundcloud\.com\/[\w-]+\/(?!sets\/)[\w-]+/,'SoundCloud','audio',function(m){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(m[0])+'&auto_play=true&visual=false'}],
   [/^https?:\/\/[^\s?#]+\.(mp4|webm|m4v|mov|m3u8)(?:[?#]\S*)?$/i,'视频','file-video',function(m){return m[0]}],
   [/^https?:\/\/[^\s?#]+\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)(?:[?#]\S*)?$/i,'音频','file-audio',function(m){return m[0]}]
