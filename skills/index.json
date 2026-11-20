@@ -1,7 +1,7 @@
 [
   {
     "name": "claw-interconnect",
-    "title": "claclaw 会话互找",
+    "title": "找会话",
     "desc": "让 AI 会话找本机其他 Claw 的会话、或另一台电脑上的会话，发消息、拿回复",
     "group": "通用",
     "scene": "sessions",
@@ -25,7 +25,7 @@
   },
   {
     "name": "claw-file",
-    "title": "claclaw 里给用户看文件",
+    "title": "发文件",
     "desc": "告诉 AI 怎样把图片、视频、音频、PDF、Markdown、文本发到手机上、哪些能直接预览",
     "group": "通用",
     "scene": "sessions",

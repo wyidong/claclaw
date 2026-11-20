@@ -1266,7 +1266,7 @@ var I18N={dict:{
 "没有能念的内容":"Nothing to read aloud",
 "上次停在这句":"Last stopped here",
 "朗读这一轮":"Read this turn aloud",
-"claclaw 会话互找":"claclaw session finder",
+"发文件":"Send files",
 "让 AI 会话找本机其他 Claw 的会话、或另一台电脑上的会话，发消息、拿回复":"Lets an AI session reach other Claw sessions on this computer or sessions on another computer: send messages, get replies",
 },
 pat:[
