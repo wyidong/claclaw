@@ -1947,7 +1947,6 @@ select.pe-in{text-align-last:right}
 #tplay[hidden]{display:none}
 #tplay .tp-v{aspect-ratio:16/9;max-height:42vh;width:100%;margin:0 auto}
 #tplay.tp-a .tp-v{aspect-ratio:auto;height:120px}
-#tplay.tp-fa .tp-v{height:72px;display:flex;align-items:center}#tplay.tp-fa .tp-v audio{width:calc(100% - 16px);margin:0 8px}   /* 纯音频文件：只要一条播放条的高度 */
 #tplay.min .tp-v{height:0;max-height:0;overflow:hidden;aspect-ratio:auto}
 #tplay .tp-v iframe,#tplay .tp-v video{display:block;width:100%;height:100%;border:0;background:#000}
 #tplay .tp-v audio{display:block;width:100%;margin-top:32px}
@@ -2001,6 +2000,77 @@ select.pe-in{text-align-last:right}
 #tplay .tp-rb{font-size:11px;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tplay .tp-ri:hover .tp-rt{text-decoration:underline}
 #tplay.float .tp-ri,#tplay.float .tp-rp{width:128px}
+/* 歌单 / 节目单（每项都是只放声音的 [歌名](链接) 的编号列表）：一张卡片一行一首 */
+.aul{margin:10px 0;border-radius:16px;background:var(--surface);border:1px solid var(--line,rgba(127,127,127,.18));overflow:hidden}
+.md .aul .aul-h{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:11px 14px;border-radius:0;background:none;color:var(--ink);font-size:14px;font-weight:600;border-bottom:1px solid var(--line,rgba(127,127,127,.14))}
+.md .aul .aul-h small{font-weight:400;color:var(--muted);font-size:12.5px}
+.aul-pi{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-ink)}
+.aul-pi svg{margin-left:2px}
+.md .aul .aul-h:active{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.md a.aur{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 4px;color:var(--ink);text-decoration:none;font-weight:inherit;border-radius:0;transition:background .12s}
+.md a.aur+a.aur{border-top:1px solid var(--line,rgba(127,127,127,.14))}
+.md a.aur::before{content:none}
+.md a.aur:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.md a.aur:active{background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.aur-n{flex:none;width:30px;text-align:center;font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.aur-eq{display:none;flex:none;width:30px;height:16px;justify-content:center;align-items:flex-end;gap:2.5px}
+.aur-eq i{width:3px;border-radius:1.5px;background:var(--accent);height:40%;animation:aueq 1s ease-in-out infinite}
+.aur-eq i:nth-child(2){animation-delay:-.4s}.aur-eq i:nth-child(3){animation-delay:-.7s}
+@keyframes aueq{0%,100%{height:30%}50%{height:100%}}
+.aur-m{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.aur-m b{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aur-m small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aur-go{flex:none;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.aur-go svg{margin-left:2px}
+.md a.aur.playing{background:color-mix(in srgb,var(--accent) 9%,var(--surface));padding:10px 12px 10px 4px;border-radius:0}
+.md a.aur.playing::before{content:none}
+.md a.aur.playing .aur-n{display:none}.md a.aur.playing .aur-eq{display:flex}
+.md a.aur.playing .aur-m b{color:var(--accent)}
+.md a.aur.playing .aur-go{opacity:0}
+#tplay:not(.on).tp-fa~* .aur-eq i,body:has(#tplay.tp-fa:not(.on)) .aur-eq i{animation-play-state:paused}
+/* 纯音频（歌、节目）：不要黑底画面，换成浅色「正在播放」条——上面一行唱片 + 歌名 + 收起 / 关闭，下面一行 上一首 / 播放暂停 / 下一首 + 进度条 */
+#tplay .tp-disc,#tplay .tp-bar .tp-bp,#tplay .tp-ac{display:none}
+#tplay.tp-a{background:var(--surface);color:var(--ink);box-shadow:0 1px 0 var(--line,rgba(127,127,127,.18)),0 6px 16px rgba(0,0,0,.06)}
+#tplay.tp-a .tp-bar{background:none}
+#tplay.tp-a .tp-bar button{color:var(--muted)}
+#tplay.tp-a .tp-bar button:not(:disabled):active,#tplay.tp-fa .tp-ac button:not(:disabled):active{background:color-mix(in srgb,var(--ink) 9%,transparent)}
+#tplay.tp-a .tp-v iframe{background:var(--surface)}
+#tplay.tp-fa{display:flex;flex-direction:column}
+#tplay.tp-fa .tp-v{height:0;overflow:hidden}
+#tplay.tp-fa .tp-bar{order:-1;gap:10px;padding:10px 6px 0 12px}
+#tplay.tp-fa .tp-prev,#tplay.tp-fa .tp-next,#tplay.tp-fa .tp-pop{display:none}
+#tplay.tp-fa .tp-t{font-size:15px;font-weight:600}
+#tplay.tp-fa .tp-s{font-size:12px;color:var(--muted);opacity:1}
+#tplay.tp-fa.err .tp-s{color:#dc2626}
+#tplay.tp-fa .tp-disc{display:block;flex:none;width:40px;height:40px;border-radius:50%;background:radial-gradient(circle,var(--surface) 0 2.6px,var(--accent) 3.2px 9.5px,#16181d 10px 11.5px,transparent 12px),repeating-radial-gradient(circle,#202228 0 1.6px,#2b2e35 1.6px 3.2px);box-shadow:0 2px 6px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.06);animation:tpspin 7s linear infinite;animation-play-state:paused}
+#tplay.tp-fa .tp-disc::after{content:"";display:block;width:100%;height:100%;border-radius:50%;background:linear-gradient(135deg,rgba(255,255,255,.18),transparent 40%,transparent 60%,rgba(255,255,255,.08))}
+#tplay.tp-fa.on .tp-disc{animation-play-state:running}
+@keyframes tpspin{to{transform:rotate(360deg)}}
+#tplay.tp-fa .tp-ac{display:flex;align-items:center;gap:4px;padding:6px 14px 10px 8px}
+#tplay.tp-fa .tp-ac button{all:unset;cursor:pointer;flex:none;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+#tplay.tp-fa .tp-ac button:disabled{opacity:.3;cursor:default}
+#tplay.tp-fa .tp-an svg{transform:scaleX(-1)}
+#tplay.tp-fa .tp-ac .tp-pp{width:42px;height:42px;background:var(--accent);color:var(--accent-ink);box-shadow:0 3px 10px color-mix(in srgb,var(--accent) 35%,transparent)}
+#tplay.tp-fa .tp-ac .tp-pp:active{transform:scale(.94);background:var(--accent)}
+#tplay .i-pause,#tplay.on .i-play{display:none}#tplay.on .i-pause{display:block}
+#tplay.tp-fa .tp-pp .i-play{margin-left:2px}
+#tplay.tp-fa.mv .tp-ap,#tplay.tp-fa.mv .tp-an{display:none}
+#tplay.tp-fa.mv .tp-ac{padding-left:12px}
+#tplay.tp-fa .tp-ct,#tplay.tp-fa .tp-dt{flex:none;min-width:34px;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:center}
+#tplay.tp-fa .tp-ct{margin-left:6px}
+#tplay .tp-sk{flex:1;min-width:0;height:22px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer;touch-action:none}
+#tplay .tp-sk::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--tp-p,0%) 100% no-repeat,color-mix(in srgb,var(--ink) 13%,transparent)}
+#tplay .tp-sk::-moz-range-track{height:4px;border-radius:2px;background:color-mix(in srgb,var(--ink) 13%,transparent)}
+#tplay .tp-sk::-moz-range-progress{height:4px;border-radius:2px;background:var(--accent)}
+#tplay .tp-sk::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--surface);border:0;box-shadow:0 0 0 2px var(--accent),0 1px 4px rgba(0,0,0,.25)}
+#tplay .tp-sk::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--surface);border:0;box-shadow:0 0 0 2px var(--accent)}
+/* 收起：只留一行（唱片、歌名、播放暂停），底边一条细进度线 */
+#tplay.tp-fa.min .tp-ac{display:none}
+#tplay.tp-fa.min .tp-bar{padding:6px 6px 6px 12px}
+#tplay.tp-fa.min .tp-disc{width:32px;height:32px}
+#tplay.tp-fa.min .tp-bp{display:flex;color:var(--ink)}
+#tplay.tp-fa.min .tp-bp .i-play{margin-left:2px}
+#tplay.tp-fa.min::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:var(--tp-p,0%);background:var(--accent)}
 /* 相关摊开时画面让出地方，聊天区至少留一截（拖过高度的也一样） */
 #tplay.rel:not(.float):not(.tp-a) .tp-v{max-height:28vh!important}
 #tplay.rel:not(.float) .tp-grip{display:none}

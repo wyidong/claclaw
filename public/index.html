@@ -773,7 +773,8 @@ var MV_COLOR={'YouTube':'#e0262b','B 站':'#f0608e','Dailymotion':'#1f6fd1','Vim
 function mdMovies(items,tiles){
   if(items.length<2||items.some(function(it){return it.tag!=='ol'||it.ind>0||it.text.indexOf('\u0001')>=0}))return '';
   var re=/^\s*(?:\*\*)?\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)(?:\*\*)?([^]*)$/,rows=[];
-  for(var k=0;k<items.length;k++){var mm=items[k].text.match(re),e=mm&&embedOf(mm[2]);if(!e||e.kind!=='video')return '';rows.push([mm[1].replace(/[*_`]/g,'').trim(),mm[2],e,mm[3].replace(/\n/g,' · ').replace(/^[\s·:：—–|-]+/,'').replace(/[*_`]/g,'').trim()])}
+  var AU=/^(audio|file-audio)$/,kind='';
+  for(var k=0;k<items.length;k++){var mm=items[k].text.match(re),e=mm&&embedOf(mm[2]),kk=e&&(AU.test(e.kind)?'a':e.kind==='video'?'v':'');if(!kk||kind&&kk!==kind)return '';kind=kk;rows.push([mm[1].replace(/[*_`]/g,'').trim(),mm[2],e,mm[3].replace(/\n/g,' · ').replace(/^[\s·:：—–|-]+/,'').replace(/[*_`]/g,'').trim()])}
   var n0=items[0].start||1;
   return '<div class="tvg mvg">'+rows.map(function(r,k){
     tiles[r[2].src]=1;var no=String(n0+k);
@@ -809,6 +810,14 @@ function md(src){
       if(hh.trim())out.push('<div class="'+(/^\s*<table/i.test(hh)?'tbl':'mdh')+'">'+hh+'</div>');
       continue;
     }
+  // 歌单 / 节目单：一张卡片里一行一首（序号、歌名、来源时长），正在放的那首序号换成跳动的音柱
+  if(kind==='a')return '<div class="aul"><button type="button" class="emb-pl aul-h"><span class="aul-pi"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg></span>播放全部<small>'+rows.length+' 首</small></button>'+rows.map(function(r,k){
+    tiles[r[2].src]=1;
+    return '<a class="aur emb-l" href="'+esc(r[1])+'" data-kind="'+r[2].kind+'" target="_blank" rel="noopener noreferrer" title="'+esc(r[0]+' · 在这里播放')+'">'
+      +'<span class="aur-n">'+(n0+k)+'</span><span class="aur-eq" aria-hidden="true"><i></i><i></i><i></i></span>'
+      +'<span class="aur-m"><b>'+esc(r[0])+'</b><small>'+esc(r[3]||r[2].site)+'</small></span>'
+      +'<span class="aur-go" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg></span></a>';
+  }).join('')+'</div>';
     if((m=l.match(/^(#{1,6})\s+(.*)$/))){var n=Math.min(m[1].length+2,6);out.push('<h'+n+'>'+mdInline(m[2])+'</h'+n+'>');i++;continue}
     if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)){out.push('<hr>');i++;continue}
     if(l.indexOf('|')>=0&&i+1<L.length&&MD_TABLE_SEP.test(L[i+1])){   // 表格
@@ -882,7 +891,7 @@ function embedOf(u){for(var k=0;k<EMBED_RULES.length;k++){var r=EMBED_RULES[k],m
 function embedCards(src,tiles){
   src=String(src).replace(/^\s*```tv[^\n]*\n[\s\S]*?^\s*```/gm,'');   // 电视频道卡片自己就能点，不再另放播放卡片
   var seen={},cards=[],re=/\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()（）「」，。、；！？"']+)/g,m,all=0;
-  while((m=re.exec(src))){var e0=embedOf((m[2]||m[3]).replace(/[.,;:!?]+$/,''));if(e0&&!seen[e0.src]){seen[e0.src]=1;all++}}
+  while((m=re.exec(src))){var e0=embedOf((m[2]||m[3]).replace(/[.,;:!?]+$/,''));if(e0&&!seen[e0.src]&&!(tiles&&tiles[e0.src])){seen[e0.src]=1;all++}}   // 已经画成卡片 / 歌单的不算
   // 能播的链接多（片单、播放列表）：不堆卡片，放一条「从第 1 个开始播」，标题本身点了就在顶上的播放器里播
   if(all>3)return '<button type="button" class="emb-pl"><span class="emb-ic">▶</span><span>从第 1 个开始播 · 共 '+all+' 个，点标题切换</span></button>';
   seen={};re.lastIndex=0;
@@ -914,26 +923,49 @@ document.addEventListener('click',function(ev){
 // 回复里能播的链接（带 ▶）：点了不跳走，在聊天顶上的播放器里播；同一条消息里的其他链接就是播放列表（上一个 / 下一个，点别的标题直接换）
 function embLink(u,t){var e=embedOf(u);if(!e)return '';return '<a href="'+u+'" class="emb-l" data-kind="'+e.kind+'" target="_blank" rel="noopener noreferrer">'+(t||u)+'</a>'}
 var tp={list:[],i:-1,box:null,t:0},TPEL=null;   // TPEL：顶上的播放器
-function tpLinks(box){var seen={},out=[];box.querySelectorAll('a.emb-l').forEach(function(a){var e=embedOf(a.getAttribute('href'));if(e&&!seen[e.src]){seen[e.src]=1;out.push({a:a,e:e,t:(a.querySelector('.tvc-m b')||a).textContent.trim()})}});return out}
+function tpLinks(box){var seen={},out=[];box.querySelectorAll('a.emb-l').forEach(function(a){var e=embedOf(a.getAttribute('href'));if(e&&!seen[e.src]){seen[e.src]=1;out.push({a:a,e:e,t:(a.querySelector('.tvc-m b,.aur-m b')||a).textContent.trim()})}});return out}
 // YouTube 开 JS 接口：知道播到哪了（弹出 / 放回时接着播）、播完了（自动下一个）
 function tpSrc(x,start){var u=x.e.src;if(/youtube-nocookie\.com\/embed\//.test(u))u+='&enablejsapi=1'+(start>5?'&start='+Math.floor(start):'');return u}
 // 电影：一部就是一整场，不要上一部 / 下一部、播完也不自动接下一部（列表里点别的片名照样换）。
 // 认法：这条消息像片单（写着电影 / 片单 / 豆瓣 / IMDb / 猫眼 / 上映，或时长到了小时），或者播起来发现片长超过 40 分钟
 var TP_MOVIE=/电影|片单|豆瓣|IMDb|猫眼|上映|(?:^|[^\d:])[1-9]:[0-5]\d:[0-5]\d(?!\d)/;
-function tpMovie(on){tp.movie=on;TPEL.classList.toggle('mv',!!on||tp.list.length<2);var x=tp.list[tp.i];if(x)TPEL.querySelector('.tp-t').textContent=(!on&&tp.list.length>1?(tp.i+1)+' / '+tp.list.length+'  ':'')+x.t}
+function tpMovie(on){tp.movie=on;TPEL.classList.toggle('mv',!!on||tp.list.length<2);var x=tp.list[tp.i];if(!x)return;
+  var fa=TPEL.classList.contains('tp-fa'),n=!on&&tp.list.length>1?(tp.i+1)+' / '+tp.list.length:'';
+  TPEL.querySelector('.tp-t').textContent=(n&&!fa?n+'  ':'')+x.t;TPEL.querySelector('.tp-s').textContent=x.e.site+(n&&fa?' · '+n:'')}
+// 纯音频的播放条：播放 / 暂停图标、进度、时间跟着 <audio> 走；拖进度条时不跟
+var tpSeeking=false;
+function tpAu(){return TPEL&&TPEL.classList.contains('tp-fa')?TPEL.querySelector('.tp-v audio'):null}
+function tpAuSync(ev){
+  var a=tpAu(),el=TPEL;if(!a||ev&&ev.target!==a)return;
+  el.classList.toggle('on',!a.paused&&!a.ended);el.classList.toggle('err',!!a.error);
+  var d=a.duration,ok=isFinite(d)&&d>0;
+  el.querySelector('.tp-dt').textContent=ok?tpHms(d):(a.error?'放不了':'--:--');
+  if(tpSeeking)return;
+  var p=ok?Math.min(1,a.currentTime/d):0;el.style.setProperty('--tp-p',(p*100).toFixed(2)+'%');
+  el.querySelector('.tp-sk').value=Math.round(p*1000);el.querySelector('.tp-ct').textContent=tpHms(a.currentTime||0);
+  if('mediaSession' in navigator)try{navigator.mediaSession.playbackState=a.paused?'paused':'playing'}catch(_){}
+}
+// 手机锁屏 / 控制中心：显示歌名，能切上一首、下一首
+function tpMedia(x){
+  if(!('mediaSession' in navigator))return;
+  try{navigator.mediaSession.metadata=new MediaMetadata({title:x.t,artist:x.e.site,album:'claclaw'})}catch(_){}
+  try{navigator.mediaSession.setActionHandler('previoustrack',function(){if(tp.i>0)tpPlay(tp.i-1)});navigator.mediaSession.setActionHandler('nexttrack',function(){if(tp.i<tp.list.length-1)tpPlay(tp.i+1)})}catch(_){}
+}
 function tpDur(d){if(d>=2400&&!tp.movie)tpMovie(true)}
 function tpPlay(i,start){
   var el=TPEL,x=tp.list[i];if(!x)return;tp.i=i;tp.t=start||0;
   var v=el.querySelector('.tp-v'),k=x.e.kind,m;v.innerHTML='';
-  if(k==='file-video'||k==='file-audio'){m=el.ownerDocument.createElement(k==='file-video'?'video':'audio');m.controls=true;m.autoplay=true;m.setAttribute('playsinline','');m.src=x.e.src;
+  if(k==='file-video'||k==='file-audio'){m=el.ownerDocument.createElement(k==='file-video'?'video':'audio');m.controls=k==='file-video';
+    if(k==='file-audio'){['play','pause','timeupdate','durationchange','loadedmetadata','emptied','error'].forEach(function(n){m.addEventListener(n,tpAuSync)});if(el.classList.contains('float'))tpFloat(false)}m.autoplay=true;m.setAttribute('playsinline','');m.src=x.e.src;
     if(start)m.addEventListener('loadedmetadata',function(){m.currentTime=start},{once:true});
     m.addEventListener('loadedmetadata',function(){tpDur(m.duration)});m.addEventListener('timeupdate',function(){tp.t=m.currentTime});m.addEventListener('ended',function(){if(!tp.movie)tpPlay(tp.i+1)})}
   else{m=el.ownerDocument.createElement('iframe');tpSandbox(m,x.e.src);m.src=tpSrc(x,start);m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
     m.addEventListener('load',function(){try{m.contentWindow.postMessage('{"event":"listening","id":1,"channel":"widget"}','*')}catch(_){}})}
   v.appendChild(m);
-  el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.classList.toggle('tp-fa',k==='file-audio');el.hidden=false;
+  el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.classList.toggle('tp-fa',k==='file-audio');el.classList.remove('on','err');el.hidden=false;
   tpMovie(tp.movie);
-  el.querySelector('.tp-s').textContent=x.e.site;
+  el.querySelector('.tp-ap').disabled=i<=0&&k!=='file-audio';el.querySelector('.tp-an').disabled=i>=tp.list.length-1;
+  if(k==='file-audio'){el.style.setProperty('--tp-p','0%');el.querySelector('.tp-ct').textContent='0:00';el.querySelector('.tp-dt').textContent='--:--';el.querySelector('.tp-sk').value=0;tpMedia(x)}
   el.querySelector('.tp-prev').disabled=i<=0;el.querySelector('.tp-next').disabled=i>=tp.list.length-1;
   tp.list.forEach(function(y,j){y.a.classList.toggle('playing',j===i)});
   el.classList.toggle('norel',!tpRelUrl());if(el.classList.contains('rel'))tpRel(true);
@@ -978,7 +1010,7 @@ function tpMsg(ev){   // YouTube 播放器发来的进度、状态
   if((d.event==='onStateChange'&&info===0)||info.playerState===0){if(!tp.movie&&tp.i<tp.list.length-1)tpPlay(tp.i+1);else tpRel(true)}   // 没有下一个：摊开相关视频   // 播完：下一个（电影不接）
 }
 window.addEventListener('message',tpMsg);
-function tpClose(){var el=TPEL,p=el.querySelector('.tp-rel');el.hidden=true;el.classList.remove('min','rel');p.hidden=true;p.dataset.u='';p.innerHTML='';tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
+function tpClose(){var el=TPEL,p=el.querySelector('.tp-rel');el.hidden=true;el.classList.remove('min','rel','on','err');if('mediaSession' in navigator)try{navigator.mediaSession.metadata=null}catch(_){}p.hidden=true;p.dataset.u='';p.innerHTML='';tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
 function tpOpen(box,a){
   tp.box=box;tp.list=tpLinks(box);tp.movie=TP_MOVIE.test(box?box.textContent:'');var i=0;
   if(a)tp.list.forEach(function(y,j){if(y.a===a)i=j});
@@ -1004,7 +1036,13 @@ window.addEventListener('resize',tpFit);
 function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
 (function(){
   var el=document.createElement('div');el.id='tplay';el.hidden=true;TPEL=el;
-  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-rb-btn" aria-label="相关视频" title="相关视频：点了在这里接着播">相关</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div><div class="tp-rel" hidden></div>';
+  var I_PLAY='<svg class="i-play" width="22" height="22" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg>',
+      I_PAUSE='<svg class="i-pause" width="22" height="22" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/></svg>',
+      I_PREV='<svg width="20" height="20" viewBox="0 0 24 24"><rect x="5" y="5.5" width="2.6" height="13" rx="1" fill="currentColor"/><path d="M19 6.6v10.8a1 1 0 0 1-1.52.85L9.3 13.2a1.4 1.4 0 0 1 0-2.4l8.18-5.05A1 1 0 0 1 19 6.6Z" fill="currentColor"/></svg>';
+  // 纯音频（歌、节目）不用视频那一套：顶上是一条浅色的「正在播放」——左边转动的唱片、歌名，下面一排 上一首 / 播放暂停 / 下一首 和进度条；收起后只剩一行（带播放暂停和细进度线）
+  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><span class="tp-disc" aria-hidden="true"></span><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-rb-btn" aria-label="相关视频" title="相关视频：点了在这里接着播">相关</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-bp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>'
+    +'<div class="tp-ac"><button type="button" class="tp-ap" aria-label="上一首">'+I_PREV+'</button><button type="button" class="tp-pp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-an" aria-label="下一首">'+I_PREV+'</button>'
+    +'<span class="tp-ct">0:00</span><input class="tp-sk" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度"><span class="tp-dt">--:--</span></div><div class="tp-rel" hidden></div>';
   feed.parentNode.insertBefore(el,feed);
   el.querySelector('.tp-prev').addEventListener('click',function(){tpPlay(tp.i-1)});
   el.querySelector('.tp-next').addEventListener('click',function(){tpPlay(tp.i+1)});
@@ -1043,6 +1081,13 @@ function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
       var h=parseInt(el.style.getPropertyValue('--tp-h'),10);try{if(h)localStorage.setItem(K,String(h))}catch(_){}};
     gp.addEventListener('pointerdown',function(e){start(e,el.classList.contains('float')?zone(e):'',gp)});
     gp.addEventListener('pointermove',function(e){if(el.classList.contains('float')&&!g)gp.style.cursor=CUR[zone(e)];else if(!el.classList.contains('float'))gp.style.cursor='';move(e)});
+  el.querySelector('.tp-ap').addEventListener('click',function(){var a=tpAu();if(a&&a.currentTime>3&&(tp.i<=0||tp.movie)){a.currentTime=0;return}tpPlay(tp.i-1)});   // 播了几秒后点「上一首」先回到开头（第一首、长节目也是）
+  el.querySelector('.tp-an').addEventListener('click',function(){tpPlay(tp.i+1)});
+  var pp=function(){var a=tpAu();if(!a)return;if(a.paused)a.play().catch(function(){});else a.pause()};
+  el.querySelector('.tp-pp').addEventListener('click',pp);el.querySelector('.tp-bp').addEventListener('click',pp);
+  var sk=el.querySelector('.tp-sk');
+  sk.addEventListener('input',function(){var a=tpAu();tpSeeking=true;el.style.setProperty('--tp-p',sk.value/10+'%');if(a&&a.duration)el.querySelector('.tp-ct').textContent=tpHms(sk.value/1000*a.duration)});
+  sk.addEventListener('change',function(){var a=tpAu();tpSeeking=false;if(a&&isFinite(a.duration))a.currentTime=sk.value/1000*a.duration;tpAuSync()});
     el.querySelectorAll('.tp-e').forEach(function(d){d.addEventListener('pointerdown',function(e){start(e,d.dataset.e,d)});d.addEventListener('pointermove',move);d.addEventListener('pointerup',up);d.addEventListener('pointercancel',up)});
     gp.addEventListener('pointerup',up);gp.addEventListener('pointercancel',up);
     var reset=function(){if(el.classList.contains('float')){el.style.width='';try{localStorage.removeItem(FK)}catch(_){}return}set(0);try{localStorage.removeItem(K)}catch(_){}};
