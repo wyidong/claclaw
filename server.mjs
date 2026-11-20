@@ -58,6 +58,7 @@ import { peerJudge } from './src/peer/peerjudge.mjs';
 import { storeNow as libStoreNow, claudeLibProviders, parseLibPick, claudeLibEnv, noProxyAdd } from './src/modelpick.mjs';
 import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './src/modelstore.mjs';
 import { serveAud } from './src/audproxy.mjs';
+import { serveLyric } from './src/lyric.mjs';
 import { saveVideo, videoFile, videoDuration, videoThumb, imageThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './src/video.mjs';
 const STARTED_AT = Date.now();
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -757,6 +758,11 @@ async function handleLocal(req, res, url) {
   if (!isDirectLocal(req) || req.headers['x-forwarded-proto'] || req.headers.forwarded || !skills.checkLocal(req.headers['x-claclaw-local'])) return sendJson(res, 403, { ok: false, error: '只接受本机带令牌的请求' });
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
+  if (url.pathname === '/api/local/theme') {   // claw-theme 技能：GET 现在的主题，POST {theme} 换主题
+    if (req.method !== 'POST') return sendJson(res, 200, { ok: true, theme: clientTheme() });
+    const b = await jsonBody(req, 1024, null);
+    return sendJson(res, 200, setClientTheme(b && b.theme));
+  }
   if (url.pathname === '/api/local/peer/result') return sendJson(res, 200, await waitJob(q.get('job') || '', wait));
   if (url.pathname === '/api/local/peer/whoami' || url.pathname === '/api/local/peer/list') {
     const f = await resolveFrom(q.get('from') || '', q.get('cwd') || '');
@@ -1859,12 +1865,27 @@ function saveSettings(patch) {
 }
 // 手机网页的个人设置（语音档位、压缩提示阈值、主题……）也在电脑上存一份：clarelay 外壳里 claclaw 嵌在别的网址里，
 // iOS 杀掉 App 后嵌入页的 localStorage 会丢。页面下发时塞进去，本机没有的项由页面补回
-const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsVoices', 'ttsSessVoice', 'ttsSessRate', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang', 'lineW', 'lineC'];
+const PREF_KEYS = ['theme', 'ttsMode', 'tts', 'ttsRate', 'ttsVoice', 'ttsVoices', 'ttsSessVoice', 'ttsSessRate', 'ttsMuted', 'ctxWarnK', 'enterSend', 'listMode', 'dissBeads', 'folded', 'gyro', 'scImg', 'lang', 'lineW', 'lineC', 'scZ', 'themeAt'];   // themeAt：主题是从对话（claw-theme）或聊天里的主题卡片换的时间，网页打开时比它新就改用电脑上这份
 function clientPrefs() {
   const p = settings().clientPrefs, out = {};
   if (p && typeof p === 'object') for (const k of PREF_KEYS) if (typeof p[k] === 'string') out[k] = p[k];
   return out;
 }
+// 换主题（claw-theme 技能、聊天里的主题卡片）：v 是 auto / light / dark / ziwei / shichen / shichen@0～11。
+// 存进 clientPrefs，再通知所有打开着的网页马上换（ws 事件 theme）
+const THEME_RE = /^(auto|light|dark|ziwei|shichen)(?:@(\d{1,2}))?$/;
+function setClientTheme(v) {
+  const m = THEME_RE.exec(String(v || ''));
+  if (!m || (m[2] != null && (m[1] !== 'shichen' || +m[2] > 11))) return { ok: false, error: '没有这个主题：' + v };
+  const next = clientPrefs(), theme = m[1] === 'auto' ? '' : m[1], scZ = m[2] != null ? String(+m[2]) : null, at = String(Date.now());
+  if (theme) next.theme = theme; else delete next.theme;
+  if (scZ != null) next.scZ = scZ; else delete next.scZ;
+  next.themeAt = at;
+  saveSettings({ clientPrefs: next });
+  broadcast({ t: 'theme', theme, scZ, at });
+  return { ok: true, theme: m[1] + (scZ != null ? '@' + scZ : '') };
+}
+function clientTheme() { const p = clientPrefs(); return (p.theme || 'auto') + (p.theme === 'shichen' && /^\d+$/.test(p.scZ || '') ? '@' + p.scZ : ''); }
 const SOUND_DIR = process.platform === 'win32' ? path.join(process.env.WINDIR || 'C:\\Windows', 'Media') : '/System/Library/Sounds';
 const SOUND_EXT = process.platform === 'win32' ? '.wav' : '.aiff';
 const SOUNDS = SOUND_OK ? (() => { try { return fs.readdirSync(SOUND_DIR).filter(f => f.toLowerCase().endsWith(SOUND_EXT)).map(f => f.slice(0, -SOUND_EXT.length)).sort(); } catch { return []; } })() : [];
@@ -2665,6 +2686,12 @@ const handler = async (req, res) => {
       saveSettings({ notifOff: m });
       return sendJson(res, 200, m);
     }
+    if (url.pathname === '/api/theme' && req.method === 'POST') {   // 聊天里的主题卡片点了：换上，并通知别的设备
+      if (notJson(req, res)) return;
+      const b = await jsonBody(req, 1024, null);
+      const r = setClientTheme(b && b.theme);
+      return sendJson(res, r.ok ? 200 : 400, r);
+    }
     if (url.pathname === '/api/prefs' && req.method === 'POST') {   // 手机网页的个人设置备份（见 clientPrefs）
       if (notJson(req, res)) return;
       const body = await jsonBody(req, 32 * 1024, null);
@@ -2806,6 +2833,7 @@ const handler = async (req, res) => {
     // 顶上播放器的「相关」：正在播的 B 站 / YouTube 视频的相关视频（claw-video 技能的 related 命令查，半小时内同一个视频不重查）
     // 纯音频（claw-music 技能）：B 站视频的单独音轨、网易云免费歌的 mp3，服务器取来转给手机的 <audio>
     if (url.pathname === '/api/aud' && (req.method === 'GET' || req.method === 'HEAD')) return serveAud(req, res, url.searchParams, log);
+    if (url.pathname === '/api/lyric' && req.method === 'GET') return serveLyric(res, url.searchParams);
     if (url.pathname === '/api/related' && req.method === 'GET') {
       const id = relatedKey(String(url.searchParams.get('u') || ''));
       if (!id) return sendJson(res, 400, { ok: false, error: '只支持 B 站、YouTube 视频' });

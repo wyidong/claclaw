@@ -52,6 +52,34 @@
     ]
   },
   {
+    "name": "claw-theme",
+    "title": "换皮肤",
+    "desc": "用户说「换个皮肤 / 换成深色 / 来个粉色的」时，从现有主题里挑一个合心意的直接换上，再给 2～3 个主题卡片，点了就换",
+    "group": "通用",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
+  },
+  {
     "name": "claw-video",
     "title": "找视频",
     "desc": "找能在聊天里直接播的视频（B 站、YouTube 等），要文件时下载成 mp4",

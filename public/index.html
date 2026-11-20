@@ -68,8 +68,10 @@ window.__sc=(function(){
 // 个人设置在电脑上也存一份（data/settings.json 的 clientPrefs）：clarelay 外壳里 claclaw 是嵌在别的网址里的，
 // iOS 杀掉 App 后这种嵌入页的 localStorage 会被清掉。页面打开时本机没有的项用电脑上那份补回；本机改了就同步过去
 (function(){
-  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsSessVoice','ttsSessRate','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang','lineW','lineC'],ls,pend={},n=0,t=0;
+  var P=/*__CLIENT_PREFS__*/null,K=['theme','ttsMode','tts','ttsRate','ttsVoice','ttsVoices','ttsSessVoice','ttsSessRate','ttsMuted','ctxWarnK','enterSend','listMode','dissBeads','folded','gyro','scImg','lang','lineW','lineC','scZ'],ls,pend={},n=0,t=0;
   try{ls=localStorage}catch(_){return}
+  // 主题在对话里（claw-theme）或别的设备上点主题卡片换过：电脑上那份比本机看到过的新，就用电脑上的（不然本机的旧主题会把它盖回去）
+  try{if(P&&P.themeAt&&P.themeAt!==ls.getItem('claclaw.themeAt')){['theme','scZ'].forEach(function(k){if(typeof P[k]==='string')ls.setItem('claclaw.'+k,P[k]);else ls.removeItem('claclaw.'+k)});ls.setItem('claclaw.themeAt',P.themeAt)}}catch(_){}
   function q(k,v){if(k.indexOf('claclaw.')!==0||K.indexOf(k.slice(8))<0)return;pend[k.slice(8)]=v;n++;clearTimeout(t);t=setTimeout(flush,300)}
   function flush(){if(!n)return;var b=JSON.stringify(pend);pend={};n=0;try{fetch('/api/prefs',{method:'POST',headers:{'content-type':'application/json'},body:b,keepalive:true}).catch(function(){})}catch(_){}}
   try{K.forEach(function(k){var v=ls.getItem('claclaw.'+k),s=P&&typeof P[k]==='string'?P[k]:null;
@@ -756,6 +758,38 @@ function mdTv(src){
   }).join('');
   return cards?'<div class="tvg">'+cards+'</div>':mdCode(src);
 }
+// 主题卡片：```theme 代码块，一行一个「主题 id | 名字 | 说明」（claw-theme 技能生成）。卡片上画一小块那个主题的界面，点了马上换上（别的设备也跟着换）
+// id：auto / light / dark / ziwei / shichen（按时辰轮流）/ shichen@0～11（固定一个时辰）。颜色取自 app.css 各主题的 --bg / --surface / --accent / --ink
+var THP={light:['#F1F3F5','#FFFFFF','#12864A','#14181C'],dark:['#0E1115','#161B21','#3FCB86','#E7EBEF'],ziwei:['#F2F0F8','#FFFFFF','#5B21B6','#1F1B2D'],
+  'shichen@0':['#EEF9F2','#FFFFFF','#268649','#1B2D21'],'shichen@1':['#162612','#21381A','#9CCB8E','#ECEEF0'],'shichen@2':['#191C1F','#25292D','#D6D9DC','#ECEEF0'],
+  'shichen@3':['#EFF4F8','#FFFFFF','#466D90','#182430'],'shichen@4':['#F9F5EE','#FFFFFF','#966D1E','#2D271B'],'shichen@5':['#332705','#4A3807','#F2D27A','#ECEEF0'],
+  'shichen@6':['#2F0909','#450D0D','#E16060','#ECEEF0'],'shichen@7':['#F9EEEE','#FFFFFF','#B62020','#2D1B1B'],'shichen@8':['#EEF3F9','#FFFFFF','#3769A0','#1B232D'],
+  'shichen@9':['#0D182B','#12223F','#86A6D6','#ECEEF0'],'shichen@10':['#2F1709','#45220D','#E18F60','#ECEEF0'],'shichen@11':['#FCF2EB','#FFFFFF','#B65C20','#2D221B']};
+function thMock(c,cls){return '<span class="thc-k'+(cls||'')+'" style="--b:'+c[0]+';--s:'+c[1]+';--a:'+c[2]+';--i:'+c[3]+'"><i class="thc-bar"></i><i class="thc-l"><b></b><b></b></i><i class="thc-r"></i><i class="thc-btn"></i></span>'}
+function thPrev(id){
+  if(id==='auto')return thMock(THP.light)+thMock(THP.dark,' thc-k2');   // 跟随系统：左上浅、右下深
+  if(id==='shichen'){var g=[];for(var z=0;z<12;z++)g.push(THP['shichen@'+z][2]);return '<span class="thc-k thc-sc" style="--s:rgba(255,255,255,.88);--a:#fff;--i:#333;--g:conic-gradient('+g.join(',')+','+g[0]+')"><i class="thc-bar"></i><i class="thc-l"><b></b><b></b></i><i class="thc-r"></i><i class="thc-btn"></i></span>'}
+  return thMock(THP[id]||THP.light);
+}
+function mdTheme(src){
+  var cur=thCur(),cards=src.split('\n').map(function(l){
+    var f=l.split('|').map(function(x){return x.trim()}),id=f[0];if(f.length<2||!(id==='auto'||id==='shichen'||THP[id]))return '';
+    var on=id===cur;
+    return '<button type="button" class="thc'+(on?' on':'')+'" data-th="'+esc(id)+'" aria-pressed="'+on+'" title="换成「'+esc(f[1])+'」"><span class="thc-p">'+thPrev(id)+'<span class="thc-ok">✓ 正在用</span></span>'
+      +'<span class="thc-m"><b>'+esc(f[1])+'</b>'+(f[2]?'<small>'+esc(f[2])+'</small>':'')+'</span></button>';
+  }).join('');
+  return cards?'<div class="thg">'+cards+'</div>':mdCode(src);
+}
+function thCur(){var t='';try{t=localStorage.getItem('claclaw.theme')||''}catch(_){}return t==='shichen'&&window.__scZ!=null?'shichen@'+window.__scZ:(t||'auto')}
+function thMark(){var c=thCur();document.querySelectorAll('.thc').forEach(function(b){var on=b.dataset.th===c;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on))})}
+// 换主题：走设置里那个下拉框的 change（记到本机、同步到电脑、立刻换色，设置页和快捷方块跟着变）
+function thSet(v){var sel=document.getElementById('setTheme'),val=v==='auto'?'':v;if(!sel||thCur()===v)return thMark();sel.value=val;if(sel.value!==val)return;sel.dispatchEvent(new Event('change'));thMark()}
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest&&ev.target.closest('.thc');if(!b)return;
+  var id=b.dataset.th;thSet(id);
+  try{fetch('/api/theme',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({theme:id})}).catch(function(){})}catch(_){}   // 电脑上记下，别的设备也跟着换
+});
+new MutationObserver(function(){thMark()}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-sc']});
 function mdCode(code){return '<div class="cb"><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code)+'</code></pre></div>'}
 // 列表项内容：普通行用 <br> 连起来；\u0001n 是嵌在这一项里的第 n 个代码块
 function mdLi(text,blocks){
@@ -776,6 +810,14 @@ function mdMovies(items,tiles){
   var AU=/^(audio|file-audio)$/,kind='';
   for(var k=0;k<items.length;k++){var mm=items[k].text.match(re),e=mm&&embedOf(mm[2]),kk=e&&(AU.test(e.kind)?'a':e.kind==='video'?'v':'');if(!kk||kind&&kk!==kind)return '';kind=kk;rows.push([mm[1].replace(/[*_`]/g,'').trim(),mm[2],e,mm[3].replace(/\n/g,' · ').replace(/^[\s·:：—–|-]+/,'').replace(/[*_`]/g,'').trim()])}
   var n0=items[0].start||1;
+  // 歌单 / 节目单：一张卡片里一行一首（序号、歌名、来源时长），正在放的那首序号换成跳动的音柱
+  if(kind==='a')return '<div class="aul"><button type="button" class="emb-pl aul-h"><span class="aul-pi"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg></span>播放全部<small>'+rows.length+' 首</small></button>'+rows.map(function(r,k){
+    tiles[r[2].src]=1;
+    return '<a class="aur emb-l" href="'+esc(r[1])+'" data-kind="'+r[2].kind+'" target="_blank" rel="noopener noreferrer" title="'+esc(r[0]+' · 在这里播放')+'">'
+      +'<span class="aur-n">'+(n0+k)+'</span><span class="aur-eq" aria-hidden="true"><i></i><i></i><i></i></span>'
+      +'<span class="aur-m"><b>'+esc(r[0])+'</b><small>'+esc(r[3]||r[2].site)+'</small></span>'
+      +'<span class="aur-go" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg></span></a>';
+  }).join('')+'</div>';
   return '<div class="tvg mvg">'+rows.map(function(r,k){
     tiles[r[2].src]=1;var no=String(n0+k);
     return tvCard(r[1],r[2],no,MV_COLOR[r[2].site]||'#475569',r[0],r[3]||r[2].site,' mvc');
@@ -795,6 +837,7 @@ function md(src){
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
       i++;var cj=code.join('\n');
       if(lang==='tv'&&i<=L.length){out.push(mdTv(cj));continue}   // 电视频道卡片（claw-tv 技能）
+      if(lang==='theme'&&i<=L.length){out.push(mdTheme(cj));continue}   // 主题卡片（claw-theme 技能）
       out.push((lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))&&i<=L.length?mdSvg(cj):mdCode(cj));continue;   // 还没收尾（流式输出中）的照代码显示
     }
     if(SVG_SRC.test(l)){                           // 回复里整段 <svg>…</svg>：到 </svg> 为止画成图；还没收尾的照代码显示
@@ -810,14 +853,6 @@ function md(src){
       if(hh.trim())out.push('<div class="'+(/^\s*<table/i.test(hh)?'tbl':'mdh')+'">'+hh+'</div>');
       continue;
     }
-  // 歌单 / 节目单：一张卡片里一行一首（序号、歌名、来源时长），正在放的那首序号换成跳动的音柱
-  if(kind==='a')return '<div class="aul"><button type="button" class="emb-pl aul-h"><span class="aul-pi"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg></span>播放全部<small>'+rows.length+' 首</small></button>'+rows.map(function(r,k){
-    tiles[r[2].src]=1;
-    return '<a class="aur emb-l" href="'+esc(r[1])+'" data-kind="'+r[2].kind+'" target="_blank" rel="noopener noreferrer" title="'+esc(r[0]+' · 在这里播放')+'">'
-      +'<span class="aur-n">'+(n0+k)+'</span><span class="aur-eq" aria-hidden="true"><i></i><i></i><i></i></span>'
-      +'<span class="aur-m"><b>'+esc(r[0])+'</b><small>'+esc(r[3]||r[2].site)+'</small></span>'
-      +'<span class="aur-go" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg></span></a>';
-  }).join('')+'</div>';
     if((m=l.match(/^(#{1,6})\s+(.*)$/))){var n=Math.min(m[1].length+2,6);out.push('<h'+n+'>'+mdInline(m[2])+'</h'+n+'>');i++;continue}
     if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)){out.push('<hr>');i++;continue}
     if(l.indexOf('|')>=0&&i+1<L.length&&MD_TABLE_SEP.test(L[i+1])){   // 表格
@@ -1046,6 +1081,13 @@ function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
   feed.parentNode.insertBefore(el,feed);
   el.querySelector('.tp-prev').addEventListener('click',function(){tpPlay(tp.i-1)});
   el.querySelector('.tp-next').addEventListener('click',function(){tpPlay(tp.i+1)});
+  el.querySelector('.tp-ap').addEventListener('click',function(){var a=tpAu();if(a&&a.currentTime>3&&(tp.i<=0||tp.movie)){a.currentTime=0;return}tpPlay(tp.i-1)});   // 播了几秒后点「上一首」先回到开头（第一首、长节目也是）
+  el.querySelector('.tp-an').addEventListener('click',function(){tpPlay(tp.i+1)});
+  var pp=function(){var a=tpAu();if(!a)return;if(a.paused)a.play().catch(function(){});else a.pause()};
+  el.querySelector('.tp-pp').addEventListener('click',pp);el.querySelector('.tp-bp').addEventListener('click',pp);
+  var sk=el.querySelector('.tp-sk');
+  sk.addEventListener('input',function(){var a=tpAu();tpSeeking=true;el.style.setProperty('--tp-p',sk.value/10+'%');if(a&&a.duration)el.querySelector('.tp-ct').textContent=tpHms(sk.value/1000*a.duration)});
+  sk.addEventListener('change',function(){var a=tpAu();tpSeeking=false;if(a&&isFinite(a.duration))a.currentTime=sk.value/1000*a.duration;tpAuSync()});
   el.querySelector('.tp-pop').addEventListener('click',tpPopOut);
   el.querySelector('.tp-rb-btn').addEventListener('click',function(){tpRel()});
   (function(){   // 浮窗：标题条在视频上面，按住拖到别处
@@ -1081,13 +1123,6 @@ function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
       var h=parseInt(el.style.getPropertyValue('--tp-h'),10);try{if(h)localStorage.setItem(K,String(h))}catch(_){}};
     gp.addEventListener('pointerdown',function(e){start(e,el.classList.contains('float')?zone(e):'',gp)});
     gp.addEventListener('pointermove',function(e){if(el.classList.contains('float')&&!g)gp.style.cursor=CUR[zone(e)];else if(!el.classList.contains('float'))gp.style.cursor='';move(e)});
-  el.querySelector('.tp-ap').addEventListener('click',function(){var a=tpAu();if(a&&a.currentTime>3&&(tp.i<=0||tp.movie)){a.currentTime=0;return}tpPlay(tp.i-1)});   // 播了几秒后点「上一首」先回到开头（第一首、长节目也是）
-  el.querySelector('.tp-an').addEventListener('click',function(){tpPlay(tp.i+1)});
-  var pp=function(){var a=tpAu();if(!a)return;if(a.paused)a.play().catch(function(){});else a.pause()};
-  el.querySelector('.tp-pp').addEventListener('click',pp);el.querySelector('.tp-bp').addEventListener('click',pp);
-  var sk=el.querySelector('.tp-sk');
-  sk.addEventListener('input',function(){var a=tpAu();tpSeeking=true;el.style.setProperty('--tp-p',sk.value/10+'%');if(a&&a.duration)el.querySelector('.tp-ct').textContent=tpHms(sk.value/1000*a.duration)});
-  sk.addEventListener('change',function(){var a=tpAu();tpSeeking=false;if(a&&isFinite(a.duration))a.currentTime=sk.value/1000*a.duration;tpAuSync()});
     el.querySelectorAll('.tp-e').forEach(function(d){d.addEventListener('pointerdown',function(e){start(e,d.dataset.e,d)});d.addEventListener('pointermove',move);d.addEventListener('pointerup',up);d.addEventListener('pointercancel',up)});
     gp.addEventListener('pointerup',up);gp.addEventListener('pointercancel',up);
     var reset=function(){if(el.classList.contains('float')){el.style.width='';try{localStorage.removeItem(FK)}catch(_){}return}set(0);try{localStorage.removeItem(K)}catch(_){}};
@@ -2492,6 +2527,7 @@ $('#bAlways').addEventListener('click',function(){reply('allow_session')});
 
 function onEvent(m){
   if(m.t==='login.update'){loginEvent(m);return}
+  if(m.t==='theme'){thSet(m.theme?m.theme+(m.scZ!=null?'@'+m.scZ:''):'auto');try{localStorage.setItem('claclaw.themeAt',String(m.at||''))}catch(_){}return}   // 对话里换了主题（claw-theme）/ 别的设备点了主题卡片
   if(m.t!=='unread')lastEvt=Date.now();
   if(m.sessionId&&session&&m.sessionId!==session.id)return;
   if(/^(user|ai\.|tool\.|peer$|perm\.|turn\.done|sys|cmd\.out)/.test(m.t||''))feedDirty=true;   // 放在过滤别的会话之后；peer$：配对申请 peer.pair 不算聊天内容
@@ -3532,7 +3568,7 @@ function pgHd(attrs,label,title){return '<div class="pg-hd"><button type="button
 // 技能页：顶上切「按技能 / 按 Agent」。按技能：每个技能一张卡，下面一排装了它的 Agent 图标；按 Agent：每个 Agent 一行写装了几个。
 // 点进去是子页：技能 → 各 Agent 装没装（装 / 卸）；Agent → 各技能装没装。共用一个技能目录的几个 Agent 装 / 卸一起变，子页里写明
 var skBy='skill',skSel='';try{skBy=localStorage.getItem('claclaw.skBy')==='agent'?'agent':'skill'}catch(_){}
-var SK_IC={'claw-interconnect':['🤝','#4F7CFF'],'claw-file':['📎','#13A07A'],'claw-video':['🎞️','#E0663A'],'claw-music':['🎧','#2563EB'],'claw-audio':['🎤','#E0457B'],'claw-movie':['🎬','#D97706'],'claw-image':['🖼️','#0EA5B7'],'claw-tv':['📺','#8B5CF6']};
+var SK_IC={'claw-interconnect':['🤝','#4F7CFF'],'claw-file':['📎','#13A07A'],'claw-video':['🎞️','#E0663A'],'claw-music':['🎧','#2563EB'],'claw-audio':['🎤','#E0457B'],'claw-movie':['🎬','#D97706'],'claw-image':['🖼️','#0EA5B7'],'claw-tv':['📺','#8B5CF6'],'claw-theme':['🎨','#DB2777']};
 function skIcon(n){var c=SK_IC[n]||['🧩','#6B7480'];return '<span class="sk-badge" style="--skc:'+c[1]+'" aria-hidden="true">'+c[0]+'</span>'}
 function skAgents(){   // 所有出现过的 Agent（按第一次出现的顺序）
   var seen={},out=[];(skillsSt||[]).forEach(function(s){s.targets.forEach(function(t){(t.claws||[]).forEach(function(k){if(!seen[k]){seen[k]=1;out.push(k)}})})});return out}
@@ -6899,6 +6935,7 @@ thSub();
   tg.addEventListener('click',function(){box.classList.toggle('open');tg.blur()});
   box.appendChild(tg);
   mark();
+  new MutationObserver(mark).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-sc']});   // 对话里换了主题也跟着标
 })();
 function notice(t){if(mList)toast(t);else addSys(t)}
 // Esc 统一在这里：一次只关最上面那一层（以前会话设置、右键菜单各有一个 handler，按一下会连带把会话列表也关掉）

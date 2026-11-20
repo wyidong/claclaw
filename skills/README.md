@@ -29,7 +29,7 @@ skills/
 - **依赖**：只用 Node 内置模块和系统自带的 `curl`，不 `npm install`。外部工具（yt-dlp、ffmpeg）用到时再下载到 `~/.claclaw/tools/`。
 - **缓存和状态**：放 `~/.claclaw/<名>/`，不写进技能目录。各 Claw 用的是复制件，claclaw 启动时会用仓库里的版本覆盖。
 - **登记**：在 `index.json` 加一条，字段是 `name`、`title`、`desc`、`group`、`scene`、`claws`、`auto`。
-  - `group`：技能大组，技能页按它分组显示。现有「通用」（interconnect、file）、「影音」（video、music、audio、movie、image、tv）。
+  - `group`：技能大组，技能页按它分组显示。现有「通用」（interconnect、file、theme）、「影音」（video、music、audio、movie、image、tv）。
   - `claws`：默认写全部会跑命令的 Claw（claude deepseek opencode kimi qwen codex openclaw glm iflow minimax codebuddy qoder copilot）。
   - `auto`：默认写全部四个安装位置（claude agents iflow codebuddy），用到哪个 Claw 就自动装到哪。
   - Mini 不调工具，用不了技能。
@@ -79,6 +79,7 @@ description: <做什么>：用户说「<原话 1>」「<原话 2>」「<原话 3
 | 只放声音（纯音频） | 音频文件直链（.mp3 / .m4a…），或 claclaw 认得的几种：B 站视频网址加 `#audio`、网易云外链 `music.163.com/song/media/outer/url?id=…`、5sing / 酷我歌曲页、Bandcamp 曲目页加 `#audio`、Free-Stock-Music / ccMixter / Incompetech 的 mp3 直链 | 顶上的音频条，没有画面（这几种由服务器 `/api/aud` 转：要来源页或是 http；只转白名单里的站，别的站要转先在 src/audproxy.mjs 登记） |
 | 片单 / 列表 | 编号列表 `1. [片名](网址) · 年份 · 类型 · 时长 · 来源` | 一条消息里超过 3 个能播的链接就成为播放列表 |
 | 频道 / 入口卡片 | ```` ```tv ```` 块，一行一个：`分组 \| 台标字 \| 名称 \| 网址 \| 说明` | 卡片：能播的带 ▶，其余点了新开页面 |
+| 主题卡片 | ```` ```theme ```` 块，一行一个：`主题 id \| 名字 \| 说明` | 卡片：画出那个主题的样子，点了马上换上 |
 | 文件 | `send_file` 工具，或反引号里写路径 | 文件卡片 / 预览 |
 
 - **stdout**：只放给用户看的内容，AI 原样贴。进度、调试、错误写 stderr。
