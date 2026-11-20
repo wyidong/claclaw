@@ -19,3 +19,14 @@ test('纯音频转发：CC 音乐站只认固定目录下的 https mp3，不当�
   for (const bad of ['https://ccmixter.org/content/a/../b.mp3', 'https://ccmixter.org/content/a/%2e%2e/b.mp3', 'https://ccmixter.org/content/a/%2Fetc.mp3',
     'http://ccmixter.org/content/a/b.mp3', 'https://evil.com/music/a/mp3/b.mp3', 'https://ccmixter.org.evil.com/content/a/b.mp3', fsm + '?x=1', 'https://127.0.0.1/a.mp3']) assert.equal(q(bad), '');
 });
+
+test('纯音频转发：5sing、酷我、Bandcamp 只认格式对的 ID，Incompetech 只认它的 mp3 目录', () => {
+  const q = s => audKey(new URLSearchParams(s));
+  assert.equal(q('fs=yc:2732572'), 'fs:yc:2732572');
+  assert.equal(q('fs=bz:1'), 'fs:bz:1');
+  assert.equal(q('kw=326804'), 'kw:326804');
+  assert.equal(q('bc=akriza/guzheng-tight'), 'bc:akriza/guzheng-tight');
+  const inc = 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/The%20Britons.mp3';
+  assert.equal(q('u=' + encodeURIComponent(inc)), 'u:' + inc);
+  for (const bad of ['fs=xx:1', 'fs=yc:abc', 'fs=yc:1/../2', 'kw=MUSIC_1', 'kw=1;2', 'bc=../x', 'bc=a.b/c', 'bc=a/b/c', 'bc=A/b?x', 'u=' + encodeURIComponent('https://incompetech.com/other/a.mp3')]) assert.equal(q(bad), '', bad);
+});

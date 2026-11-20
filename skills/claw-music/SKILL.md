@@ -1,11 +1,11 @@
 ---
 name: claw-music
-description: 听歌（纯音频，只有声音、不带 MV 画面）：用户说「来首 XX 的歌」「放一首周杰伦的晴天」「我想听 XX」「找几首好听的歌」「来点国风 / 古风纯音乐」「放点古筝 / 二胡」「要无损 / 高音质的」「要 mp3」「只要声音不要 MV」「把这首歌下下来」时使用。给能在 claclaw 聊天里直接播的纯音频链接（B 站官方 / 无损上传的单独音轨最高 320k、网易云免费歌 mp3、CC 授权和公版音乐；国风、纯音乐、古筝二胡这类按风格找的直接给几首），按原曲时长挑完整版。要看 MV、现场视频用 claw-audio，普通视频用 claw-video。
+description: 听歌（纯音频，只有声音、不带 MV 画面）：用户说「来首 XX 的歌」「放一首周杰伦的晴天」「我想听 XX」「找几首好听的歌」「来点国风 / 古风纯音乐」「放点古筝 / 二胡」「来段郭德纲的相声」「听单田芳评书 / 三体有声书」「要无损 / 高音质的」「要 mp3」「只要声音不要 MV」「把这首歌下下来」时使用。给能在 claclaw 聊天里直接播的纯音频链接（B 站官方 / 无损上传的单独音轨最高 320k、网易云免费歌 mp3、酷我 / 5sing 免费歌、Bandcamp 独立音乐、CC 授权和公版音乐；国风、纯音乐、古筝二胡这类按风格找的直接给几首；相声、评书、有声书给网易云免费电台等的节目），按原曲时长挑完整版。要看 MV、现场视频用 claw-audio，普通视频用 claw-video。
 ---
 
 # 听歌（纯音频）
 
-并发查网易云（免费歌的官方外链 mp3）、B 站（官方 MV / 无损上传的单独音轨，不登录最高 320kbps）、Openverse（CC 授权）、Internet Archive（公版），按「歌名、歌手对得上 + 时长和原曲一样 + 高音质」挑完整版，通常 3～5 秒。**只用这个命令，不要自己编链接。** 不先问用户细节，直接给，发完再问要不要换版本。
+并发查网易云（免费歌的官方外链 mp3）、B 站（官方 MV / 无损上传的单独音轨，不登录最高 320kbps）、酷我（只收标了免费的，128k）、5sing（原创 / 翻唱，最高 320k）、Bandcamp（音乐人开放的试听，128k）、Incompetech（CC BY 配乐）、Openverse（CC 授权）、Internet Archive（公版），按「歌名、歌手对得上 + 时长和原曲一样 + 高音质」挑完整版，通常 3～5 秒。**只用这个命令，不要自己编链接。** 不先问用户细节，直接给，发完再问要不要换版本。
 
 ## 命令
 
@@ -15,14 +15,15 @@ description: 听歌（纯音频，只有声音、不带 MV 画面）：用户说
 ~/.claclaw/bin/claw-music get "歌名 歌手" [--pick 序号]  # 下载成音频文件（网易云 mp3、B 站 m4a）
 ~/.claclaw/bin/claw-music get --pick 3                  # 下载上次列表里的第 3 个
 ~/.claclaw/bin/claw-music "国风 纯音乐" [--n 5]         # 按风格找：一次给 5 首不同的（每次随机换一批）
+~/.claclaw/bin/claw-music "郭德纲 相声" [--n 5]         # 节目：相声、评书、有声书、广播剧、播客、戏曲
 ```
 
-Windows 用 `%USERPROFILE%\.claclaw\bin\claw-music.cmd`；没有这个命令时用 `node <claclaw 仓库>/skills/claw-music/music.mjs`。`--src ne,nepl,bili,fsm,ccmixter,openverse,archive` 只用这些来源。
+Windows 用 `%USERPROFILE%\.claclaw\bin\claw-music.cmd`；没有这个命令时用 `node <claclaw 仓库>/skills/claw-music/music.mjs`。`--src ne,nepl,nedj,kw,fs,bili,bc,inc,fsm,ccmixter,openverse,archive` 只用这些来源；`--song` 强制按「歌名 歌手」找（歌名里正好有「古筝」「相声」这类词时）。
 
 ## 怎么回复
 
 - 每行是 `[标题](链接)  来源 · 音质  时长`。**把 `[标题](链接)` 原样写进回复**，前面一句说是谁唱的、哪个版本。claclaw 点了只放声音（顶上的播放器是音频条，没有画面）。
-- **链接不要改**：B 站的链接后面带 `#audio`，网易云的是 `music.163.com/song/media/outer/url?id=…`，Free-Stock-Music / ccMixter 是它们的 mp3 地址，claclaw 靠这些写法认出「只放声音」。去掉 `#audio` 就会变成放 MV。
+- **链接不要改**：B 站的链接后面带 `#audio`，网易云的是 `music.163.com/song/media/outer/url?id=…`，5sing（`5sing.kugou.com/yc/…html`）、酷我（`kuwo.cn/play_detail/…`）是歌曲页，Bandcamp 是曲目页后面加 `#audio`，Free-Stock-Music / ccMixter / Incompetech 是它们的 mp3 地址，claclaw 靠这些写法认出「只放声音」。去掉 `#audio` 就会变成放 MV。
 - 一次给 1 首；用户要「几首 / 歌单」时每首歌各跑一次（或 `--n 5` 给同一首的几个版本），写成编号列表 `1. [歌名 - 歌手](链接) · 时长 · 来源`，超过 3 首时 claclaw 会连着放。
 - 推荐歌单时，先自己想好歌名和歌手，再逐首用命令查；查不到的那首就换一首，不要编。
 - 「换个版本 / 要现场版 / 要伴奏」：`find` 看列表挑一个，或关键词加「现场 / live / 伴奏」再搜。
@@ -32,6 +33,7 @@ Windows 用 `%USERPROFILE%\.claclaw\bin\claw-music.cmd`；没有这个命令时�
 
 - `"歌名 歌手"`：第一个词当歌名、后面当歌手，比如 `"晴天 周杰伦"`、`"海阔天空 Beyond"`。歌名里有空格的去掉空格。
 - 按风格找（风格模式，关键词里有国风、古风、中国风、纯音乐、轻音乐、民乐、古筝、二胡、琵琶、古琴、笛子、箫、葫芦丝、唢呐…就自动进）：`"国风 纯音乐"`、`"古筝"`、`"二胡 独奏"`；指定曲子加上曲名：`"兰亭序 古筝"`。不再按歌名歌手对，而是从网易云（免费单曲 + 高播放的风格歌单）、B 站、Free-Stock-Music（中国风分类，CC BY）、ccMixter、Openverse、Internet Archive（只要标了 CC / 公版的）里挑，几个来源轮着排，教学、曲谱、一小时循环、带人声的往后放。整理成编号列表给用户，每首写来源。
+- 节目（节目模式，关键词里有相声、评书、小品、有声书、广播剧、播客、脱口秀、戏曲、京剧…就自动进）：`"郭德纲 相声"`、`"单田芳 评书"`、`"三体 有声书"`。从网易云免费电台（付费电台不要，按集数从第 1 集往后）、酷我、B 站里挑，一集可以几十分钟到两三个小时。连载的先给第 1 集，用户要下一集再 `find` 看后面的。
 - 白噪音、外文纯音乐：`"雨声"`、`"Canon in D"`；外文、古典用英文关键词还能搜到 CC / 公版音乐。
 
 ## 说明
@@ -39,6 +41,7 @@ Windows 用 `%USERPROFILE%\.claclaw\bin\claw-music.cmd`；没有这个命令时�
 - 网易云只有免费歌能放（官方外链）；周杰伦这类 VIP 歌外链打不开，就用 B 站上官方 MV、CD 音轨、无损上传的音轨。两边都没有就如实说，可以改用 claw-audio 找 MV。
 - B 站的音轨由 claclaw 服务器转给手机（B 站要求来源页是 B 站），只在 claclaw 里能纯音频播放；别处打开链接就是原视频。
 - 按原曲时长判断完整版（网易云查得到原曲时长，VIP 歌也有）；翻唱、DJ、伴奏、片段、合集默认排除，用户点名要时才给。
-- Openverse、Free-Stock-Music、ccMixter 是 CC 授权（多数要署名，有的不能商用，见来源那一栏），Internet Archive 是公版；要公开使用时选它们，并告诉用户出处和授权。
-- Free-Stock-Music、ccMixter 的 mp3 要求来源页是它们自己，由 claclaw 服务器转，只在 claclaw 里能直接放。
+- 酷我只收它标了免费、能整首在线听的（会员、付费、只能听片段的不要）；5sing 是原创音乐人自己上传的（标了翻唱、伴奏的会写出来）；Bandcamp 放的是音乐人开放的试听流，喜欢可以去那里买。
+- Openverse、Free-Stock-Music、ccMixter、Incompetech 是 CC 授权（多数要署名，有的不能商用，见来源那一栏），Internet Archive 是公版；要公开使用时选它们，并告诉用户出处和授权。
+- 除网易云外链、CC 直链外，这些来源的音频地址带时效或要来源页，都由 claclaw 服务器按 ID 现取再转，只在 claclaw 里能直接放；别处打开链接是原网页。
 - 只给个人收听，不下载付费、会员、DRM 内容。

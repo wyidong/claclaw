@@ -862,8 +862,12 @@ var EMBED_RULES=[
   // 纯音频（claw-music 技能）：B 站视频网址后面带 #audio = 只放它的音轨；网易云官方外链 = 免费歌的 mp3。都由服务器 /api/aud 转（B 站要 Referer，网易云的 mp3 是 http）
   [/^https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV[0-9A-Za-z]{10})\/?(?:\?(?:[^#\s]*&)?p=(\d+))?[^#\s]*#audio$/,'B 站音轨','file-audio',function(m){return '/api/aud?bv='+m[1]+'&p='+(m[2]||1)}],
   [/^https?:\/\/music\.163\.com\/song\/media\/outer\/url\?id=(\d+)/,'网易云','file-audio',function(m){return '/api/aud?ne='+m[1]}],
-  // CC 音乐站（Free-Stock-Music、ccMixter）的 mp3 要带来源页才给，也由服务器转
-  [/^https:\/\/(?:www\.free-stock-music\.com\/music|ccmixter\.org\/content)\/[^\s?#]+\.mp3$/,'CC 音乐','file-audio',function(m){return '/api/aud?u='+encodeURIComponent(m[0])}],
+  // CC 音乐站（Free-Stock-Music、ccMixter、Incompetech）的 mp3 要带来源页 / 改类型，也由服务器转
+  [/^https:\/\/(?:www\.free-stock-music\.com\/music|ccmixter\.org\/content|incompetech\.com\/music\/royalty-free\/mp3-royaltyfree)\/[^\s?#]+\.mp3$/,'CC 音乐','file-audio',function(m){return '/api/aud?u='+encodeURIComponent(m[0])}],
+  // 5sing、酷我的歌曲页，Bandcamp 曲目页加 #audio：服务器按 ID 现取带时效的音频地址再转
+  [/^https?:\/\/5sing\.kugou\.com\/(yc|fc|bz)\/(\d+)\.html/,'5sing','file-audio',function(m){return '/api/aud?fs='+m[1]+':'+m[2]}],
+  [/^https?:\/\/(?:www\.)?kuwo\.cn\/play_detail\/(\d+)/,'酷我','file-audio',function(m){return '/api/aud?kw='+m[1]}],
+  [/^https:\/\/([a-z0-9-]+)\.bandcamp\.com\/track\/([a-z0-9-]+)#audio$/,'Bandcamp','file-audio',function(m){return '/api/aud?bc='+m[1]+'/'+m[2]}],
   [/^https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV[0-9A-Za-z]{10})\/?(?:\?(?:[^#\s]*&)?p=(\d+))?/,'B 站','video',function(m){return 'https://player.bilibili.com/player.html?isOutside=true&bvid='+m[1]+'&p='+(m[2]||1)+'&high_quality=1&autoplay=1'}],
   [/^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/,'YouTube','video',function(m){return 'https://www.youtube-nocookie.com/embed/'+m[1]+'?autoplay=1&playsinline=1&rel=0'}],
   [/^https?:\/\/(?:www\.)?(?:dailymotion\.com\/video|dai\.ly)\/([a-z0-9]+)/i,'Dailymotion','video',function(m){return 'https://www.dailymotion.com/embed/video/'+m[1]+'?autoplay=1'}],
