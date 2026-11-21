@@ -56,7 +56,7 @@ function strictModel() {
 
 // answer(params) → 选哪个 optionId（默认「允许」）
 function startAgent(env, answer = () => 'allow') {
-  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'inherit'] });
+  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, MINI_SKILLS_DIR: '/nonexistent', ...env }, stdio: ['pipe', 'pipe', 'inherit'] });   // 默认不给技能（测技能的自己指目录）
   const updates = [], pend = new Map(), asks = [];
   let buf = '', id = 0;
   p.stdout.on('data', d => {
@@ -546,9 +546,9 @@ test('Mini agent：命令放进标明语言的代码块；按网页带来的设�
     const sys = m.reqs.map(q => q.messages[0].content);
     assert.match(sys[0], /标明语言的代码块.*一行一条/);
     assert.match(sys[0], /Windows 电脑.*PowerShell/);
-    assert.match(sys[1], /iPhone.*手机上的操作步骤.*先问电脑是 Mac、Windows 还是 Linux/);
-    assert.match(sys[2], /不知道用户用的什么设备.*先问/);
-    assert.match(sys[3], /不知道用户用的什么设备/);   // 认不得的设备名不写进提示词
+    assert.match(sys[1], /iPhone.*才先问一句/);
+    assert.doesNotMatch(sys[2], /设备|先问/);          // 不知道设备：不写
+    assert.doesNotMatch(sys[3], /nokia|设备/);         // 认不得的设备名不写进提示词
     assert.ok(sys.every(x => x.length < 360));
   } finally { a.stop(); m.srv.close(); }
 });
@@ -591,4 +591,144 @@ test('Mini：不同会话同时用不同家的模型——每家一个进程，�
     assert.deepEqual(again.items.map(x => x.kind === 'user' ? x.text : null).filter(Boolean), ['问 2']);
     again.unsubscribe(ws);
   } finally { await miShutdown(); A.srv.close(); B.srv.close(); }
+});
+
+// 假技能目录：claw-echo 把参数原样输出成一个 tv 代码块；claw-file 在清单里但 Mini 不给；claw-nojs 没有命令脚本
+function fakeSkills() {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-skills-'));
+  fs.writeFileSync(path.join(d, 'index.json'), JSON.stringify([{ name: 'claw-echo' }, { name: 'claw-file' }, { name: 'claw-nojs' }]));
+  for (const n of ['echo', 'file', 'nojs']) {
+    fs.mkdirSync(path.join(d, 'claw-' + n));
+    fs.writeFileSync(path.join(d, 'claw-' + n, 'SKILL.md'), `---\nname: claw-${n}\ndescription: ${n} 技能：用户说「回声」时使用。\n---\n\n# ${n}\n\n用法：~/.claclaw/bin/claw-${n} "词"，输出原样贴。\n`);
+    if (n !== 'nojs') fs.writeFileSync(path.join(d, 'claw-' + n, n + '.mjs'), 'const a = process.argv.slice(2); if (a[0] === "fail") { console.error("坏了"); process.exit(2); } console.log("```tv\\n" + JSON.stringify(a) + "\\n```");');
+  }
+  return d;
+}
+const toolsOf = ups => ups.filter(u => /^tool_call/.test(u.sessionUpdate));
+
+test('Mini 技能：能力够的模型拿到技能清单；写 claw 代码块 → 先读说明、再跑命令，结果交回模型接着答；代码块不显示，网页上是工具卡片', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), sk = fakeSkills();
+  const m = await fakeModel(['我查一下。\n```claw\nread claw-echo\n```', '```claw\n~/.claclaw/bin/claw-echo "四川 卫视" x\n```\n', '四川卫视：\n```tv\n["四川 卫视","x"]\n```']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'gemma-4-31b-it', MINI_MODEL: 'gemma-4-31b-it', MINI_SKILLS_DIR: sk });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const r = await say(a, n.sessionId, '看四川卫视');
+    assert.equal(r.result.stopReason, 'end_turn');
+    assert.equal(m.reqs.length, 3);
+    const sys = m.reqs[0].messages[0].content;
+    assert.match(sys, /- claw-echo：echo 技能：用户说「回声」时使用。/);
+    assert.doesNotMatch(sys, /claw-file|claw-nojs/);                         // 发文件不给、没脚本的不给
+    assert.match(sys, /不能操作用户的电脑（下面的技能除外）/);
+    const r2 = m.reqs[1].messages, r3 = m.reqs[2].messages;
+    assert.equal(r2.at(-2).role, 'assistant'); assert.match(r2.at(-2).content, /```claw\nread claw-echo/);
+    assert.match(r2.at(-1).content, /^\[技能结果\]\n\$ read claw-echo\n# echo\n\n用法：claw-echo "词"/);   // 说明里的 ~/.claclaw/bin/ 去掉
+    assert.match(r3.at(-1).content, /\$ ~\/\.claclaw\/bin\/claw-echo "四川 卫视" x\n```tv\n\["四川 卫视","x"\]\n```/);   // 参数按引号拆、不经 shell
+    const shown = textOf(a.updates);
+    assert.equal(shown, '我查一下。\n\n四川卫视：\n```tv\n["四川 卫视","x"]\n```');
+    const tc = toolsOf(a.updates);
+    assert.deepEqual(tc.map(u => [u.sessionUpdate, u.kind || '', u.status]), [['tool_call', 'read', 'in_progress'], ['tool_call_update', '', 'completed'], ['tool_call', 'execute', 'in_progress'], ['tool_call_update', '', 'completed']]);
+    assert.equal(tc[2].title, 'claw-echo');
+    const saved = JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8'));
+    assert.equal(saved.messages.at(-1).content, shown);                    // 存下的是用户看到的（下一轮模型看得到贴出来的结果）
+    assert.equal(saved.messages.at(-2).run.steps, 2);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini 技能：本机小模型（不到 7B）不给技能，claw 代码块照普通文字显示；没有的技能、命令失败都告诉模型', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), sk = fakeSkills();
+  const m = await fakeModel(['```claw\nclaw-nope x\nclaw-echo fail\n```', '没找到。']);
+  const small = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'qwen3:1.7b', MINI_MODEL: 'qwen3:1.7b', MINI_SKILLS_DIR: sk });
+  try {
+    await small.rpc('initialize', {});
+    const n = (await small.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(small, n.sessionId, '回声');
+    assert.doesNotMatch(m.reqs[0].messages[0].content, /claw-echo|技能/);
+    assert.equal(m.reqs.length, 1);
+    assert.match(textOf(small.updates), /```claw\nclaw-nope x/);
+    assert.equal(toolsOf(small.updates).length, 0);
+  } finally { small.stop(); }
+  const big = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'deepseek-v4-pro', MINI_MODEL: 'deepseek-v4-pro', MINI_SKILLS_DIR: sk });
+  try {
+    await big.rpc('initialize', {});
+    const n = (await big.rpc('session/new', { cwd: os.tmpdir() })).result;
+    m.reqs.length = 0;
+    await say(big, n.sessionId, '回声');
+    assert.equal(m.reqs.length, 2);
+    const res = m.reqs[1].messages.at(-1).content;
+    assert.match(res, /\$ claw-nope x\n没有这个技能：claw-nope。能用的：claw-echo/);
+    assert.match(res, /\$ claw-echo fail\n（没有输出）|\$ claw-echo fail\n\n（退出码 2：坏了）/);
+    assert.match(res, /\[claw-echo 的说明（你没读过，照里面的「怎么回复」回复）\]\n# echo/);   // 没读就跑：附上说明
+    assert.deepEqual(toolsOf(big.updates).filter(u => u.sessionUpdate === 'tool_call_update').map(u => u.status), ['failed', 'failed']);
+    assert.equal(textOf(big.updates), '没找到。');
+  } finally { big.stop(); m.srv.close(); }
+});
+
+test('Mini：设备只在知道时写一句，而且写明要给命令时才用', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeModel(['好']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'q1', MINI_MODEL: 'q1' });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await a.rpc('session/prompt', { sessionId: n.sessionId, prompt: [{ type: 'text', text: '测试' }] });
+    await a.rpc('session/prompt', { sessionId: n.sessionId, prompt: [{ type: 'text', text: '测试' }], _meta: { device: 'iphone' } });
+    assert.doesNotMatch(m.reqs[0].messages[0].content, /设备|先问/);
+    assert.match(m.reqs[1].messages[0].content, /iPhone.*只有要给电脑命令、又不知道电脑是什么系统时，才先问一句/);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini 技能：OpenAI 格式用原生工具调用（声明 claw 工具，tool_calls 拼参数），结果按 tool_call_id 发回；接口不收工具就退回 claw 代码块', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), sk = fakeSkills(), reqs = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      const j = JSON.parse(b); reqs.push(j);
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const w = o => res.write('data: ' + JSON.stringify(o) + '\n\n');
+      if (reqs.length === 1) {
+        w({ choices: [{ delta: { content: '稍等。' } }] });
+        w({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'claw', arguments: '' } }] } }] });
+        w({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"commands":["claw-ec' } }] } }] });
+        w({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: 'ho \\"a b\\""]}' } }] }, finish_reason: 'tool_calls' }] });
+      } else w({ choices: [{ delta: { content: '好了' }, finish_reason: 'stop' }] });
+      res.end('data: [DONE]\n\n');
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const a = startAgent({ MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', MINI_DIR: dir, MINI_MODELS: 'deepseek-flash', MINI_MODEL: 'deepseek-flash', MINI_SKILLS_DIR: sk });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a, n.sessionId, '回声 a b');
+    assert.equal(reqs.length, 2);
+    assert.equal(reqs[0].tools[0].function.name, 'claw');
+    assert.match(reqs[0].messages[0].content, /要用技能时调用 claw 工具/);
+    const [as, tool] = reqs[1].messages.slice(-2);
+    assert.deepEqual(as.tool_calls, [{ id: 'call_1', type: 'function', function: { name: 'claw', arguments: JSON.stringify({ commands: ['claw-echo "a b"'] }) } }]);
+    assert.equal(as.content, '稍等。');
+    assert.equal(tool.role, 'tool'); assert.equal(tool.tool_call_id, 'call_1');
+    assert.match(tool.content, /\$ claw-echo "a b"\n```tv\n\["a b"\]\n```/);
+    assert.equal(textOf(a.updates), '稍等。\n\n好了');
+  } finally { a.stop(); srv.close(); }
+});
+
+test('Mini：去掉调参重试时撞上 503（服务忙）：报这次的原话，调参不收照样记下', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), reqs = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      reqs.push(JSON.parse(b));
+      if (reqs.length === 1) { res.writeHead(400, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: 'Thinking budget is not supported for this model.' } })); }
+      res.writeHead(503, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }));
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const a = startAgent({ MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', MINI_DIR: dir, MINI_MODELS: 'q1', MINI_MODEL: 'q1' });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const r = await say(a, n.sessionId, '你好');
+    assert.match(r.error.message, /503：This model is currently experiencing high demand/);
+    assert.ok('temperature' in reqs[0] && !('temperature' in reqs[1]));
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).plain, true);
+  } finally { a.stop(); srv.close(); }
 });

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// 极简对话 agent（ACP，stdin/stdout 一行一条 JSON-RPC）：只问答，不调工具、不碰这台电脑上的文件和命令。
+// 极简对话 agent（ACP，stdin/stdout 一行一条 JSON-RPC）：问答为主，不碰这台电脑上的文件和任意命令；
+// 能力够的模型（名字里的参数量不到 7B 的本机小模型除外）还能用 claclaw 自带的技能（skills/，电视、听歌、视频、换肤……）：
+// 模型在回复里写 ```claw 代码块（read 技能名 / 技能命令），这边只认技能清单里的命令，不经 shell 直接用 node 跑技能脚本，结果再交给模型接着答。
 // 用途：拿模型库里的模型（尤其本地 Ollama）直接答疑，顺便看模型快不快、好不好用。
 // - 每轮请求只有一段很短的系统提示 + 对话本身，不带工具定义，首字最快
 // - 默认关思考（reasoning_effort=none）；会话设置里可以打开
@@ -9,6 +11,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { HOME, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
 
 const BASE = (process.env.MINI_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
@@ -20,6 +24,20 @@ const DEFAULT_MODEL = process.env.MINI_MODEL || MODELS[0] || 'qwen3:1.7b';
 const DIR = process.env.MINI_DIR || path.join(HOME, '.claclaw-mini', 'sessions');
 const BUDGET = Math.max(2000, Number(process.env.MINI_BUDGET) || 6000);
 const MAX_OUT = Math.max(256, Number(process.env.MINI_MAX_OUT) || 4096);   // 一次回复的 token 上限：小模型偶尔停不下来
+// 技能：skills/index.json 里登记的、有命令脚本的（找会话、发文件 Mini 用不上，不给）；MINI_SKILLS_DIR 可以改目录（测试用；指到没有的目录就是不给技能）
+const SKILLS_DIR = process.env.MINI_SKILLS_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
+const SKILL_SKIP = new Set(['claw-interconnect', 'claw-file']);
+const SKILLS = (() => {
+  let idx = []; try { idx = JSON.parse(fs.readFileSync(path.join(SKILLS_DIR, 'index.json'), 'utf8')); } catch {}
+  return (Array.isArray(idx) ? idx : []).filter(x => /^claw-[a-z0-9-]+$/.test(x?.name || '') && !SKILL_SKIP.has(x.name)).map(x => {
+    const dir = path.join(SKILLS_DIR, x.name), js = path.join(dir, x.name.slice(5) + '.mjs');
+    let md = ''; try { md = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8'); } catch {}
+    const desc = String(md.match(/^description:\s*(.+)$/m)?.[1] || x.desc || '').trim();
+    return md && fs.existsSync(js) ? { name: x.name, desc, js, md: md.replace(/^---[\s\S]*?---\s*/, '').trim() } : null;
+  }).filter(Boolean);
+})();
+const MAX_STEPS = 4;          // 一轮里最多用几次技能（每次一个 claw 代码块，最多 3 条命令）
+const SKILL_MS = 120000;      // 一条技能命令最多跑多久
 
 fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
 
@@ -78,17 +96,37 @@ const configOf = s => [
 
 // ---------- 提示词 ----------
 // 日期按天变、模型换了才变：前缀照样能复用。写明当前模型：会话中途换了模型，新模型会跟着历史里旧模型的自我介绍说（「我是通义千问」）
-// 命令要放进标了语言的代码块、一行一条（网页会给每条加复制图标、多条的能下载成脚本）；用户的设备由网页按浏览器判断后随消息带来（s.dev），放在最后，换设备才变
+// 命令要放进标了语言的代码块、一行一条（网页会给每条加复制图标、多条的能下载成脚本）；用户的设备由网页按浏览器判断后随消息带来（s.dev），放在最后，换设备才变。
+// 设备那句只在知道时写，并且写明「要给命令时」才用：不知道就不写（小模型会把「先问系统」当成每句话都要说的）
 const DEVICES = { mac: 'Mac 电脑', windows: 'Windows 电脑', linux: 'Linux 电脑', chromeos: 'Chromebook', iphone: 'iPhone', ipad: 'iPad', android: '安卓手机 / 平板', harmony: '鸿蒙手机' };
-const ASK_OS = '先问电脑是 Mac、Windows 还是 Linux（对话里说过就照说的给）';
-const devLine = d => !DEVICES[d] ? `不知道用户用的什么设备：要给电脑命令时${ASK_OS}。`
-  : /^(iphone|ipad|android|harmony)$/.test(d) ? `用户在用${DEVICES[d]}和你对话：手机上的事给手机上的操作步骤；要在电脑上做的，${ASK_OS}。`
-  : `用户在用${DEVICES[d]}和你对话：命令默认按这个系统给${d === 'windows' ? '（默认 PowerShell）' : ''}，用户说了别的系统就按说的给。`;
+const devLine = d => !DEVICES[d] ? ''
+  : /^(iphone|ipad|android|harmony)$/.test(d) ? `\n用户在用${DEVICES[d]}和你对话；只有要给电脑命令、又不知道电脑是什么系统时，才先问一句。`
+  : `\n用户在用${DEVICES[d]}和你对话；要给命令时按这个系统给${d === 'windows' ? '（默认 PowerShell）' : ''}，用户说了别的系统就按说的给。`;
+// 模型够不够用技能：名字里写了参数量、不到 7B 的（本机小模型）不给——跟不住「先读说明、再写命令、再按结果回复」这几步，技能清单还拖慢首字
+const sizeOf = m => { const x = /(\d+(?:\.\d+)?)b(?![a-z])/i.exec(String(m || '').replace(/^.*\//, '')); return x ? Number(x[1]) : null; };
+const skillsOn = s => { const n = sizeOf(s.model); return SKILLS.length > 0 && (n == null || n >= 7); };   // 没写参数量的（云上的大模型）算够
+// 怎么调技能：OpenAI 格式的接口用原生工具调用（声明一个 claw 工具；DeepSeek 这类不声明工具时会把自己的工具调用标记当文字写出来）；
+// 别的格式、或者接口不收工具（回 400 后 plain）就在回复里写 claw 代码块
+const nativeOn = s => FORMAT === 'openai' && skillsOn(s) && !s.plain;
+const CLAW_TOOL = { type: 'function', function: { name: 'claw', description: '运行 claclaw 技能：read 技能名（看它的说明），或者技能命令（以技能名开头、不写路径），一次最多 3 条',
+  parameters: { type: 'object', properties: { commands: { type: 'array', items: { type: 'string' }, description: '比如 ["read claw-tv"]、["claw-tv \\"四川卫视\\""]' } }, required: ['commands'] } } };
+const skillsText = s => `
+
+你还能用 claclaw 的技能：命令由 claclaw 在用户电脑上替你跑，结果再发给你。技能有：
+${SKILLS.map(k => '- ' + k.name + '：' + k.desc).join('\n')}
+${nativeOn(s) ? `要用技能时调用 claw 工具。第一次用某个技能先读它的说明（commands 写 ["read claw-tv"]），读过就照说明写命令（以技能名开头，不写路径），比如 ["claw-tv \\"四川卫视\\""]。` : `要用技能时，回复里写一个 claw 代码块就停下，等结果。第一次用某个技能先读它的说明：
+\`\`\`claw
+read claw-tv
+\`\`\`
+读过就照说明写命令（一行一条，最多 3 条，以技能名开头，不写路径），比如：
+\`\`\`claw
+claw-tv "四川卫视"
+\`\`\``}
+结果回来后照技能说明回复用户（要原样贴的代码块原样贴）。用不上技能就直接回答，不要提技能。`;
 const systemOf = s => `你是答疑助手，简洁回答；用户用什么语言就用什么语言。今天是 ${new Date().toLocaleDateString('sv')}。
-你不能上网，也不能操作用户的电脑；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
-命令放进标明语言的代码块（bash、powershell、cmd 等），一行一条，说明写在代码块外面。
-你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。
-${devLine(s.dev)}`;
+你不能上网，也不能操作用户的电脑${skillsOn(s) ? '（下面的技能除外）' : ''}；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
+要给命令时，放进标明语言的代码块（bash、powershell、cmd 等），一行一条，说明写在代码块外面。
+你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。${skillsOn(s) ? skillsText(s) : ''}${devLine(s.dev)}`;
 // 发给模型的历史：旧版本（还能调工具时）留下的工具标签和工具结果不发；空回复不发；
 // 去掉这些后相邻同角色的并成一条（有的接口不收连续两条 user / assistant），开头不能是 assistant
 const LEGACY_TOOL = /^\s*<(run|read|write)[\s>]/;
@@ -154,10 +192,13 @@ function reqOf(s, extra = []) {
       // thinkingBudget 0 = 关思考（关不掉的模型回 400，走 plain）
       generationConfig: { maxOutputTokens: MAX_OUT, ...(tune ? { temperature: 0.3, thinkingConfig: s.think ? { includeThoughts: true } : { thinkingBudget: 0 } } : {}) } },
   };
+  const native = nativeOn(s);
   return {
     url: BASE + '/chat/completions', headers: { authorization: 'Bearer ' + KEY },
-    body: { model: s.model, stream: true, stream_options: { include_usage: true }, max_tokens: MAX_OUT,
-      messages: [{ role: 'system', content: system }, ...msgs.map(x => x.images ? { role: x.role, content: [...(x.content ? [{ type: 'text', text: x.content }] : []), ...x.images.map(i => ({ type: 'image_url', image_url: { url: 'data:' + i.mime + ';base64,' + i.data } }))] } : { role: x.role, content: x.content })],
+    body: { model: s.model, stream: true, stream_options: { include_usage: true }, max_tokens: MAX_OUT, ...(native ? { tools: [CLAW_TOOL] } : {}),
+      // calls / tool：这一轮里原生调技能的来回（模型的 tool_calls、技能结果）
+      messages: [{ role: 'system', content: system }, ...msgs.map(x => x.calls ? { role: 'assistant', content: x.content || null, tool_calls: x.calls.map(c => ({ id: c.id, type: 'function', function: { name: 'claw', arguments: JSON.stringify({ commands: c.lines }) } })) }
+        : x.role === 'tool' ? { role: 'tool', tool_call_id: x.toolId, content: x.content } : x.images ? { role: x.role, content: [...(x.content ? [{ type: 'text', text: x.content }] : []), ...x.images.map(i => ({ type: 'image_url', image_url: { url: 'data:' + i.mime + ';base64,' + i.data } }))] } : { role: x.role, content: x.content })],
       ...(tune ? { temperature: 0.3 } : {}),
       ...(s.think || s.noOff || !tune ? {} : { reasoning_effort: 'none' }) },   // noOff：这个模型关不掉思考（见 clean），不发 none，让服务端自己把思考分出去
   };
@@ -200,7 +241,7 @@ function pieceOf(j) {
       stop: stopOf(c?.finishReason || j.promptFeedback?.blockReason) };
   }
   const dl = j.choices?.[0]?.delta;
-  return { text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), tt: String(dl?.reasoning || dl?.reasoning_content || ''), usage: j.usage ? { in: j.usage.prompt_tokens, cr: j.usage.prompt_tokens_details?.cached_tokens, out: j.usage.completion_tokens, think: j.usage.completion_tokens_details?.reasoning_tokens } : null,
+  return { calls: Array.isArray(dl?.tool_calls) ? dl.tool_calls : null, text: dl?.content || '', thought: !!(dl?.reasoning || dl?.reasoning_content), tt: String(dl?.reasoning || dl?.reasoning_content || ''), usage: j.usage ? { in: j.usage.prompt_tokens, cr: j.usage.prompt_tokens_details?.cached_tokens, out: j.usage.completion_tokens, think: j.usage.completion_tokens_details?.reasoning_tokens } : null,
     stop: stopOf(j.choices?.[0]?.finish_reason) };
 }
 // 各家的结束原因 → 'stop'（正常写完）| 'length'（到了输出上限，没写完）| 其他原样（被过滤拦下之类：RECITATION / SAFETY / content_filter / refusal…）
@@ -251,12 +292,16 @@ async function chat(s, signal, onText, onThought, extra, calls = []) {
       s.plain = true;
       call = { at: Date.now(), retry: true, req: reqRec(reqOf(s, extra)) }; calls.push(call);
       r = await post(s, signal, extra);
-      if (!r.ok) { s.plain = false; call.status = r.status; call.body = (await r.text().catch(() => '')).slice(0, 4000); throw new Error(errOf(400, first) + imgHint(400, call)); }
+      if (!r.ok) {   // 重试还是 400：不是调参的事，换回来、报第一次的原话；别的错（503 忙、429 超额）：调参确实不收，记下，报这次的原话
+        const b2 = await r.text().catch(() => ''); call.status = r.status; call.body = b2.slice(0, 4000);
+        if (r.status === 400) { s.plain = false; throw new Error(errOf(400, first) + imgHint(400, call)); }
+        throw new Error(errOf(r.status, b2, r.headers) + imgHint(r.status, call));
+      }
     }
     call.status = r.status; call.plain = !!s.plain;
     if (!r.ok) { const b = await r.text(); call.body = b.slice(0, 4000); throw new Error(errOf(r.status, b, r.headers) + imgHint(r.status, call)); }   // body：服务返回的原文，给解剖看
   } catch (e) { fail(call, e); throw e; }
-  let text = '', tt = '', buf = '', first = 0, stop = null;   // first：第一个字（含思考）到达的时刻；text / tt 是模型原样的输出和思考（不剥标签），记进 calls 给解剖看
+  let text = '', tt = '', buf = '', first = 0, stop = null; const tc = [];   // tc：原生工具调用（按 index 拼参数）   // first：第一个字（含思考）到达的时刻；text / tt 是模型原样的输出和思考（不剥标签），记进 calls 给解剖看
   const u = {};
   const dec = new TextDecoder();
   try {
@@ -272,7 +317,8 @@ async function chat(s, signal, onText, onThought, extra, calls = []) {
         const x = pieceOf(j);
         if (x.usage) for (const k of ['in', 'cr', 'cw', 'out', 'think']) if (x.usage[k] != null) u[k] = x.usage[k];
         if (x.stop) stop = x.stop;
-        if ((x.text || x.thought) && !first) first = Date.now();
+        if (x.calls) for (const c of x.calls) { const t = tc[c.index ?? 0] ||= { id: '', name: '', args: '' }; if (c.id) t.id = c.id; if (c.function?.name) t.name = c.function.name; if (c.function?.arguments) t.args += c.function.arguments; }
+        if ((x.text || x.thought || x.calls) && !first) first = Date.now();
         if (x.thought) { tt += x.tt || ''; onThought(); }
         if (x.text) { text += x.text; onText(text); }
       }
@@ -280,7 +326,8 @@ async function chat(s, signal, onText, onThought, extra, calls = []) {
   } catch (e) { Object.assign(call, usageRec(u), { chars: clean(text).length }, rawRec(text, tt)); fail(call, e); throw e; }
   const end = Date.now();
   Object.assign(call, { ms: end - call.at, ttftMs: first ? first - call.at : null, ...usageRec(u), stop, chars: clean(text).length, ...rawRec(text, tt) });
-  return { text: clean(text), tin: u.in || 0, tout: u.out || 0, leaked: text.includes('</think>'), stop, t0, first, end };
+  if (tc.length) call.calls = tc.filter(Boolean).map(t => ({ name: t.name, args: t.args.slice(0, 2000) }));
+  return { text: clean(text), calls: tc.filter(Boolean), tin: u.in || 0, tout: u.out || 0, leaked: text.includes('</think>'), stop, t0, first, end };
 }
 // 带了图、服务说请求不对（400 / 413 / 415 / 422）：多半是这个模型不收图或者图太大
 const imgHint = (st, c) => c.req?.imgs && [400, 413, 415, 422].includes(st) ? '（这次带了图：这个模型可能不收图片，或者图太大，换个能看图的模型试试）' : '';
@@ -288,6 +335,84 @@ const imgHint = (st, c) => c.req?.imgs && [400, 413, 415, 422].includes(st) ? '�
 const rawRec = (text, tt) => ({ ...(text ? { text } : {}), ...(tt ? { thought: tt } : {}) });
 // 用量 → 记录里的字段：inp 是输入合计（含缓存）；没报的项不写
 const usageRec = u => Object.fromEntries([['inp', u.in], ['cr', u.cr], ['cw', u.cw], ['out', u.out], ['think', u.think]].filter(([, v]) => v != null));
+
+// ---------- 技能 ----------
+// 回复里的 ```claw 代码块：写完的（有收尾）或写到最后没收尾的；流式显示时从代码块开头（含正在写的 ``` 开头）起先不显示
+const CLAW_RE = /(^|\n)```claw[^\n]*\n([\s\S]*?)(?:\n```[^\n]*(?:\n|$)|$)/;
+function clawBlock(t) {
+  const m = CLAW_RE.exec(t);
+  if (!m) return null;
+  const lines = m[2].split('\n').map(x => x.trim()).filter(x => x && !x.startsWith('#')).slice(0, 3);
+  return lines.length ? { at: m.index + m[1].length, end: m.index + m[0].length, lines } : null;
+}
+// 原生调的 claw 工具 → 和代码块一样的 { lines }，多带 id（结果按 id 发回去）；同时调了几次只认第一次
+function nativeBlock(r, step) {
+  const c = r.calls?.find(x => x.name === 'claw');
+  if (!c) return null;
+  let a = {}; try { a = JSON.parse(c.args || '{}'); } catch {}
+  const v = Array.isArray(a.commands) ? a.commands : String(a.commands || a.command || '').split('\n');
+  return { id: c.id || 'call_' + step, at: r.text.length, end: r.text.length, lines: v.map(x => String(x).trim()).filter(Boolean).slice(0, 3) };
+}
+function hideClaw(t) {
+  const i = t.search(/(^|\n)```claw/);
+  if (i >= 0) return t.slice(0, i);
+  const m = /(^|\n)(`{1,3}(?:c(?:l(?:a(?:w)?)?)?)?)$/.exec(t);
+  return m ? t.slice(0, m.index) : t;
+}
+// 命令行拆参数：空白分隔，'…' "…" 里的原样（"…" 里认 \" \\），不经 shell
+function argsOf(line) {
+  const out = []; let cur = '', q = '', any = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) { if (c === q) q = ''; else if (q === '"' && c === '\\' && /["\\]/.test(line[i + 1] || '')) cur += line[++i]; else cur += c; }
+    else if (c === '"' || c === "'") { q = c; any = true; }
+    else if (/\s/.test(c)) { if (cur || any) out.push(cur); cur = ''; any = false; }
+    else cur += c;
+  }
+  if (cur || any) out.push(cur);
+  return out;
+}
+const skillOf = name => SKILLS.find(k => k.name === String(name || '').replace(/^.*\//, '').replace(/\.(cmd|mjs)$/, '')) || null;
+const cap = (t, n) => t.length > n ? t.slice(0, n) + '\n…（后面还有 ' + (t.length - n) + ' 字，没给出）' : t;
+// 跑一条技能命令：用这个进程的 node 直接跑技能脚本（和 ~/.claclaw/bin/ 下的命令一样），参数原样传，超时、停止都会杀掉
+function runSkill(k, args, signal) {
+  return new Promise(res => {
+    let out = '', err = '', done = false;
+    const p = spawn(process.execPath, [k.js, ...args], { cwd: HOME, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
+    const fin = code => { if (done) return; done = true; clearTimeout(to); signal?.removeEventListener?.('abort', kill); res({ code, out, err }); };
+    const kill = () => { try { p.kill('SIGKILL'); } catch {} };
+    const to = setTimeout(() => { err += '\n（超过 ' + SKILL_MS / 1000 + ' 秒，停掉了）'; kill(); }, SKILL_MS);
+    signal?.addEventListener?.('abort', kill, { once: true });
+    p.stdout.on('data', d => { if (out.length < 200000) out += d; });
+    p.stderr.on('data', d => { if (err.length < 20000) err += d; });
+    p.on('error', e => { err += e.message; fin(-1); });
+    p.on('close', code => fin(code));
+  });
+}
+// 一个 claw 代码块：一条条跑（read 技能名 = 给它的说明），网页上每条显示成一张工具卡片；返回发给模型的结果。
+// seen：这一轮里给过说明的技能。没读说明就直接跑命令的（有的模型不听「先读」），结果后面附上说明，让它照「怎么回复」贴
+async function runClaw(s, lines, signal, seen = new Set()) {
+  const outs = [], docs = [];
+  for (const line of lines) {
+    const a = argsOf(line), id = 'claw-' + crypto.randomUUID().slice(0, 8);
+    const read = /^read$/i.test(a[0] || ''), k = skillOf(read ? a[1] : a[0]);
+    update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: k ? k.name : 'claw', kind: read ? 'read' : 'execute', status: 'in_progress', rawInput: { command: line } });
+    let text, ok = true;
+    if (!k) { ok = false; text = '没有这个技能：' + (read ? a[1] : a[0]) + '。能用的：' + SKILLS.map(x => x.name).join('、'); }
+    else if (read) { text = k.md.replace(/~\/\.claclaw\/bin\//g, ''); seen.add(k.name); }
+    else {
+      if (!seen.has(k.name)) { seen.add(k.name); docs.push(k); }
+      const r = await runSkill(k, a.slice(1), signal);
+      if (signal?.aborted) { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed' }); throw Object.assign(new Error('cancelled'), { name: 'AbortError' }); }
+      ok = r.code === 0;
+      text = cap(r.out.trim(), 12000) + (ok ? '' : '\n（退出码 ' + r.code + (r.err.trim() ? '：' + cap(r.err.trim(), 1500) : '') + '）');
+    }
+    update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(text, 4000) } }] });
+    outs.push('$ ' + line + '\n' + (text || '（没有输出）'));
+  }
+  const doc = docs.map(k => '\n\n[' + k.name + ' 的说明（你没读过，照里面的「怎么回复」回复）]\n' + k.md.replace(/~\/\.claclaw\/bin\//g, '')).join('');
+  return '[技能结果]\n' + outs.join('\n\n') + doc + '\n\n照技能说明回复用户；还要用技能就再写一个 claw 代码块。';
+}
 
 // ---------- 一轮 ----------
 // 回复到了输出上限（没写完）就自动接着写，最多 MAX_PARTS 段，拼成同一条回复
@@ -306,7 +431,8 @@ async function prompt(s, text, images = []) {
   const um = { role: 'user', content: text, ...(images.length ? { images: images.map(i => saveImg(s.id, i.mime, i.data)) } : {}), at: Date.now() };
   s.messages.push(um);
   if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50) || '图片'; update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
-  let full = '', parts = 0;
+  let full = '', parts = 0, steps = 0, seg = '';   // seg：上次用技能之后写的（到了长度上限接着写时整段发回去）
+  const skills = skillsOn(s), ex = [], seen = new Set();                 // ex：这一轮里用技能的来回（模型写的 claw 代码块、技能结果）
   const say = t => update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
   let kept = false;
   const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, at: Date.now(), ...(parts > 1 ? { parts } : {}) }); } };
@@ -315,24 +441,42 @@ async function prompt(s, text, images = []) {
     // 这一轮怎么答的（给会话解剖、调 Mini 用）：用的哪个模型、什么接口和参数、发了几条历史、丢了几条、系统提示，以及每次请求的明细
     const run = um.run = { model: s.model, api: FORMAT, host: hostOf(BASE), think: !!s.think, noOff: !!s.noOff, maxOut: MAX_OUT, sys: systemOf(s), sent: history(s).length, dropped: s.from, calls: [] };
     let tin = 0, tout = 0, gen = 0, t0 = 0, first = 0, end = 0, stop = null;
+    let after = false;   // 上一次是用技能：这一段和前面写的之间空一行
     while (parts < MAX_PARTS) {
       parts++;
-      const base = full, extra = base ? [{ role: 'assistant', content: base }, { role: 'user', content: CONTINUE }] : [];
+      const base = full, extra = [...ex, ...(seg ? [{ role: 'assistant', content: seg }, { role: 'user', content: CONTINUE }] : [])];
+      const glue = t => { if (!base) return t.replace(/^\s+/, ''); return base + (after && t && !/\n\s*$/.test(base) ? '\n\n' : '') + t; };   // 开头的空行不要
+      const vis = t => skills ? hideClaw(t) : t;
       let sent = base.length, cut = false;
       const r = await chat(s, ac.signal, raw => {
-        const now = base + clean(raw);
+        const now = glue(vis(clean(raw)));
         if (!cut && raw.includes('</think>')) { cut = true; sent = base.length; }   // 刚发现思考混在正文里：已经流出去的没法收回，从这一段开头重新算
         if (now.length > sent) { say(now.slice(sent)); sent = now.length; }
       }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }), extra, run.calls);
       if (r.leaked && !s.noOff && !s.think) s.noOff = true;
-      full = base + r.text;
+      const blk = skills && steps < MAX_STEPS ? nativeBlock(r, steps) || clawBlock(r.text) : null;
+      if (blk) {   // 用技能：代码块前面写的照常显示；跑完把结果交给模型接着写（不算「接着写」的段数）
+        steps++; parts--;
+        full = glue(r.text.slice(0, blk.at).replace(/\s+$/, ''));
+        if (full.length > sent) say(full.slice(sent));
+        const res = await runClaw(s, blk.lines, ac.signal, seen);
+        if (blk.id) ex.push({ role: 'assistant', content: (seg + r.text).trim(), calls: [{ id: blk.id, lines: blk.lines }] }, { role: 'tool', toolId: blk.id, content: res });
+        else ex.push({ role: 'assistant', content: seg + r.text.slice(0, blk.end).replace(/\s+$/, '') }, { role: 'user', content: res });
+        seg = ''; after = true;
+        if (!t0) { t0 = r.t0; first = r.first; }
+        tin = r.tin || tin; tout += r.tout; end = r.end;
+        if (r.first) gen += (r.end - r.first) / 1000;
+        continue;
+      }
+      const txt = skills ? r.text.replace(/(^|\n)```claw[\s\S]*?(?:\n```[^\n]*|$)/g, '$1').replace(/\s+$/, '') : r.text;   // 技能用满了还写 claw 块：不显示
+      full = glue(txt); seg += r.text; after = false;
       if (full.length > sent) say(full.slice(sent));
       if (!t0) { t0 = r.t0; first = r.first; }
       tin = r.tin || tin; tout += r.tout; end = r.end; stop = r.stop;
       if (r.first) gen += (r.end - r.first) / 1000;
       if (stop !== 'length' || !r.text) break;
     }
-    Object.assign(run, { endAt: Date.now(), parts, stop, ...(noteOf(stop) ? { note: noteOf(stop) } : {}) });
+    Object.assign(run, { endAt: Date.now(), parts, stop, ...(steps ? { steps } : {}), ...(noteOf(stop) ? { note: noteOf(stop) } : {}) });
     keep(); save(s);
     // 生成速度只算第一个字之后的；输出太短（< 8 tok）算出的速度没意义，不报；没有 usage 的服务不报速度（估出来的不准，调试时会误导）
     const stats = { model: s.model, ttft: first ? (first - t0) / 1000 : null, outTokens: tout || null, tps: tout >= 8 && gen > 0.05 ? tout / gen : null, total: (end - t0) / 1000,
