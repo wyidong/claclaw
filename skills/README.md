@@ -32,7 +32,9 @@ skills/
   - `group`：技能大组，技能页按它分组显示。现有「通用」（interconnect、file、theme）、「影音」（video、music、audio、movie、image、tv）。
   - `claws`：默认写全部会跑命令的 Claw（claude deepseek opencode kimi qwen codex openclaw glm iflow minimax codebuddy qoder copilot）。
   - `auto`：默认写全部四个安装位置（claude agents iflow codebuddy），用到哪个 Claw 就自动装到哪。
-  - kuAi 不用安装：能力够的模型（名字里的参数量不到 7B 的本机小模型除外）直接读仓库里的 SKILL.md、用 node 跑命令脚本（找会话、发文件除外），所以命令要能单独跑、输出能原样贴。
+  - kuAi 不用安装：直接读仓库里的 SKILL.md、用 node 跑命令脚本（找会话、发文件除外），所以命令要能单独跑、输出能原样贴。新技能要在 `skills/kuai.json` 加一条：
+    - `brief`：一句话（40 字以内）。能力够的模型拿到的技能清单里只写这一句，完整的说明等它读 SKILL.md 时才给（清单全量列出要一千多 token）。
+    - `fill`：给小模型用的「填空」定义。小模型跟不住「自己选技能、自己写命令」，所以由程序按关键词（`when` / `not`）认出用户想用这个技能，模型只把参数（`slots`）填进固定的 JSON，程序校验后按 `args` 拼命令、跑、把输出贴出来。字段说明在 `src/claws/kuai-fill.mjs` 开头；例子（`examples`）里的参数必须是那句话里的原文。
 - **同步**：改了 `skills/` 下的文件不用手动重装。claclaw 启动时按内容哈希，把各 Claw 目录里的复制件同步成新版。
 - **复制件只给 AI 看 SKILL.md**：命令总是由 `~/.claclaw/bin/` 跑仓库里的脚本，所以脚本可以用相对路径引 `../_lib/`。
 

@@ -3,7 +3,8 @@
 // - 会话：agent 把每个会话存成 data/kuai-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
 // - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商，每家各起一个进程，会话各走各的（同一个群里几个会话可以同时用不同家的模型）；本机地址（127.0.0.1 / localhost）的排最前；
 //   会话走哪家记在 data/kuai-route.json 的 sessions（没记的按会话的模型认，认不出走默认那家）；provider 是新会话默认走的（最近选的那家）
-// - 能力档：到 L2 的模型才给技能和命令（kuai-profiles.mjs）；模型库里每个模型可以手动设（tier），随 KUAI_MODEL_INFO 传给 agent
+// - 能力档（kuai-profiles.mjs）：L1 程序代填参数跑技能，到 L2 的模型自己用技能和命令；模型库里每个模型可以手动设（tier），随 KUAI_MODEL_INFO 传给 agent；
+//   没设的按上岗小测验的结果（本机的模型 agent 自己在后台测，云上的在模型管理里点「测一下」→ kuQuizStart），都没有才按参数量估
 // - 改名：agent 没有接口，名字记在 claclaw 这边；删除：把会话文件挪进回收站
 // 网页里 kuAi 会话的 id = 'ku:' + 会话 id（UUID）。
 import fs from 'node:fs';
@@ -22,7 +23,7 @@ const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 const AGENT_JS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'kuai-agent.mjs');
 const SESSIONS = path.join(DATA, 'kuai-sessions');
 const ROUTE_FILE = path.join(DATA, 'kuai-route.json');
-const LEARN_FILE = path.join(DATA, 'kuai-models.json');   // agent 按模型记下试出来的特性（关不掉思考、不收调参、实际窗口）
+const LEARN_FILE = path.join(DATA, 'kuai-models.json');   // agent 按模型记下试出来的特性（关不掉思考、不收调参、实际窗口）和小测验的结果
 const FMTS = ['openai', 'anthropic', 'gemini'];   // 一家有几种接口时按这个顺序挑
 const epOf = x => x.p.endpoints[x.fmt];
 const LOCAL = /^(127\.|localhost$|\[?::1\]?$)/;
@@ -130,6 +131,8 @@ function agentFor(pid) {
   let ag = agents.get(pid);
   if (!ag) {
     ag = new AcpAgent({ name: 'kuAi', bin: () => process.execPath, missing: '没找到 node', command: bin => [bin, [AGENT_JS]], prepare: () => routeEnv(pid) });
+    const notify = ag.onNotify.bind(ag);
+    ag.onNotify = m => m.method === '_kuai/quiz' ? onQuiz(pid, m.params || {}) : notify(m);   // 小测验的进度
     agents.set(pid, ag);
   }
   return ag;
@@ -137,6 +140,42 @@ function agentFor(pid) {
 export const kuShutdown = () => Promise.all([...agents.values()].map(ag => ag.stop()));
 export function kuModelsChanged(log) { for (const [pid, ag] of agents) ag.modelsChanged(routeEnv(pid).sig, log); }
 export const kuAcpRunning = () => [...agents.values()].some(ag => ag.running);
+
+// ---------- 上岗小测验 ----------
+// 测的是 agent（它有 key、知道怎么发请求）；这边只管发起、记进度，结果由 agent 写进 LEARN_FILE。
+const quizState = new Map();   // '供应商 id|模型' → { state: running | stopped | error, done, of, name, error }；测完的不留（结果在 LEARN_FILE 里）
+function onQuiz(pid, p) {
+  const key = pid + '|' + String(p.model || '');
+  if (p.state === 'done') quizState.delete(key);
+  else quizState.set(key, { state: p.state, ...(p.state === 'running' ? { done: Number(p.done) || 0, of: Number(p.of) || 0, name: String(p.name || '') } : {}), ...(p.error ? { error: String(p.error).slice(0, 300) } : {}) });
+}
+// 模型管理里点「测一下」：起好那家的进程，开始测就返回（本机小模型要测几分钟，网页自己轮询进度）
+export async function kuQuizStart(pid, model, log) {
+  const hit = libOf(storeNow()).find(x => x.p.id === pid && x.m.id === model);
+  if (!hit) throw Object.assign(new Error('kuAi 用不了这个模型（模型库里没有，或者它的接口格式 kuAi 不支持）'), { user: true });
+  const key = pid + '|' + model;
+  if (quizState.get(key)?.state === 'running') return;
+  const ag = agentFor(pid);
+  await ag.use(log);
+  quizState.set(key, { state: 'running', done: 0, of: 0, name: '' });
+  log?.('kuai quiz start', pid, model);
+  ag.rpc('_kuai/quiz', { model }).then(q => log?.('kuai quiz done', pid, model, 'L' + q?.tier), e => {
+    log?.('kuai quiz failed', pid, model, e.message);
+    if (quizState.get(key)?.state === 'running') quizState.set(key, { state: 'error', error: String(e.message).slice(0, 300) });   // 进程没了之类：agent 来不及报
+  }).finally(() => ag.idleCheck());
+}
+// 模型库里每个模型在 kuAi 这边的情况（给模型管理页）：{ 供应商 id: { 模型: { quiz: { tier, pass, of, at, each（每题过没过）, slow（因为太慢没过的题） }, run: { state, done, of, name, error } } } }
+export function kuModelNotes(store = storeNow()) {
+  const learned = readJson(LEARN_FILE, {}), out = {};
+  for (const x of libOf(store)) {
+    const host = hostOf(baseOf(x.fmt, epOf(x))), q = learned?.[host + '|' + x.m.id]?.quiz, run = quizState.get(x.p.id + '|' + x.m.id);
+    const each = q?.at && q.pass && typeof q.pass === 'object' ? q.pass : null;
+    if (run?.state === 'running' && !agents.get(x.p.id)?.running) quizState.delete(x.p.id + '|' + x.m.id);   // 测到一半进程没了（空闲关掉、claclaw 重启）
+    const note = { ...(each ? { quiz: { tier: q.tier, pass: Object.values(each).filter(v => v === true).length, of: Object.keys(each).length, at: q.at, each, ...(Array.isArray(q.slow) && q.slow.length ? { slow: q.slow } : {}) } } : {}), ...(quizState.has(x.p.id + '|' + x.m.id) ? { run } : {}) };
+    if (Object.keys(note).length) (out[x.p.id] ||= {})[x.m.id] = note;
+  }
+  return out;
+}
 
 export const COMMANDS = [
   { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
@@ -180,6 +219,7 @@ export class KuRunner extends AcpRunner {
     if (!st || this.replaying || this.closed) return;
     this.closeText();
     if (st.note) this.emit({ t: 'sys', text: '⚠️ ' + st.note });   // 没写完 / 被拦下：写明原因
+    for (const t of Array.isArray(st.info) ? st.info : []) this.emit({ t: 'sys', text: 'ℹ️ ' + String(t) });   // 小测验测完了、这个会话降了档
     this.emit({ t: 'sys', text: statsLine(st) });
   }
 
@@ -231,7 +271,8 @@ export class KuRunner extends AcpRunner {
 const num = (x, d) => Number(x).toFixed(d);
 export function statsLine(st) {
   const parts = [st.model || 'kuAi'];
-  if (st.ttft == null) parts.push('没有输出');
+  if (st.fill) parts.push('程序代跑 ' + st.fill);   // L1：模型只填了参数（或者参数由程序定，没问模型），结果是技能直接给的
+  else if (st.ttft == null) parts.push('没有输出');
   else parts.push('首字 ' + num(st.ttft, st.ttft < 10 ? 2 : 1) + ' 秒');
   if (st.tps) parts.push(num(st.tps, st.tps < 10 ? 1 : 0) + ' tok/s');
   if (st.outTokens) parts.push('输出 ' + st.outTokens + ' tok');

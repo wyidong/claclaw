@@ -78,13 +78,14 @@ export function profileOf({ model, format = 'openai', host = '' } = {}) {
 
 // ---------- 能力档 ----------
 // L0 问答 · L1 填空（程序认意图、模型只填参数）· L2 单工具（技能 + 白名单命令）· L3 只读多步 · L4 动手 · L5 规划
-// 现在做出来的只有 L0 和 L2：不到 L2 的只问答，L2 以上的都按 L2 给。
+// 现在做出来的是 L0、L1、L2：L2 以上的都按 L2 给。
 export const TIER_NAMES = ['问答', '填空', '单工具', '只读多步', '动手', '规划'];
 export const TIER_AUTO_MAX = 3;   // 自动最多定到 L3，往上要用户在模型库里打开
-// 没有实测（上岗小测验还没做）时按参数量和家族给初值：
+export const TIER_BUILT = 2;      // 现在做出来的最高一档（再高的都按它给）
+// 没有实测（上岗小测验 kuai-quiz.mjs 还没跑过）时按参数量和家族给初值：
 //   没写参数量的当云上的模型 → L3；不到 1.5B → L0；不到 7B → L1；不到 24B → L2；再大 → L3。
 //   Gemma 多步明显弱（BFCL：Gemma-3-27B 多步 10.8%，不如 Qwen3-4B 的 22%），封在 L2。
-//   Qwen3 4B–8B 单步有 86–88%，够 L2，但小模型要等小测验通过才自动放开；现在想用就在模型库里手动设。
+//   Qwen3 4B–8B 单步有 86–88%，够 L2，但小模型要等小测验通过才自动放开（本机的模型用过一次后自己在后台测）。
 export function autoTier({ model, size = sizeOf(model) } = {}) {
   const family = familyOf(model);
   if (size == null) return { tier: TIER_AUTO_MAX, why: '没写参数量，按云上的模型算' };
@@ -95,10 +96,11 @@ export function autoTier({ model, size = sizeOf(model) } = {}) {
 }
 // 窗口允许到哪一档：L2 要 8k，L3 要 16k，L4 要 64k，L5 要 128k；不知道窗口就不限
 export const windowTier = ctx => !(ctx > 0) ? 5 : ctx < 8000 ? 1 : ctx < 16000 ? 2 : ctx < 64000 ? 3 : ctx < 128000 ? 4 : 5;
-// 档位 = min(能力档, 窗口允许的档)。能力档：用户在模型库里设的优先，没设就自动
-export function tierOf({ model, size, user, ctx } = {}) {
+// 档位 = min(能力档, 窗口允许的档)。能力档：用户在模型库里设的 > 小测验测出来的（quiz：{ tier, pass, of }）> 按参数量和家族估的
+export function tierOf({ model, size, user, quiz, ctx } = {}) {
   const u = Number.isInteger(user) && user >= 0 && user <= 5 ? user : null;
-  const a = u != null ? { tier: u, why: '模型库里设的' } : autoTier({ model, size });
+  const q = quiz && Number.isInteger(quiz.tier) ? { tier: Math.max(0, Math.min(quiz.tier, TIER_AUTO_MAX)), why: '小测验 ' + quiz.pass + '/' + quiz.of } : null;
+  const a = u != null ? { tier: u, why: '模型库里设的' } : q || autoTier({ model, size });
   const w = windowTier(ctx);
   return w < a.tier ? { tier: w, why: '窗口只有 ' + Math.round(ctx / 1000) + 'k', auto: u == null } : { ...a, auto: u == null };
 }

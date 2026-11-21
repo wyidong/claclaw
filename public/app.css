@@ -1354,6 +1354,9 @@ textarea.md-in:focus-visible{outline:none}
 .h-row.md-swrow{cursor:pointer}
 .h-row.md-swrow .k{flex:1;min-width:0}
 .md-swrow .k small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.md-qz{flex:none;height:34px;padding:0 14px;border:0;border-radius:10px;background:var(--bg);color:var(--accent);font:inherit;font-size:14px;font-weight:500;cursor:pointer}   /* 模型详情里 kuAi 小测验的「测一下」 */
+.md-qz:active{opacity:.6}
+.md-qz:disabled{opacity:.5;cursor:default}
 .md-sw{flex:none;-webkit-appearance:none;appearance:none;position:relative;width:46px;height:28px;margin:0;border-radius:14px;background:var(--line);cursor:pointer;transition:background .2s}
 .md-sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
 .md-sw:checked{background:var(--allow,var(--accent))}

@@ -24,7 +24,7 @@ import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmA
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './src/claws/qwen.mjs';
 import { isCx, CxRunner, cxRunners, cxSessionList, cxNewSession, cxShutdown, cxAcpRunning, cxInfo, cxExists, cxDelete, cxInstalled, cxSupported, cxUnsupportedReason, cxRename, cxModelsChanged } from './src/claws/codex.mjs';
 import { isGl, GlRunner, glRunners, glSessionList, glNewSession, glShutdown, glAcpRunning, glInfo, glExists, glDelete, glInstalled, glRename, glModelsChanged } from './src/claws/glm.mjs';
-import { isKu, KuRunner, kuRunners, kuSessionList, kuNewSession, kuShutdown, kuAcpRunning, kuInfo, kuExists, kuDelete, kuInstalled, kuRename, kuModelsChanged } from './src/claws/kuai.mjs';
+import { isKu, KuRunner, kuRunners, kuSessionList, kuNewSession, kuShutdown, kuAcpRunning, kuInfo, kuExists, kuDelete, kuInstalled, kuRename, kuModelsChanged, kuQuizStart, kuModelNotes } from './src/claws/kuai.mjs';
 import { isIf, IfRunner, ifRunners, ifSessionList, ifNewSession, ifShutdown, ifAcpRunning, ifInfo, ifExists, ifDelete, ifInstalled, ifRename, ifModelsChanged } from './src/claws/iflow.mjs';
 import { isMm, MmRunner, mmRunners, mmSessionList, mmNewSession, mmShutdown, mmAcpRunning, mmInfo, mmExists, mmDelete, mmInstalled, mmSupported, mmUnsupportedReason, mmRename, mmModelsChanged } from './src/claws/minimax.mjs';
 import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbAcpRunning, cbInfo, cbExists, cbDelete, cbInstalled, cbRename, cbModelsChanged } from './src/claws/codebuddy.mjs';
@@ -2759,6 +2759,11 @@ const handler = async (req, res) => {
             return sendJson(res, 200, { models });
           } catch (e) { if (e.user) { log('models fetch', p.id, 'failed:', e.message); return sendJson(res, 400, { error: e.message }); } throw e; }
         }
+        if (body.op === 'model-quiz') {   // kuAi 的上岗小测验：开始测就返回，进度和结果在 GET 的 kuai 里
+          try { await kuQuizStart(String(body.provider || ''), String(body.id || ''), log); }
+          catch (e) { log('models quiz', String(body.id || '').slice(0, 60), 'failed:', e.message); return sendJson(res, 400, { error: e.user ? e.message : '没测成：' + e.message }); }
+          return sendJson(res, 200, { ...modelsPublic(store), kuai: kuModelNotes() });
+        }
         let r;
         try { r = modelOp(store, body); } catch (e) { if (e.user) return sendJson(res, 400, { error: e.message }); throw e; }
         if (r.removed) {   // 删掉的供应商（连 key）备份进回收站，30 天后自动清
@@ -2768,9 +2773,9 @@ const handler = async (req, res) => {
         saveStore(MODELS_FILE, store);
         modelsChangedAll();
         log('models', body.op, String(body.provider || body.orig || body.id || r.saved || '').slice(0, 40), body.op === 'model-save' || body.op === 'model-delete' ? String(body.id || '').slice(0, 60) : body.op === 'models-add' ? r.saved : '');
-        return sendJson(res, 200, { ...modelsPublic(store), saved: r.saved || null });
+        return sendJson(res, 200, { ...modelsPublic(store), kuai: kuModelNotes(), saved: r.saved || null });
       }
-      return sendJson(res, 200, modelsPublic(loadStore(MODELS_FILE)));
+      return sendJson(res, 200, { ...modelsPublic(loadStore(MODELS_FILE)), kuai: kuModelNotes() });   // kuai：每个模型的小测验结果、正在测的进度
     }
     if (url.pathname === '/api/claude-usage' && req.method === 'GET') return sendJson(res, 200, { usage: claudeUsage.get() });
     if (url.pathname === '/api/clarelay') {   // 内置 clarelay 电脑端：GET 状态；POST {op: join(invite) | connect | disconnect | remove | update（下载新版电脑端）}

@@ -64,6 +64,13 @@ test('kuAi 能力档：用户设的 > 自动（参数量 + 家族），再被窗
   assert.deepEqual(tierOf({ model: 'qwen3:4b', user: 2, ctx: 4096 }), { tier: 1, why: '窗口只有 4k', auto: false });
   assert.equal(tierOf({ model: 'llama3.1:8b', ctx: 16384 }).tier, 2);
   assert.equal(tierOf({ model: 'x', user: 9 }).tier, 3);   // 不对的值当没设
+  // 小测验测出来的 > 按参数量估的；手动设的还是最优先；测出来的也被窗口封顶、最多到 L3
+  assert.deepEqual(tierOf({ model: 'qwen3:4b', quiz: { tier: 2, pass: 4, of: 5 } }), { tier: 2, why: '小测验 4/5', auto: true });
+  assert.deepEqual(tierOf({ model: 'deepseek-v4-pro', quiz: { tier: 0, pass: 1, of: 5 } }), { tier: 0, why: '小测验 1/5', auto: true });
+  assert.deepEqual(tierOf({ model: 'qwen3:4b', user: 0, quiz: { tier: 3, pass: 5, of: 5 } }), { tier: 0, why: '模型库里设的', auto: false });
+  assert.deepEqual(tierOf({ model: 'qwen3:4b', quiz: { tier: 3, pass: 5, of: 5 }, ctx: 8192 }), { tier: 2, why: '窗口只有 8k', auto: true });
+  assert.equal(tierOf({ model: 'gemma-4-31b-it', quiz: { tier: 3, pass: 5, of: 5 } }).tier, 3);   // 实测过了：不再按「Gemma 多步弱」封顶
+  assert.equal(tierOf({ model: 'x', quiz: { tier: 9, pass: 5, of: 5 } }).tier, 3);
 });
 
 test('kuAi 上下文预算：窗口够大时不变；窗口小就给回复留一半、对话跟着收紧；窗口是猜的只收紧对话', () => {
