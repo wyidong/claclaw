@@ -1423,6 +1423,15 @@ async function peerReview(pt, { id, tool, input, cwd, plan }) {
 }
 AcpRunner.peerReview = peerReview;   // ACP 会话（acp.mjs）处理协同消息时也走这一套
 
+// 强杀某个会话的 Claude Code 进程（claclaw 的子进程里命令行带这个会话 ID 的）：中断没回应时用。Windows 上没有 pgrep，靠 q.close()
+function killClaudeChild(id) {
+  if (process.platform === 'win32' || !/^[0-9a-f-]{36}$/.test(id)) return;
+  try {
+    const out = execFileSync('pgrep', ['-P', String(process.pid), '-f', id], { encoding: 'utf8', timeout: 3000 });
+    for (const pid of out.split(/\s+/).filter(Boolean)) { try { process.kill(+pid, 'SIGKILL'); log('killed claude', pid, id.slice(0, 8)); } catch {} }
+  } catch {}
+}
+
 class Runner {
   constructor(info, mode, allowedModes, opts = {}) {
     this.id = info.sessionId;
@@ -1506,7 +1515,7 @@ class Runner {
     this.loadModels();
     this.pump().catch(e => {
       log('runner error', this.id.slice(0, 8), e?.message);
-      this.emit({ t: 'error', message: '会话进程出错：' + (e?.message || e) });
+      if (this.closeReason !== 'interrupt') this.emit({ t: 'error', message: '会话进程出错：' + (e?.message || e) });   // 强制停止杀的，不报错
     }).finally(() => this.dispose(this.closeReason));
   }
 
@@ -1796,8 +1805,15 @@ class Runner {
 
   async interrupt() {
     for (const id of [...this.pending.keys()]) this.replyPermission(id, 'deny');
-    try { await this.q.interrupt(); } catch (e) { log('interrupt failed', e?.message); }
-    this.emit({ t: 'sys', text: '已中断' });
+    // Claude Code 卡死时（比如请求发出去一直没回音）连中断也不回、SIGTERM 也不理：6 秒没回应就强杀这个会话的进程。
+    // 会话记录在磁盘上，再发消息会重开进程接着这个会话
+    const answered = await Promise.race([this.q.interrupt().then(() => true, e => { log('interrupt failed', e?.message); return true; }), new Promise(ok => setTimeout(() => ok(false), 6000))]);
+    if (answered || this.closed) { this.emit({ t: 'sys', text: '已中断' }); return; }
+    log('interrupt timeout', this.id.slice(0, 8), '→ 强制结束进程');
+    this.closeReason = 'interrupt';
+    this.emit({ t: 'sys', text: '已强制停止：Claude 没响应中断（多半卡在请求上），已结束这个会话的进程；再发消息会接着这个会话' });
+    killClaudeChild(this.id);
+    setTimeout(() => this.dispose('interrupt'), 1500);
   }
 
   async setMode(mode) {
