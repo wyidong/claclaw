@@ -51,7 +51,7 @@ import { readBody, jsonBody } from './src/httpbody.mjs';
 import { makeSkins } from './src/skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './src/util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginUnsubscribe } from './src/claws/login.mjs';
-import { INSTALLS, installStart, installState, installing } from './src/claws/install.mjs';
+import { installStart, installState, installing, markInstallable } from './src/claws/install.mjs';
 import { claudeExe, claudeRunnable } from './src/claws/claudebin.mjs';
 import { findUserPath, openLocal, previewType, READ_MAX } from './src/localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './src/peer/peerguard.mjs';
@@ -2817,7 +2817,7 @@ const handler = async (req, res) => {
       } catch (e) { return sendJson(res, 400, { error: e.message }); }
       return sendJson(res, 200, skills.list(installed));
     }
-    // 帮用户装第一个 Agent（见 install.mjs）：GET 取进度，POST {claw} 开始装（只能装 INSTALLS 里列的）
+    // 帮用户装 Agent（见 install.mjs）：GET 取进度，POST {claw} 开始装（只能装 install.mjs 的 INSTALLS 里列的）
     if (url.pathname === '/api/claws/install') {
       if (req.method === 'POST') {
         if (notJson(req, res)) return;
@@ -2850,8 +2850,8 @@ const handler = async (req, res) => {
       // running：装了但没启动的（OpenClaw 网关没开）灰着显示，带「启动」（canStart）；其他 Claw 用的时候才拉起进程，装了就算可用
       const list = detectClaws();
       for (const c of list) { c.running = c.installed && c.supported ? (clawById(c.id)?.ready ? await clawById(c.id).ready() : true) : false; if (c.id === 'claude') c.login = { can: true, ctok: claudeTokenPublic() }; else if (c.installed) c.login = loginInfo(c.id); }   // login：能不能在手机上登录、登了没（见 login.mjs）；Claude 只有长期令牌这一项
-      // 一个都没装：能在网页上一键装的（DeepSeek）标上 canInstall，网页显示它的卡片和「安装」按钮
-      if (!list.some(c => c.installed)) for (const c of list) if (INSTALLS[c.id] && c.supported) c.canInstall = true;
+      // 能在网页上一键装、还没装的（DeepSeek）标上 canInstall，网页显示它的卡片和「安装」按钮
+      markInstallable(list);
       const inst = installing(); for (const c of list) if (c.id === inst) c.installing = true;   // 正在装：卡片写「安装中」，点开看进度（不会重复装）
       for (const c of list) if (c.id === 'openclaw' && c.installed && c.supported && c.running === false) c.canStart = true;
       return sendJson(res, 200, list);

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { installStart, installState, installReset } from '../src/claws/install.mjs';
+import { installStart, installState, installReset, markInstallable } from '../src/claws/install.mjs';
 import { dsWriteKey, dsHasKey } from '../src/claws/login.mjs';
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'claclaw-install-'));
@@ -44,6 +44,14 @@ function fakeSpawn(code, out = '') {
   return { impl, calls };
 }
 const settle = () => new Promise(r => setTimeout(r, 30));
+
+test('安装按钮：DeepSeek 没装就给，不看别的 Claw 装没装；装了的、这台机器用不了的、没列出来的不给', () => {
+  const mark = l => markInstallable(l).filter(c => c.canInstall).map(c => c.id);
+  assert.deepEqual(mark([{ id: 'deepseek', supported: true, installed: false }, { id: 'kuai', supported: true, installed: true }, { id: 'claude', supported: true, installed: true }]), ['deepseek']);
+  assert.deepEqual(mark([{ id: 'deepseek', supported: true, installed: false }, { id: 'opencode', supported: true, installed: false }]), ['deepseek']);
+  assert.deepEqual(mark([{ id: 'deepseek', supported: true, installed: true }, { id: 'kuai', supported: true, installed: true }]), []);
+  assert.deepEqual(mark([{ id: 'deepseek', supported: false, installed: false }, { id: 'toString', supported: true, installed: false }]), []);
+});
 
 test('安装：只能装列出来的；跑 npm install -g 固定的包；成功 / 没权限 / 失败都有说法', async () => {
   assert.throws(() => installStart('evil'), /不能在这里安装/);

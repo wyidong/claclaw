@@ -1,4 +1,4 @@
-// 帮用户装好第一个 Agent：电脑上一个 Claw 都没有时，网页上默认显示 DeepSeek 卡片和「安装」按钮，
+// 帮用户装 Agent：DeepSeek 没装时（别的 Claw 装没装都一样），网页的 Claw 页显示它的卡片和「安装」按钮，
 // 点了就在电脑上跑 npm install -g 装 DeepSeek Harness（dsh），装完再引导去 DeepSeek 开放平台拿 API key（见 login.mjs 的 deepseek）。
 // - 只能装这里列出的包（不接受网页传来的包名）；同一时间只跑一个
 // - 进度：网页每隔几秒取一次 installState()；结果留 10 分钟
@@ -26,6 +26,9 @@ export const INSTALLS = {
     allowScripts: ['@deepseek-ai/dsh-subprocess-local', 'node-pty', 'koffi', 'protobufjs', '@google/genai'],
   },
 };
+// Claw 列表里哪些能在网页上一键装：这里列了、这台机器能用、还没装的，标上 canInstall（网页显示卡片和「安装」按钮）
+//   以前只在一个 Claw 都没装时才标：模型库里一配上模型 kuAi 就算装了，按钮跟着没了
+export function markInstallable(list) { for (const c of list) if (Object.hasOwn(INSTALLS, c.id) && c.supported && !c.installed) c.canInstall = true; return list; }
 const pkgArgs = s => [...(s.allowScripts?.length ? ['--allow-scripts=' + s.allowScripts.join(',')] : []), s.pkg];
 
 let job = null;
