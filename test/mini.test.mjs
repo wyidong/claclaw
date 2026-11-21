@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-data-'));   // mini.mjs 引入 auth.mjs 前先指到临时目录
-const { pickRoute, statsLine, baseOf } = await import('../src/claws/mini.mjs');
+const { pickRoute, statsLine, baseOf, sessionPid, miNewSession, miRunners, miShutdown, MiRunner } = await import('../src/claws/mini.mjs');
 const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'claws', 'mini-agent.mjs');
 
 const P = (id, url, models = ['m1']) => ({ id, name: id, endpoints: { openai: url }, key: 'k', models: models.map(x => ({ id: x })) });
@@ -551,4 +551,44 @@ test('Mini agent：命令放进标明语言的代码块；按网页带来的设�
     assert.match(sys[3], /不知道用户用的什么设备/);   // 认不得的设备名不写进提示词
     assert.ok(sys.every(x => x.length < 360));
   } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini 会话走哪家：记过的优先；没记过按会话的模型在模型库里找（默认那家有就用默认那家）；都对不上走默认那家', () => {
+  const l = lib(store);
+  assert.equal(sessionPid({ provider: 'deepseek', sessions: { a: 'ollama' } }, store, 'a', 'm1', l), 'ollama');
+  assert.equal(sessionPid({ provider: 'deepseek', sessions: { a: 'gone' } }, store, 'a', 'q2', l), 'ollama');   // 记的那家没了：按模型认
+  assert.equal(sessionPid({ provider: 'deepseek' }, store, 'b', 'm1', l), 'deepseek');
+  assert.equal(sessionPid({ provider: 'deepseek' }, store, 'b', 'xx', l), 'deepseek');
+  assert.equal(sessionPid({}, store, 'b', '', l), 'ollama');                                                    // 没记过默认：本机的排前
+});
+
+test('Mini：不同会话同时用不同家的模型——每家一个进程，换供应商只换这一个会话，别的会话照常', { timeout: 30000 }, async () => {
+  const D = process.env.CLACLAW_DATA, A = await fakeModel(['A 家回答']), B = await fakeModel(['B 家回答']);
+  fs.writeFileSync(path.join(D, 'models.json'), JSON.stringify({ providers: [P('pa', A.url, ['a1', 'a2']), P('pb', B.url, ['b1'])].map((p, i) => ({ ...p, id: ['pa', 'pb'][i] })) }));
+  const ev = [], ws = { readyState: 1, send: x => ev.push(JSON.parse(x)) };
+  const done = id => ev.filter(e => e.t === 'turn.done' && e.sessionId === id).length;
+  const until = async f => { for (let i = 0; i < 500 && !f(); i++) await new Promise(r => setTimeout(r, 20)); assert.ok(f(), '等不到：' + f); };
+  try {
+    const r1 = await miNewSession(os.tmpdir(), {}), r2 = await miNewSession(os.tmpdir(), {});
+    r1.subscribe(ws); r2.subscribe(ws);
+    assert.equal(r1.pid, 'pa'); assert.equal(r2.pid, 'pa');
+    await r2.pickModel('lib:pb/b1');                                   // r2 换到 B 家
+    assert.equal(r2.pid, 'pb'); assert.notEqual(r1.agent, r2.agent);
+    assert.equal(r1.attached, true, 'r1 不受影响');
+    await r1.pickModel('lib:pa/a2');
+    r1.send('问 1'); r2.send('问 2');                                    // 同时问
+    await until(() => done(r1.id) && done(r2.id));
+    assert.deepEqual(A.reqs.map(q => q.model), ['a2']); assert.deepEqual(B.reqs.map(q => q.model), ['b1']);
+    const route = JSON.parse(fs.readFileSync(path.join(D, 'mini-route.json'), 'utf8'));
+    assert.equal(route.sessions[r2.sid], 'pb'); assert.equal(route.sessions[r1.sid], 'pa'); assert.equal(route.provider, 'pa');   // 最近选的那家是新会话默认的
+    // 关掉重开：按记下的那家接上，历史还在
+    const sid2 = r2.sid; r2.unsubscribe(ws); r1.unsubscribe(ws);
+    await new Promise(r => setTimeout(r, 200));
+    const again = new MiRunner('mi:' + sid2, { info: { cwd: os.tmpdir() } });
+    miRunners.set(again.id, again); again.subscribe(ws);
+    assert.equal(again.pid, 'pb');
+    await again.attach();
+    assert.deepEqual(again.items.map(x => x.kind === 'user' ? x.text : null).filter(Boolean), ['问 2']);
+    again.unsubscribe(ws);
+  } finally { await miShutdown(); A.srv.close(); B.srv.close(); }
 });
