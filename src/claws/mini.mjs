@@ -1,4 +1,4 @@
-// Mini：claclaw 自带的纯问答 agent，不调工具、不碰电脑上的文件和命令；接模型库里的模型（尤其本地 Ollama）答疑、看模型快不快。
+// kuAi（原名 Mini；代码、数据目录、会话 id 前缀照旧叫 mini / mi:，旧会话和群不受影响）：claclaw 自带的纯问答 agent，不调工具、不碰电脑上的文件和命令；接模型库里的模型（尤其本地 Ollama）答疑、看模型快不快。
 // agent 本体在 mini-agent.mjs（ACP，stdin/stdout）。每轮结束显示一行：模型 · 首字耗时 · 生成速度。
 // - 会话：agent 把每个会话存成 data/mini-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
 // - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商（和 GLM Agent 一样），本机地址（127.0.0.1 / localhost）的排最前；
@@ -56,7 +56,7 @@ function listRows() {
 export function miSessionList({ busy = () => false } = {}) {
   return listRows().map(s => ({
     id: MI_PREFIX + s.id,
-    title: s.title || 'Mini 会话',
+    title: s.title || 'kuAi 会话',
     cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
     lastModified: s.updated,
     openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
@@ -103,7 +103,7 @@ function routeEnv() {
 
 // ---------- ACP 进程（底座见 acp.mjs） ----------
 const agent = new AcpAgent({
-  name: 'mini', bin: () => process.execPath, missing: '没找到 node', command: bin => [bin, [AGENT_JS]],
+  name: 'kuAi', bin: () => process.execPath, missing: '没找到 node', command: bin => [bin, [AGENT_JS]],
   prepare: () => routeEnv(),
 });
 export const miShutdown = () => agent.stop();
@@ -119,7 +119,7 @@ export const miRunners = new Map();
 
 export class MiRunner extends AcpRunner {
   static agent = agent; static prefix = MI_PREFIX; static runners = miRunners;
-  static label = 'Mini'; static group = 'Mini'; static permPrefix = 'mi-'; static commands = COMMANDS;
+  static label = 'kuAi'; static group = 'kuAi'; static permPrefix = 'mi-'; static commands = COMMANDS;
   static cfgIds = { model: 'model' };
   static cfgNames = { model: '模型' };
   static ctxFromUsage = true; static titleFromAgent = true;
@@ -137,10 +137,10 @@ export class MiRunner extends AcpRunner {
     this.replaying = false; this.replayOpen = null;
     if (!ok) return;
     this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Mini 会话';
+    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'kuAi 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
-  get imageError() { return 'Mini 进程是旧版本，还不收图片：重启 claclaw 后再试'; }
+  get imageError() { return 'kuAi 进程是旧版本，还不收图片：重启 claclaw 后再试'; }
   // 每轮结束 agent 在 usage_update._meta.mini 里带上速度：显示成一行小字（不进历史）
   handle(u) {
     super.handle(u);
@@ -162,7 +162,7 @@ export class MiRunner extends AcpRunner {
     if (!hit || !lib.length) return base;
     const curId = this.config ? String(this.config.find(o => o.id === 'model')?.currentValue || '') : '';
     const cur = (lib.find(x => x.p.id === hit.p.id && x.m.id === (curId || this.model)) || hit).value;
-    const items = lib.map(x => ({ value: x.value, label: x.m.name || x.m.id, sub: x.p.name + ' · ' + x.m.id + (x.p.id !== hit.p.id ? '（换供应商会重启，所有 Mini 会话一起换）' : '') }));
+    const items = lib.map(x => ({ value: x.value, label: x.m.name || x.m.id, sub: x.p.name + ' · ' + x.m.id + (x.p.id !== hit.p.id ? '（换供应商会重启，所有 kuAi 会话一起换）' : '') }));
     return { ...base, current: cur, label: lib.find(x => x.value === cur)?.m.name || curId || hit.m.id, groups: [{ name: STORE_GROUP, items }] };
   }
   // 同一家里换模型：进程里直接换；换供应商：记下走法、重启进程再接上。
@@ -173,7 +173,7 @@ export class MiRunner extends AcpRunner {
     if (!next) return super.pickModel(value);
     if (hit && next.p.id === hit.p.id) return super.pickModel(next.m.id);
     if (this.busy) throw new Error('这一轮结束后再换模型');
-    if ([...miRunners.values()].some(r => r !== this && r.busy)) throw new Error('有别的 Mini 会话正在回复，等它结束再换（所有 Mini 会话共用一个进程）');
+    if ([...miRunners.values()].some(r => r !== this && r.busy)) throw new Error('有别的 kuAi 会话正在回复，等它结束再换（所有 kuAi 会话共用一个进程）');
     writeJsonAtomic(ROUTE_FILE, { provider: next.p.id });
     this.log?.('mini route →', next.p.id);
     agent.stop();
@@ -185,7 +185,7 @@ export class MiRunner extends AcpRunner {
 
 const num = (x, d) => Number(x).toFixed(d);
 export function statsLine(st) {
-  const parts = [st.model || 'Mini'];
+  const parts = [st.model || 'kuAi'];
   if (st.ttft == null) parts.push('没有输出');
   else parts.push('首字 ' + num(st.ttft, st.ttft < 10 ? 2 : 1) + ' 秒');
   if (st.tps) parts.push(num(st.tps, st.tps < 10 ? 1 : 0) + ' tok/s');

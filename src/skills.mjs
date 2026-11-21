@@ -4,7 +4,7 @@
 //   ~/.agents/skills    —— DeepSeek Harness、OpenCode、Kimi、Qwen Code、Codex、OpenClaw、MiniMax Code、Qoder CLI、Copilot CLI 共用的个人技能目录
 //   ~/.iflow/skills     —— iFlow CLI（只读自己的）
 //   ~/.codebuddy/skills —— CodeBuddy Code（只读自己的）
-// Mini 不调工具，用不了技能。
+// kuAi（原名 Mini）不调工具，用不了技能。
 // 装的是复制件（有的 Claw 不跟软链接），里面放一个 .claclaw-skill 标记；claclaw 启动时把带标记的复制件同步成仓库里的最新版，
 // 卸载也只删带标记的，用户自己的同名技能不碰。
 // 另外每次启动写 ~/.claclaw/local.json（本机地址 + 令牌）和 ~/.claclaw/bin/ 下的命令，技能里的命令靠它们找到 claclaw。

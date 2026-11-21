@@ -32,7 +32,7 @@ skills/
   - `group`：技能大组，技能页按它分组显示。现有「通用」（interconnect、file、theme）、「影音」（video、music、audio、movie、image、tv）。
   - `claws`：默认写全部会跑命令的 Claw（claude deepseek opencode kimi qwen codex openclaw glm iflow minimax codebuddy qoder copilot）。
   - `auto`：默认写全部四个安装位置（claude agents iflow codebuddy），用到哪个 Claw 就自动装到哪。
-  - Mini 不调工具，用不了技能。
+  - kuAi（原名 Mini）不调工具，用不了技能。
 - **同步**：改了 `skills/` 下的文件不用手动重装。claclaw 启动时按内容哈希，把各 Claw 目录里的复制件同步成新版。
 - **复制件只给 AI 看 SKILL.md**：命令总是由 `~/.claclaw/bin/` 跑仓库里的脚本，所以脚本可以用相对路径引 `../_lib/`。
 
