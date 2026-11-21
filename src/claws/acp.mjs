@@ -330,7 +330,7 @@ export class AcpAgent {
 // ---------- 打开的会话 ----------
 // 子类的静态字段：agent（AcpAgent）、prefix（'ds:' …）、runners（id → runner 的 Map）、label（'DeepSeek' …，模型分组名 group 默认同它）；
 // 可调选项 cfgIds / cfgNames / commands 默认是模型和模式
-// 子类可以覆盖的：history()、modelNameOf(cfg)、ownModel(o, store)、cleanName(name)、ctxNow()、beforePrompt()、afterPrompt()、
+// 子类可以覆盖的：history()、modelNameOf(cfg)、ownModel(o, store)、cleanName(name)、ctxNow()、beforePrompt()、afterPrompt()、promptMeta(dev)、
 // prepareAttach()、attachError(e)、permInfo(tc, known)、imageError
 const MODEL_CMD = { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true };
 // 输入框的命令：/model、（more）、/mode；modeWhat：/mode 的说明里怎么叫它
@@ -366,6 +366,7 @@ export class AcpRunner {
     this.ctx = null; this.ctxSent = undefined; this.compactAsked = false;
     this.turnSeq = 0; this.turnId = 0;   // 每一轮的编号：finish 只收当前这一轮的（agent 崩了时 onAcpDead 和 prompt 的 catch 都会来收尾）
     this.turnPeer = null; this.peerNext = null; this.peerMode = null; this.modeRestoring = null;
+    this.devNext = null;        // 网页发消息时用的设备（mac / windows / iphone…，server.mjs 在 send 前设上），跟着下一次 send 走
   }
 
   // 协同消息触发的这一轮（server.mjs 在 send 前设上，和 Claude 的 Runner 一样写 r.peerTurn = …）：
@@ -382,6 +383,7 @@ export class AcpRunner {
   ctxNow() { return this.ctx; }
   beforePrompt() {}
   afterPrompt() {}
+  promptMeta() { return null; }   // session/prompt 的 _meta（默认不带；Mini 带上用户的设备）
   async prepareAttach() {}
   attachDone() {}
   attachError(e) { return e; }
@@ -675,10 +677,11 @@ export class AcpRunner {
     const cmdRe = new RegExp('^\\/(' + names + ')(?:\\s+(.*))?$');
     if (!this.busy && /^\/compact\s*$/.test(String(text))) this.compactAsked = true;
     const pt = this.peerNext; this.peerNext = null;
+    const dev = this.devNext || ''; this.devNext = null;
     if (this.busy) {
       // ACP 不支持插话：先排队。命令不排队（等这一轮结束再发），最多排 10 条
       if (new RegExp('^\\/(' + names + ')\\b').test(text) || this.queue.length >= 10) return false;
-      this.queue.push({ text, images, pt });
+      this.queue.push({ text, images, pt, dev });
       return 'queued';
     }
     const cmd = text.match(cmdRe);
@@ -698,7 +701,8 @@ export class AcpRunner {
           ...images.map(i => ({ type: 'image', mimeType: i.media_type, data: i.data })),
           ...(text ? [{ type: 'text', text }] : []),
         ];
-        const r = await this.agent.rpc('session/prompt', { sessionId: this.sid, prompt });
+        const meta = dev ? this.promptMeta(dev) : null;
+        const r = await this.agent.rpc('session/prompt', { sessionId: this.sid, prompt, ...(meta ? { _meta: meta } : {}) });
         this.afterPrompt();
         this.finish({ reason: r?.stopReason || 'end_turn', turn });
       } catch (e) {
@@ -775,6 +779,7 @@ export class AcpRunner {
     // 排着的里面有协同消息：合成的这一轮按协同处理（来源、需求合在一起）
     const pts = q.map(x => x.pt).filter(Boolean);
     if (pts.length) this.peerNext = { from: [...new Set(pts.map(x => x.from))].join('、'), allowed: new Set(), text: pts.map(x => x.text).join('\n\n') };
+    this.devNext = q.map(x => x.dev).filter(Boolean).at(-1) || null;
     if (!this.send(text, images)) return false;
     this.emit({ t: 'queue.sent' });
     return true;

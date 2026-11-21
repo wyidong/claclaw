@@ -78,9 +78,17 @@ const configOf = s => [
 
 // ---------- 提示词 ----------
 // 日期按天变、模型换了才变：前缀照样能复用。写明当前模型：会话中途换了模型，新模型会跟着历史里旧模型的自我介绍说（「我是通义千问」）
+// 命令要放进标了语言的代码块、一行一条（网页会给每条加复制图标、多条的能下载成脚本）；用户的设备由网页按浏览器判断后随消息带来（s.dev），放在最后，换设备才变
+const DEVICES = { mac: 'Mac 电脑', windows: 'Windows 电脑', linux: 'Linux 电脑', chromeos: 'Chromebook', iphone: 'iPhone', ipad: 'iPad', android: '安卓手机 / 平板', harmony: '鸿蒙手机' };
+const ASK_OS = '先问电脑是 Mac、Windows 还是 Linux（对话里说过就照说的给）';
+const devLine = d => !DEVICES[d] ? `不知道用户用的什么设备：要给电脑命令时${ASK_OS}。`
+  : /^(iphone|ipad|android|harmony)$/.test(d) ? `用户在用${DEVICES[d]}和你对话：手机上的事给手机上的操作步骤；要在电脑上做的，${ASK_OS}。`
+  : `用户在用${DEVICES[d]}和你对话：命令默认按这个系统给${d === 'windows' ? '（默认 PowerShell）' : ''}，用户说了别的系统就按说的给。`;
 const systemOf = s => `你是答疑助手，简洁回答；用户用什么语言就用什么语言。今天是 ${new Date().toLocaleDateString('sv')}。
 你不能上网，也不能操作用户的电脑；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
-你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。`;
+命令放进标明语言的代码块（bash、powershell、cmd 等），一行一条，说明写在代码块外面。
+你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。
+${devLine(s.dev)}`;
 // 发给模型的历史：旧版本（还能调工具时）留下的工具标签和工具结果不发；空回复不发；
 // 去掉这些后相邻同角色的并成一条（有的接口不收连续两条 user / assistant），开头不能是 assistant
 const LEGACY_TOOL = /^\s*<(run|read|write)[\s>]/;
@@ -364,6 +372,7 @@ const handlers = {
     const text = (p.prompt || []).map(b => b?.type === 'text' ? b.text : '').join('').trim();
     const images = (p.prompt || []).filter(b => b?.type === 'image' && EXT[b.mimeType] && typeof b.data === 'string' && b.data).map(b => ({ mime: b.mimeType, data: b.data }));
     if (!text && !images.length) return { stopReason: 'end_turn' };
+    s.dev = DEVICES[p._meta?.device] ? p._meta.device : '';   // 这一条是用什么设备发的（协同、群里转来的没有）
     return { stopReason: await prompt(s, text, images) };
   },
   'session/set_model': p => { const s = open(String(p.sessionId)); setModel(s, String(p.modelId)); save(s); return {}; },

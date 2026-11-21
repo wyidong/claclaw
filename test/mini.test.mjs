@@ -94,7 +94,7 @@ test('Mini agent：纯问答——不带工具、提示词很短；模型写了�
     assert.equal(q.reasoning_effort, 'none'); assert.equal(q.max_tokens, 4096);
     assert.ok(!('tools' in q) && !('stop' in q));
     assert.equal(q.messages.length, 2);
-    assert.ok(q.messages[0].content.length < 200, '系统提示要短');
+    assert.ok(q.messages[0].content.length < 360, '系统提示要短');
     assert.match(q.messages[0].content, /你现在用的模型是 q1。/);
     assert.doesNotMatch(q.messages[0].content, /<run>|工作目录|标签/);
     const u = a.updates.find(x => x.sessionUpdate === 'usage_update');
@@ -529,4 +529,26 @@ test('Mini agent：带图被服务拒了（400）——报错里说明可能是�
     const r = await sayImg(a, n.sessionId, '看图');
     assert.match(r.error.message, /unknown variant `image_url`.*这次带了图：这个模型可能不收图片/);
   } finally { a.stop(); srv.close(); }
+});
+
+test('Mini agent：命令放进标明语言的代码块；按网页带来的设备给命令（电脑按系统给、手机和不知道的先问电脑系统）', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeModel(['一', '二', '三', '四']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'q1', MINI_MODEL: 'q1' });
+  const ask = (sid, text, device) => a.rpc('session/prompt', { sessionId: sid, prompt: [{ type: 'text', text }], ...(device ? { _meta: { device } } : {}) });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await ask(n.sessionId, '怎么看 IP', 'windows');
+    await ask(n.sessionId, '怎么看 IP', 'iphone');
+    await ask(n.sessionId, '怎么看 IP');
+    await ask(n.sessionId, '怎么看 IP', 'nokia');
+    const sys = m.reqs.map(q => q.messages[0].content);
+    assert.match(sys[0], /标明语言的代码块.*一行一条/);
+    assert.match(sys[0], /Windows 电脑.*PowerShell/);
+    assert.match(sys[1], /iPhone.*手机上的操作步骤.*先问电脑是 Mac、Windows 还是 Linux/);
+    assert.match(sys[2], /不知道用户用的什么设备.*先问/);
+    assert.match(sys[3], /不知道用户用的什么设备/);   // 认不得的设备名不写进提示词
+    assert.ok(sys.every(x => x.length < 360));
+  } finally { a.stop(); m.srv.close(); }
 });

@@ -140,6 +140,7 @@ export class MiRunner extends AcpRunner {
     if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Mini 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
+  promptMeta(dev) { return { device: dev }; }   // 用户用的设备：Mini 按它给对应系统的命令
   get imageError() { return 'Mini 进程是旧版本，还不收图片：重启 claclaw 后再试'; }
   // 每轮结束 agent 在 usage_update._meta.mini 里带上速度：显示成一行小字（不进历史）
   handle(u) {

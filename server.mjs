@@ -3664,6 +3664,7 @@ wss.on('connection', (ws, req) => {
           return;
         }
         const acp = runner instanceof AcpRunner;
+        if (acp) runner.devNext = typeof m.dev === 'string' && /^[a-z]{2,12}$/.test(m.dev) ? m.dev : null;   // 网页用的设备（Mini 按它给命令）
         const sent = runner.send(text, images);
         if (!sent) fail({ t: 'error', busy: runner.busy || undefined, message: acp && runner.busy ? '这一轮结束前只能排队普通消息（命令要等这一轮结束，最多排 10 条）' : '上一条还在处理中' });
         else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data), queued: sent === 'queued' || undefined });

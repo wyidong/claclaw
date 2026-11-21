@@ -289,3 +289,27 @@ test('协同消息在回复中发来（排队）：轮到它时才按协同处�
     assert.equal(reviews, 1);
   } finally { AcpRunner.peerReview = null; r.subs.clear(); r.dispose(); await ag.stop(); }
 });
+
+test('网页带来的设备（devNext）：跟着下一次 send 走、放进 session/prompt 的 _meta（子类 promptMeta 决定带不带）；排队的轮到时带最后一条的', { timeout: 15000 }, async () => {
+  const { ag, r, of } = mkRunner();
+  const seen = [], rpc0 = ag.rpc;
+  ag.rpc = (m, p, ms) => { if (m === 'session/prompt') seen.push(p); return rpc0(m, p, ms); };
+  try {
+    r.devNext = 'windows'; r.send('a');
+    await until(() => of('turn.done').length === 1);
+    assert.equal(seen[0]._meta, undefined);            // 默认不带
+    r.promptMeta = dev => ({ device: dev });
+    r.devNext = 'windows'; r.send('b');
+    await until(() => of('turn.done').length === 2);
+    assert.deepEqual(seen[1]._meta, { device: 'windows' });
+    r.send('c');                                       // 没设：不带（协同、群里转来的）
+    await until(() => of('turn.done').length === 3);
+    assert.equal(seen[2]._meta, undefined);
+    r.devNext = 'mac'; r.send('hang');
+    await until(() => seen.length === 4);
+    r.devNext = 'iphone'; assert.equal(r.send('q'), 'queued');
+    r.finish({ reason: 'cancelled' });
+    await until(() => seen.length === 5);
+    assert.deepEqual(seen[4]._meta, { device: 'iphone' });
+  } finally { r.subs.clear(); r.dispose(); await ag.stop(); }
+});

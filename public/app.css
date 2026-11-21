@@ -341,6 +341,19 @@ html.solo.has-skin #sessBtn .dot .wx-cl :is(svg,img){width:14px;height:14px;back
 .peer{align-self:stretch;margin:2px 0;padding:8px 12px;border-left:1.5px solid var(--muted);border-radius:2px 10px 10px 2px;background:var(--code-bg);font-size:14px;line-height:1.5}
 .md .cb{position:relative;margin:0 0 .7em}.md .cb pre{margin:0;padding-right:44px}
 .md li>.cb{margin:.4em 0 .5em}
+.md .cb.cbc pre{padding-right:12px;border-radius:0 0 10px 10px}   /* 命令块：头上一条（语言 · 几条、下载成脚本、复制全部），每条命令后面一个小复制图标 */
+.cb-h{display:flex;align-items:center;gap:6px;padding:4px 5px 4px 12px;background:var(--code-bg);border-radius:10px 10px 0 0;border-bottom:var(--bw) solid var(--line);font-size:12px;color:var(--muted)}
+.peer .md .cb-h{background:var(--surface)}
+.cb-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb-h .cp{position:static;width:28px;height:24px}
+.cdl{display:inline-flex;align-items:center;gap:3px;height:24px;padding:0 8px;border:var(--bw) solid var(--line);background:var(--surface);color:var(--muted);border-radius:7px;font-size:12px}
+.cdl svg{pointer-events:none;flex:none}.cdl:active{background:var(--code-bg)}
+.cb.cbc .cbl{display:inline-block;min-width:100%;border-radius:4px;transition:background .2s}
+.cb.cbc .cbl.hit{background:rgba(127,127,127,.22)}
+.lcp{display:inline-flex;align-items:center;justify-content:center;vertical-align:-2px;width:20px;height:16px;margin-left:8px;padding:0;border:0;border-radius:4px;background:none;color:var(--muted);opacity:.65}
+.lcp svg{pointer-events:none}
+@media (hover:hover){.lcp{opacity:.4}.cbl:hover .lcp{opacity:1}}
+@media (pointer:coarse){.cb.cbc .cbl{cursor:pointer}}
 .cp{position:absolute;top:5px;right:6px;display:flex;align-items:center;justify-content:center;width:30px;height:28px;border:var(--bw) solid var(--line);background:var(--surface);color:var(--muted);padding:0;border-radius:7px}
 .cp svg,.ic svg{pointer-events:none;flex:none}
 .md :not(pre)>code{cursor:copy}

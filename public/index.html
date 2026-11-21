@@ -741,7 +741,7 @@ function svgData(src){
 }
 function mdSvg(src){
   var d=svgData(src);if(!d)return mdCode(src);
-  return '<figure class="mdsvg'+(d.fill?' fill':'')+'"><img src="'+esc(d.url)+'" alt="SVG 图" loading="lazy"></figure><details class="mdsvg-src"><summary>SVG 源码</summary>'+mdCode(src)+'</details>';
+  return '<figure class="mdsvg'+(d.fill?' fill':'')+'"><img src="'+esc(d.url)+'" alt="SVG 图" loading="lazy"></figure><details class="mdsvg-src"><summary>SVG 源码</summary>'+mdCode(src,'svg')+'</details>';
 }
 // 电视频道卡片：```tv 代码块，一行一个频道「分组 | 台标字 | 台名 | 网址 | 说明」（claw-tv 技能生成）。
 // 点卡片新开页面去官网看；能在 claclaw 里直接播的（YouTube 直播）卡片带 ▶，点了进顶上的播放器
@@ -811,7 +811,93 @@ document.addEventListener('click',function(ev){
   try{fetch('/api/theme',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({theme:id})}).catch(function(){})}catch(_){}   // 电脑上记下，别的设备也跟着换
 });
 new MutationObserver(function(){thMark()}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-sc']});
-function mdCode(code){return '<div class="cb"><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code)+'</code></pre></div>'}
+// ---------- 命令块：标了 bash / powershell / cmd 等语言的代码块，每条命令后面一个复制图标（手机上点那一行就复制那一条；空行、注释不加），
+// 有两条以上的能下载成脚本（.sh / .ps1 / .bat），朗读时说「下面有 N 条命令」。续行（\ ` ^）、heredoc、跨行的 if / for / 大括号算一条
+var CMD_KIND={bash:'sh',sh:'sh',zsh:'sh',shell:'sh',shellscript:'sh',powershell:'ps',pwsh:'ps',ps1:'ps',ps:'ps',cmd:'bat',bat:'bat',batch:'bat',dos:'bat',console:'con',terminal:'con','shell-session':'con'};
+var CMD_PROMPT=/^\s*(?:\$|%|PS [^>\n]*>)\s+/;   // console 块里的提示符：只认这些开头的行，复制时去掉
+function cmdCmt(s,kind){return kind==='bat'?/^(@?rem(\s|$)|::)/i.test(s):/^#/.test(s)||kind==='ps'&&/^<#/.test(s)}
+function cmdParse(code,kind){
+  var L=String(code).replace(/\s+$/,'').split('\n'),rows=[],cmds=[],cur=null,depth=0,here='',bc=false;
+  for(var i=0;i<L.length;i++){
+    var t=L[i],s=t.trim();
+    if(!cur){
+      if(kind==='ps'&&bc){rows.push({t:t,g:-1});if(s.indexOf('#>')>=0)bc=false;continue}
+      if(!s||cmdCmt(s,kind)||kind==='con'&&!CMD_PROMPT.test(t)){if(kind==='ps'&&/^<#/.test(s)&&s.indexOf('#>')<0)bc=true;rows.push({t:t,g:-1});continue}
+      cur={a:i,c:[]};depth=0;here='';
+    }
+    rows.push({t:t,g:cmds.length});
+    cur.c.push(kind==='con'?t.replace(CMD_PROMPT,''):t);
+    var open=false;
+    if(here){if(s===here)here='';else open=true}
+    else{
+      var x=t.replace(/'[^'\n]*'/g,"''").replace(/"(?:[^"\\\n]|\\.)*"/g,'""');
+      if(kind!=='bat')x=x.replace(/(^|\s)#.*$/,'$1');
+      var cnt=function(re){return (x.match(re)||[]).length};
+      if(kind==='sh'||kind==='con'){
+        var h=t.replace(/(^|\s)#.*$/,'$1').match(/(?:^|[^<])<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/);if(h)here=h[2];
+        depth+=cnt(/(?:^|[;&|(]|\bthen\b|\bdo\b|\belse\b)\s*(?:if|for|while|until|case|select)\b/g)+(/\{\s*$/.test(x)?1:0)
+          -cnt(/(?:^|[;&|]|\bthen\b|\bdo\b|\belse\b)\s*(?:fi|done|esac)\b/g)-(/^\s*\}/.test(x)?1:0);
+        open=!!here||/(^|[^\\])(\\\\)*\\$/.test(t)||/(\|\||&&|\|)\s*$/.test(x);
+      }else if(kind==='ps'){
+        var hs=x.match(/@(["'])\s*$/);if(hs)here=hs[1]+'@';
+        depth+=cnt(/[{(]/g)-cnt(/[})]/g);
+        open=!!here||/`$/.test(t)||/\|\s*$/.test(x);
+      }else{depth+=cnt(/\(/g)-cnt(/\)/g);open=/\^$/.test(t)}
+      if(depth<0)depth=0;
+    }
+    if(!(open||depth>0)||i===L.length-1){cmds.push({a:cur.a,b:i,text:cur.c.join('\n')});cur=null}
+  }
+  return {rows:rows,cmds:cmds};
+}
+var CN_NUM=['零','一','两','三','四','五','六','七','八','九','十'];
+var CODE_QUIET={tv:1,theme:1,shop:1,svg:1};   // 画成卡片 / 图的块：朗读不提
+// 朗读时代码块换成的话
+function codeSay(code,lang,p){
+  lang=String(lang||'').toLowerCase();
+  if(CODE_QUIET[lang])return '，';
+  if(!p&&CMD_KIND[lang])p=cmdParse(code,CMD_KIND[lang]);
+  var n=p?p.cmds.length:0,u='条命令';
+  if(!n){u='行代码';n=String(code).split('\n').filter(function(x){return x.trim()}).length}
+  return n?'，下面有'+(CN_NUM[n]||n)+u+'，':'，';
+}
+// 下载成脚本：bash 类 → .sh（没有 #! 就补），PowerShell → .ps1（带 BOM，Windows 自带的 5.1 才认得中文），cmd → .bat（CRLF；有中文先切 UTF-8 代码页）
+var CMD_EXT={sh:'sh',ps:'ps1',bat:'bat'};
+function cmdScript(code,lang,p){
+  lang=String(lang||'').toLowerCase();var kind=CMD_KIND[lang],ext=CMD_EXT[kind];
+  if(!ext)return null;
+  p=p||cmdParse(code,kind);if(p.cmds.length<2)return null;
+  var words=[];
+  p.cmds.some(function(c){
+    var w=c.text.split('\n')[0].trim().split(/\s+/);if(w[0]==='sudo')w.shift();
+    if(/^(cd|pushd|echo|set|export|Set-Location)$/i.test(w[0]||''))return false;
+    for(var k=0;k<w.length&&words.length<3;k++){if(!/^[A-Za-z][\w.+-]*$/.test(w[k])||w[k].length>24)break;words.push(w[k].toLowerCase())}
+    return words.length>0;
+  });
+  var name=(words.join('-').replace(/[.-]+$/,'')||'commands').slice(0,40)+'.'+ext;
+  var text=String(code).replace(/\s+$/,'')+'\n';
+  if(kind==='sh'&&!/^#!/.test(text))text='#!/usr/bin/env '+(lang==='zsh'?'zsh':'bash')+'\n'+text;
+  if(kind==='bat'&&/[^\x00-\x7f]/.test(text)&&!/^\s*@?chcp\b/im.test(text))text='@chcp 65001 >nul\n'+text;
+  if(kind!=='sh')text=text.replace(/\n/g,'\r\n');
+  if(kind==='ps')text='﻿'+text;
+  return {name:name,ext:ext,text:text};
+}
+var LCP_ICON='<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+var CDL_ICON='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>';
+function mdCode(code,lang){
+  lang=String(lang||'').toLowerCase();
+  var kind=CMD_KIND[lang],p=kind?cmdParse(code,kind):null,say=' data-say="'+esc(codeSay(code,lang,p))+'"';
+  if(!p||p.cmds.length<2)return '<div class="cb"'+say+'><button class="cp" type="button" aria-label="复制">'+COPY_ICON+'</button><pre><code>'+esc(code)+'</code></pre></div>';
+  var body=p.rows.map(function(r,i){
+    if(r.g<0)return esc(r.t);
+    var c=p.cmds[r.g];
+    return '<span class="cbl" data-g="'+r.g+'" data-c="'+esc(c.text)+'">'+esc(r.t)+(i===c.b?'<button class="lcp" type="button" tabindex="-1" aria-label="复制这条命令">'+LCP_ICON+'</button>':'')+'</span>';
+  }).join('\n');
+  var sc=cmdScript(code,lang,p);
+  return '<div class="cb cbc" data-lang="'+esc(lang)+'"'+say+'><div class="cb-h"><span class="cb-l">'+esc(lang)+' · '+p.cmds.length+' 条命令</span>'
+    +(sc?'<button class="cdl" type="button" title="下载成脚本 '+esc(sc.name)+'" aria-label="下载成脚本 '+esc(sc.name)+'">'+CDL_ICON+'<span>.'+sc.ext+'</span></button>':'')
+    +'<button class="cp" type="button" aria-label="复制全部">'+COPY_ICON+'</button></div><pre><code>'+body+'</code></pre></div>';
+}
+// ---------- 命令块完
 // 列表项内容：普通行用 <br> 连起来；\u0001n 是嵌在这一项里的第 n 个代码块
 function mdLi(text,blocks){
   var out='',prevText=false;
@@ -860,7 +946,7 @@ function md(src){
       if(lang==='tv'&&i<=L.length){out.push(mdTv(cj));continue}   // 电视频道卡片（claw-tv 技能）
       if(lang==='theme'&&i<=L.length){out.push(mdTheme(cj));continue}   // 主题卡片（claw-theme 技能）
       if(lang==='shop'&&i<=L.length){out.push(mdShop(cj));continue}   // 商品卡片（claw-shopping 技能）
-      out.push((lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))&&i<=L.length?mdSvg(cj):mdCode(cj));continue;   // 还没收尾（流式输出中）的照代码显示
+      out.push((lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))&&i<=L.length?mdSvg(cj):mdCode(cj,lang));continue;   // 还没收尾（流式输出中）的照代码显示
     }
     if(SVG_SRC.test(l)){                           // 回复里整段 <svg>…</svg>：到 </svg> 为止画成图；还没收尾的照代码显示
       var se=-1;for(var j2=i;j2<L.length&&j2<i+3000;j2++)if(/<\/svg>\s*$/i.test(L[j2])){se=j2;break}
@@ -894,10 +980,10 @@ function md(src){
         var lm=L[i].match(MD_LIST);
         if(lm){items.push({ind:lm[1].replace(/\t/g,'    ').length,tag:/\d/.test(lm[2])?'ol':'ul',start:parseInt(lm[2],10),text:lm[3]});i++;continue}
         // 列表项里缩进的代码块（「1. 说明」下面跟 ```）：整块收进这一项，照样带复制按钮；块里的空行、相对缩进都保留
-        if(items.length&&(fm=L[i].match(/^(\s+)(```|~~~)/))){
+        if(items.length&&(fm=L[i].match(/^(\s+)(```|~~~)\s*([\w+-]*)/))){
           var fi=fm[1].length,fc=fm[2],cl=[];i++;
           while(i<L.length&&L[i].trim().indexOf(fc)!==0){cl.push(L[i].slice(0,fi).trim()?L[i]:L[i].slice(fi));i++}
-          i++;items[items.length-1].text+='\n\u0001'+(blocks.push(mdCode(cl.join('\n')))-1);continue;
+          i++;items[items.length-1].text+='\n\u0001'+(blocks.push(mdCode(cl.join('\n'),fm[3]))-1);continue;
         }
         if(L[i].trim()&&/^\s{2,}/.test(L[i])&&items.length){items[items.length-1].text+='\n'+L[i].trim();i++;continue}
         break;
@@ -1691,11 +1777,24 @@ $('#fview .fv-x').addEventListener('click',function(){$('#fview').classList.remo
 $('#fview .fv-share:not(.fv-mdt)').addEventListener('click',function(){if(fvBlob)saveBlob(fvBlob,fvName)});
 // 排版后的 .md 文件里：复制按钮、点代码块复制（和消息里一样）
 // 复制：.ic 复制前面那个元素（链接复制地址），.cp 复制整块；点一下代码块也能复制整块（手机上不用对准右上角的小按钮），拖选文字时不算
+function cmdCopy(ln){
+  copyText(ln.dataset.c);
+  var g=ln.dataset.g,all=ln.parentNode.querySelectorAll('.cbl[data-g="'+g+'"]');
+  all.forEach(function(x){x.classList.add('hit')});setTimeout(function(){all.forEach(function(x){x.classList.remove('hit')})},700);
+}
+function cmdSave(cb){
+  var pre=cb&&cb.querySelector('pre'),sc=pre&&cmdScript(pre.textContent,cb.dataset.lang);
+  if(sc)saveBlob(new Blob([sc.text],{type:'text/plain'}),sc.name);
+}
 function copyClick(t,btnSel,preSel){
   var btn=t.closest&&t.closest(btnSel);
   if(btn&&btn.classList.contains('ic')){var prev=btn.previousElementSibling;if(prev)copyText(prev.tagName==='A'?prev.getAttribute('href'):prev.textContent);return true}
-  if(btn&&btn.classList.contains('cp')){var box=btn.parentNode,pre=box.querySelector('pre');if(pre&&box.classList.contains('cb'))copyText(pre.textContent);else{var c=box.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}return true}
-  var pb=t.closest&&t.closest(preSel);if(pb&&!String(getSelection()||'').trim()){copyText(pb.textContent);return true}
+  var ln=t.closest&&t.closest('.cb.cbc .cbl');   // 命令块：点复制图标或那一行，复制那一条命令
+  if(ln&&(btn&&btn.classList.contains('lcp')||!String(getSelection()||'').trim())){cmdCopy(ln);return true}
+  if(btn&&btn.classList.contains('cdl')){cmdSave(btn.closest('.cb'));return true}
+  if(btn&&btn.classList.contains('cp')){var cb=btn.closest('.cb'),pre=cb&&cb.querySelector('pre');if(pre)copyText(pre.textContent);else{var c=btn.parentNode.cloneNode(true);c.querySelectorAll('button').forEach(function(x){x.remove()});copyText(c.innerText.trim())}return true}
+  var pb=t.closest&&t.closest(preSel);if(pb&&pb.closest('.cbc'))return true;   // 命令块里点到空行、注释：不整块复制（整块用右上角的按钮）
+  if(pb&&!String(getSelection()||'').trim()){copyText(pb.textContent);return true}
   return false;
 }
 $('#fview .fv-b').addEventListener('click',function(e){copyClick(e.target,'.fv-md button','.fv-md .cb pre')});
@@ -1758,6 +1857,8 @@ feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classLi
 // 电脑：单击复制完整 ID。手机：长按 0.5 秒才复制（上下滑列表时手指扫过 ID 不会误复制），短按和点这一行别处一样
 // 苹果手机不记浏览器历史：记了的话系统侧滑返回会放截图动画、页面弹一下；返回只靠返回键和下面自己做的右滑。安卓照旧记（返回键 / 系统返回要用）
 var IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+// 用的什么设备（随消息发给电脑，Mini 按它给对应系统的命令）
+function devKind(){var u=navigator.userAgent||'';if(IOS)return /iPhone|iPod/.test(u)?'iphone':'ipad';if(/HarmonyOS|OpenHarmony/i.test(u))return 'harmony';if(/Android/i.test(u))return 'android';if(/Windows/.test(u))return 'windows';if(/CrOS/.test(u))return 'chromeos';if(/Macintosh|Mac OS X/.test(u))return 'mac';if(/Linux|X11/.test(u))return 'linux';return ''}
 function navPush(st){if(!IOS)history.pushState(st,'')}
 var lpTimer=null,lpStart=null,lpFiredAt=0;
 document.addEventListener('click',function(e){
@@ -3003,7 +3104,7 @@ function trySend(){
   if(outbox.video&&!outbox.video.id)return;   // 视频还在上传：传完会再调
   if(!ws||ws.readyState!==1){banner('连接已断开，恢复后会自动发送刚才那条消息');return}
   if(!outbox.cid)outbox.cid=Math.random().toString(36).slice(2,10)+Date.now().toString(36);   // 这条消息的编号：自动重发时不变，服务器据此去掉重复的那份
-  ws.send(JSON.stringify({t:'message.send',cid:outbox.cid,text:outbox.text,images:outbox.images,video:outbox.video&&outbox.video.kind!=='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,file:outbox.video&&outbox.video.kind==='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined,filePending:outbox.filePending||undefined}));
+  ws.send(JSON.stringify({t:'message.send',cid:outbox.cid,dev:devKind(),text:outbox.text,images:outbox.images,video:outbox.video&&outbox.video.kind!=='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,file:outbox.video&&outbox.video.kind==='file'?{id:outbox.video.id,name:outbox.video.name}:undefined,videoPending:outbox.videoPending||undefined,filePending:outbox.filePending||undefined}));
   outboxTimer=setTimeout(function(){if(outbox&&Date.now()-lastEvt>8000)reconnectNow()},8000);   // 8 秒没回显、期间也没收到任何消息才判定连接已死
 }
 function imgUrls(a){return (a||[]).map(function(i){return 'data:'+i.media_type+';base64,'+i.data})}
@@ -6111,10 +6212,10 @@ function srvUnlock(force){
   tts.srvUnlocked=true;
   srvEls.forEach(function(a){try{if(a===srvCur||srvQ.some(function(x){return x.resumeEl===a}))return;a.src=SILENT_SRC;var p=a.play();if(p&&p.catch)p.catch(function(){tts.srvUnlocked=false})}catch(_){tts.srvUnlocked=false}});
 }
-// 朗读前去掉 Markdown 记号：代码块、表格、图片、链接地址都不念
+// 朗读前去掉 Markdown 记号：表格、图片、链接地址都不念，代码块换成「下面有 N 条命令 / N 行代码」
 function ttsStrip(src){
   return String(src||'')
-    .replace(/```[\s\S]*?```/g,'，代码略，')
+    .replace(/```([^\n`]*)\n?([\s\S]*?)```/g,function(m,info,body){return codeSay(body,info.trim().split(/\s+/)[0])})
     .replace(/^\s*\|.*\|\s*$/gm,'').replace(/^\s*[-:| ]{3,}\s*$/gm,'')
     .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
     .replace(/https?:\/\/\S+/g,'链接')
@@ -6125,7 +6226,7 @@ function ttsText(src){
   return ttsStrip(src).replace(/\n{2,}/g,'。\n').replace(/\s+/g,' ').trim();
 }
 // 边写边念：文字每出来完整的一句（句末标点或换行）就交去念，不等整段写完。
-// 代码块没写完时不切（等它写完整块念成「代码略」）；太短的碎句先攒着，和下一句一起念。
+// 代码块没写完时不切（等它写完整块念成「下面有 N 条命令」这类提示）；太短的碎句先攒着，和下一句一起念。
 var ttsPos=0,ttsWarmAt=0;
 // 开始回复时让电脑先连好微软语音（30 秒内只叫一次）
 function ttsWarmUp(){if(!tts.on||!/^srv:edge:/.test(ttsW())||Date.now()-ttsWarmAt<30000)return;ttsWarmAt=Date.now();fetch('/api/tts/warm',{method:'POST'}).catch(function(){})}
@@ -6485,10 +6586,10 @@ function ttsLastReply(){
   var els=feed.querySelectorAll('.msg.ai');if(!els.length)return '';
   return ttsElText(els[els.length-1]);
 }
-// 一段回复要念的文字：代码、表格略过，按钮（含结尾的播放键）不念
+// 一段回复要念的文字：代码块换成简短提示、表格略过，按钮（含结尾的播放键）不念
 function ttsElText(el){
   var c=el.cloneNode(true);
-  c.querySelectorAll('pre,.cb').forEach(function(x){x.replaceWith('，代码略，')});
+  c.querySelectorAll('.cb,pre').forEach(function(x){if(x.parentNode)x.replaceWith(x.dataset.say!=null?x.dataset.say:codeSay(x.textContent,''))});
   c.querySelectorAll('table,.tbl').forEach(function(x){x.replaceWith('，表格略，')});
   c.querySelectorAll('button').forEach(function(x){x.remove()});
   c.querySelectorAll('p,li,h1,h2,h3,h4,h5,h6,blockquote').forEach(function(x){x.append('\n')});
