@@ -2,7 +2,7 @@
 
 claclaw 是装在电脑上的一个小网页服务，让你用手机浏览器接管这台电脑上的 AI 编程会话：看已有会话、接着聊或新开一个，AI 要改文件、跑命令时在手机上点「允许 / 拒绝」，回复完收到推送。不用 SSH，不怕断线。
 
-它把本机的 AI 编程工具叫作 **Claw**，支持 Claude Code、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、GitHub Copilot CLI、OpenClaw，以及自带的 Mini（问答为主，能力够的模型还能用技能、跑几条简单命令）。装了任意一个就能用，装了几个就能随时切换。两台电脑上的会话还能互发消息、拉进同一个群聊协作。
+它把本机的 AI 编程工具叫作 **Claw**，支持 Claude Code、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、GitHub Copilot CLI、OpenClaw，以及自带的 kuAi（问答为主，能力够的模型还能用技能、跑几条简单命令）。装了任意一个就能用，装了几个就能随时切换。两台电脑上的会话还能互发消息、拉进同一个群聊协作。
 
 > 能登录 claclaw 的人，就能在你的电脑上批准任意命令。
 

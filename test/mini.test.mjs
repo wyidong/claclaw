@@ -430,7 +430,7 @@ test('Mini agent：每轮在用户那条消息上记 run（模型、接口、发
     const u = msgs[0], r = u.run;
     assert.ok(u.at > 0 && msgs[1].at >= u.at);
     assert.equal(r.model, 'mx'); assert.equal(r.api, 'openai'); assert.match(r.host, /^127\.0\.0\.1:\d+$/); assert.equal(r.sent, 1); assert.equal(r.dropped, 0);
-    assert.match(r.sys, /你是答疑助手/); assert.equal(r.parts, 1); assert.equal(r.stop, null); assert.ok(r.endAt >= u.at);
+    assert.match(r.sys, /你是 kuAi，claclaw 自带的答疑助手/); assert.equal(r.parts, 1); assert.equal(r.stop, null); assert.ok(r.endAt >= u.at);
     assert.equal(r.calls.length, 2);
     assert.equal(r.calls[0].status, 400); assert.match(r.calls[0].err, /temperature/);
     assert.equal(r.calls[1].status, 200); assert.ok(r.calls[1].retry && r.calls[1].plain); assert.equal(r.calls[1].chars, 2); assert.ok(r.calls[1].ttftMs >= 0);

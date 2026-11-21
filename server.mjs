@@ -567,8 +567,8 @@ const CLAWS = [
     info: glInfo, sessionList: glSessionList, newSession: glNewSession, installed: glInstalled, running: glAcpRunning, shutdown: glShutdown, modelsChanged: glModelsChanged, exists: glExists,
     del: id => glDelete(id, TRASH), rename: (id, title) => glRename(id, title),
   }),
-  // Mini：claclaw 自带的极简 agent（本地小模型用），差异都在 mini.mjs 里
-  infoClaw({ id: 'mini', label: 'Mini', logName: 'mini', prefix: 'mi:', is: isMi, runners: miRunners, cls: MiRunner,
+  // kuAi（原名 Mini，代码里还叫 mini、会话 id 前缀 mi:）：claclaw 自带的极简 agent，差异都在 mini.mjs 里
+  infoClaw({ id: 'mini', label: 'kuAi', logName: 'mini', prefix: 'mi:', is: isMi, runners: miRunners, cls: MiRunner,
     info: miInfo, sessionList: miSessionList, newSession: miNewSession, installed: miInstalled, running: miAcpRunning, shutdown: miShutdown, modelsChanged: miModelsChanged, exists: miExists,
     del: id => miDelete(id, TRASH), rename: (id, title) => miRename(id, title),
   }),

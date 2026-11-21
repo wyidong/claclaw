@@ -1,4 +1,4 @@
-// Mini：claclaw 自带的问答 agent，能力够的模型还能用 claclaw 的技能和几条简单命令（只读的直接跑，有动静的要确认，见 mini-agent.mjs）；接模型库里的模型（尤其本地 Ollama）答疑、看模型快不快。
+// kuAi（原名 Mini；代码、数据目录、会话 id 前缀照旧叫 mini / mi:，旧会话和群不受影响）：claclaw 自带的问答 agent，能力够的模型还能用 claclaw 的技能和几条简单命令（只读的直接跑，有动静的要确认，见 mini-agent.mjs）；接模型库里的模型（尤其本地 Ollama）答疑、看模型快不快。
 // agent 本体在 mini-agent.mjs（ACP，stdin/stdout）。每轮结束显示一行：模型 · 首字耗时 · 生成速度。
 // - 会话：agent 把每个会话存成 data/mini-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
 // - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商，每家各起一个进程，会话各走各的（同一个群里几个会话可以同时用不同家的模型）；本机地址（127.0.0.1 / localhost）的排最前；
@@ -56,7 +56,7 @@ function listRows() {
 export function miSessionList({ busy = () => false } = {}) {
   return listRows().map(s => ({
     id: MI_PREFIX + s.id,
-    title: s.title || 'Mini 会话',
+    title: s.title || 'kuAi 会话',
     cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
     lastModified: s.updated,
     openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
@@ -122,7 +122,7 @@ const agents = new Map();   // 供应商 id（模型库里没有能用的模型�
 function agentFor(pid) {
   let ag = agents.get(pid);
   if (!ag) {
-    ag = new AcpAgent({ name: 'mini', bin: () => process.execPath, missing: '没找到 node', command: bin => [bin, [AGENT_JS]], prepare: () => routeEnv(pid) });
+    ag = new AcpAgent({ name: 'kuAi', bin: () => process.execPath, missing: '没找到 node', command: bin => [bin, [AGENT_JS]], prepare: () => routeEnv(pid) });
     agents.set(pid, ag);
   }
   return ag;
@@ -142,7 +142,7 @@ export class MiRunner extends AcpRunner {
   static get agent() { return agentFor(route()?.p.id || ''); }   // 新建会话用默认那家；已有的会话在构造时换成它自己那家的
   static onCreated(sid) { saveRoute(sid, route()?.p.id || ''); }
   static prefix = MI_PREFIX; static runners = miRunners;
-  static label = 'Mini'; static group = 'Mini'; static permPrefix = 'mi-'; static commands = COMMANDS;
+  static label = 'kuAi'; static group = 'kuAi'; static permPrefix = 'mi-'; static commands = COMMANDS;
   static cfgIds = { model: 'model' };
   static cfgNames = { model: '模型' };
   static ctxFromUsage = true; static titleFromAgent = true;
@@ -160,12 +160,12 @@ export class MiRunner extends AcpRunner {
     this.replaying = false; this.replayOpen = null;
     if (!ok) return;
     this.items = this.items.filter(it => it.kind !== 'user' || it.text || it.images?.length);
-    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'Mini 会话';
+    if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'kuAi 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
   // 用户用的设备：Mini 按它给对应系统的命令；协同 / 群里别人转来的那一轮：Mini 的简单命令每条都要确认
   promptMeta(dev, peer) { return dev || peer ? { ...(dev ? { device: dev } : {}), ...(peer ? { peer: true } : {}) } : null; }
-  get imageError() { return 'Mini 进程是旧版本，还不收图片：重启 claclaw 后再试'; }
+  get imageError() { return 'kuAi 进程是旧版本，还不收图片：重启 claclaw 后再试'; }
   // 每轮结束 agent 在 usage_update._meta.mini 里带上速度：显示成一行小字（不进历史）
   handle(u) {
     super.handle(u);
@@ -223,7 +223,7 @@ export class MiRunner extends AcpRunner {
 
 const num = (x, d) => Number(x).toFixed(d);
 export function statsLine(st) {
-  const parts = [st.model || 'Mini'];
+  const parts = [st.model || 'kuAi'];
   if (st.ttft == null) parts.push('没有输出');
   else parts.push('首字 ' + num(st.ttft, st.ttft < 10 ? 2 : 1) + ' 秒');
   if (st.tps) parts.push(num(st.tps, st.tps < 10 ? 1 : 0) + ' tok/s');
