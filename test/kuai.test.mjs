@@ -7,6 +7,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+process.env.KUAI_META = '0';   // 假的模型服务都在 127.0.0.1：不去问它们是不是 Ollama（专门的测试自己打开）
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-data-'));   // kuai.mjs 引入 auth.mjs 前先指到临时目录
 const { pickRoute, statsLine, baseOf, sessionPid, kuNewSession, kuRunners, kuShutdown, KuRunner } = await import('../src/claws/kuai.mjs');
 const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'claws', 'kuai-agent.mjs');
@@ -40,13 +41,13 @@ function fakeModel(replies) {
   return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port + '/v1' })));
 }
 
-// 不收 temperature 的接口（像 OpenAI 官方的推理模型）：带了就回 400
+// 不收 reasoning_effort 的接口：带了就回 400
 function strictModel() {
   const reqs = [];
   const srv = http.createServer((req, res) => {
     let b = ''; req.on('data', d => b += d); req.on('end', () => {
       const j = JSON.parse(b); reqs.push(j);
-      if ('temperature' in j) { res.writeHead(400, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: "Unsupported parameter: 'temperature'" } })); }
+      if ('reasoning_effort' in j) { res.writeHead(400, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: "Unsupported parameter: 'reasoning_effort'" } })); }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end('data: ' + JSON.stringify({ choices: [{ delta: { content: '好的' } }] }) + '\n\ndata: [DONE]\n\n');
     });
@@ -227,7 +228,7 @@ test('kuAi agent：旧会话里的工具标签 / 工具结果 / 空回复不发�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('kuAi agent：接口不收 temperature / reasoning_effort（回 400）时去掉重试一次，记下来以后不发', async () => {
+test('kuAi agent：接口不收 reasoning_effort（回 400）时去掉重试一次，按模型记下来：这个会话、别的会话都不再发；换了模型重新试', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await strictModel();
   const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir });
@@ -238,12 +239,19 @@ test('kuAi agent：接口不收 temperature / reasoning_effort（回 400）时�
     assert.equal(r.result.stopReason, 'end_turn'); assert.equal(textOf(a.updates), '好的');
     assert.equal(m.reqs.length, 2); assert.ok(!('reasoning_effort' in m.reqs[1]));
     await say(a, n.sessionId, '再问');
-    assert.equal(m.reqs.length, 3); assert.ok(!('temperature' in m.reqs[2]));   // 记住了，不再先撞一次 400
+    assert.equal(m.reqs.length, 3); assert.ok(!('reasoning_effort' in m.reqs[2]));   // 记住了，不再先撞一次 400
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).plain, true);
-    // 换了模型要重新试：又先带上 temperature
+    // 换了模型要重新试：又先带上
     await a.rpc('session/set_config_option', { sessionId: n.sessionId, configId: 'model', value: 'other' });
     await say(a, n.sessionId, '换了模型');
-    assert.equal(m.reqs[3].model, 'other'); assert.ok('temperature' in m.reqs[3]); assert.equal(m.reqs.length, 5);
+    assert.equal(m.reqs[3].model, 'other'); assert.ok('reasoning_effort' in m.reqs[3]); assert.equal(m.reqs.length, 5);
+    // 按模型记在 KUAI_LEARN 里（没给就在会话目录的 .learned）：新开的会话不用再撞一次 400
+    const rec = JSON.parse(fs.readFileSync(path.join(dir, '.learned'), 'utf8')), key = Object.keys(rec).find(k => k.endsWith('|other'));
+    assert.ok(rec[key].plain > 0);
+    const n2 = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await a.rpc('session/set_config_option', { sessionId: n2.sessionId, configId: 'model', value: 'other' });
+    await say(a, n2.sessionId, '新会话');
+    assert.equal(m.reqs.length, 6); assert.ok(!('reasoning_effort' in m.reqs[5]));
   } finally { a.stop(); m.srv.close(); }
 });
 
@@ -304,7 +312,7 @@ for (const kind of ['anthropic', 'gemini']) test('kuAi agent：' + kind + ' 接�
       assert.equal(q.url, '/v1/messages'); assert.equal(q.headers['x-api-key'], 'sk-test'); assert.ok(q.headers['anthropic-version']);
       assert.match(q.body.system, /你现在用的模型是 mx/);
       assert.deepEqual(q.body.messages.map(x => x.role + ':' + x.content), ['user:第一问', 'assistant:你好世界', 'user:第二问']);
-      assert.ok(!('thinking' in q.body)); assert.equal(q.body.temperature, 0.3);
+      assert.ok(!('thinking' in q.body)); assert.ok(!('temperature' in q.body));   // 采样参数拿不准的不发
       assert.equal(use.used, 60 + 12); assert.equal(use._meta.kuai.outTokens, 12);
     } else {
       assert.equal(q.url, '/v1beta/models/mx:streamGenerateContent?alt=sse'); assert.equal(q.headers['x-goog-api-key'], 'sk-test');
@@ -432,13 +440,13 @@ test('kuAi agent：每轮在用户那条消息上记 run（模型、接口、发
     assert.equal(r.model, 'mx'); assert.equal(r.api, 'openai'); assert.match(r.host, /^127\.0\.0\.1:\d+$/); assert.equal(r.sent, 1); assert.equal(r.dropped, 0);
     assert.match(r.sys, /你是 kuAi，claclaw 自带的答疑助手/); assert.equal(r.parts, 1); assert.equal(r.stop, null); assert.ok(r.endAt >= u.at);
     assert.equal(r.calls.length, 2);
-    assert.equal(r.calls[0].status, 400); assert.match(r.calls[0].err, /temperature/);
+    assert.equal(r.calls[0].status, 400); assert.match(r.calls[0].err, /reasoning_effort/);
     assert.equal(r.calls[1].status, 200); assert.ok(r.calls[1].retry && r.calls[1].plain); assert.equal(r.calls[1].chars, 2); assert.ok(r.calls[1].ttftMs >= 0);
-    // 实际发了什么：第一次带 temperature，去掉调参重试的那次不带；对话的形状（系统提示 + 用户 2 字）；400 时服务返回的原文；不记 key
-    assert.equal(r.calls[0].req.path, '/v1/chat/completions'); assert.equal(r.calls[0].req.params.temperature, 0.3); assert.equal(r.calls[0].req.params.model, 'mx');
-    assert.equal('temperature' in r.calls[1].req.params, false);
+    // 实际发了什么：第一次带 reasoning_effort，去掉调参重试的那次不带；对话的形状（系统提示 + 用户 2 字）；400 时服务返回的原文；不记 key
+    assert.equal(r.calls[0].req.path, '/v1/chat/completions'); assert.equal(r.calls[0].req.params.reasoning_effort, 'none'); assert.ok(!('temperature' in r.calls[0].req.params)); assert.equal(r.calls[0].req.params.model, 'mx');
+    assert.equal('reasoning_effort' in r.calls[1].req.params, false);
     assert.deepEqual(r.calls[1].req.msgs.map(x => x[0]), ['system', 'user']); assert.equal(r.calls[1].req.msgs[1][1], 2);
-    assert.match(r.calls[0].body, /temperature/); assert.equal(typeof r.calls[1].text, 'string');
+    assert.match(r.calls[0].body, /reasoning_effort/); assert.equal(typeof r.calls[1].text, 'string');
     assert.equal(JSON.stringify(r).includes('Bearer'), false);
   } finally { a.stop(); m.srv.close(); }
 });
@@ -728,7 +736,7 @@ test('kuAi：去掉调参重试时撞上 503（服务忙）：报这次的原话
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
     const r = await say(a, n.sessionId, '你好');
     assert.match(r.error.message, /503：This model is currently experiencing high demand/);
-    assert.ok('temperature' in reqs[0] && !('temperature' in reqs[1]));
+    assert.ok('reasoning_effort' in reqs[0] && !('reasoning_effort' in reqs[1]));
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).plain, true);
   } finally { a.stop(); srv.close(); }
 });
@@ -864,5 +872,101 @@ test('kuAi 简单命令：选项里连写的路径（-f.env、-of.env、--file=�
     assert.doesNotMatch(find, /\.hidden/);
     assert.match(res(3), /\$ find \. -name k -print0\n没跑：find 不能带/);
     assert.doesNotMatch(res(3), /\.hidden/);
+  } finally { a.stop(); m.srv.close(); }
+});
+
+// ---------- 模型画像、能力档、窗口 ----------
+const runOf = (dir, sid) => JSON.parse(fs.readFileSync(path.join(dir, sid + '.json'), 'utf8')).messages.filter(x => x.run).at(-1).run;
+
+test('kuAi 能力档：模型库里手动设的优先——小模型设成 L2 就给命令，云上的模型设成 L0 就只问答；本机的 Qwen3 按模型卡带采样', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
+  const m = await fakeModel(['好。']);
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_CMDS: '1', KUAI_MODELS: 'qwen3:4b,deepseek-v4-pro,qwen3:1.7b', KUAI_MODEL: 'qwen3:4b',
+    KUAI_MODEL_INFO: JSON.stringify({ 'qwen3:4b': { tier: 2, ctx: 32768 }, 'deepseek-v4-pro': { tier: 0 } }) });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result, sid = n.sessionId;
+    await say(a, sid, '你好');
+    assert.match(m.reqs[0].messages[0].content, /简单命令：date cal/); assert.equal(m.reqs[0].tools.length, 1);
+    assert.equal(m.reqs[0].temperature, 0.7); assert.equal(m.reqs[0].top_p, 0.8); assert.equal(m.reqs[0].reasoning_effort, 'none');
+    let r = runOf(dir, sid);
+    assert.equal(r.tier, 2); assert.equal(r.tierWhy, '模型库里设的'); assert.equal(r.ctx, 32768); assert.equal(r.budget, 6000); assert.equal(r.maxOut, 4096);
+    // 开思考：换成思考那一套采样，不发 reasoning_effort
+    await a.rpc('session/set_config_option', { sessionId: sid, configId: 'effort', value: 'on' });
+    await say(a, sid, '再问');
+    assert.equal(m.reqs[1].temperature, 0.6); assert.equal(m.reqs[1].top_p, 0.95); assert.ok(!('reasoning_effort' in m.reqs[1]));
+    await a.rpc('session/set_config_option', { sessionId: sid, configId: 'effort', value: 'off' });
+    // 云上的模型设成只问答：不提命令、不带工具；名字不认识的不带采样
+    await a.rpc('session/set_config_option', { sessionId: sid, configId: 'model', value: 'deepseek-v4-pro' });
+    await say(a, sid, '换了');
+    assert.doesNotMatch(m.reqs[2].messages[0].content, /简单命令/); assert.ok(!('tools' in m.reqs[2])); assert.ok(!('temperature' in m.reqs[2]));
+    r = runOf(dir, sid); assert.equal(r.tier, 0);
+    // 没设的小模型：自动是 L1，只问答
+    await a.rpc('session/set_config_option', { sessionId: sid, configId: 'model', value: 'qwen3:1.7b' });
+    await say(a, sid, '再换');
+    assert.doesNotMatch(m.reqs[3].messages[0].content, /简单命令/);
+    r = runOf(dir, sid); assert.equal(r.tier, 1); assert.equal(r.tierWhy, '1.7B');
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('kuAi 窗口：本机是 Ollama 时问它要参数量和实际的窗口——名字里没写参数量的小模型不给命令；窗口小就收紧对话预算和回复上限，并按模型记下', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), reqs = [], asked = [];
+  let ctx = 4096;
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      const json = o => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
+      asked.push(req.method + ' ' + req.url);
+      if (req.url === '/api/version') return json({ version: '0.33.3' });
+      if (req.url === '/api/show') return json({ capabilities: ['completion', 'tools'], details: { parameter_size: '1.2B', family: 'x' }, parameters: 'temperature 0.6\nstop "<|im_end|>"' });
+      if (req.url === '/api/ps') return json({ models: [{ name: 'mystery:latest', model: 'mystery:latest', context_length: ctx }] });
+      reqs.push(JSON.parse(b));
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end('data: ' + JSON.stringify({ choices: [{ delta: { content: '好。' } }] }) + '\n\ndata: ' + JSON.stringify({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 10 } }) + '\n\ndata: [DONE]\n\n');
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const a = startAgent({ KUAI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', KUAI_DIR: dir, KUAI_CMDS: '1', KUAI_META: '1', KUAI_MODELS: 'mystery:latest', KUAI_MODEL: 'mystery:latest',
+    KUAI_MODEL_INFO: JSON.stringify({ 'mystery:latest': { ctx: 131072 } }) });   // 模型库里填的是模型的上限，不是 Ollama 实际给的
+  try {
+    await a.rpc('initialize', {});
+    const sid = (await a.rpc('session/new', { cwd: os.tmpdir() })).result.sessionId;
+    await say(a, sid, '你好');
+    assert.deepEqual(asked.slice(0, 3), ['GET /api/version', 'POST /api/show', 'GET /api/ps']);
+    assert.doesNotMatch(reqs[0].messages[0].content, /简单命令/);   // 名字里没写参数量（按名字会当成云上的模型），Ollama 说 1.2B：只问答
+    assert.equal(reqs[0].max_tokens, 2048);
+    let r = runOf(dir, sid);
+    assert.equal(r.tier, 0); assert.equal(r.tierWhy, '1.2B'); assert.equal(r.ctx, 4096); assert.equal(r.budget, 1792); assert.equal(r.maxOut, 2048); assert.ok(!r.ctxGuess);
+    assert.equal(a.updates.filter(u => u.sessionUpdate === 'usage_update').at(-1).size, 1792);
+    const rec = JSON.parse(fs.readFileSync(path.join(dir, '.learned'), 'utf8'));
+    assert.equal(Object.values(rec)[0].ctx, 4096); assert.match(Object.keys(rec)[0], /^127\.0\.0\.1:\d+\|mystery:latest$/);
+    // 窗口调大了（改了 OLLAMA_CONTEXT_LENGTH）：下一轮就跟上；模型信息不重复问
+    ctx = 16384;
+    await say(a, sid, '再问');
+    assert.equal(reqs[1].max_tokens, 4096);
+    r = runOf(dir, sid); assert.equal(r.ctx, 16384); assert.equal(r.budget, 6000);
+    assert.equal(asked.filter(x => x === 'POST /api/show').length, 1); assert.equal(asked.filter(x => x === 'GET /api/version').length, 1);
+  } finally { a.stop(); srv.close(); }
+});
+
+test('kuAi 画像：Gemini 接口上的 Gemma 1–3 不收系统提示，并进第一条用户消息、不带思考设置；Gemma 4 照常带系统提示，思考压到最低', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
+  const m = await fakeNative('gemini');
+  const a = startAgent({ KUAI_FORMAT: 'gemini', KUAI_BASE_URL: m.url + '/v1beta', KUAI_API_KEY: 'sk-test', KUAI_MODELS: 'gemma-3-27b-it,gemma-4-31b-it', KUAI_MODEL: 'gemma-3-27b-it', KUAI_DIR: dir });
+  try {
+    await a.rpc('initialize', {});
+    const sid = (await a.rpc('session/new', { cwd: os.tmpdir() })).result.sessionId;
+    await say(a, sid, '第一问');
+    let b = m.reqs[0].body;
+    assert.ok(!('systemInstruction' in b));
+    assert.match(b.contents[0].parts[0].text, /你是 kuAi/); assert.equal(b.contents[0].parts[1].text, '第一问'); assert.equal(b.contents[0].role, 'user');
+    assert.deepEqual(b.generationConfig, { maxOutputTokens: 4096 });
+    await say(a, sid, '第二问');   // 系统提示只并进第一条
+    b = m.reqs[1].body;
+    assert.deepEqual(b.contents.map(x => x.role + ':' + x.parts.length), ['user:2', 'model:1', 'user:1']);
+    await a.rpc('session/set_config_option', { sessionId: sid, configId: 'model', value: 'gemma-4-31b-it' });
+    await say(a, sid, '第三问');
+    b = m.reqs[2].body;
+    assert.match(b.systemInstruction.parts[0].text, /你是 kuAi/); assert.equal(b.contents[0].parts.length, 1);
+    assert.deepEqual(b.generationConfig, { maxOutputTokens: 4096, thinkingConfig: { thinkingLevel: 'minimal' } });
   } finally { a.stop(); m.srv.close(); }
 });

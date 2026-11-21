@@ -191,3 +191,21 @@ test('从接口读模型：服务端请求按 HTTP_PROXY / NO_PROXY 走代理（
     proxy.close();
   }
 });
+
+test('模型的 kuAi 能力档：0–5 的整数，不填是自动；旧网页不带这一项时保留原来的，明确清空才去掉', () => {
+  const s = emptyStore();
+  applyOp(s, { op: 'provider-save', name: 'DeepSeek', endpoints: { openai: 'https://api.deepseek.com' }, key: 'sk-abcdefgh12345678' });
+  const pid = s.providers[0].id, get = id => s.providers[0].models.find(x => x.id === id);
+  applyOp(s, { op: 'model-save', provider: pid, id: 'm1', tier: '2' });
+  assert.equal(get('m1').tier, 2);
+  applyOp(s, { op: 'model-save', provider: pid, id: 'm2' });
+  assert.ok(!('tier' in get('m2')));
+  applyOp(s, { op: 'model-save', provider: pid, id: 'm1', orig: 'm1', context: 64000 });   // 旧网页：没有 tier 这一项
+  assert.equal(get('m1').tier, 2); assert.equal(get('m1').context, 64000);
+  applyOp(s, { op: 'model-save', provider: pid, id: 'm1', orig: 'm1', tier: 0 });
+  assert.equal(get('m1').tier, 0);
+  applyOp(s, { op: 'model-save', provider: pid, id: 'm1', orig: 'm1', tier: '' });           // 选回「自动」
+  assert.ok(!('tier' in get('m1')));
+  for (const bad of [6, -1, 1.5, 'x']) assert.throws(() => applyOp(s, { op: 'model-save', provider: pid, id: 'm3', tier: bad }), /能力档不对/);
+  assert.equal(publicView(s).providers[0].models.find(x => x.id === 'm2').tier, undefined);
+});

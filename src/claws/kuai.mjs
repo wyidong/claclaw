@@ -3,6 +3,7 @@
 // - 会话：agent 把每个会话存成 data/kuai-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
 // - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商，每家各起一个进程，会话各走各的（同一个群里几个会话可以同时用不同家的模型）；本机地址（127.0.0.1 / localhost）的排最前；
 //   会话走哪家记在 data/kuai-route.json 的 sessions（没记的按会话的模型认，认不出走默认那家）；provider 是新会话默认走的（最近选的那家）
+// - 能力档：到 L2 的模型才给技能和命令（kuai-profiles.mjs）；模型库里每个模型可以手动设（tier），随 KUAI_MODEL_INFO 传给 agent
 // - 改名：agent 没有接口，名字记在 claclaw 这边；删除：把会话文件挪进回收站
 // 网页里 kuAi 会话的 id = 'ku:' + 会话 id（UUID）。
 import fs from 'node:fs';
@@ -21,6 +22,7 @@ const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 const AGENT_JS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'kuai-agent.mjs');
 const SESSIONS = path.join(DATA, 'kuai-sessions');
 const ROUTE_FILE = path.join(DATA, 'kuai-route.json');
+const LEARN_FILE = path.join(DATA, 'kuai-models.json');   // agent 按模型记下试出来的特性（关不掉思考、不收调参、实际窗口）
 const FMTS = ['openai', 'anthropic', 'gemini'];   // 一家有几种接口时按这个顺序挑
 const epOf = x => x.p.endpoints[x.fmt];
 const LOCAL = /^(127\.|localhost$|\[?::1\]?$)/;
@@ -112,7 +114,12 @@ function routeEnv(pid) {
     env.KUAI_API_KEY = hit.p.key || 'none';
     env.KUAI_MODELS = hit.p.models.map(m => m.id).join(',');
     env.KUAI_MODEL = hit.m.id;
+    // 模型库里填的窗口、手动设的能力档（没设的不带）
+    const info = {};
+    for (const m of hit.p.models) { const x = { ...(m.context ? { ctx: m.context } : {}), ...(Number.isInteger(m.tier) ? { tier: m.tier } : {}) }; if (Object.keys(x).length) info[m.id] = x; }
+    if (Object.keys(info).length) env.KUAI_MODEL_INFO = JSON.stringify(info);
   }
+  env.KUAI_LEARN = LEARN_FILE;
   if (process.env.CLACLAW_KUAI_BUDGET) env.KUAI_BUDGET = process.env.CLACLAW_KUAI_BUDGET;
   return { env, sig: hash16(JSON.stringify(env)) };
 }

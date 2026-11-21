@@ -135,9 +135,14 @@ function saveModel(store, b, now) {
   if (ctx >= 1000) m.context = ctx;
   if (b.vision === true) m.vision = true;
   if (b.reasoning === true) m.reasoning = true;
+  // kuAi 的能力档（0–5，见 src/claws/kuai-profiles.mjs）：不填 / 空 = 自动；旧网页不带这一项时保留原来的
+  const tier = b.tier === '' || b.tier == null ? null : Number(b.tier);
+  if (tier != null && !(Number.isInteger(tier) && tier >= 0 && tier <= 5)) fail('kuAi 能力档不对（0–5，或者不填）');
+  if (tier != null) m.tier = tier;
   if (b.orig) {
     const i = p.models.findIndex(x => x.id === b.orig);
     if (i < 0) fail('没有这个模型（可能已经删了）');
+    if (b.tier === undefined && Number.isInteger(p.models[i].tier)) m.tier = p.models[i].tier;
     p.models[i] = m;
   } else {
     if (p.models.length >= MAX_MODELS) fail('这个 Key 下模型太多了（最多 ' + MAX_MODELS + ' 个）');

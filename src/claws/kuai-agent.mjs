@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 // 极简对话 agent（ACP，stdin/stdout 一行一条 JSON-RPC）：问答为主，不碰这台电脑上的文件和任意命令；
-// 能力够的模型（名字里的参数量不到 7B 的本机小模型除外）还能用 claclaw 自带的技能（skills/，电视、听歌、视频、换肤……）：
+// 能力档到 L2 的模型（见 kuai-profiles.mjs；本机小模型默认不到，可以在模型库里手动设）还能用 claclaw 自带的技能（skills/，电视、听歌、视频、换肤……）：
 // 模型在回复里写 ```claw 代码块（read 技能名 / 技能命令），这边只认技能清单里的命令，不经 shell 直接用 node 跑技能脚本，结果再交给模型接着答。
 // 同样的写法还能跑几条简单命令（date、ls、df、cat……，见 CMDS）：只读的直接跑，open、mkdir 这类要用户在网页上点确认；不经 shell，隐藏文件、~/Library、claclaw 的 data 不碰。
 // 用途：拿模型库里的模型（尤其本地 Ollama）直接答疑，顺便看模型快不快、好不好用。
 // - 每轮请求只有一段很短的系统提示 + 对话本身，首字最快（技能和命令只有一个 claw 工具）
-// - 默认关思考（reasoning_effort=none）；会话设置里可以打开
+// - 默认关思考；会话设置里可以打开。怎么关、带不带采样参数按模型画像来（kuai-profiles.mjs），拿不准的不发
 // - 请求前缀保持不变（Ollama 能复用已处理的部分）；超出预算才一次性丢掉最早的几轮，不做「压缩」那种额外请求
 // - 每轮结束在 usage_update 的 _meta.kuai 里带上首字耗时、生成速度，claclaw 显示成一行小字
-// 环境变量：KUAI_FORMAT（接口格式 openai | anthropic | gemini，默认 openai）、KUAI_BASE_URL（openai 写到 /v1；anthropic 写到 /v1 之前；gemini 写到 /v1beta）、KUAI_API_KEY、KUAI_MODELS（逗号分隔）、KUAI_MODEL、KUAI_DIR（会话目录）、KUAI_BUDGET（上下文预算 token）、KUAI_MAX_OUT
+// 试出来的特性（关不掉思考、不收调参、Ollama 实际的窗口）按模型记在 KUAI_LEARN 指的文件里，换会话不用再试
+// 环境变量：KUAI_MODEL_INFO（模型库里每个模型的窗口和手动设的能力档，JSON：{ 模型: { ctx, tier } }）、KUAI_LEARN、KUAI_META（=0 不问 Ollama 要模型信息）、KUAI_FORMAT（接口格式 openai | anthropic | gemini，默认 openai）、KUAI_BASE_URL（openai 写到 /v1；anthropic 写到 /v1 之前；gemini 写到 /v1beta）、KUAI_API_KEY、KUAI_MODELS（逗号分隔）、KUAI_MODEL、KUAI_DIR（会话目录）、KUAI_BUDGET（上下文预算 token）、KUAI_MAX_OUT
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { HOME, tilde, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
+import { profileOf, tierOf, parseSize, isLocalHost, budgetOf } from './kuai-profiles.mjs';
 
 const BASE = (process.env.KUAI_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
 const KEY = process.env.KUAI_API_KEY || 'none';
@@ -25,6 +27,9 @@ const DEFAULT_MODEL = process.env.KUAI_MODEL || MODELS[0] || 'qwen3:1.7b';
 const DIR = process.env.KUAI_DIR || path.join(HOME, '.claclaw-kuai', 'sessions');
 const BUDGET = Math.max(2000, Number(process.env.KUAI_BUDGET) || 6000);
 const MAX_OUT = Math.max(256, Number(process.env.KUAI_MAX_OUT) || 4096);   // 一次回复的 token 上限：小模型偶尔停不下来
+const MODEL_INFO = (() => { try { const j = JSON.parse(process.env.KUAI_MODEL_INFO || '{}'); return j && typeof j === 'object' ? j : {}; } catch { return {}; } })();
+const LEARN = process.env.KUAI_LEARN || path.join(DIR, '.learned');
+const META_ON = process.env.KUAI_META !== '0';
 // 技能：skills/index.json 里登记的、有命令脚本的（找会话、发文件 kuAi 用不上，不给）；KUAI_SKILLS_DIR 可以改目录（测试用；指到没有的目录就是不给技能）
 const SKILLS_DIR = process.env.KUAI_SKILLS_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
 const SKILL_SKIP = new Set(['claw-interconnect', 'claw-file']);
@@ -97,6 +102,61 @@ const configOf = s => [
   { id: 'effort', name: '思考', category: 'thought_level', type: 'select', currentValue: s.think ? 'on' : 'off', options: [{ value: 'off', name: '关' }, { value: 'on', name: '开' }] },
 ];
 
+// ---------- 按模型记下的特性、模型信息 ----------
+// 记在 LEARN 文件里：{ '主机|模型': { noOff: 时刻, plain: 时刻, ctx: 窗口 } }。noOff / plain 记的是试出来的时刻，30 天后重新试（服务商可能改了）
+const HOST = hostOf(BASE), LOCAL = isLocalHost(HOST), LEARN_MS = 30 * 864e5;
+const readLearn = () => { const j = readJson(LEARN, {}); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; };
+let learned = readLearn();
+const lkey = m => HOST + '|' + m;
+const fresh = t => typeof t === 'number' && Date.now() - t < LEARN_MS;
+const knows = (m, k) => fresh(learned[lkey(m)]?.[k]);
+function learn(m, k, v) {
+  const old = learned[lkey(m)]?.[k];
+  if (k === 'ctx' ? old === v : !!v === fresh(old)) return;
+  const all = readLearn(), r = { ...(all[lkey(m)] || {}) };   // 几家供应商各一个进程，共用这个文件：写之前重读
+  if (v) r[k] = k === 'ctx' ? v : Date.now(); else delete r[k];
+  all[lkey(m)] = r; learned = all;
+  try { writeJsonAtomic(LEARN, all, 0); } catch {}
+}
+// 本机的模型服务是 Ollama 时问它要模型信息：参数量（名字里没写的也有）和实际的窗口。
+// Ollama 没设窗口时默认只有 4096，超出的部分它不报错、直接丢掉最早的消息，所以对话的预算得跟着实际的窗口走
+const ORIGIN = (() => { try { return new URL(BASE).origin; } catch { return ''; } })();
+async function getJson(p, body, ms = 1500) {
+  const r = await fetch(ORIGIN + p, { method: body ? 'POST' : 'GET', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(ms) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+let ollama = null, isOllama = false;
+const askOllama = () => ollama ||= (META_ON && LOCAL && FORMAT !== 'gemini' && ORIGIN ? getJson('/api/version').then(j => typeof j?.version === 'string', () => false) : Promise.resolve(false)).then(ok => (isOllama = ok));
+const metas = new Map();   // 模型 → { size（B）, caps, numCtx }；问不到的记成空的，不反复问
+const metaOf = m => metas.get(m) || {};
+async function loadMeta(m) {
+  if (!(await askOllama())) return;
+  if (!metas.has(m)) {
+    try {
+      const j = await getJson('/api/show', { model: m }, 3000);
+      metas.set(m, { size: parseSize(j?.details?.parameter_size), caps: Array.isArray(j?.capabilities) ? j.capabilities : null, numCtx: Number(/(?:^|\n)\s*num_ctx\s+(\d+)/.exec(String(j?.parameters || ''))?.[1]) || 0 });
+    } catch { metas.set(m, {}); }
+  }
+  await seeCtx(m);
+}
+// 模型装载着时 /api/ps 报它实际用的窗口：记下来（没装载就问不到，沿用上次记的）
+async function seeCtx(m) {
+  if (!(await askOllama())) return;
+  try { const x = ((await getJson('/api/ps'))?.models || []).find(x => x?.name === m || x?.model === m || x?.name === m + ':latest'); if (x?.context_length > 0) learn(m, 'ctx', Number(x.context_length)); } catch {}
+}
+// 这个模型的窗口：Ollama 报的实际值（记下的）> Modelfile 里的 num_ctx > Ollama 上都不知道时按默认的 4096 猜（known=false）> 模型库里填的
+function ctxOf(s) {
+  const m = s.model, l = Number(learned[lkey(m)]?.ctx);
+  if (l > 0) return { ctx: l, known: true };
+  if (metaOf(m).numCtx > 0) return { ctx: metaOf(m).numCtx, known: true };
+  if (isOllama) return { ctx: 4096, known: false };
+  const c = Number(MODEL_INFO[m]?.ctx);
+  return c > 0 ? { ctx: c, known: true } : { ctx: 0, known: false };
+}
+// 对话预算和一次回复的上限：跟着窗口收紧（窗口够大时就是 BUDGET / MAX_OUT）
+const limitsOf = s => { const c = ctxOf(s); return budgetOf({ ctx: c.ctx, known: c.known, budget: BUDGET, maxOut: MAX_OUT }); };
+
 // ---------- 提示词 ----------
 // 日期按天变、模型换了才变：前缀照样能复用。写明当前模型：会话中途换了模型，新模型会跟着历史里旧模型的自我介绍说（「我是通义千问」）
 // 命令要放进标了语言的代码块、一行一条（网页会给每条加复制图标、多条的能下载成脚本）；用户的设备由网页按浏览器判断后随消息带来（s.dev），放在最后，换设备才变。
@@ -105,9 +165,10 @@ const DEVICES = { mac: 'Mac 电脑', windows: 'Windows 电脑', linux: 'Linux �
 const devLine = d => !DEVICES[d] ? ''
   : /^(iphone|ipad|android|harmony)$/.test(d) ? `\n用户在用${DEVICES[d]}和你对话；只有要给电脑命令、又不知道电脑是什么系统时，才先问一句。`
   : `\n用户在用${DEVICES[d]}和你对话；要给命令时按这个系统给${d === 'windows' ? '（默认 PowerShell）' : ''}，用户说了别的系统就按说的给。`;
-// 模型够不够用技能、命令：名字里写了参数量、不到 7B 的（本机小模型）不给——跟不住「先读说明、再写命令、再按结果回复」这几步，清单还拖慢首字
-const sizeOf = m => { const x = /(\d+(?:\.\d+)?)b(?![a-z])/i.exec(String(m || '').replace(/^.*\//, '')); return x ? Number(x[1]) : null; };
-const bigEnough = s => { const n = sizeOf(s.model); return n == null || n >= 7; };   // 没写参数量的（云上的大模型）算够
+// 模型够不够用技能、命令：能力档到 L2 才给（档位怎么定见 kuai-profiles.mjs）——不到的跟不住「先读说明、再写命令、再按结果回复」这几步，清单还拖慢首字
+// 参数量：Ollama 报的优先（名字里没写的也有），没有就看名字；窗口是猜的（known=false）时不拿它限档
+const tierNow = s => { const c = ctxOf(s); return tierOf({ model: s.model, size: metaOf(s.model).size ?? undefined, user: MODEL_INFO[s.model]?.tier, ctx: c.known ? c.ctx : 0 }); };
+const bigEnough = s => tierNow(s).tier >= 2;
 const skillsOn = s => SKILLS.length > 0 && bigEnough(s);
 const cmdsOn = s => CMDS_ON && bigEnough(s);
 const toolsOn = s => skillsOn(s) || cmdsOn(s);
@@ -181,12 +242,13 @@ const tok = t => { let n = 0; for (const c of String(t)) n += c.charCodeAt(0) > 
 // 旧版本（还能调工具时）存下的工具结果也是 role:user，带 tool:true，不能当断点
 function trim(s) {
   const m = s.messages, size = from => m.slice(from).reduce((a, x) => a + tok(x.content) + 4 + (Array.isArray(x.images) ? x.images.length * IMG_TOK : 0), 0) + tok(systemOf(s));
-  if (size(s.from) <= BUDGET) return;
+  const B = limitsOf(s).budget;
+  if (size(s.from) <= B) return;
   const starts = m.map((x, i) => x.role === 'user' && !x.tool ? i : -1).filter(i => i >= 0);
   for (const i of starts) {
     if (i <= s.from || i === starts.at(-1)) continue;
     s.from = i;
-    if (size(i) <= BUDGET * 0.6) break;
+    if (size(i) <= B * 0.6) break;
   }
 }
 
@@ -198,29 +260,33 @@ const clean = full => { const k = full.lastIndexOf('</think>'); return k >= 0 ? 
 // plain：接口不收调参（temperature、关思考那几项，比如 OpenAI 官方的推理模型）回 400 时，去掉重试一次，成了就记下来以后都不发
 function reqOf(s, extra = []) {
   const system = systemOf(s), msgs = [...history(s), ...extra], tune = !s.plain;
+  // 采样、思考按模型画像来：拿不准的不发。plain（接口回过 400）：这些都不带。
+  // 思考：开 → 画像里的开法；关 → 画像里的关法；关不掉的（画像里没有关法，或者试出来关不掉 noOff）不发，让服务端自己把思考分出去
+  const prof = profileOf({ model: s.model, format: FORMAT, host: HOST }), maxOut = limitsOf(s).maxOut;
+  const samp = tune ? prof.sampling[s.think ? 'on' : 'off'] : {};
+  const think = !tune ? null : s.think ? prof.think.on : s.noOff ? null : prof.think.off;
   if (FORMAT === 'anthropic') return {
     url: BASE + '/v1/messages', headers: { 'x-api-key': KEY, 'anthropic-version': '2023-06-01' },
-    // 不带 thinking 就是不思考；开思考时不能再带 temperature，max_tokens 要比思考预算大
-    body: { model: s.model, stream: true, max_tokens: MAX_OUT, system,
+    // 不带 thinking 就是不思考；max_tokens 要比思考预算大
+    body: { model: s.model, stream: true, max_tokens: maxOut, system,
       messages: msgs.map(x => x.images ? { role: x.role, content: [...x.images.map(i => ({ type: 'image', source: { type: 'base64', media_type: i.mime, data: i.data } })), ...(x.content ? [{ type: 'text', text: x.content }] : [])] } : { role: x.role, content: x.content }),
-      ...(tune ? s.think ? { thinking: { type: 'enabled', budget_tokens: 2048 }, max_tokens: MAX_OUT + 2048 } : { temperature: 0.3 } : {}) },
+      ...(think && s.think ? { thinking: think, max_tokens: maxOut + (think.budget_tokens || 0) } : {}) },
   };
   if (FORMAT === 'gemini') return {
     url: BASE + '/models/' + encodeURIComponent(String(s.model).replace(/^models\//, '')) + ':streamGenerateContent?alt=sse', headers: { 'x-goog-api-key': KEY },
-    body: { systemInstruction: { parts: [{ text: system }] },
-      contents: msgs.map(x => ({ role: x.role === 'assistant' ? 'model' : 'user', parts: [...(x.images || []).map(i => ({ inline_data: { mime_type: i.mime, data: i.data } })), ...(x.content || !x.images ? [{ text: x.content }] : [])] })),
-      // thinkingBudget 0 = 关思考（关不掉的模型回 400，走 plain）
-      generationConfig: { maxOutputTokens: MAX_OUT, ...(tune ? { temperature: 0.3, thinkingConfig: s.think ? { includeThoughts: true } : { thinkingBudget: 0 } } : {}) } },
+    // 接口不收系统提示的模型（Gemma 1–3）：并进第一条用户消息
+    body: { ...(prof.system === 'user' ? {} : { systemInstruction: { parts: [{ text: system }] } }),
+      contents: msgs.map((x, i) => ({ role: x.role === 'assistant' ? 'model' : 'user', parts: [...(prof.system === 'user' && i === 0 ? [{ text: system }] : []), ...(x.images || []).map(i => ({ inline_data: { mime_type: i.mime, data: i.data } })), ...(x.content || !x.images ? [{ text: x.content }] : [])] })),
+      generationConfig: { maxOutputTokens: maxOut, ...(samp.temperature != null ? { temperature: samp.temperature } : {}), ...(samp.top_p != null ? { topP: samp.top_p } : {}), ...(think && Object.keys(think).length ? { thinkingConfig: think } : {}) } },
   };
   const native = nativeOn(s);
   return {
     url: BASE + '/chat/completions', headers: { authorization: 'Bearer ' + KEY },
-    body: { model: s.model, stream: true, stream_options: { include_usage: true }, max_tokens: MAX_OUT, ...(native ? { tools: [CLAW_TOOL] } : {}),
+    body: { model: s.model, stream: true, stream_options: { include_usage: true }, max_tokens: maxOut, ...(native ? { tools: [CLAW_TOOL] } : {}),
       // calls / tool：这一轮里原生调技能的来回（模型的 tool_calls、技能结果）
       messages: [{ role: 'system', content: system }, ...msgs.map(x => x.calls ? { role: 'assistant', content: x.content || null, tool_calls: x.calls.map(c => ({ id: c.id, type: 'function', function: { name: 'claw', arguments: JSON.stringify({ commands: c.lines }) } })) }
         : x.role === 'tool' ? { role: 'tool', tool_call_id: x.toolId, content: x.content } : x.images ? { role: x.role, content: [...(x.content ? [{ type: 'text', text: x.content }] : []), ...x.images.map(i => ({ type: 'image_url', image_url: { url: 'data:' + i.mime + ';base64,' + i.data } }))] } : { role: x.role, content: x.content })],
-      ...(tune ? { temperature: 0.3 } : {}),
-      ...(s.think || s.noOff || !tune ? {} : { reasoning_effort: 'none' }) },   // noOff：这个模型关不掉思考（见 clean），不发 none，让服务端自己把思考分出去
+      ...samp, ...(think || {}) },
   };
 }
 // 这次请求实际发了什么（给解剖看）：接口路径、除对话以外的全部参数、每条消息的角色和字数。不含 key（key 在请求头里，不记）
@@ -319,6 +385,7 @@ async function chat(s, signal, onText, onThought, extra, calls = []) {
       }
     }
     call.status = r.status; call.plain = !!s.plain;
+    if (r.ok && s.plain) learn(s.model, 'plain', true);   // 去掉调参才成的：按模型记下，别的会话不用再撞一次 400
     if (!r.ok) { const b = await r.text(); call.body = b.slice(0, 4000); throw new Error(errOf(r.status, b, r.headers) + imgHint(r.status, call)); }   // body：服务返回的原文，给解剖看
   } catch (e) { fail(call, e); throw e; }
   let text = '', tt = '', buf = '', first = 0, stop = null; const tc = [];   // tc：原生工具调用（按 index 拼参数）   // first：第一个字（含思考）到达的时刻；text / tt 是模型原样的输出和思考（不剥标签），记进 calls 给解剖看
@@ -619,14 +686,20 @@ async function prompt(s, text, images = []) {
   s.messages.push(um);
   if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50) || '图片'; update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
   let full = '', parts = 0, steps = 0, seg = '';   // seg：上次用技能之后写的（到了长度上限接着写时整段发回去）
-  const tools = toolsOn(s), ex = [], seen = new Set();                   // ex：这一轮里用技能 / 命令的来回（模型写的 claw 代码块、结果）
+  let tools = false; const ex = [], seen = new Set();                    // ex：这一轮里用技能 / 命令的来回（模型写的 claw 代码块、结果）
   const say = t => update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
   let kept = false;
   const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, at: Date.now(), ...(parts > 1 ? { parts } : {}) }); } };
   try {
+    await loadMeta(s.model);
+    if (ac.signal.aborted) throw aborted();
+    if (knows(s.model, 'noOff')) s.noOff = true;   // 以前试出来的（按模型记的）：不用每个会话再试一遍
+    if (knows(s.model, 'plain')) s.plain = true;
+    tools = toolsOn(s);
     trim(s);
+    const tier = tierNow(s), lim = limitsOf(s), win = ctxOf(s);
     // 这一轮怎么答的（给会话解剖、调 kuAi 用）：用的哪个模型、什么接口和参数、发了几条历史、丢了几条、系统提示，以及每次请求的明细
-    const run = um.run = { model: s.model, api: FORMAT, host: hostOf(BASE), think: !!s.think, noOff: !!s.noOff, maxOut: MAX_OUT, sys: systemOf(s), sent: history(s).length, dropped: s.from, calls: [] };
+    const run = um.run = { model: s.model, api: FORMAT, host: hostOf(BASE), think: !!s.think, noOff: !!s.noOff, maxOut: lim.maxOut, budget: lim.budget, ...(win.ctx ? { ctx: win.ctx, ...(win.known ? {} : { ctxGuess: true }) } : {}), tier: tier.tier, tierWhy: tier.why, sys: systemOf(s), sent: history(s).length, dropped: s.from, calls: [] };
     let tin = 0, tout = 0, gen = 0, t0 = 0, first = 0, end = 0, stop = null;
     let after = false;   // 上一次是用技能：这一段和前面写的之间空一行
     while (parts < MAX_PARTS) {
@@ -640,7 +713,7 @@ async function prompt(s, text, images = []) {
         if (!cut && raw.includes('</think>')) { cut = true; sent = base.length; }   // 刚发现思考混在正文里：已经流出去的没法收回，从这一段开头重新算
         if (now.length > sent) { say(now.slice(sent)); sent = now.length; }
       }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }), extra, run.calls);
-      if (r.leaked && !s.noOff && !s.think) s.noOff = true;
+      if (r.leaked && !s.noOff && !s.think) { s.noOff = true; learn(s.model, 'noOff', true); }
       const blk = tools && steps < MAX_STEPS ? nativeBlock(r, steps) || clawBlock(r.text) : null;
       if (blk) {   // 用技能：代码块前面写的照常显示；跑完把结果交给模型接着写（不算「接着写」的段数）
         steps++; parts--;
@@ -668,7 +741,8 @@ async function prompt(s, text, images = []) {
     // 生成速度只算第一个字之后的；输出太短（< 8 tok）算出的速度没意义，不报；没有 usage 的服务不报速度（估出来的不准，调试时会误导）
     const stats = { model: s.model, ttft: first ? (first - t0) / 1000 : null, outTokens: tout || null, tps: tout >= 8 && gen > 0.05 ? tout / gen : null, total: (end - t0) / 1000,
       ...(parts > 1 ? { parts } : {}), ...(noteOf(stop) ? { note: noteOf(stop) } : {}) };
-    update(s.id, { sessionUpdate: 'usage_update', used: tin ? tin + tout : 0, size: BUDGET, _meta: { kuai: stats } });
+    update(s.id, { sessionUpdate: 'usage_update', used: tin ? tin + tout : 0, size: lim.budget, _meta: { kuai: stats } });
+    seeCtx(s.model);   // 模型这会儿装载着：顺手记下它实际的窗口
     return 'end_turn';
   } catch (e) {
     if (um.run) Object.assign(um.run, { endAt: Date.now(), parts }, e.name === 'AbortError' ? { cancelled: true } : { error: String(e.message).slice(0, 500) });

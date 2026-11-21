@@ -1476,10 +1476,13 @@ function dsSec(ms){ms=+ms||0;return (ms/1000).toFixed(ms<10000?2:1)+' 秒'}
 function dsBrief(s){s=String(s||'').replace(/\s+/g,' ').trim();return s.length>120?s.slice(0,119)+'…':s}   // 只给每轮明细列表做一行预览；点进那一轮看全文
 function dsRaw(label,txt,open){return '<details class="ds-raw"'+(open?' open':'')+'><summary>'+label+' · '+dsN(String(txt).length)+' 字</summary><pre>'+esc(txt)+'</pre></details>'}   // 原样显示：标签按源码、换行照留
 // kuAi 这一轮怎么问的：接口、模型、参数、发了几条历史、系统提示；最后出错 / 没写完的说明
+var KU_TIERS=['问答','填空','单工具','只读多步','动手','规划'];
 function dsKuaiAsk(ku){
   var c=['<span class="ds-chip">'+esc(ku.api||'openai')+(ku.host?' · '+esc(ku.host):'')+'</span>','<span class="ds-chip">思考 <b>'+(ku.think?'开':'关')+'</b>'+(ku.noOff?'（这个模型关不掉）':'')+'</span>',
     '<span class="ds-chip">发了 <b>'+ku.sent+'</b> 条对话'+(ku.dropped?'，更早的 '+ku.dropped+' 条已省略':'')+'</span>'];
   if(ku.maxOut)c.push('<span class="ds-chip">输出上限 <b>'+dsN(ku.maxOut)+'</b> tok</span>');
+  if(ku.tier!=null)c.push('<span class="ds-chip">能力档 <b>L'+ku.tier+' '+(KU_TIERS[ku.tier]||'')+'</b>'+(ku.tierWhy?'（'+esc(ku.tierWhy)+'）':'')+'</span>');
+  if(ku.ctx)c.push('<span class="ds-chip">窗口 <b>'+dsN(ku.ctx)+'</b> tok'+(ku.ctxGuess?'（猜的：Ollama 默认值）':'')+(ku.budget?'，对话预算 '+dsN(ku.budget):'')+'</span>');
   var h='<div class="ds-sec">怎么问的<small>每次请求 = 系统提示 + 发出的对话</small></div><div class="ds-chips">'+c.join('')+'</div>';
   if(ku.sys)h+='<details class="ds-files"><summary>系统提示 '+dsN(ku.sys.length)+' 字</summary><div class="ds-tx" style="white-space:pre-wrap">'+esc(ku.sys)+'</div></details>';
   if(ku.error)h+='<div class="ds-files" style="color:var(--deny)">出错：'+esc(ku.error)+'</div>';
@@ -3807,7 +3810,7 @@ function openModels(from){
   hostView='models';mdlSub='';mdlMsg={};mdlRemote=null;mdlForget();renderModels();loadModels();
 }
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
-function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');return a.join(' · ')}
+function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');if(m.tier!=null)a.push('kuAi：'+(m.tier>=2?'技能和命令':'只问答'));return a.join(' · ')}
 function mdlIn(id,val,attrs,mono,label){   // Key 详情的输入行：上面一行小标题，下面无框输入（点进去小标题变主题色）
   var sec=/type="password"/.test(attrs||'');attrs=(attrs||'').replace(/\s*type="password"/,'');
   return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+esc(label||'')+'</label><textarea id="'+id+'" rows="1" class="md-in'+(mono?' mono':'')+(sec?' md-secret':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" '+attrs+'>'+esc(val==null?'':String(val))+'</textarea></div>'}
@@ -3882,6 +3885,9 @@ function renderModels(){
       mdlIn('mdMCtx',m?m.context:'','inputmode="numeric" maxlength="9" placeholder="可不填，比如 128000"',false,'上下文（token）'));
     var sw=function(id,on,t,sub){return '<label class="h-row md-swrow"><span class="k">'+t+'<small>'+sub+'</small></span><input type="checkbox" class="md-sw" id="'+id+'"'+(on?' checked':'')+'></label>'};
     h+=hSec('能力',sw('mdMVision',m&&m.vision,'能识图','发图片时用得上')+sw('mdMReason',m&&m.reasoning,'会推理（思考）','能开推理强度'));
+    // kuAi 的能力档：现在做出来的只有两档（只问答 = 0，技能和命令 = 2）；别的值（以后的档）原样留着
+    var tv=m&&m.tier!=null?String(m.tier):'',topt=[['','自动'],['0','只问答'],['2','技能和命令']];if(tv&&tv!=='0'&&tv!=='2')topt.push([tv,'L'+tv+' '+(KU_TIERS[+tv]||'')]);
+    h+=hSec('kuAi','<label class="h-row md-swrow"><span class="k">能开放到哪<small>自动：云上的模型和 7B 以上的本机模型给技能和命令，更小的只问答</small></span><select class="pe-in" id="mdMTier" style="width:auto;max-width:52%" aria-label="kuAi 能开放到哪">'+topt.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===tv?' selected':'')+'>'+o[1]+'</option>'}).join('')+'</select></label>');
     h+='<div class="md-acts"><button type="button" class="md-save" data-act="mdl-model-save">'+(m?'保存':'添加')+'</button></div>';
     if(m)h+='<div class="md-danger"><button type="button" data-act="mdl-model-del">删除模型</button></div>';
   }else{
@@ -3970,7 +3976,7 @@ function mdlAct(act,a){
     mdlPost({op:'models-add',provider:pid,models:sel},'已添加 '+sel.length+' 个模型',function(){var got={};sel.forEach(function(m){got[m.id]=1});mdlRemote.items=mdlRemote.items.filter(function(m){return !got[m.id]})});return;
   }
   if(act==='mdl-model-save'&&mm){
-    var b2={op:'model-save',provider:mm[1],id:mdlVal('mdMId'),name:mdlVal('mdMName'),context:mdlVal('mdMCtx'),vision:!!(document.getElementById('mdMVision')||{}).checked,reasoning:!!(document.getElementById('mdMReason')||{}).checked};
+    var b2={op:'model-save',provider:mm[1],id:mdlVal('mdMId'),name:mdlVal('mdMName'),context:mdlVal('mdMCtx'),vision:!!(document.getElementById('mdMVision')||{}).checked,reasoning:!!(document.getElementById('mdMReason')||{}).checked,tier:(document.getElementById('mdMTier')||{}).value||''};
     if(mm[2])b2.orig=mm[2];
     mdlPost(b2,mm[2]?'已保存':'已添加',function(){mdlSub='p:'+mm[1]});return;
   }
