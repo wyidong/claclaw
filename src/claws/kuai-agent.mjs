@@ -450,11 +450,13 @@ const CMD_MS = 20000, CMD_OUT = 100000;
 const flags = a => a.filter(x => /^-[^-]/.test(x)).join('');   // 短选项拼在一起看（-rn 里有 r）
 const CMDS = {
   date: {}, cal: {}, uptime: {}, whoami: {}, hostname: {}, uname: {}, sw_vers: {}, pwd: {}, which: {}, echo: {},
-  ls: {}, du: {}, df: {}, stat: {}, wc: {}, head: {}, cat: {}, md5: {}, shasum: {}, vm_stat: {}, system_profiler: {},
+  df: {}, stat: {}, wc: {}, head: {}, cat: {}, md5: {}, shasum: {}, vm_stat: {}, system_profiler: {},
   file: { no: a => /C/.test(flags(a)) ? 'file 不能 -C（会写文件）' : '' },
   tail: { no: a => /[fF]/.test(flags(a)) || a.some(x => /^--follow/.test(x)) ? 'tail 不能 -f（停不下来）' : '' },
   grep: { no: a => /[rR]/.test(flags(a)) || a.some((x, i) => /^--(recursive|dereference-recursive|directories=recurse)$/.test(x) || (x === '-d' && a[i + 1] === 'recurse')) ? 'grep 不能搜整个目录（-r），把要搜的文件写出来' : '' },
-  find: { no: a => a.some(x => /^-(exec|execdir|ok|okdir|delete|fprint0?|fprintf|fls)$/.test(x)) ? 'find 不能带 -exec、-delete 这类' : '' },
+  find: { no: a => a.some(x => /^-(exec|execdir|ok|okdir|delete|fprint0?|fprintf|fls|print0|printf)$/.test(x)) ? 'find 不能带 -exec、-delete、-print0 这类' : '', out: dropHidden },
+  du: { out: dropHidden },
+  ls: { no: a => /R/.test(flags(a)) && /[aA]/.test(flags(a)) ? 'ls 不能连隐藏的一起递归列（-R 和 -a 不能一起用）' : '' },
   sysctl: { no: a => a.some(x => x.includes('=') || /^-\w*w/.test(x)) ? 'sysctl 只能查' : '' },
   pmset: { no: a => a[0] !== '-g' ? 'pmset 只能 -g 查' : '' },
   diskutil: { no: a => /^(list|info)$/.test(a[0] || '') || (a[0] === 'apfs' && a[1] === 'list') ? '' : 'diskutil 只能 list、info、apfs list' },
@@ -466,31 +468,50 @@ const CMDS = {
   } },
   open: { ask: true }, mkdir: { ask: true }, touch: { ask: true }, cp: { ask: true }, mv: { ask: true }, say: { ask: true },
 };
+// find、du 会钻进隐藏目录：输出里路径带隐藏的一段（./.ssh/…）的行不给，末尾说一句
+function dropHidden(t) {
+  const lines = t.split('\n'), keep = lines.filter(l => !/(^|[/\s])\.(?!\.?(?:\/|\s|$))[^/\s]/.test(l));
+  return keep.join('\n') + (keep.length < lines.length ? '\n（另有 ' + (lines.length - keep.length) + ' 行在隐藏目录里，没给出）' : '');
+}
 const cmdList = ask => Object.keys(CMDS).filter(k => !!CMDS[k].ask === ask).join(' ');
 // 真实位置：不存在的按上一级的真实位置拼（mkdir、touch 的新名字）
+// 用 native：macOS 默认不分大小写，~/LIBRARY 也是 ~/Library，native 会还原成磁盘上的写法；不存在的一段段往上找到存在的那级再拼回去
 function realOf(p) {
-  try { return fs.realpathSync(p); } catch {}
-  try { return path.join(fs.realpathSync(path.dirname(p)), path.basename(p)); } catch { return path.resolve(p); }
+  let head = path.resolve(p); const rest = [];
+  for (;;) {
+    try { return path.join(fs.realpathSync.native(head), ...rest); } catch {}
+    const up = path.dirname(head);
+    if (up === head) return path.resolve(p);
+    rest.unshift(path.basename(head)); head = up;
+  }
 }
+// 比较路径：macOS / Windows 默认不分大小写（新建的名字 native 还原不了大小写，比较时一律按小写）
+const fold = process.platform === 'darwin' || process.platform === 'win32' ? x => x.toLowerCase() : x => x;
 const NO_GO = [path.join(HOME, 'Library'), path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data'), process.env.CLACLAW_DATA,
   path.basename(DIR) === 'kuai-sessions' ? path.dirname(DIR) : '', '/dev'].filter(Boolean).map(realOf);
 const SECRET = /(credential|secret|token|passw|id_rsa|id_ed25519|id_ecdsa|keychain|cookies?$|\.(pem|key|p12|pfx|kdbx)$)/i;
 // 命令在会话的目录里跑（新建会话时选的；没有、不是目录就用主目录）。不是主目录时就是「小目录」：主目录下这个目录以外的个人文件不碰（系统目录照常能看）；
 // 会话目录本身是隐藏目录下的（用户自己选的）也照常用，只是目录里面的隐藏文件不碰
 const HOME_REAL = realOf(HOME);
-const inside = (p, d) => p === d || p.startsWith(d + path.sep);
+const inside = (p, d) => { p = fold(p); d = fold(d); return p === d || p.startsWith(d + path.sep); };
 function cwdOf(s) { try { const d = realOf(s.cwd || HOME); return fs.statSync(d).isDirectory() ? d : HOME_REAL; } catch { return HOME_REAL; } }
-// 一个参数要是路径（带 / 或 ~，或者当前目录下有这个名字；选项看 = 后面或 / 起的部分；网址不算）：碰不碰得
+// 一个参数碰不碰得。选项里可能连着写了路径：--file=X 看 = 后面；短选项（-f.env、-of.env）把第 2 个字符起的每一段都当路径看一遍
 function badPath(arg, wd = HOME_REAL) {
-  let v = arg;
-  if (v.startsWith('-')) { const i = v.search(/[=/~]/); if (i < 0) return ''; v = v.slice(v[i] === '=' ? i + 1 : i); }
+  if (!arg.startsWith('-')) return badOne(arg, wd);
+  const eq = arg.indexOf('='), parts = eq > 0 ? [arg.slice(eq + 1)] : [];
+  if (!arg.startsWith('--')) for (let i = 2; i < arg.length; i++) parts.push(arg.slice(i));
+  for (const x of parts) { const why = badOne(x, wd); if (why) return why; }
+  return '';
+}
+// 一段要是路径（带 / 或 ~，或者当前目录下有这个名字；网址不算）：碰不碰得
+function badOne(v, wd) {
   if (!v || /^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return '';
   if (!/[/~]/.test(v) && !fs.existsSync(path.join(wd, v))) return '';
   const abs = realOf(path.resolve(wd, v.replace(/^~(?=\/|$)/, HOME)));
   v = tilde(v);   // 说的时候照模型的写法
   if ((inside(abs, wd) ? path.relative(wd, abs) : abs).split(path.sep).some(c => c.startsWith('.'))) return v + ' 是隐藏的目录 / 文件，不能碰';
-  if (wd !== HOME_REAL && inside(abs, HOME_REAL) && !inside(abs, wd)) return v + ' 在会话目录（' + tilde(wd) + '）外面，不能碰';
-  if (NO_GO.some(d => abs === d || abs.startsWith(d + path.sep))) return v + ' 所在的目录不能碰';
+  if (fold(wd) !== fold(HOME_REAL) && inside(abs, HOME_REAL) && !inside(abs, wd)) return v + ' 在会话目录（' + tilde(wd) + '）外面，不能碰';
+  if (NO_GO.some(d => inside(abs, d))) return v + ' 所在的目录不能碰';
   if (SECRET.test(path.basename(abs))) return v + ' 看着像密钥、密码一类的文件，不能碰';
   return '';
 }
@@ -576,6 +597,7 @@ async function runSimple(s, line, id, signal) {
   const ok = r.code === 0;
   // macOS 的隐私保护（桌面、文稿、下载等要单独授权）：说清楚是系统拦的、怎么开，模型好转告用户
   const tcc = process.platform === 'darwin' && /Operation not permitted/.test(r.out) ? '\n（macOS 隐私保护拦下了：claclaw 没有读这个文件夹的权限。要用的话，用户在「系统设置 → 隐私与安全性 → 完全磁盘访问权限」里加上 ' + process.execPath + '，再重启 claclaw）' : '';
+  if (c.out) r.out = c.out(r.out.trim());
   return end(ok, cap(r.out.trim(), 12000) + (r.note ? '\n（' + r.note + '）' : '') + (ok ? '' : '\n（退出码 ' + r.code + '）') + tcc);
 }
 

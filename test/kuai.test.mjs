@@ -836,3 +836,33 @@ test('kuAi 简单命令：会话开在小目录里——命令在那个目录里
     assert.doesNotMatch(res(3), /没跑/);                                   // 系统目录照常
   } finally { a.stop(); m.srv.close(); }
 });
+
+test('kuAi 简单命令：选项里连写的路径（-f.env、-of.env、--file=）、换大小写（~/LIBRARY）照样拦；find / du 不给隐藏目录里的路径，ls 不能 -aR', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), h = fakeHome();
+  fs.mkdirSync(path.join(h, 'www')); fs.writeFileSync(path.join(h, 'www', 'k'), 'x');
+  const m = await fakeModel([
+    '```claw\nfile -f.hidden/k\ngrep -of.hidden/k notes.txt\ngrep --file=.hidden/k notes.txt\n```',
+    '```claw\ncat ~/LIBRARY/x\ncat ~/library/new\nls -aR\n```',
+    '```claw\nfind . -name k\nfind . -name k -print0\nls -R\n```',
+    '好。']);
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'gemma-4-31b-it', KUAI_MODEL: 'gemma-4-31b-it', KUAI_CMDS: '1', HOME: h });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: h })).result;
+    await say(a, n.sessionId, '试试');
+    const res = i => m.reqs[i].messages.at(-1).content;
+    assert.match(res(1), /\$ file -f\.hidden\/k\n没跑：\.hidden\/k 是隐藏的目录/);
+    assert.match(res(1), /\$ grep -of\.hidden\/k notes\.txt\n没跑：\.hidden\/k 是隐藏的目录/);
+    assert.match(res(1), /\$ grep --file=\.hidden\/k notes\.txt\n没跑：\.hidden\/k 是隐藏的目录/);
+    if (process.platform === 'darwin') {
+      assert.match(res(2), /\$ cat ~\/LIBRARY\/x\n没跑：~\/LIBRARY\/x 所在的目录不能碰/);
+      assert.match(res(2), /\$ cat ~\/library\/new\n没跑：~\/library\/new 所在的目录不能碰/);   // 还不存在的名字也按不分大小写比
+    }
+    assert.match(res(2), /\$ ls -aR\n没跑：ls 不能连隐藏的一起递归列/);
+    const find = res(3).split('\n\n')[0];
+    assert.match(find, /\$ find \. -name k\n\.\/www\/k\n（另有 1 行在隐藏目录里，没给出）/);
+    assert.doesNotMatch(find, /\.hidden/);
+    assert.match(res(3), /\$ find \. -name k -print0\n没跑：find 不能带/);
+    assert.doesNotMatch(res(3), /\.hidden/);
+  } finally { a.stop(); m.srv.close(); }
+});
