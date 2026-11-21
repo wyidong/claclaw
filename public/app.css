@@ -1639,7 +1639,12 @@ select.pe-in{text-align-last:right}
   #app.m-list.host-on #hostPane{display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px calc(72px + max(env(safe-area-inset-bottom,0px),var(--sab,0px)))}
   /* 宿主 / 协同 / 技能页的标题栏和设置页的一样：铺满宽、顶部条的底色、底线，滚动时钉在顶上 */
   #app.m-list.host-on #hostPane .pg-hd{flex:none;position:sticky;top:calc(-14px - env(safe-area-inset-top,0px));z-index:2;box-sizing:content-box;min-height:calc(56px - var(--bw));margin:calc(-14px - env(safe-area-inset-top,0px)) -12px 14px;padding:env(safe-area-inset-top,0px) 48px 0;background:var(--strip)}   /* 设置页各页的标题条：和快捷入口、模型管理同高 56（含底线；会话页标头 60，略高） */
-  #app.m-list.host-on #hostPane .pe-back{left:0;top:env(safe-area-inset-top,0px);bottom:0}   /* 标题上下留白一样：不再往上多挪 6px、底下不多留 6px */
+  #app.m-list.host-on #hostPane .pe-back{left:0;top:env(safe-area-inset-top,0px);bottom:0}
+  /* 标题栏真正钉死：sticky 在滚动区里面，iPhone 顶部回弹时会跟着内容一起被拉下来、上面露出一块空白；改成 fixed（和「最近」的快捷入口一样不随回弹动），滚动区顶上留出它的高度 */
+  #app.m-list.host-on #hostPane{padding-top:calc(env(safe-area-inset-top,0px) + 57px + 14px)}
+  #app.m-list.host-on #hostPane .pg-hd{position:fixed;top:0;left:0;right:0;margin:0}
+  #app.m-list.claw-on #clawPane{padding-top:calc(env(safe-area-inset-top,0px) + 56px + 12px)}
+  #app.m-list.claw-on #clawModels{position:fixed;top:0;left:0;right:0;margin:0}   /* 标题上下留白一样：不再往上多挪 6px、底下不多留 6px */
 }
 /* Claw 页的卡片：手机、电脑共用（电脑端的 Claw 页整页显示，见下面 min-width:1000px 里的 claw-on） */
 #clawList{flex:none;display:flex;flex-direction:column;gap:12px}
