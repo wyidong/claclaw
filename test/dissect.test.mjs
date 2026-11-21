@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { dissectClaudeLines, dissectClaude, dissectDs, dissectKimi, dissectMini, toolBrief, toolKind, userTextOf } from '../src/claws/dissect.mjs';
+import { dissectClaudeLines, dissectClaude, dissectDs, dissectKimi, dissectKuai, toolBrief, toolKind, userTextOf } from '../src/claws/dissect.mjs';
 
 const T0 = Date.parse('2026-10-26T12:00:00Z');
 const iso = (ms) => new Date(T0 + ms).toISOString();
@@ -186,7 +186,7 @@ test('Kimi wire.jsonl：按轮拆、用量取 step.end、技能注入不算一�
   assert.equal(b.interrupted, true);
 });
 
-test('Mini 解剖：一轮 = 用户一句话，一步 = 一次请求（400 重试、接着写各算一步）；四桶、首字、速度、出错都对上；旧记录只有文字', () => {
+test('kuAi 解剖：一轮 = 用户一句话，一步 = 一次请求（400 重试、接着写各算一步）；四桶、首字、速度、出错都对上；旧记录只有文字', () => {
   const o = { model: 'q1', cwd: '/tmp', messages: [
     // 旧版本：没有 run、没有时间，还有工具结果
     { role: 'user', content: '旧问题' }, { role: 'assistant', content: '<run>ls</run>' }, { role: 'user', tool: true, content: '<result>a</result>' }, { role: 'assistant', content: '旧回答' },
@@ -199,7 +199,7 @@ test('Mini 解剖：一轮 = 用户一句话，一步 = 一次请求（400 重�
     // 额度超限
     { role: 'user', content: '再问', at: T0 + 60000, run: { model: 'gemini-2.5-flash', api: 'gemini', sent: 5, dropped: 2, endAt: T0 + 60400, error: '模型服务说额度或频率超限（429）：约 37 秒后恢复', calls: [{ at: T0 + 60000, status: 429, ms: 400, err: '额度超限' }] } },
   ] };
-  const r = dissectMini(o);
+  const r = dissectKuai(o);
   assert.equal(r.summary.turns, 3); assert.equal(r.summary.apiErrors, 1);
   const [a, b, c] = r.turns;
   assert.equal(a.text, '旧问题'); assert.equal(a.nSteps, 2); assert.equal(a.reply, '旧回答'); assert.equal(a.steps[0].model, 'q1');
@@ -210,14 +210,14 @@ test('Mini 解剖：一轮 = 用户一句话，一步 = 一次请求（400 重�
   assert.equal(s1.ttftMs, 1000); assert.equal(s1.tps, 100); assert.equal(s1.stop, '到了输出上限'); assert.equal(b.steps[2].stop, '写完'); assert.ok(s1.retry && s1.plain);
   assert.equal(b.steps[2].cr, null); assert.equal(b.steps[2].inp, 900);
   assert.equal(b.reply, '第一段第二段'); assert.equal(b.inp, 1200); assert.equal(b.out, 340);
-  assert.deepEqual({ api: b.mini.api, sent: b.mini.sent, dropped: b.mini.dropped, parts: b.mini.parts, sys: b.mini.sys }, { api: 'gemini', sent: 3, dropped: 2, parts: 2, sys: '你是答疑助手' });
-  assert.equal(c.nSteps, 1); assert.equal(c.steps[0].stop, 'HTTP 429'); assert.match(c.mini.error, /429/); assert.equal(c.reply, '');
+  assert.deepEqual({ api: b.kuai.api, sent: b.kuai.sent, dropped: b.kuai.dropped, parts: b.kuai.parts, sys: b.kuai.sys }, { api: 'gemini', sent: 3, dropped: 2, parts: 2, sys: '你是答疑助手' });
+  assert.equal(c.nSteps, 1); assert.equal(c.steps[0].stop, 'HTTP 429'); assert.match(c.kuai.error, /429/); assert.equal(c.reply, '');
   assert.deepEqual(r.summary.models.sort(), ['gemini-2.5-flash', 'q1']);
   // 模型表现：只算有 run 的；2 次出错（400、429），首字 / 速度只算成功的
-  assert.deepEqual(r.summary.miniModels, [{ model: 'gemini-2.5-flash', calls: 4, errors: 2, out: 340, ttftMs: 750, tps: 55 }]);   // 速度 (100 + 10) / 2
+  assert.deepEqual(r.summary.kuaiModels, [{ model: 'gemini-2.5-flash', calls: 4, errors: 2, out: 340, ttftMs: 750, tps: 55 }]);   // 速度 (100 + 10) / 2
 });
 
-test('解剖原样给全文：你说的、每步输出、最后的回复不截、不并空白；Mini 每步给模型原样输出（带 <think> 标签）、思考、出错原文；旧轮标 noStats', () => {
+test('解剖原样给全文：你说的、每步输出、最后的回复不截、不并空白；kuAi 每步给模型原样输出（带 <think> 标签）、思考、出错原文；旧轮标 noStats', () => {
   const long = '第一行\n\n  第二行 <b>粗</b>\n' + '长'.repeat(5000);
   const o = { model: 'q1', messages: [
     { role: 'user', content: '旧问题' }, { role: 'assistant', content: '旧回答' },
@@ -226,7 +226,7 @@ test('解剖原样给全文：你说的、每步输出、最后的回复不截�
       { at: T0 + 100, status: 200, ms: 1900, ttftMs: 300, inp: 10, out: 9, stop: 'stop', chars: 4, text: '<think>想想</think>\n回答\n  缩进', thought: '推理原文' }] } },
     { role: 'assistant', content: '回答\n  缩进', model: 'm', at: T0 + 2000 },
   ] };
-  const r = dissectMini(o), [a, b] = r.turns;
+  const r = dissectKuai(o), [a, b] = r.turns;
   assert.equal(a.noStats, true); assert.equal(a.steps[0].noStats, true); assert.equal(a.durMs, 0); assert.equal(r.summary.noStats, 1);
   assert.equal(b.noStats, undefined);
   assert.equal(b.images, 2); assert.equal(a.images, 0);

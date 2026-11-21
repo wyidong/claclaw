@@ -7,16 +7,16 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-data-'));   // mini.mjs 引入 auth.mjs 前先指到临时目录
-const { pickRoute, statsLine, baseOf, sessionPid, miNewSession, miRunners, miShutdown, MiRunner } = await import('../src/claws/mini.mjs');
-const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'claws', 'mini-agent.mjs');
+process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-data-'));   // kuai.mjs 引入 auth.mjs 前先指到临时目录
+const { pickRoute, statsLine, baseOf, sessionPid, kuNewSession, kuRunners, kuShutdown, KuRunner } = await import('../src/claws/kuai.mjs');
+const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'claws', 'kuai-agent.mjs');
 
 const P = (id, url, models = ['m1']) => ({ id, name: id, endpoints: { openai: url }, key: 'k', models: models.map(x => ({ id: x })) });
 const store = { providers: [P('deepseek', 'https://api.deepseek.com'), P('ollama', 'http://127.0.0.1:11434/v1', ['q1', 'q2']), P('anthropic-only', 'x')] };
 store.providers[2].endpoints = { anthropic: 'https://a.example' };
 const lib = pr => pr.providers.flatMap(p => p.endpoints.openai ? p.models.map(m => ({ p, m, value: 'lib:' + p.id + '/' + m.id, fmt: 'openai' })) : []);
 
-test('Mini 走哪家：记过的优先；没记过本机地址排最前；记的那家没了换回默认', () => {
+test('kuAi 走哪家：记过的优先；没记过本机地址排最前；记的那家没了换回默认', () => {
   assert.equal(pickRoute({}, store, lib(store)).p.id, 'ollama');
   assert.equal(pickRoute({ provider: 'deepseek' }, store, lib(store)).p.id, 'deepseek');
   assert.equal(pickRoute({ provider: 'gone' }, store, lib(store)).p.id, 'ollama');   // 记的那家没了
@@ -56,7 +56,7 @@ function strictModel() {
 
 // answer(params) → 选哪个 optionId（默认「允许」）
 function startAgent(env, answer = () => 'allow') {
-  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, MINI_SKILLS_DIR: '/nonexistent', MINI_CMDS: '0', ...env }, stdio: ['pipe', 'pipe', 'inherit'] });   // 默认不给技能、不跑命令（测的自己打开）
+  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, KUAI_SKILLS_DIR: '/nonexistent', KUAI_CMDS: '0', ...env }, stdio: ['pipe', 'pipe', 'inherit'] });   // 默认不给技能、不跑命令（测的自己打开）
   const updates = [], pend = new Map(), asks = [];
   let buf = '', id = 0;
   p.stdout.on('data', d => {
@@ -74,10 +74,10 @@ function startAgent(env, answer = () => 'allow') {
 const say = (a, sid, text) => a.rpc('session/prompt', { sessionId: sid, prompt: [{ type: 'text', text }] });
 const textOf = ups => ups.filter(u => u.sessionUpdate === 'agent_message_chunk').map(u => u.content.text).join('');
 
-test('Mini agent：纯问答——不带工具、提示词很短；模型写了标签也只当文字；会话落盘、重放历史；每轮带速度', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-cwd-'));
+test('kuAi agent：纯问答——不带工具、提示词很短；模型写了标签也只当文字；会话落盘、重放历史；每轮带速度', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-cwd-'));
   const m = await fakeModel(['你可以运行 <run>ls</run> 看看。', '第二个回答']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'q1,q2', MINI_MODEL: 'q1' });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'q1,q2', KUAI_MODEL: 'q1' });
   try {
     const init = await a.rpc('initialize', {});
     assert.equal(init.result.agentCapabilities.loadSession, true);
@@ -98,8 +98,8 @@ test('Mini agent：纯问答——不带工具、提示词很短；模型写了�
     assert.match(q.messages[0].content, /你现在用的模型是 q1。/);
     assert.doesNotMatch(q.messages[0].content, /<run>|工作目录|标签/);
     const u = a.updates.find(x => x.sessionUpdate === 'usage_update');
-    assert.equal(u.used, 110); assert.equal(u._meta.mini.model, 'q1'); assert.equal(u._meta.mini.outTokens, 10);
-    assert.ok(u._meta.mini.ttft >= 0 && u._meta.mini.total >= u._meta.mini.ttft);
+    assert.equal(u.used, 110); assert.equal(u._meta.kuai.model, 'q1'); assert.equal(u._meta.kuai.outTokens, 10);
+    assert.ok(u._meta.kuai.ttft >= 0 && u._meta.kuai.total >= u._meta.kuai.ttft);
 
     await say(a, n.sessionId, '再问一个');
     assert.equal(m.reqs[1].messages.length, 4);
@@ -110,7 +110,7 @@ test('Mini agent：纯问答——不带工具、提示词很短；模型写了�
 
     // 另一个进程里接上：历史重放成 用户 / 回复
     a.stop();
-    const b = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir });
+    const b = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir });
     try {
       await b.rpc('initialize', {});
       await b.rpc('session/load', { sessionId: n.sessionId, cwd });
@@ -121,13 +121,13 @@ test('Mini agent：纯问答——不带工具、提示词很短；模型写了�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini agent：思考开关；旧版本存的工具记录重放时不显示', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：思考开关；旧版本存的工具记录重放时不显示', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const old = { sessionId: 'old-sess', cwd: os.tmpdir(), model: 'q1', title: '旧', mode: 'yolo', messages: [
     { role: 'user', content: '看看文件' }, { role: 'assistant', content: '<run>ls</run>' }, { role: 'user', tool: true, content: '<result>\na.txt\n</result>' }, { role: 'assistant', content: '有 a.txt' }] };
   fs.writeFileSync(path.join(dir, 'old-sess.json'), JSON.stringify(old));
   const m = await fakeModel(['好']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const l = await a.rpc('session/load', { sessionId: 'old-sess' });
@@ -140,9 +140,9 @@ test('Mini agent：思考开关；旧版本存的工具记录重放时不显示'
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini agent：模型服务连不上 / 报错时给人看得懂的错误', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
-  const a = startAgent({ MINI_BASE_URL: 'http://127.0.0.1:1/v1', MINI_DIR: dir });
+test('kuAi agent：模型服务连不上 / 报错时给人看得懂的错误', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
+  const a = startAgent({ KUAI_BASE_URL: 'http://127.0.0.1:1/v1', KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -151,10 +151,10 @@ test('Mini agent：模型服务连不上 / 报错时给人看得懂的错误', a
   } finally { a.stop(); }
 });
 
-test('Mini agent：超出预算时一次性丢最早的几轮，最后一轮保留', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：超出预算时一次性丢最早的几轮，最后一轮保留', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['ok']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_BUDGET: '2000' });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_BUDGET: '2000' });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -169,10 +169,10 @@ test('Mini agent：超出预算时一次性丢最早的几轮，最后一轮保�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini agent：关不掉思考的模型（思考混在正文里，只有 </think>）：只留回答，之后不再发 reasoning_effort=none', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：关不掉思考的模型（思考混在正文里，只有 </think>）：只留回答，之后不再发 reasoning_effort=none', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['我想一想，用户要什么……</think>\n\n答案是 42', '第二次：对']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -188,16 +188,16 @@ test('Mini agent：关不掉思考的模型（思考混在正文里，只有 </t
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini 速度那一行：模型 · 首字 · 速度 · 输出 · 共计；没有输出 / 没有 usage 时少几项', () => {
+test('kuAi 速度那一行：模型 · 首字 · 速度 · 输出 · 共计；没有输出 / 没有 usage 时少几项', () => {
   assert.equal(statsLine({ model: 'qwen3:30b', ttft: 0.4234, tps: 47.26, outTokens: 312, total: 7.04 }), 'qwen3:30b · 首字 0.42 秒 · 47 tok/s · 输出 312 tok · 共 7.0 秒');
   assert.equal(statsLine({ model: 'q', ttft: 12.3, tps: 3.14, outTokens: null, total: 20 }), 'q · 首字 12.3 秒 · 3.1 tok/s · 共 20.0 秒');
   assert.equal(statsLine({ model: 'q', ttft: null, tps: null, outTokens: null, total: 1 }), 'q · 没有输出 · 共 1.0 秒');
 });
 
-test('Mini agent：中途换模型——提示词写明当前模型，回答记下是哪个模型答的', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：中途换模型——提示词写明当前模型，回答记下是哪个模型答的', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['我是 q1', '我是 q2']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'q1,q2', MINI_MODEL: 'q1' });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'q1,q2', KUAI_MODEL: 'q1' });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -211,14 +211,14 @@ test('Mini agent：中途换模型——提示词写明当前模型，回答记�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini agent：旧会话里的工具标签 / 工具结果 / 空回复不发给模型，相邻同角色并成一条', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：旧会话里的工具标签 / 工具结果 / 空回复不发给模型，相邻同角色并成一条', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   fs.writeFileSync(path.join(dir, 'legacy-1.json'), JSON.stringify({ sessionId: 'legacy-1', model: 'q1', messages: [
     { role: 'assistant', content: '开头多出来的' },
     { role: 'user', content: '西游记原文' }, { role: 'assistant', content: '<read>https://x.com/a</read>' }, { role: 'user', tool: true, content: '<result>\n失败\n</result>' },
     { role: 'user', content: 'hi' }, { role: 'assistant', content: '你好' }, { role: 'user', content: 'ls' }, { role: 'assistant', content: '' }] }));
   const m = await fakeModel(['好']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     await a.rpc('session/load', { sessionId: 'legacy-1' });
@@ -227,10 +227,10 @@ test('Mini agent：旧会话里的工具标签 / 工具结果 / 空回复不发�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini agent：接口不收 temperature / reasoning_effort（回 400）时去掉重试一次，记下来以后不发', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：接口不收 temperature / reasoning_effort（回 400）时去掉重试一次，记下来以后不发', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await strictModel();
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -247,7 +247,7 @@ test('Mini agent：接口不收 temperature / reasoning_effort（回 400）时�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini 走哪家：模型库里只有 Anthropic / Gemini 接口的也能选；地址按格式补齐', () => {
+test('kuAi 走哪家：模型库里只有 Anthropic / Gemini 接口的也能选；地址按格式补齐', () => {
   const g = { id: 'google', name: 'Google', endpoints: { gemini: 'https://generativelanguage.googleapis.com/v1beta' }, key: 'k', models: [{ id: 'gemini-2.5-flash' }] };
   const hit = pickRoute({ provider: 'google' }, { providers: [store.providers[0], g] });
   assert.equal(hit.p.id, 'google'); assert.equal(hit.fmt, 'gemini');
@@ -286,11 +286,11 @@ function fakeNative(kind) {
   return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port })));
 }
 
-for (const kind of ['anthropic', 'gemini']) test('Mini agent：' + kind + ' 接口——路径、key 的请求头、请求体、流式回复、用量都对', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+for (const kind of ['anthropic', 'gemini']) test('kuAi agent：' + kind + ' 接口——路径、key 的请求头、请求体、流式回复、用量都对', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeNative(kind);
   const base = kind === 'gemini' ? m.url + '/v1beta' : m.url;
-  const a = startAgent({ MINI_FORMAT: kind, MINI_BASE_URL: base, MINI_API_KEY: 'sk-test', MINI_MODELS: 'mx', MINI_MODEL: kind === 'gemini' ? 'models/mx' : 'mx', MINI_DIR: dir });
+  const a = startAgent({ KUAI_FORMAT: kind, KUAI_BASE_URL: base, KUAI_API_KEY: 'sk-test', KUAI_MODELS: 'mx', KUAI_MODEL: kind === 'gemini' ? 'models/mx' : 'mx', KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -305,13 +305,13 @@ for (const kind of ['anthropic', 'gemini']) test('Mini agent：' + kind + ' 接�
       assert.match(q.body.system, /你现在用的模型是 mx/);
       assert.deepEqual(q.body.messages.map(x => x.role + ':' + x.content), ['user:第一问', 'assistant:你好世界', 'user:第二问']);
       assert.ok(!('thinking' in q.body)); assert.equal(q.body.temperature, 0.3);
-      assert.equal(use.used, 60 + 12); assert.equal(use._meta.mini.outTokens, 12);
+      assert.equal(use.used, 60 + 12); assert.equal(use._meta.kuai.outTokens, 12);
     } else {
       assert.equal(q.url, '/v1beta/models/mx:streamGenerateContent?alt=sse'); assert.equal(q.headers['x-goog-api-key'], 'sk-test');
       assert.match(q.body.systemInstruction.parts[0].text, /你现在用的模型是 models\/mx/);
       assert.deepEqual(q.body.contents.map(x => x.role + ':' + x.parts[0].text), ['user:第一问', 'model:你好世界', 'user:第二问']);
       assert.deepEqual(q.body.generationConfig.thinkingConfig, { thinkingBudget: 0 });
-      assert.equal(use.used, 60 + 12); assert.equal(use._meta.mini.outTokens, 12);
+      assert.equal(use.used, 60 + 12); assert.equal(use._meta.kuai.outTokens, 12);
     }
     // 打开思考：anthropic 带 thinking、不带 temperature；gemini 要思考摘要
     await a.rpc('session/set_config_option', { sessionId: n.sessionId, configId: 'effort', value: 'on' });
@@ -348,12 +348,12 @@ function scripted(kind, script) {
   });
   return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port + (kind === 'openai' ? '/v1' : kind === 'gemini' ? '/v1beta' : '') })));
 }
-const miniStats = ups => ups.filter(u => u.sessionUpdate === 'usage_update').at(-1)?._meta?.mini;
+const kuaiStats = ups => ups.filter(u => u.sessionUpdate === 'usage_update').at(-1)?._meta?.kuai;
 
-for (const [kind, LEN, OK] of [['openai', 'length', 'stop'], ['anthropic', 'max_tokens', 'end_turn'], ['gemini', 'MAX_TOKENS', 'STOP']]) test('Mini agent：' + kind + ' 回复到了输出上限就自动接着写，拼成同一条回复', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+for (const [kind, LEN, OK] of [['openai', 'length', 'stop'], ['anthropic', 'max_tokens', 'end_turn'], ['gemini', 'MAX_TOKENS', 'STOP']]) test('kuAi agent：' + kind + ' 回复到了输出上限就自动接着写，拼成同一条回复', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await scripted(kind, [{ text: '第一段，', stop: LEN }, { text: '第二段，', stop: LEN }, { text: '写完了。', stop: OK }]);
-  const a = startAgent({ MINI_FORMAT: kind, MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a = startAgent({ KUAI_FORMAT: kind, KUAI_BASE_URL: m.url, KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -364,7 +364,7 @@ for (const [kind, LEN, OK] of [['openai', 'length', 'stop'], ['anthropic', 'max_
     // 续写的请求：带上已经写的和「接着写」
     const last = kind === 'gemini' ? m.reqs[2].contents.map(x => x.role + ':' + x.parts[0].text) : m.reqs[2].messages.filter(x => x.role !== 'system').map(x => x.role + ':' + x.content);
     assert.equal(last.length, 3); assert.match(last[1], /:第一段，第二段，$/); assert.match(last[2], /^user:.*接着写/);
-    const st = miniStats(a.updates);
+    const st = kuaiStats(a.updates);
     assert.equal(st.parts, 3); assert.equal(st.outTokens, 60); assert.ok(!st.note);
     assert.match(statsLine(st), /分 3 段/);
     const saved = JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).messages;
@@ -372,27 +372,27 @@ for (const [kind, LEN, OK] of [['openai', 'length', 'stop'], ['anthropic', 'max_
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini agent：一直写不完最多接 4 段，提示发「继续」；被 Gemini 防复述拦下不重试，写明原因', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：一直写不完最多接 4 段，提示发「继续」；被 Gemini 防复述拦下不重试，写明原因', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m1 = await scripted('openai', [{ text: '又一段', stop: 'length' }]);
-  const a1 = startAgent({ MINI_BASE_URL: m1.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a1 = startAgent({ KUAI_BASE_URL: m1.url, KUAI_MODEL: 'mx', KUAI_DIR: dir });
   const m2 = await scripted('gemini', [{ text: '昔在黄帝，生而神灵，', stop: 'RECITATION' }]);
-  const a2 = startAgent({ MINI_FORMAT: 'gemini', MINI_BASE_URL: m2.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a2 = startAgent({ KUAI_FORMAT: 'gemini', KUAI_BASE_URL: m2.url, KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     await a1.rpc('initialize', {});
     const n1 = (await a1.rpc('session/new', { cwd: os.tmpdir() })).result;
     await say(a1, n1.sessionId, '写很长');
-    assert.equal(m1.reqs.length, 4); assert.match(miniStats(a1.updates).note, /继续/);
+    assert.equal(m1.reqs.length, 4); assert.match(kuaiStats(a1.updates).note, /继续/);
     await a2.rpc('initialize', {});
     const n2 = (await a2.rpc('session/new', { cwd: os.tmpdir() })).result;
     await say(a2, n2.sessionId, '素问第一篇原文');
     assert.equal(m2.reqs.length, 1); assert.equal(textOf(a2.updates), '昔在黄帝，生而神灵，');
-    assert.match(miniStats(a2.updates).note, /照搬已有的原文/);
+    assert.match(kuaiStats(a2.updates).note, /照搬已有的原文/);
   } finally { a1.stop(); a2.stop(); m1.srv.close(); m2.srv.close(); }
 });
 
-test('Mini agent：接口报错只取说明；429 写明多久恢复（Gemini 的每分钟 / 每天额度、retry-after 头）', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：接口报错只取说明；429 写明多久恢复（Gemini 的每分钟 / 每天额度、retry-after 头）', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const quota = (id, delay) => JSON.stringify([{ error: { code: 429, message: 'You exceeded your current quota.\n* Quota exceeded for metric: free_tier_requests, limit: 10\nPlease retry in 37.2s.', status: 'RESOURCE_EXHAUSTED',
     details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: id, quotaValue: '10' }] }, { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: delay }] } }]);
   const replies = [
@@ -405,7 +405,7 @@ test('Mini agent：接口报错只取说明；429 写明多久恢复（Gemini �
   let k = 0;
   const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { const [h, b] = replies[k++]; res.writeHead(429, { 'content-type': 'application/json', ...h }); res.end(b); }); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
-  const a = startAgent({ MINI_FORMAT: 'gemini', MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1beta', MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a = startAgent({ KUAI_FORMAT: 'gemini', KUAI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1beta', KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -418,10 +418,10 @@ test('Mini agent：接口报错只取说明；429 写明多久恢复（Gemini �
   } finally { a.stop(); srv.close(); }
 });
 
-test('Mini agent：每轮在用户那条消息上记 run（模型、接口、发了几条、系统提示、每次请求的明细），回复带时间', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：每轮在用户那条消息上记 run（模型、接口、发了几条、系统提示、每次请求的明细），回复带时间', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await strictModel();
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -447,10 +447,10 @@ test('Mini agent：每轮在用户那条消息上记 run（模型、接口、发
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const sayImg = (a, sid, text, n = 1) => a.rpc('session/prompt', { sessionId: sid, prompt: [...(text ? [{ type: 'text', text }] : []), ...Array.from({ length: n }, () => ({ type: 'image', mimeType: 'image/png', data: PNG }))] });
 
-test('Mini agent：收图——声明能收图；OpenAI 格式发 image_url（data URL）；图存在会话旁边、会话文件里只记文件名；下一轮历史里照样带；只有图没有字也能发；重放带图', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：收图——声明能收图；OpenAI 格式发 image_url（data URL）；图存在会话旁边、会话文件里只记文件名；下一轮历史里照样带；只有图没有字也能发；重放带图', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['看到了']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     const init = await a.rpc('initialize', {});
     assert.equal(init.result.agentCapabilities.promptCapabilities.image, true);
@@ -472,7 +472,7 @@ test('Mini agent：收图——声明能收图；OpenAI 格式发 image_url（da
     const r = await sayImg(a, n.sessionId, '');
     assert.equal(r.result.stopReason, 'end_turn'); assert.deepEqual(m.reqs[2].messages.at(-1).content, [{ type: 'image_url', image_url: { url: 'data:image/png;base64,' + PNG } }]);
   } finally { a.stop(); }
-  const b = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir });
+  const b = startAgent({ KUAI_BASE_URL: m.url, KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     await b.rpc('initialize', {});
     const sid = fs.readdirSync(dir).find(f => f.endsWith('.json')).replace(/\.json$/, '');
@@ -483,10 +483,10 @@ test('Mini agent：收图——声明能收图；OpenAI 格式发 image_url（da
   } finally { b.stop(); m.srv.close(); }
 });
 
-test('Mini agent：历史里最多带最近 6 张图，更早的换成一句话', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：历史里最多带最近 6 张图，更早的换成一句话', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['嗯']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_MODEL: 'mx', MINI_DIR: dir, MINI_BUDGET: '100000' });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_MODEL: 'mx', KUAI_DIR: dir, KUAI_BUDGET: '100000' });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -497,10 +497,10 @@ test('Mini agent：历史里最多带最近 6 张图，更早的换成一句话'
   } finally { a.stop(); m.srv.close(); }
 });
 
-for (const kind of ['anthropic', 'gemini']) test('Mini agent：' + kind + ' 接口发图的写法', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+for (const kind of ['anthropic', 'gemini']) test('kuAi agent：' + kind + ' 接口发图的写法', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeNative(kind);
-  const a = startAgent({ MINI_FORMAT: kind, MINI_BASE_URL: kind === 'gemini' ? m.url + '/v1beta' : m.url, MINI_API_KEY: 'sk-test', MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a = startAgent({ KUAI_FORMAT: kind, KUAI_BASE_URL: kind === 'gemini' ? m.url + '/v1beta' : m.url, KUAI_API_KEY: 'sk-test', KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -518,11 +518,11 @@ for (const kind of ['anthropic', 'gemini']) test('Mini agent：' + kind + ' 接�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini agent：带图被服务拒了（400）——报错里说明可能是模型不收图', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：带图被服务拒了（400）——报错里说明可能是模型不收图', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'unknown variant `image_url`, expected `text`' } })); }); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
-  const a = startAgent({ MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', MINI_MODEL: 'mx', MINI_DIR: dir });
+  const a = startAgent({ KUAI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -531,10 +531,10 @@ test('Mini agent：带图被服务拒了（400）——报错里说明可能是�
   } finally { a.stop(); srv.close(); }
 });
 
-test('Mini agent：命令放进标明语言的代码块；按网页带来的设备给命令（电脑按系统给、手机和不知道的先问电脑系统）', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi agent：命令放进标明语言的代码块；按网页带来的设备给命令（电脑按系统给、手机和不知道的先问电脑系统）', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['一', '二', '三', '四']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'q1', MINI_MODEL: 'q1' });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'q1', KUAI_MODEL: 'q1' });
   const ask = (sid, text, device) => a.rpc('session/prompt', { sessionId: sid, prompt: [{ type: 'text', text }], ...(device ? { _meta: { device } } : {}) });
   try {
     await a.rpc('initialize', {});
@@ -553,7 +553,7 @@ test('Mini agent：命令放进标明语言的代码块；按网页带来的设�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini 会话走哪家：记过的优先；没记过按会话的模型在模型库里找（默认那家有就用默认那家）；都对不上走默认那家', () => {
+test('kuAi 会话走哪家：记过的优先；没记过按会话的模型在模型库里找（默认那家有就用默认那家）；都对不上走默认那家', () => {
   const l = lib(store);
   assert.equal(sessionPid({ provider: 'deepseek', sessions: { a: 'ollama' } }, store, 'a', 'm1', l), 'ollama');
   assert.equal(sessionPid({ provider: 'deepseek', sessions: { a: 'gone' } }, store, 'a', 'q2', l), 'ollama');   // 记的那家没了：按模型认
@@ -562,14 +562,14 @@ test('Mini 会话走哪家：记过的优先；没记过按会话的模型在模
   assert.equal(sessionPid({}, store, 'b', '', l), 'ollama');                                                    // 没记过默认：本机的排前
 });
 
-test('Mini：不同会话同时用不同家的模型——每家一个进程，换供应商只换这一个会话，别的会话照常', { timeout: 30000 }, async () => {
+test('kuAi：不同会话同时用不同家的模型——每家一个进程，换供应商只换这一个会话，别的会话照常', { timeout: 30000 }, async () => {
   const D = process.env.CLACLAW_DATA, A = await fakeModel(['A 家回答']), B = await fakeModel(['B 家回答']);
   fs.writeFileSync(path.join(D, 'models.json'), JSON.stringify({ providers: [P('pa', A.url, ['a1', 'a2']), P('pb', B.url, ['b1'])].map((p, i) => ({ ...p, id: ['pa', 'pb'][i] })) }));
   const ev = [], ws = { readyState: 1, send: x => ev.push(JSON.parse(x)) };
   const done = id => ev.filter(e => e.t === 'turn.done' && e.sessionId === id).length;
   const until = async f => { for (let i = 0; i < 500 && !f(); i++) await new Promise(r => setTimeout(r, 20)); assert.ok(f(), '等不到：' + f); };
   try {
-    const r1 = await miNewSession(os.tmpdir(), {}), r2 = await miNewSession(os.tmpdir(), {});
+    const r1 = await kuNewSession(os.tmpdir(), {}), r2 = await kuNewSession(os.tmpdir(), {});
     r1.subscribe(ws); r2.subscribe(ws);
     assert.equal(r1.pid, 'pa'); assert.equal(r2.pid, 'pa');
     await r2.pickModel('lib:pb/b1');                                   // r2 换到 B 家
@@ -579,23 +579,23 @@ test('Mini：不同会话同时用不同家的模型——每家一个进程，�
     r1.send('问 1'); r2.send('问 2');                                    // 同时问
     await until(() => done(r1.id) && done(r2.id));
     assert.deepEqual(A.reqs.map(q => q.model), ['a2']); assert.deepEqual(B.reqs.map(q => q.model), ['b1']);
-    const route = JSON.parse(fs.readFileSync(path.join(D, 'mini-route.json'), 'utf8'));
+    const route = JSON.parse(fs.readFileSync(path.join(D, 'kuai-route.json'), 'utf8'));
     assert.equal(route.sessions[r2.sid], 'pb'); assert.equal(route.sessions[r1.sid], 'pa'); assert.equal(route.provider, 'pa');   // 最近选的那家是新会话默认的
     // 关掉重开：按记下的那家接上，历史还在
     const sid2 = r2.sid; r2.unsubscribe(ws); r1.unsubscribe(ws);
     await new Promise(r => setTimeout(r, 200));
-    const again = new MiRunner('mi:' + sid2, { info: { cwd: os.tmpdir() } });
-    miRunners.set(again.id, again); again.subscribe(ws);
+    const again = new KuRunner('ku:' + sid2, { info: { cwd: os.tmpdir() } });
+    kuRunners.set(again.id, again); again.subscribe(ws);
     assert.equal(again.pid, 'pb');
     await again.attach();
     assert.deepEqual(again.items.map(x => x.kind === 'user' ? x.text : null).filter(Boolean), ['问 2']);
     again.unsubscribe(ws);
-  } finally { await miShutdown(); A.srv.close(); B.srv.close(); }
+  } finally { await kuShutdown(); A.srv.close(); B.srv.close(); }
 });
 
-// 假技能目录：claw-echo 把参数原样输出成一个 tv 代码块；claw-file 在清单里但 Mini 不给；claw-nojs 没有命令脚本
+// 假技能目录：claw-echo 把参数原样输出成一个 tv 代码块；claw-file 在清单里但 kuAi 不给；claw-nojs 没有命令脚本
 function fakeSkills() {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-skills-'));
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-skills-'));
   fs.writeFileSync(path.join(d, 'index.json'), JSON.stringify([{ name: 'claw-echo' }, { name: 'claw-file' }, { name: 'claw-nojs' }]));
   for (const n of ['echo', 'file', 'nojs']) {
     fs.mkdirSync(path.join(d, 'claw-' + n));
@@ -606,10 +606,10 @@ function fakeSkills() {
 }
 const toolsOf = ups => ups.filter(u => /^tool_call/.test(u.sessionUpdate));
 
-test('Mini 技能：能力够的模型拿到技能清单；写 claw 代码块 → 先读说明、再跑命令，结果交回模型接着答；代码块不显示，网页上是工具卡片', { timeout: 20000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), sk = fakeSkills();
+test('kuAi 技能：能力够的模型拿到技能清单；写 claw 代码块 → 先读说明、再跑命令，结果交回模型接着答；代码块不显示，网页上是工具卡片', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), sk = fakeSkills();
   const m = await fakeModel(['我查一下。\n```claw\nread claw-echo\n```', '```claw\n~/.claclaw/bin/claw-echo "四川 卫视" x\n```\n', '四川卫视：\n```tv\n["四川 卫视","x"]\n```']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'gemma-4-31b-it', MINI_MODEL: 'gemma-4-31b-it', MINI_SKILLS_DIR: sk });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'gemma-4-31b-it', KUAI_MODEL: 'gemma-4-31b-it', KUAI_SKILLS_DIR: sk });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -635,10 +635,10 @@ test('Mini 技能：能力够的模型拿到技能清单；写 claw 代码块 �
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini 技能：本机小模型（不到 7B）不给技能，claw 代码块照普通文字显示；没有的技能、命令失败都告诉模型', { timeout: 20000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), sk = fakeSkills();
+test('kuAi 技能：本机小模型（不到 7B）不给技能，claw 代码块照普通文字显示；没有的技能、命令失败都告诉模型', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), sk = fakeSkills();
   const m = await fakeModel(['```claw\nclaw-nope x\nclaw-echo fail\n```', '没找到。']);
-  const small = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'qwen3:1.7b', MINI_MODEL: 'qwen3:1.7b', MINI_SKILLS_DIR: sk });
+  const small = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'qwen3:1.7b', KUAI_MODEL: 'qwen3:1.7b', KUAI_SKILLS_DIR: sk });
   try {
     await small.rpc('initialize', {});
     const n = (await small.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -648,7 +648,7 @@ test('Mini 技能：本机小模型（不到 7B）不给技能，claw 代码块�
     assert.match(textOf(small.updates), /```claw\nclaw-nope x/);
     assert.equal(toolsOf(small.updates).length, 0);
   } finally { small.stop(); }
-  const big = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'deepseek-v4-pro', MINI_MODEL: 'deepseek-v4-pro', MINI_SKILLS_DIR: sk });
+  const big = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'deepseek-v4-pro', KUAI_MODEL: 'deepseek-v4-pro', KUAI_SKILLS_DIR: sk });
   try {
     await big.rpc('initialize', {});
     const n = (await big.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -664,10 +664,10 @@ test('Mini 技能：本机小模型（不到 7B）不给技能，claw 代码块�
   } finally { big.stop(); m.srv.close(); }
 });
 
-test('Mini：设备只在知道时写一句，而且写明要给命令时才用', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi：设备只在知道时写一句，而且写明要给命令时才用', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['好']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'q1', MINI_MODEL: 'q1' });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'q1', KUAI_MODEL: 'q1' });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -678,8 +678,8 @@ test('Mini：设备只在知道时写一句，而且写明要给命令时才用'
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini 技能：OpenAI 格式用原生工具调用（声明 claw 工具，tool_calls 拼参数），结果按 tool_call_id 发回；接口不收工具就退回 claw 代码块', { timeout: 20000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), sk = fakeSkills(), reqs = [];
+test('kuAi 技能：OpenAI 格式用原生工具调用（声明 claw 工具，tool_calls 拼参数），结果按 tool_call_id 发回；接口不收工具就退回 claw 代码块', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), sk = fakeSkills(), reqs = [];
   const srv = http.createServer((req, res) => {
     let b = ''; req.on('data', d => b += d); req.on('end', () => {
       const j = JSON.parse(b); reqs.push(j);
@@ -695,7 +695,7 @@ test('Mini 技能：OpenAI 格式用原生工具调用（声明 claw 工具，to
     });
   });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
-  const a = startAgent({ MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', MINI_DIR: dir, MINI_MODELS: 'deepseek-flash', MINI_MODEL: 'deepseek-flash', MINI_SKILLS_DIR: sk });
+  const a = startAgent({ KUAI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', KUAI_DIR: dir, KUAI_MODELS: 'deepseek-flash', KUAI_MODEL: 'deepseek-flash', KUAI_SKILLS_DIR: sk });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -712,8 +712,8 @@ test('Mini 技能：OpenAI 格式用原生工具调用（声明 claw 工具，to
   } finally { a.stop(); srv.close(); }
 });
 
-test('Mini：去掉调参重试时撞上 503（服务忙）：报这次的原话，调参不收照样记下', { timeout: 20000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), reqs = [];
+test('kuAi：去掉调参重试时撞上 503（服务忙）：报这次的原话，调参不收照样记下', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), reqs = [];
   const srv = http.createServer((req, res) => {
     let b = ''; req.on('data', d => b += d); req.on('end', () => {
       reqs.push(JSON.parse(b));
@@ -722,7 +722,7 @@ test('Mini：去掉调参重试时撞上 503（服务忙）：报这次的原话
     });
   });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
-  const a = startAgent({ MINI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', MINI_DIR: dir, MINI_MODELS: 'q1', MINI_MODEL: 'q1' });
+  const a = startAgent({ KUAI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1', KUAI_DIR: dir, KUAI_MODELS: 'q1', KUAI_MODEL: 'q1' });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -735,7 +735,7 @@ test('Mini：去掉调参重试时撞上 503（服务忙）：报这次的原话
 
 // 假的主目录：普通文件、隐藏目录、Library；PATH 前面放一个假的 date（打印环境变量，看 API Key 带没带过去）
 function fakeHome() {
-  const h = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mini-home-')));
+  const h = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-home-')));
   fs.mkdirSync(path.join(h, 'Desktop')); fs.mkdirSync(path.join(h, '.hidden')); fs.mkdirSync(path.join(h, 'Library')); fs.mkdirSync(path.join(h, 'bin'));
   for (const f of ['Desktop/a.png', 'Desktop/b.png', 'Desktop/.c.png', '.hidden/k', 'Library/x', 'notes.txt']) fs.writeFileSync(path.join(h, f), f === 'notes.txt' ? '记一笔\n' : 'x');
   fs.symlinkSync(path.join(h, '.hidden'), path.join(h, 'link'));
@@ -743,15 +743,15 @@ function fakeHome() {
   return h;
 }
 
-test('Mini 简单命令：清单里只读的直接跑（不经 shell，~ 和通配符这边展开，不带隐藏文件）；隐藏 / Library / 链接到隐藏的不碰；管道、清单外、grep -r 不跑；有动静的要确认；不带 API Key', { timeout: 20000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), h = fakeHome();
+test('kuAi 简单命令：清单里只读的直接跑（不经 shell，~ 和通配符这边展开，不带隐藏文件）；隐藏 / Library / 链接到隐藏的不碰；管道、清单外、grep -r 不跑；有动静的要确认；不带 API Key', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), h = fakeHome();
   const m = await fakeModel([
     '我看看。\n```claw\nls ~/Desktop/*.png\ncat ~/.hidden/k\nls | wc -l\n```',
     '```claw\nrm -rf ~/Desktop\ngrep -rn x ~\ncat link/k\n```',
     '```claw\nmkdir ~/newdir\ntouch ~/t.txt\n$ cat notes.txt\n```',
     '```claw\ndate\ncat ~/Library/x\n```',
     '看完了。']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'gemma-4-31b-it', MINI_MODEL: 'gemma-4-31b-it', MINI_CMDS: '1', HOME: h, MINI_API_KEY: 'sk-test-secret', PATH: path.join(h, 'bin') + ':' + process.env.PATH },
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'gemma-4-31b-it', KUAI_MODEL: 'gemma-4-31b-it', KUAI_CMDS: '1', HOME: h, KUAI_API_KEY: 'sk-test-secret', PATH: path.join(h, 'bin') + ':' + process.env.PATH },
     p => /^mkdir/.test(p.toolCall.rawInput.command) ? 'allow' : 'reject');
   try {
     await a.rpc('initialize', {});
@@ -779,7 +779,7 @@ test('Mini 简单命令：清单里只读的直接跑（不经 shell，~ 和通�
     assert.match(res(3), /\$ touch ~\/t\.txt\n用户没有允许跑这条命令。/);
     assert.match(res(3), /\$ cat notes\.txt\n记一笔/);
     assert.match(res(4), new RegExp('HOME=' + h));
-    assert.doesNotMatch(res(4), /sk-test-secret|MINI_/);
+    assert.doesNotMatch(res(4), /sk-test-secret|KUAI_/);
     assert.equal(textOf(a.updates), '我看看。\n\n看完了。');
     const tc = toolsOf(a.updates).filter(u => u.sessionUpdate === 'tool_call');
     assert.equal(tc.length, 11);
@@ -787,10 +787,10 @@ test('Mini 简单命令：清单里只读的直接跑（不经 shell，~ 和通�
   } finally { a.stop(); m.srv.close(); }
 });
 
-test('Mini 简单命令：协同 / 群里别人转来的那一轮（_meta.peer）每条都要确认；小模型不给命令；关掉（MINI_CMDS=0）就不提', { timeout: 20000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+test('kuAi 简单命令：协同 / 群里别人转来的那一轮（_meta.peer）每条都要确认；小模型不给命令；关掉（KUAI_CMDS=0）就不提', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-'));
   const m = await fakeModel(['```claw\necho 你好\n```', '好。', '```claw\necho 你好\n```', '好。']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'deepseek-flash', MINI_MODEL: 'deepseek-flash', MINI_CMDS: '1' }, () => 'reject');
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'deepseek-flash', KUAI_MODEL: 'deepseek-flash', KUAI_CMDS: '1' }, () => 'reject');
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
@@ -804,8 +804,8 @@ test('Mini 简单命令：协同 / 群里别人转来的那一轮（_meta.peer�
     assert.match(m.reqs[3].messages.at(-1).content, /\$ echo 你好\n你好\n/);
   } finally { a.stop(); m.srv.close(); }
   const m2 = await fakeModel(['好。']);
-  const small = startAgent({ MINI_BASE_URL: m2.url, MINI_DIR: dir, MINI_MODELS: 'qwen3:4b', MINI_MODEL: 'qwen3:4b', MINI_CMDS: '1' });
-  const off = startAgent({ MINI_BASE_URL: m2.url, MINI_DIR: dir, MINI_MODELS: 'deepseek-flash', MINI_MODEL: 'deepseek-flash' });
+  const small = startAgent({ KUAI_BASE_URL: m2.url, KUAI_DIR: dir, KUAI_MODELS: 'qwen3:4b', KUAI_MODEL: 'qwen3:4b', KUAI_CMDS: '1' });
+  const off = startAgent({ KUAI_BASE_URL: m2.url, KUAI_DIR: dir, KUAI_MODELS: 'deepseek-flash', KUAI_MODEL: 'deepseek-flash' });
   try {
     for (const x of [small, off]) {
       await x.rpc('initialize', {});
@@ -815,12 +815,12 @@ test('Mini 简单命令：协同 / 群里别人转来的那一轮（_meta.peer�
   } finally { small.stop(); off.stop(); m2.srv.close(); }
 });
 
-test('Mini 简单命令：会话开在小目录里——命令在那个目录里跑、相对路径和通配符从那里算；主目录下目录以外的不碰，系统目录照常；目录里的隐藏文件不碰', { timeout: 20000 }, async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), h = fakeHome(), proj = path.join(h, 'www', 'proj');
+test('kuAi 简单命令：会话开在小目录里——命令在那个目录里跑、相对路径和通配符从那里算；主目录下目录以外的不碰，系统目录照常；目录里的隐藏文件不碰', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), h = fakeHome(), proj = path.join(h, 'www', 'proj');
   fs.mkdirSync(path.join(proj, 'src'), { recursive: true });
   for (const f of ['README.md', 'NOTES.md', 'src/a.js', '.env']) fs.writeFileSync(path.join(proj, f), f);
   const m = await fakeModel(['```claw\nls\nls *.md\ncat src/a.js\n```', '```claw\ncat ../../notes.txt\ncat ~/Desktop/a.png\ncat .env\n```', '```claw\nls /\n```', '好。']);
-  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'gemma-4-31b-it', MINI_MODEL: 'gemma-4-31b-it', MINI_CMDS: '1', HOME: h });
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'gemma-4-31b-it', KUAI_MODEL: 'gemma-4-31b-it', KUAI_CMDS: '1', HOME: h });
   try {
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: proj })).result;

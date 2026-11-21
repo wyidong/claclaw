@@ -24,7 +24,7 @@ import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmA
 import { isQw, QwRunner, qwRunners, qwSessionList, qwNewSession, qwShutdown, qwAcpRunning, qwInfo, qwExists, qwDelete, qwInstalled, qwModelsChanged, qwRename } from './src/claws/qwen.mjs';
 import { isCx, CxRunner, cxRunners, cxSessionList, cxNewSession, cxShutdown, cxAcpRunning, cxInfo, cxExists, cxDelete, cxInstalled, cxSupported, cxUnsupportedReason, cxRename, cxModelsChanged } from './src/claws/codex.mjs';
 import { isGl, GlRunner, glRunners, glSessionList, glNewSession, glShutdown, glAcpRunning, glInfo, glExists, glDelete, glInstalled, glRename, glModelsChanged } from './src/claws/glm.mjs';
-import { isMi, MiRunner, miRunners, miSessionList, miNewSession, miShutdown, miAcpRunning, miInfo, miExists, miDelete, miInstalled, miRename, miModelsChanged } from './src/claws/mini.mjs';
+import { isKu, KuRunner, kuRunners, kuSessionList, kuNewSession, kuShutdown, kuAcpRunning, kuInfo, kuExists, kuDelete, kuInstalled, kuRename, kuModelsChanged } from './src/claws/kuai.mjs';
 import { isIf, IfRunner, ifRunners, ifSessionList, ifNewSession, ifShutdown, ifAcpRunning, ifInfo, ifExists, ifDelete, ifInstalled, ifRename, ifModelsChanged } from './src/claws/iflow.mjs';
 import { isMm, MmRunner, mmRunners, mmSessionList, mmNewSession, mmShutdown, mmAcpRunning, mmInfo, mmExists, mmDelete, mmInstalled, mmSupported, mmUnsupportedReason, mmRename, mmModelsChanged } from './src/claws/minimax.mjs';
 import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbAcpRunning, cbInfo, cbExists, cbDelete, cbInstalled, cbRename, cbModelsChanged } from './src/claws/codebuddy.mjs';
@@ -42,7 +42,7 @@ import { AcpRunner, cfgKindName } from './src/claws/acp.mjs';
 import { AUTO_COMPACT, AUTO_COMPACT_CHOICES, autoCompactDue, autoCompactRun } from './src/claws/autocompact.mjs';
 import { isDs, DsRunner, dsRunners, dsSessionList, dsNewSession, dsShutdown, dsSessionDir, dsAcpRunning, dsExists, dsSupported, dsUnsupportedReason, dsRename, dsUsage, dsCtx, dsRecordsOf } from './src/claws/dsh.mjs';
 import * as skills from './src/skills.mjs';
-import { dissectClaude, dissectDs, dissectKimi, dissectMini } from './src/claws/dissect.mjs';
+import { dissectClaude, dissectDs, dissectKimi, dissectKuai } from './src/claws/dissect.mjs';
 import { originalMode, IMAGE_TYPES, peerPreview, lastPromptOf, usageOf, lastMsgAt, branchOf, jsonlPathOf, toolTarget, toolDiff, resultText, userText, peerMessages, ctxFromFile, kTok, ctxTokens, loadHistoryCached, himg, historyPage, resumable, claudeHasMessages } from './src/claws/claudehist.mjs';
 import { isOp, OpRunner, opRunners, opSessionList, opNewSession, opShutdown, opAcpRunning, opExists, opDelete, opTakeoverInfo, opEndHolders, opInstalled, opRename, opSupported, opUnsupportedReason, opTokSum, opModelsChanged } from './src/claws/opencode.mjs';
 import { makeClaudeUsage } from './src/claws/claudeusage.mjs';
@@ -426,7 +426,7 @@ function claclawMcp(sessionId) {
       // claclaw 协同：本机会话之间都能用；跨电脑只能找对方开放的会话（每次调用时检查，设置改了立刻生效）
       tool(
         'peer_sessions',
-        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / Codex / GLM / Mini / iFlow / MiniMax / CodeBuddy / Qoder / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
+        '查看能对话的其他 AI 会话：本机 claclaw 里的会话（Claude / DeepSeek / OpenCode / Kimi / Qwen / Codex / GLM / kuAi / iFlow / MiniMax / CodeBuddy / Qoder / OpenClaw，local 一栏），以及协同对方（另一台已配对的电脑）开放的会话（peers 一栏）。' +
         '只在用户要你和「别的会话 / 对方 / 另一台电脑的会话」沟通时使用。peer 填「本机」只列本机，填对方名字只列那个对方，不填两边都列。',
         { peer: z.string().optional().describe('「本机」或对方名字，可省略') },
         async ({ peer }) => {
@@ -567,10 +567,10 @@ const CLAWS = [
     info: glInfo, sessionList: glSessionList, newSession: glNewSession, installed: glInstalled, running: glAcpRunning, shutdown: glShutdown, modelsChanged: glModelsChanged, exists: glExists,
     del: id => glDelete(id, TRASH), rename: (id, title) => glRename(id, title),
   }),
-  // kuAi（原名 Mini，代码里还叫 mini、会话 id 前缀 mi:）：claclaw 自带的极简 agent，差异都在 mini.mjs 里
-  infoClaw({ id: 'mini', label: 'kuAi', logName: 'mini', prefix: 'mi:', is: isMi, runners: miRunners, cls: MiRunner,
-    info: miInfo, sessionList: miSessionList, newSession: miNewSession, installed: miInstalled, running: miAcpRunning, shutdown: miShutdown, modelsChanged: miModelsChanged, exists: miExists,
-    del: id => miDelete(id, TRASH), rename: (id, title) => miRename(id, title),
+  // kuAi（会话 id 前缀 ku:）：claclaw 自带的极简 agent，差异都在 kuai.mjs 里
+  infoClaw({ id: 'kuai', label: 'kuAi', logName: 'kuai', prefix: 'ku:', is: isKu, runners: kuRunners, cls: KuRunner,
+    info: kuInfo, sessionList: kuSessionList, newSession: kuNewSession, installed: kuInstalled, running: kuAcpRunning, shutdown: kuShutdown, modelsChanged: kuModelsChanged, exists: kuExists,
+    del: id => kuDelete(id, TRASH), rename: (id, title) => kuRename(id, title),
   }),
   infoClaw({ id: 'iflow', label: 'iFlow', logName: 'iflow', prefix: 'if:', is: isIf, runners: ifRunners, cls: IfRunner,
     info: ifInfo, sessionList: ifSessionList, newSession: ifNewSession, installed: ifInstalled, running: ifAcpRunning, shutdown: ifShutdown, modelsChanged: ifModelsChanged, exists: ifExists,
@@ -2910,11 +2910,11 @@ const handler = async (req, res) => {
           const r = dissectKimi(recs, info.cwd || '');
           return sendJson(res, 200, { claw: 'kimi', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r });
         }
-        if (isMi(id)) {
-          const info = miInfo(id);
+        if (isKu(id)) {
+          const info = kuInfo(id);
           if (!info?.file) return sendJson(res, 404, { error: '找不到这个会话' });
-          const r = dissectMini(JSON.parse(fs.readFileSync(info.file, 'utf8')));
-          return sendJson(res, 200, { claw: 'mini', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r });
+          const r = dissectKuai(JSON.parse(fs.readFileSync(info.file, 'utf8')));
+          return sendJson(res, 200, { claw: 'kuai', id, title: info.title || '', cwdShort: relPath(info.cwd || '', null), ...r });
         }
         if (/^(op|oc):/.test(id)) return sendJson(res, 501, { error: '这个 Claw 还不支持解剖' });
         if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(res, 400, { error: '会话 ID 不对' });
@@ -3664,7 +3664,7 @@ wss.on('connection', (ws, req) => {
           return;
         }
         const acp = runner instanceof AcpRunner;
-        if (acp) runner.devNext = typeof m.dev === 'string' && /^[a-z]{2,12}$/.test(m.dev) ? m.dev : null;   // 网页用的设备（Mini 按它给命令）
+        if (acp) runner.devNext = typeof m.dev === 'string' && /^[a-z]{2,12}$/.test(m.dev) ? m.dev : null;   // 网页用的设备（kuAi 按它给命令）
         const sent = runner.send(text, images);
         if (!sent) fail({ t: 'error', busy: runner.busy || undefined, message: acp && runner.busy ? '这一轮结束前只能排队普通消息（命令要等这一轮结束，最多排 10 条）' : '上一条还在处理中' });
         else runner.emit({ t: 'user', text, images: images.map(i => 'data:' + i.media_type + ';base64,' + i.data), queued: sent === 'queued' || undefined });

@@ -1,6 +1,6 @@
 // 会话解剖：把一个会话按「轮」拆开（一轮 = 用户发的一句话，到下一句话之前），
 // 每轮里有几步（模型调用）、调了哪些工具、花了多少 token / 时间，给用户看每句提示词让 AI 花了多少力气。
-// Claude 读 ~/.claude/projects 下的会话文件（jsonl）；DeepSeek 读 dsh 的会话记录；Mini 读它自己的会话文件（data/mini-sessions/<id>.json）。
+// Claude 读 ~/.claude/projects 下的会话文件（jsonl）；DeepSeek 读 dsh 的会话记录；kuAi 读它自己的会话文件（data/kuai-sessions/<id>.json）。
 // 数字纪律：只用记录里实报的数；拿不到的不补 0、不估、不摊（缓存读 / 缓存写全程没上报过就标 known=false，页面显示 --）。
 // 四桶：inp 未命中输入 · cr 缓存读 · cw 缓存写 · out 输出（含思考 think）。合计 = 四桶相加；上下文大小 = inp + cr + cw。
 import fs from 'node:fs';
@@ -365,10 +365,10 @@ export function dissectKimi(recs, cwd) {
   return finish(st.turns, { model }, cwd || '');
 }
 
-// ---------- Mini：会话文件 { model, messages: [...] } ----------
+// ---------- kuAi：会话文件 { model, messages: [...] } ----------
 // 用户那条消息上有 run（这一轮怎么答的：模型、接口和参数、发了几条历史、丢了几条、系统提示、每次请求的明细 calls）；
 // 一步 = 一次请求（到了输出上限接着写、400 去掉参数重试都各算一步）。没有 run 的旧记录：只有文字，一条回复算一步
-export function dissectMini(o) {
+export function dissectKuai(o) {
   const turns = [];
   let cur = null;
   for (const m of (o && Array.isArray(o.messages) ? o.messages : [])) {
@@ -399,15 +399,15 @@ export function dissectMini(o) {
         if (c.retry) cur.retries++;
       }
       if (r.cancelled) cur.interrupted = true;
-      cur.mini = { api: String(r.api || ''), host: String(r.host || ''), think: !!r.think, noOff: !!r.noOff, maxOut: Number(r.maxOut) || 0, sent: Number(r.sent) || 0, dropped: Number(r.dropped) || 0,
+      cur.kuai = { api: String(r.api || ''), host: String(r.host || ''), think: !!r.think, noOff: !!r.noOff, maxOut: Number(r.maxOut) || 0, sent: Number(r.sent) || 0, dropped: Number(r.dropped) || 0,
         sys: String(r.sys || ''), parts: Number(r.parts) || 0, stop: String(r.stop || ''), note: String(r.note || ''), error: String(r.error || '') };
     } else if (m.role === 'assistant' && cur) {
       // 最后的回复 = 存下来的整段（几段续写拼好的）；每一步各自的原文在上面 calls 里。
       // 早一点的 run 没存每步原文，回复放到最后一步上；更早的旧记录没有 run，一条回复补一步，用量、耗时都没记（noStats，页面显示 --）
       cur.replyFull = m.content;
-      let s = cur.mini ? cur.steps[cur.steps.length - 1] : null;
+      let s = cur.kuai ? cur.steps[cur.steps.length - 1] : null;
       if (!s) { s = newStep(Number(m.at) || cur.at, m.model || o.model); s.noStats = true; cur.noStats = true; cur.steps.push(s); }
-      if (!cur.mini || !cur.steps.some((x) => x.text)) { s.text = m.content; s.chars = m.content.length; }
+      if (!cur.kuai || !cur.steps.some((x) => x.text)) { s.text = m.content; s.chars = m.content.length; }
       if (!s.model) s.model = m.model || o.model || '';
       if (m.at && !cur.noStats) cur.endAt = Math.max(cur.endAt, Number(m.at));
     }
@@ -417,11 +417,11 @@ export function dissectMini(o) {
     if (t.replyFull != null) { t.reply = t.replyFull; t.replyChars = t.replyFull.length; delete t.replyFull; }
   }
   r.summary.noStats = r.turns.filter((t) => t.noStats).length;   // 没记用量、耗时的旧轮数
-  r.summary.apiErrors = r.turns.filter((t) => t.mini && t.mini.error).length;   // 这一轮最后出错了（额度超限、连不上之类）
+  r.summary.apiErrors = r.turns.filter((t) => t.kuai && t.kuai.error).length;   // 这一轮最后出错了（额度超限、连不上之类）
   // 模型表现（挑模型用）：每个模型请求几次、出错几次、平均首字 / 生成速度（只算成功、有数的请求）
   const by = new Map();
   for (const t of r.turns) for (const s of t.steps) {
-    if (!t.mini) continue;
+    if (!t.kuai) continue;
     const k = s.model || '?', m = by.get(k) || { model: k, calls: 0, errors: 0, out: 0, ttft: [], tps: [] };
     m.calls++; m.out += s.out;
     if (s.err) m.errors++;
@@ -430,7 +430,7 @@ export function dissectMini(o) {
     by.set(k, m);
   }
   const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
-  r.summary.miniModels = [...by.values()].map((m) => ({ model: m.model, calls: m.calls, errors: m.errors, out: m.out,
+  r.summary.kuaiModels = [...by.values()].map((m) => ({ model: m.model, calls: m.calls, errors: m.errors, out: m.out,
     ttftMs: avg(m.ttft) == null ? null : Math.round(avg(m.ttft)), tps: avg(m.tps) == null ? null : Math.round(avg(m.tps) * 10) / 10 })).sort((a, b) => b.calls - a.calls);
   return r;
 }

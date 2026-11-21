@@ -383,7 +383,7 @@ export class AcpRunner {
   ctxNow() { return this.ctx; }
   beforePrompt() {}
   afterPrompt() {}
-  promptMeta() { return null; }   // session/prompt 的 _meta（参数：网页带来的设备、是不是协同那一轮；默认不带，Mini 带上）
+  promptMeta() { return null; }   // session/prompt 的 _meta（参数：网页带来的设备、是不是协同那一轮；默认不带，kuAi 带上）
   async prepareAttach() {}
   attachDone() {}
   attachError(e) { return e; }

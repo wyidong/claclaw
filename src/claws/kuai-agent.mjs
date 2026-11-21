@@ -7,8 +7,8 @@
 // - 每轮请求只有一段很短的系统提示 + 对话本身，首字最快（技能和命令只有一个 claw 工具）
 // - 默认关思考（reasoning_effort=none）；会话设置里可以打开
 // - 请求前缀保持不变（Ollama 能复用已处理的部分）；超出预算才一次性丢掉最早的几轮，不做「压缩」那种额外请求
-// - 每轮结束在 usage_update 的 _meta.mini 里带上首字耗时、生成速度，claclaw 显示成一行小字
-// 环境变量：MINI_FORMAT（接口格式 openai | anthropic | gemini，默认 openai）、MINI_BASE_URL（openai 写到 /v1；anthropic 写到 /v1 之前；gemini 写到 /v1beta）、MINI_API_KEY、MINI_MODELS（逗号分隔）、MINI_MODEL、MINI_DIR（会话目录）、MINI_BUDGET（上下文预算 token）、MINI_MAX_OUT
+// - 每轮结束在 usage_update 的 _meta.kuai 里带上首字耗时、生成速度，claclaw 显示成一行小字
+// 环境变量：KUAI_FORMAT（接口格式 openai | anthropic | gemini，默认 openai）、KUAI_BASE_URL（openai 写到 /v1；anthropic 写到 /v1 之前；gemini 写到 /v1beta）、KUAI_API_KEY、KUAI_MODELS（逗号分隔）、KUAI_MODEL、KUAI_DIR（会话目录）、KUAI_BUDGET（上下文预算 token）、KUAI_MAX_OUT
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -16,17 +16,17 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { HOME, tilde, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
 
-const BASE = (process.env.MINI_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
-const KEY = process.env.MINI_API_KEY || 'none';
-const FORMAT = ['anthropic', 'gemini'].includes(process.env.MINI_FORMAT) ? process.env.MINI_FORMAT : 'openai';
+const BASE = (process.env.KUAI_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
+const KEY = process.env.KUAI_API_KEY || 'none';
+const FORMAT = ['anthropic', 'gemini'].includes(process.env.KUAI_FORMAT) ? process.env.KUAI_FORMAT : 'openai';
 const hostOf = u => { try { return new URL(u).host; } catch { return ''; } };
-const MODELS = (process.env.MINI_MODELS || '').split(',').map(s => s.trim()).filter(Boolean);
-const DEFAULT_MODEL = process.env.MINI_MODEL || MODELS[0] || 'qwen3:1.7b';
-const DIR = process.env.MINI_DIR || path.join(HOME, '.claclaw-mini', 'sessions');
-const BUDGET = Math.max(2000, Number(process.env.MINI_BUDGET) || 6000);
-const MAX_OUT = Math.max(256, Number(process.env.MINI_MAX_OUT) || 4096);   // 一次回复的 token 上限：小模型偶尔停不下来
-// 技能：skills/index.json 里登记的、有命令脚本的（找会话、发文件 Mini 用不上，不给）；MINI_SKILLS_DIR 可以改目录（测试用；指到没有的目录就是不给技能）
-const SKILLS_DIR = process.env.MINI_SKILLS_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
+const MODELS = (process.env.KUAI_MODELS || '').split(',').map(s => s.trim()).filter(Boolean);
+const DEFAULT_MODEL = process.env.KUAI_MODEL || MODELS[0] || 'qwen3:1.7b';
+const DIR = process.env.KUAI_DIR || path.join(HOME, '.claclaw-kuai', 'sessions');
+const BUDGET = Math.max(2000, Number(process.env.KUAI_BUDGET) || 6000);
+const MAX_OUT = Math.max(256, Number(process.env.KUAI_MAX_OUT) || 4096);   // 一次回复的 token 上限：小模型偶尔停不下来
+// 技能：skills/index.json 里登记的、有命令脚本的（找会话、发文件 kuAi 用不上，不给）；KUAI_SKILLS_DIR 可以改目录（测试用；指到没有的目录就是不给技能）
+const SKILLS_DIR = process.env.KUAI_SKILLS_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'skills');
 const SKILL_SKIP = new Set(['claw-interconnect', 'claw-file']);
 const SKILLS = (() => {
   let idx = []; try { idx = JSON.parse(fs.readFileSync(path.join(SKILLS_DIR, 'index.json'), 'utf8')); } catch {}
@@ -37,8 +37,8 @@ const SKILLS = (() => {
     return md && fs.existsSync(js) ? { name: x.name, desc, js, md: md.replace(/^---[\s\S]*?---\s*/, '').trim() } : null;
   }).filter(Boolean);
 })();
-// 简单命令：MINI_CMDS=0 关掉（测试用）
-const CMDS_ON = process.env.MINI_CMDS !== '0';
+// 简单命令：KUAI_CMDS=0 关掉（测试用）
+const CMDS_ON = process.env.KUAI_CMDS !== '0';
 const MAX_STEPS = 4;          // 一轮里最多用几次技能（每次一个 claw 代码块，最多 3 条命令）
 const SKILL_MS = 120000;      // 一条技能命令最多跑多久
 
@@ -443,7 +443,7 @@ async function runClaw(s, lines, signal, seen = new Set()) {
 // ---------- 简单命令 ----------
 // 名字 → { ask：有动静的，要用户在网页上点确认；no(args)：不让跑的原因；fix(args)：改参数 }。别的只读，直接跑。
 // 不经 shell：管道、重定向、命令替换一律不收；开头的 ~、$HOME 和没加引号的通配符这边展开（展开不带隐藏文件，和 shell 一样）；只按名字在 PATH 里找（写了路径也只认名字）。
-// 环境变量只给 PATH、HOME 这几个（Mini 进程里有 API Key，不能带过去）；工作目录是主目录，20 秒超时，输出超过 10 万字就停。
+// 环境变量只给 PATH、HOME 这几个（kuAi 进程里有 API Key，不能带过去）；工作目录是主目录，20 秒超时，输出超过 10 万字就停。
 // 隐藏的目录和文件（.ssh、.claclaw、.env……）、~/Library、claclaw 的 data、/dev，以及名字像密钥、密码的文件不碰（链接按真实位置算）。
 // 协同 / 群里别人转来的那一轮（session/prompt 的 _meta.peer）每条都要确认（claclaw 那边先过 peerguard）
 const CMD_MS = 20000, CMD_OUT = 100000;
@@ -473,7 +473,7 @@ function realOf(p) {
   try { return path.join(fs.realpathSync(path.dirname(p)), path.basename(p)); } catch { return path.resolve(p); }
 }
 const NO_GO = [path.join(HOME, 'Library'), path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data'), process.env.CLACLAW_DATA,
-  path.basename(DIR) === 'mini-sessions' ? path.dirname(DIR) : '', '/dev'].filter(Boolean).map(realOf);
+  path.basename(DIR) === 'kuai-sessions' ? path.dirname(DIR) : '', '/dev'].filter(Boolean).map(realOf);
 const SECRET = /(credential|secret|token|passw|id_rsa|id_ed25519|id_ecdsa|keychain|cookies?$|\.(pem|key|p12|pfx|kdbx)$)/i;
 // 命令在会话的目录里跑（新建会话时选的；没有、不是目录就用主目录）。不是主目录时就是「小目录」：主目录下这个目录以外的个人文件不碰（系统目录照常能看）；
 // 会话目录本身是隐藏目录下的（用户自己选的）也照常用，只是目录里面的隐藏文件不碰
@@ -603,7 +603,7 @@ async function prompt(s, text, images = []) {
   const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, at: Date.now(), ...(parts > 1 ? { parts } : {}) }); } };
   try {
     trim(s);
-    // 这一轮怎么答的（给会话解剖、调 Mini 用）：用的哪个模型、什么接口和参数、发了几条历史、丢了几条、系统提示，以及每次请求的明细
+    // 这一轮怎么答的（给会话解剖、调 kuAi 用）：用的哪个模型、什么接口和参数、发了几条历史、丢了几条、系统提示，以及每次请求的明细
     const run = um.run = { model: s.model, api: FORMAT, host: hostOf(BASE), think: !!s.think, noOff: !!s.noOff, maxOut: MAX_OUT, sys: systemOf(s), sent: history(s).length, dropped: s.from, calls: [] };
     let tin = 0, tout = 0, gen = 0, t0 = 0, first = 0, end = 0, stop = null;
     let after = false;   // 上一次是用技能：这一段和前面写的之间空一行
@@ -646,7 +646,7 @@ async function prompt(s, text, images = []) {
     // 生成速度只算第一个字之后的；输出太短（< 8 tok）算出的速度没意义，不报；没有 usage 的服务不报速度（估出来的不准，调试时会误导）
     const stats = { model: s.model, ttft: first ? (first - t0) / 1000 : null, outTokens: tout || null, tps: tout >= 8 && gen > 0.05 ? tout / gen : null, total: (end - t0) / 1000,
       ...(parts > 1 ? { parts } : {}), ...(noteOf(stop) ? { note: noteOf(stop) } : {}) };
-    update(s.id, { sessionUpdate: 'usage_update', used: tin ? tin + tout : 0, size: BUDGET, _meta: { mini: stats } });
+    update(s.id, { sessionUpdate: 'usage_update', used: tin ? tin + tout : 0, size: BUDGET, _meta: { kuai: stats } });
     return 'end_turn';
   } catch (e) {
     if (um.run) Object.assign(um.run, { endAt: Date.now(), parts }, e.name === 'AbortError' ? { cancelled: true } : { error: String(e.message).slice(0, 500) });

@@ -1,10 +1,10 @@
-// kuAi（原名 Mini；代码、数据目录、会话 id 前缀照旧叫 mini / mi:，旧会话和群不受影响）：claclaw 自带的问答 agent，能力够的模型还能用 claclaw 的技能和几条简单命令（只读的直接跑，有动静的要确认，见 mini-agent.mjs）；接模型库里的模型（尤其本地 Ollama）答疑、看模型快不快。
-// agent 本体在 mini-agent.mjs（ACP，stdin/stdout）。每轮结束显示一行：模型 · 首字耗时 · 生成速度。
-// - 会话：agent 把每个会话存成 data/mini-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
+// kuAi（代码、数据目录叫 kuai，会话 id 前缀 ku:）：claclaw 自带的问答 agent，能力够的模型还能用 claclaw 的技能和几条简单命令（只读的直接跑，有动静的要确认，见 kuai-agent.mjs）；接模型库里的模型（尤其本地 Ollama）答疑、看模型快不快。
+// agent 本体在 kuai-agent.mjs（ACP，stdin/stdout）。每轮结束显示一行：模型 · 首字耗时 · 生成速度。
+// - 会话：agent 把每个会话存成 data/kuai-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
 // - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商，每家各起一个进程，会话各走各的（同一个群里几个会话可以同时用不同家的模型）；本机地址（127.0.0.1 / localhost）的排最前；
-//   会话走哪家记在 data/mini-route.json 的 sessions（没记的按会话的模型认，认不出走默认那家）；provider 是新会话默认走的（最近选的那家）
+//   会话走哪家记在 data/kuai-route.json 的 sessions（没记的按会话的模型认，认不出走默认那家）；provider 是新会话默认走的（最近选的那家）
 // - 改名：agent 没有接口，名字记在 claclaw 这边；删除：把会话文件挪进回收站
-// 网页里 Mini 会话的 id = 'mi:' + 会话 id（UUID）。
+// 网页里 kuAi 会话的 id = 'ku:' + 会话 id（UUID）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,19 +13,19 @@ import { tilde, oneLine, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
 import { DATA } from '../auth.mjs';
 import { storeNow, STORE_GROUP, LIB, libModels, hostOf } from '../modelpick.mjs';
 
-const MI_PREFIX = 'mi:';
-export const isMi = id => typeof id === 'string' && id.startsWith(MI_PREFIX);
-const sidOf = id => id.slice(MI_PREFIX.length);
+const KU_PREFIX = 'ku:';
+export const isKu = id => typeof id === 'string' && id.startsWith(KU_PREFIX);
+const sidOf = id => id.slice(KU_PREFIX.length);
 const validSid = sid => /^[A-Za-z0-9_.-]{4,128}$/.test(sid);
 
-const AGENT_JS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mini-agent.mjs');
-const SESSIONS = path.join(DATA, 'mini-sessions');
-const ROUTE_FILE = path.join(DATA, 'mini-route.json');
+const AGENT_JS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'kuai-agent.mjs');
+const SESSIONS = path.join(DATA, 'kuai-sessions');
+const ROUTE_FILE = path.join(DATA, 'kuai-route.json');
 const FMTS = ['openai', 'anthropic', 'gemini'];   // 一家有几种接口时按这个顺序挑
 const epOf = x => x.p.endpoints[x.fmt];
 const LOCAL = /^(127\.|localhost$|\[?::1\]?$)/;
 
-export const miInstalled = () => !!route();   // 模型库里有能用的模型就算装好了（agent 随 claclaw 自带）
+export const kuInstalled = () => !!route();   // 模型库里有能用的模型就算装好了（agent 随 claclaw 自带）
 
 // ---------- 会话列表 ----------
 const fileCache = new Map();   // 文件路径 → { key（大小:修改时间）, row }
@@ -48,23 +48,23 @@ function listRows() {
     const key = st.size + ':' + st.mtimeMs;
     let c = fileCache.get(f);
     if (c?.key !== key) { let row = null; try { row = parseFile(f, st); } catch {} c = { key, row }; fileCache.set(f, c); }
-    if (c.row) rows.push({ ...c.row, title: localNames.get(MI_PREFIX + c.row.id) || c.row.title });
+    if (c.row) rows.push({ ...c.row, title: localNames.get(KU_PREFIX + c.row.id) || c.row.title });
   }
   for (const f of fileCache.keys()) if (!seen.has(f)) fileCache.delete(f);
   return rows.sort((a, b) => b.updated - a.updated);
 }
-export function miSessionList({ busy = () => false } = {}) {
+export function kuSessionList({ busy = () => false } = {}) {
   return listRows().map(s => ({
-    id: MI_PREFIX + s.id,
+    id: KU_PREFIX + s.id,
     title: s.title || 'kuAi 会话',
     cwd: s.cwd, cwdShort: tilde(s.cwd || ''), branch: s.model,
     lastModified: s.updated,
     openInWeb: false, busyElsewhere: null, unread: 0, webActive: 0,
-    claw: 'mini', busy: busy(MI_PREFIX + s.id),
+    claw: 'kuai', busy: busy(KU_PREFIX + s.id),
   }));
 }
-export const miInfo = id => isMi(id) ? listRows().find(s => s.id === sidOf(id)) || null : null;
-export const miExists = id => !!miInfo(id);
+export const kuInfo = id => isKu(id) ? listRows().find(s => s.id === sidOf(id)) || null : null;
+export const kuExists = id => !!kuInfo(id);
 
 // ---------- 走哪家 ----------
 // 记过的那家还在就用它；没记过：本机地址的排最前，再按模型库顺序
@@ -83,7 +83,7 @@ export function sessionPid(rec, store, sid, model, lib = libModels(store, FMTS))
   if (model && !(def && def.p.models.some(m => m.id === model))) { const hit = lib.find(x => x.m.id === model); if (hit) return hit.p.id; }
   return def?.p.id || '';
 }
-const pidOf = (sid, store = storeNow()) => sessionPid(readJson(ROUTE_FILE, {}), store, sid, miInfo(MI_PREFIX + sid)?.model);
+const pidOf = (sid, store = storeNow()) => sessionPid(readJson(ROUTE_FILE, {}), store, sid, kuInfo(KU_PREFIX + sid)?.model);
 // 记下会话走哪家（provider：顺便改新会话默认走的）；删掉的会话（null）去掉
 function saveRoute(sid, pid, provider) {
   const rec = readJson(ROUTE_FILE, {}), sessions = { ...(rec.sessions || {}) };
@@ -105,15 +105,15 @@ function proxyEnv() {
   return { NODE_USE_ENV_PROXY: '1', NO_PROXY: no.join(','), no_proxy: no.join(',') };
 }
 function routeEnv(pid) {
-  const store = storeNow(), hit = libOf(store).find(x => x.p.id === pid) || route(store), env = { MINI_DIR: SESSIONS, ...proxyEnv() };
+  const store = storeNow(), hit = libOf(store).find(x => x.p.id === pid) || route(store), env = { KUAI_DIR: SESSIONS, ...proxyEnv() };
   if (hit) {
-    env.MINI_FORMAT = hit.fmt;
-    env.MINI_BASE_URL = baseOf(hit.fmt, epOf(hit));
-    env.MINI_API_KEY = hit.p.key || 'none';
-    env.MINI_MODELS = hit.p.models.map(m => m.id).join(',');
-    env.MINI_MODEL = hit.m.id;
+    env.KUAI_FORMAT = hit.fmt;
+    env.KUAI_BASE_URL = baseOf(hit.fmt, epOf(hit));
+    env.KUAI_API_KEY = hit.p.key || 'none';
+    env.KUAI_MODELS = hit.p.models.map(m => m.id).join(',');
+    env.KUAI_MODEL = hit.m.id;
   }
-  if (process.env.CLACLAW_MINI_BUDGET) env.MINI_BUDGET = process.env.CLACLAW_MINI_BUDGET;
+  if (process.env.CLACLAW_KUAI_BUDGET) env.KUAI_BUDGET = process.env.CLACLAW_KUAI_BUDGET;
   return { env, sig: hash16(JSON.stringify(env)) };
 }
 
@@ -127,22 +127,22 @@ function agentFor(pid) {
   }
   return ag;
 }
-export const miShutdown = () => Promise.all([...agents.values()].map(ag => ag.stop()));
-export function miModelsChanged(log) { for (const [pid, ag] of agents) ag.modelsChanged(routeEnv(pid).sig, log); }
-export const miAcpRunning = () => [...agents.values()].some(ag => ag.running);
+export const kuShutdown = () => Promise.all([...agents.values()].map(ag => ag.stop()));
+export function kuModelsChanged(log) { for (const [pid, ag] of agents) ag.modelsChanged(routeEnv(pid).sig, log); }
+export const kuAcpRunning = () => [...agents.values()].some(ag => ag.running);
 
 export const COMMANDS = [
   { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true },
 ];
 
-// ---------- 打开的 Mini 会话 ----------
-export const miRunners = new Map();
+// ---------- 打开的 kuAi 会话 ----------
+export const kuRunners = new Map();
 
-export class MiRunner extends AcpRunner {
+export class KuRunner extends AcpRunner {
   static get agent() { return agentFor(route()?.p.id || ''); }   // 新建会话用默认那家；已有的会话在构造时换成它自己那家的
   static onCreated(sid) { saveRoute(sid, route()?.p.id || ''); }
-  static prefix = MI_PREFIX; static runners = miRunners;
-  static label = 'kuAi'; static group = 'kuAi'; static permPrefix = 'mi-'; static commands = COMMANDS;
+  static prefix = KU_PREFIX; static runners = kuRunners;
+  static label = 'kuAi'; static group = 'kuAi'; static permPrefix = 'ku-'; static commands = COMMANDS;
   static cfgIds = { model: 'model' };
   static cfgNames = { model: '模型' };
   static ctxFromUsage = true; static titleFromAgent = true;
@@ -151,7 +151,7 @@ export class MiRunner extends AcpRunner {
   get openMethod() { return 'session/load'; }
 
   async prepareAttach() {
-    const s = miInfo(this.id);
+    const s = kuInfo(this.id);
     if (s) { if (!this.cwd) { this.cwd = s.cwd; this.info.cwd = s.cwd; } this.title = localNames.get(this.id) || this.title || s.title; this.model = this.model || s.model; }
     this.items = []; this.tools.clear(); this.replayOpen = null;
     this.replaying = true;
@@ -163,13 +163,13 @@ export class MiRunner extends AcpRunner {
     if (!this.title) this.title = oneLine(this.items.find(x => x.kind === 'user')?.text || '').slice(0, 60) || 'kuAi 会话';
   }
   beforePrompt(text, images) { this.items.push({ kind: 'user', text, images: images.length ? images : undefined, at: Date.now() }); }
-  // 用户用的设备：Mini 按它给对应系统的命令；协同 / 群里别人转来的那一轮：Mini 的简单命令每条都要确认
+  // 用户用的设备：kuAi 按它给对应系统的命令；协同 / 群里别人转来的那一轮：kuAi 的简单命令每条都要确认
   promptMeta(dev, peer) { return dev || peer ? { ...(dev ? { device: dev } : {}), ...(peer ? { peer: true } : {}) } : null; }
   get imageError() { return 'kuAi 进程是旧版本，还不收图片：重启 claclaw 后再试'; }
-  // 每轮结束 agent 在 usage_update._meta.mini 里带上速度：显示成一行小字（不进历史）
+  // 每轮结束 agent 在 usage_update._meta.kuai 里带上速度：显示成一行小字（不进历史）
   handle(u) {
     super.handle(u);
-    const st = u?.sessionUpdate === 'usage_update' && u._meta?.mini;
+    const st = u?.sessionUpdate === 'usage_update' && u._meta?.kuai;
     if (!st || this.replaying || this.closed) return;
     this.closeText();
     if (st.note) this.emit({ t: 'sys', text: '⚠️ ' + st.note });   // 没写完 / 被拦下：写明原因
@@ -183,7 +183,7 @@ export class MiRunner extends AcpRunner {
     const v = String(o.value), hit = this.hit(store);
     return { value: v, label: String(o.name || v), id: v, base: hit ? epOf(hit) : '' };
   }
-  // 模型选择：模型库里所有 Mini 能用的（换供应商只换这一个会话的进程，别的会话不受影响）
+  // 模型选择：模型库里所有 kuAi 能用的（换供应商只换这一个会话的进程，别的会话不受影响）
   xmodels() {
     const base = super.xmodels(), store = storeNow(), lib = libOf(store), hit = this.hit(store);
     if (!hit || !lib.length) return base;
@@ -216,7 +216,7 @@ export class MiRunner extends AcpRunner {
     old.release(this.sid, this);
     saveRoute(this.sid, pid);
     this.pid = pid; this.agent = agentFor(pid); this.config = null;
-    this.log?.('mini route', this.sid.slice(0, 8), '→', pid);
+    this.log?.('kuai route', this.sid.slice(0, 8), '→', pid);
     await this.attach();
   }
 }
@@ -233,14 +233,14 @@ export function statsLine(st) {
   return parts.join(' · ');
 }
 
-export const miNewSession = (cwd, opts) => MiRunner.create(cwd, opts);
+export const kuNewSession = (cwd, opts) => KuRunner.create(cwd, opts);
 
 // 删除：会话文件挪进回收站（agent 没有删除接口）
-export function miDelete(id, trashDir) {
-  const s = miInfo(id);
+export function kuDelete(id, trashDir) {
+  const s = kuInfo(id);
   if (!s?.file) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
   fs.mkdirSync(trashDir, { recursive: true, mode: 0o700 });
-  const dest = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_mini_' + s.id + '.json');
+  const dest = path.join(trashDir, new Date().toISOString().replace(/[:.]/g, '-') + '_kuai_' + s.id + '.json');
   fs.renameSync(s.file, dest);
   const files = s.file.replace(/\.json$/, '.files');   // 会话里的图片（agent 存在会话文件旁边）一起挪走
   try { if (fs.existsSync(files)) fs.renameSync(files, dest.replace(/\.json$/, '.files')); } catch {}
@@ -250,9 +250,9 @@ export function miDelete(id, trashDir) {
   return dest;
 }
 // 改名：记在 claclaw 这边（列表、标题都用它；agent 自己起的标题不再覆盖）
-export function miRename(id, title) {
-  if (!miInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
+export function kuRename(id, title) {
+  if (!kuInfo(id)) throw Object.assign(new Error('找不到这个会话'), { code: 404 });
   localNames.set(id, title);
-  const r = miRunners.get(id); if (r) r.title = title;
+  const r = kuRunners.get(id); if (r) r.title = title;
   return title;
 }
