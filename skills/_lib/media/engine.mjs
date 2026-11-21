@@ -534,37 +534,11 @@ async function latestMovies(LAST) {
   if (!items.length) die('没找到能直接播放的华语新片', 2);
   const when = x => x.db?.date || (x.db?.year ? x.db.year + '' : '');
   items.sort((a, b) => when(b).localeCompare(when(a)) || (a.ago ?? 9e9) - (b.ago ?? 9e9));
-  await fetchCovers(items);
   writeJson(LAST, { q: '华语新片', at: Date.now(), items });
   if (opt.debug) console.error('用时', (Date.now() - t0) + 'ms');
-  console.log('序号\t片名\t上映\t地区\t类型\t豆瓣\t时长\t播放\t官方频道\t封面');
+  console.log('序号\t片名\t上映\t地区\t类型\t豆瓣\t时长\t播放\t官方频道');
   const ml = x => `[${x.key.replace(/[\[\]]/g, ' ')}](${x.page})`;   // 片名就是播放链接：claclaw 里点了在顶上的播放器播，列表留着随时换
-  items.forEach((x, i) => console.log([i + 1, ml(x), when(x) || '?', x.db?.area || '?', x.db?.genres || '', x.db?.rating || '暂无', fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.cover || ''].join('\t')));
-}
-// 封面：来源自带缩略图的才有（YouTube / Dailymotion / Internet Archive），下载到 ~/.claclaw/media/covers/，片单里给本地路径；没有或下不来的留空
-const coverUrl = x => {
-  const id = (re) => re.exec(x.page || '')?.[1];
-  if (/youtube\.com\/watch/.test(x.page || '')) { const v = id(/[?&]v=([\w-]{11})/); return v && `https://i.ytimg.com/vi/${v}/mqdefault.jpg`; }
-  if (/dailymotion\.com\/video\//.test(x.page || '')) { const v = id(/video\/(\w+)/); return v && `https://www.dailymotion.com/thumbnail/video/${v}`; }
-  if (/archive\.org\/details\//.test(x.page || '')) { const v = id(/details\/([^/?#]+)/); return v && `https://archive.org/services/img/${v}`; }
-  return '';
-};
-async function fetchCovers(items) {
-  const dir = path.join(STATE, 'covers'); fs.mkdirSync(dir, { recursive: true });
-  const todo = items.map(x => ({ x, u: coverUrl(x) })).filter(t => t.u);
-  for (let i = 0; i < todo.length; i += 8) await Promise.all(todo.slice(i, i + 8).map(async ({ x, u }) => {
-    const base = path.join(dir, crypto.createHash('md5').update(u).digest('hex').slice(0, 12));
-    const hit = ['jpg', 'png', 'webp', 'gif'].map(e => `${base}.${e}`).find(f => fs.existsSync(f));
-    if (hit) { x.cover = hit; return; }
-    for (const viaProxy of [true, false]) {
-      try {
-        const b = await http(u, { binary: true, proxy: viaProxy, timeout: 8000 });
-        const ext = IMG_MAGIC.find(([, f]) => f(b))?.[0];
-        if (!ext || b.length < 1500 || b.length > 5 * 1048576) continue;
-        fs.writeFileSync(`${base}.${ext}`, b); x.cover = `${base}.${ext}`; return;
-      } catch {}
-    }
-  }));
+  items.forEach((x, i) => console.log([i + 1, ml(x), when(x) || '?', x.db?.area || '?', x.db?.genres || '', x.db?.rating || '暂无', fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, '')].join('\t')));
 }
 async function movies(q) {
   const LAST = path.join(STATE, 'movies-last.json');
@@ -638,11 +612,10 @@ async function movies(q) {
   const ok = await Promise.all(head.map(x => x.src === 'youtube' ? yt.embed(x, ectx) : true));   // Dailymotion 搜的时候已按 allow_embed 筛过；Archive 都能嵌
   const items = head.filter((_, i) => ok[i]).slice(0, n);
   if (!items.length) die('没找到官方频道能直接播放的完整电影' + (year ? `（${year} 年的）` : '') + (minRate ? `（豆瓣 ${minRate} 分以上）` : '') + '：换个类型 / 片名 / 演员，或放宽条件', 2);
-  await fetchCovers(items);
   writeJson(LAST, { q, at: Date.now(), items });
   // 片单里片名就是播放链接（claclaw 点了在聊天顶上的播放器里播，不跳走；列表留着随时换）；--pick 序号 也还能单独拿一部
-  console.log('序号\t片名\t豆瓣\t年份\t类型\t时长\t播放\t官方频道\t原标题\t封面');   // 豆瓣「暂无」= 没评分或这次没查到（限流）；封面 = 本地图片路径，空 = 没有
-  items.forEach((x, i) => console.log([i + 1, `[${x.name.replace(/[\[\]]/g, ' ')}](${x.page})`, x.db?.rating ? x.db.rating + (x.db.votes < 100 ? '（' + x.db.votes + '人评）' : '') : x.db?.imdb ? 'IMDb ' + x.db.imdb : x.db?.my ? '猫眼 ' + x.db.my : '暂无', x.db?.year || '?', [x.db?.type, x.db?.genres].filter(Boolean).join(' '), fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title, x.cover || ''].join('\t')));
+  console.log('序号\t片名\t豆瓣\t年份\t类型\t时长\t播放\t官方频道\t原标题');   // 豆瓣「暂无」= 没评分或这次没查到（限流）
+  items.forEach((x, i) => console.log([i + 1, `[${x.name.replace(/[\[\]]/g, ' ')}](${x.page})`, x.db?.rating ? x.db.rating + (x.db.votes < 100 ? '（' + x.db.votes + '人评）' : '') : x.db?.imdb ? 'IMDb ' + x.db.imdb : x.db?.my ? '猫眼 ' + x.db.my : '暂无', x.db?.year || '?', [x.db?.type, x.db?.genres].filter(Boolean).join(' '), fmtDur(x.dur), fmtPlays(x.plays), (x.channel || '').replace(/\s*-\s*Get .*$/i, ''), x.title].join('\t')));
 }
 
 // ---------- 相关推荐（claclaw 播放器里的「相关」：B 站 / YouTube 正在播的这个视频的相关视频，点了在 claclaw 里接着播） ----------
