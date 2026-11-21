@@ -14,7 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { HOME, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
+import { HOME, tilde, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
 
 const BASE = (process.env.MINI_BASE_URL || 'http://127.0.0.1:11434/v1').replace(/\/+$/, '');
 const KEY = process.env.MINI_API_KEY || 'none';
@@ -117,6 +117,8 @@ const whatOf = s => skillsOn(s) && cmdsOn(s) ? '技能和简单命令' : skillsO
 const nativeOn = s => FORMAT === 'openai' && toolsOn(s) && !s.plain;
 const CLAW_TOOL = { type: 'function', function: { name: 'claw', description: '运行 claclaw 技能或简单命令：read 技能名（看它的说明）、技能命令（以技能名开头、不写路径），或者清单里的简单命令；一次最多 3 条',
   parameters: { type: 'object', properties: { commands: { type: 'array', items: { type: 'string' }, description: '比如 ["read claw-tv"]、["claw-tv \\"四川卫视\\""]、["df -h"]' } }, required: ['commands'] } } };
+const cwdLine = s => { const wd = cwdOf(s); return wd === HOME_REAL ? '命令在主目录 ~ 里跑，相对路径从这里算；隐藏文件、~/Library 不能碰。'
+  : `命令在会话目录 ${tilde(wd)} 里跑，相对路径从这里算；主目录下这个目录以外的文件、隐藏文件不能碰。`; };
 const OS = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }[process.platform] || process.platform;
 const toolsText = s => {
   const sk = skillsOn(s), cm = cmdsOn(s), what = whatOf(s), use = sk && cm ? '要用时' : '要用' + what + '时';
@@ -137,7 +139,7 @@ df -h
 
 你还能用 claclaw 的${what}：命令由 claclaw 在它所在的电脑（${OS}）上替你跑，结果再发给你。` + (sk ? `技能有：
 ${SKILLS.map(k => '- ' + k.name + '：' + k.desc).join('\n')}
-` : '\n') + (cm ? `简单命令：${cmdList(false)} 直接跑；${cmdList(true)} 要用户在网页上点确认。不经 shell：不能用管道、重定向、cd（~ 和通配符可以用），相对路径从主目录 ~ 算；隐藏文件、~/Library 不能碰。别的命令跑不了，就给出命令让用户自己跑。
+` : '\n') + (cm ? `简单命令：${cmdList(false)} 直接跑；${cmdList(true)} 要用户在网页上点确认。不经 shell：不能用管道、重定向、cd（~ 和通配符可以用）。${cwdLine(s)}别的命令跑不了，就给出命令让用户自己跑。
 ` : '') + how + `
 结果回来后${sk && cm ? '接着回答用户，用了技能就照它的说明回复（要原样贴的代码块原样贴）。用不上就直接回答，不要提这些' : sk ? '照技能说明回复用户（要原样贴的代码块原样贴）。用不上技能就直接回答，不要提技能' : '接着回答用户。用不上就直接回答，不要提简单命令'}。`;
 };
@@ -473,15 +475,21 @@ function realOf(p) {
 const NO_GO = [path.join(HOME, 'Library'), path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data'), process.env.CLACLAW_DATA,
   path.basename(DIR) === 'mini-sessions' ? path.dirname(DIR) : '', '/dev'].filter(Boolean).map(realOf);
 const SECRET = /(credential|secret|token|passw|id_rsa|id_ed25519|id_ecdsa|keychain|cookies?$|\.(pem|key|p12|pfx|kdbx)$)/i;
-// 一个参数要是路径（带 / 或 ~，或者主目录下有这个名字；选项看 = 后面或 / 起的部分；网址不算）：碰不碰得
-function badPath(arg) {
+// 命令在会话的目录里跑（新建会话时选的；没有、不是目录就用主目录）。不是主目录时就是「小目录」：主目录下这个目录以外的个人文件不碰（系统目录照常能看）；
+// 会话目录本身是隐藏目录下的（用户自己选的）也照常用，只是目录里面的隐藏文件不碰
+const HOME_REAL = realOf(HOME);
+const inside = (p, d) => p === d || p.startsWith(d + path.sep);
+function cwdOf(s) { try { const d = realOf(s.cwd || HOME); return fs.statSync(d).isDirectory() ? d : HOME_REAL; } catch { return HOME_REAL; } }
+// 一个参数要是路径（带 / 或 ~，或者当前目录下有这个名字；选项看 = 后面或 / 起的部分；网址不算）：碰不碰得
+function badPath(arg, wd = HOME_REAL) {
   let v = arg;
   if (v.startsWith('-')) { const i = v.search(/[=/~]/); if (i < 0) return ''; v = v.slice(v[i] === '=' ? i + 1 : i); }
   if (!v || /^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return '';
-  if (!/[/~]/.test(v) && !fs.existsSync(path.join(HOME, v))) return '';
-  const abs = realOf(path.resolve(HOME, v.replace(/^~(?=\/|$)/, HOME)));
-  if (v === HOME || v.startsWith(HOME + '/')) v = '~' + v.slice(HOME.length);   // 说的时候照模型的写法
-  if (abs.split(path.sep).some(c => c.startsWith('.'))) return v + ' 是隐藏的目录 / 文件，不能碰';
+  if (!/[/~]/.test(v) && !fs.existsSync(path.join(wd, v))) return '';
+  const abs = realOf(path.resolve(wd, v.replace(/^~(?=\/|$)/, HOME)));
+  v = tilde(v);   // 说的时候照模型的写法
+  if ((inside(abs, wd) ? path.relative(wd, abs) : abs).split(path.sep).some(c => c.startsWith('.'))) return v + ' 是隐藏的目录 / 文件，不能碰';
+  if (wd !== HOME_REAL && inside(abs, HOME_REAL) && !inside(abs, wd)) return v + ' 在会话目录（' + tilde(wd) + '）外面，不能碰';
   if (NO_GO.some(d => abs === d || abs.startsWith(d + path.sep))) return v + ' 所在的目录不能碰';
   if (SECRET.test(path.basename(abs))) return v + ' 看着像密钥、密码一类的文件，不能碰';
   return '';
@@ -501,12 +509,12 @@ function cmdArgs(line) {
   return { args: out, shell };
 }
 const homeOf = v => v.replace(/^~(?=\/|$)/, HOME).replace(/^\$(HOME|\{HOME\})(?=\/|$)/, HOME);
-function expand(args) {
+function expand(args, wd) {
   const out = [];
   for (const { v, glob } of args) {
     const x = homeOf(v);
     let hit = [];
-    if (glob) { try { hit = fs.globSync(x, { cwd: HOME }).filter(p => !path.basename(p).startsWith('.') && !badPath(p)).sort(); } catch {} }   // 碰不得的（~/Library 等）当没有
+    if (glob) { try { hit = fs.globSync(x, { cwd: wd }).filter(p => !path.basename(p).startsWith('.') && !badPath(p, wd)).sort(); } catch {} }   // 碰不得的（~/Library 等）当没有
     out.push(...(hit.length ? hit.slice(0, 500) : [x]));   // 没匹配到的原样传（和 shell 一样）
   }
   return out;
@@ -516,10 +524,10 @@ function cmdEnv() {
   for (const k of ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TMPDIR', 'SHELL']) if (process.env[k]) e[k] = process.env[k];
   return e;
 }
-function runCmd(argv, signal) {
+function runCmd(argv, signal, wd) {
   return new Promise(res => {
     let out = '', note = '', done = false;
-    const p = spawn(argv[0], argv.slice(1), { cwd: HOME, stdio: ['ignore', 'pipe', 'pipe'], env: cmdEnv() });
+    const p = spawn(argv[0], argv.slice(1), { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'], env: cmdEnv() });
     const kill = () => { try { p.kill('SIGKILL'); } catch {} };
     const fin = code => { if (done) return; done = true; clearTimeout(to); signal?.removeEventListener?.('abort', kill); res({ code, out, note }); };
     const to = setTimeout(() => { note = '超过 ' + CMD_MS / 1000 + ' 秒，停掉了'; kill(); }, CMD_MS);
@@ -553,8 +561,9 @@ async function runSimple(s, line, id, signal) {
   const name = (toks[0]?.v || '').replace(/^.*\//, ''), c = Object.hasOwn(CMDS, name) ? CMDS[name] : null;
   if (!c) return end(false, '这条命令跑不了：' + (name || '（空）') + ' 不在简单命令清单里。能跑的：' + Object.keys(CMDS).join(' ') + '。别的给出命令让用户自己跑。');
   if (shell) return end(false, '没跑：不经 shell，不能用管道、重定向、;、&&、命令替换。拆成单独的命令再跑（比如只跑 ls ~/Desktop，数数、筛选你自己来）。');
-  let args = expand(toks.slice(1));
-  const why = args.map(badPath).find(Boolean) || c.no?.(args) || '';
+  const wd = cwdOf(s);
+  let args = expand(toks.slice(1), wd);
+  const why = args.map(x => badPath(x, wd)).find(Boolean) || c.no?.(args) || '';
   if (why) return end(false, '没跑：' + why + '。');
   if (c.fix) args = c.fix(args);
   if (c.ask || s.peer) {
@@ -562,7 +571,7 @@ async function runSimple(s, line, id, signal) {
     if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
     if (!ok) return end(false, '用户没有允许跑这条命令。');
   }
-  const r = await runCmd([name, ...args], signal);
+  const r = await runCmd([name, ...args], signal, wd);
   if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
   const ok = r.code === 0;
   // macOS 的隐私保护（桌面、文稿、下载等要单独授权）：说清楚是系统拦的、怎么开，模型好转告用户

@@ -755,14 +755,14 @@ test('Mini 简单命令：清单里只读的直接跑（不经 shell，~ 和通�
     p => /^mkdir/.test(p.toolCall.rawInput.command) ? 'allow' : 'reject');
   try {
     await a.rpc('initialize', {});
-    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const n = (await a.rpc('session/new', { cwd: h })).result;
     const r = await say(a, n.sessionId, '看看桌面');
     assert.equal(r.result.stopReason, 'end_turn');
     assert.equal(m.reqs.length, 5);
     const sys = m.reqs[0].messages[0].content;
     assert.match(sys, /不能操作用户的电脑（下面的简单命令除外）/);
     assert.match(sys, /简单命令：date cal .* 直接跑；open mkdir touch cp mv say 要用户在网页上点确认/);
-    assert.match(sys, /不经 shell：不能用管道、重定向、cd（~ 和通配符可以用）/);
+    assert.match(sys, /不经 shell：不能用管道、重定向、cd（~ 和通配符可以用）。命令在主目录 ~ 里跑，相对路径从这里算；隐藏文件、~\/Library 不能碰。/);
     const res = i => m.reqs[i].messages.at(-1).content;
     assert.equal(res(1).split('\n\n')[0], '[命令结果]\n$ ls ~/Desktop/*.png\n' + h + '/Desktop/a.png\n' + h + '/Desktop/b.png');   // 展开不带 .c.png
     assert.match(res(1), /\$ cat ~\/\.hidden\/k\n没跑：~\/\.hidden\/k 是隐藏的目录 \/ 文件，不能碰。/);
@@ -813,4 +813,26 @@ test('Mini 简单命令：协同 / 群里别人转来的那一轮（_meta.peer�
     }
     assert.ok(m2.reqs.every(q => !/简单命令/.test(q.messages[0].content) && !q.tools));
   } finally { small.stop(); off.stop(); m2.srv.close(); }
+});
+
+test('Mini 简单命令：会话开在小目录里——命令在那个目录里跑、相对路径和通配符从那里算；主目录下目录以外的不碰，系统目录照常；目录里的隐藏文件不碰', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), h = fakeHome(), proj = path.join(h, 'www', 'proj');
+  fs.mkdirSync(path.join(proj, 'src'), { recursive: true });
+  for (const f of ['README.md', 'NOTES.md', 'src/a.js', '.env']) fs.writeFileSync(path.join(proj, f), f);
+  const m = await fakeModel(['```claw\nls\nls *.md\ncat src/a.js\n```', '```claw\ncat ../../notes.txt\ncat ~/Desktop/a.png\ncat .env\n```', '```claw\nls /\n```', '好。']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'gemma-4-31b-it', MINI_MODEL: 'gemma-4-31b-it', MINI_CMDS: '1', HOME: h });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: proj })).result;
+    await say(a, n.sessionId, '看看这个项目');
+    assert.match(m.reqs[0].messages[0].content, /命令在会话目录 ~\/www\/proj 里跑，相对路径从这里算；主目录下这个目录以外的文件、隐藏文件不能碰。/);
+    const res = i => m.reqs[i].messages.at(-1).content;
+    assert.match(res(1), /\$ ls\nNOTES\.md\nREADME\.md\nsrc\n/);
+    assert.match(res(1), /\$ ls \*\.md\nNOTES\.md\nREADME\.md\n/);
+    assert.match(res(1), /\$ cat src\/a\.js\nsrc\/a\.js/);
+    assert.match(res(2), /\$ cat \.\.\/\.\.\/notes\.txt\n没跑：\.\.\/\.\.\/notes\.txt 在会话目录（~\/www\/proj）外面，不能碰。/);
+    assert.match(res(2), /\$ cat ~\/Desktop\/a\.png\n没跑：~\/Desktop\/a\.png 在会话目录（~\/www\/proj）外面/);
+    assert.match(res(2), /\$ cat \.env\n没跑：\.env 是隐藏的目录/);
+    assert.doesNotMatch(res(3), /没跑/);                                   // 系统目录照常
+  } finally { a.stop(); m.srv.close(); }
 });
