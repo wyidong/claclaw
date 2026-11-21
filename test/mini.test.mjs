@@ -56,7 +56,7 @@ function strictModel() {
 
 // answer(params) → 选哪个 optionId（默认「允许」）
 function startAgent(env, answer = () => 'allow') {
-  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, MINI_SKILLS_DIR: '/nonexistent', ...env }, stdio: ['pipe', 'pipe', 'inherit'] });   // 默认不给技能（测技能的自己指目录）
+  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, MINI_SKILLS_DIR: '/nonexistent', MINI_CMDS: '0', ...env }, stdio: ['pipe', 'pipe', 'inherit'] });   // 默认不给技能、不跑命令（测的自己打开）
   const updates = [], pend = new Map(), asks = [];
   let buf = '', id = 0;
   p.stdout.on('data', d => {
@@ -731,4 +731,86 @@ test('Mini：去掉调参重试时撞上 503（服务忙）：报这次的原话
     assert.ok('temperature' in reqs[0] && !('temperature' in reqs[1]));
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).plain, true);
   } finally { a.stop(); srv.close(); }
+});
+
+// 假的主目录：普通文件、隐藏目录、Library；PATH 前面放一个假的 date（打印环境变量，看 API Key 带没带过去）
+function fakeHome() {
+  const h = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mini-home-')));
+  fs.mkdirSync(path.join(h, 'Desktop')); fs.mkdirSync(path.join(h, '.hidden')); fs.mkdirSync(path.join(h, 'Library')); fs.mkdirSync(path.join(h, 'bin'));
+  for (const f of ['Desktop/a.png', 'Desktop/b.png', 'Desktop/.c.png', '.hidden/k', 'Library/x', 'notes.txt']) fs.writeFileSync(path.join(h, f), f === 'notes.txt' ? '记一笔\n' : 'x');
+  fs.symlinkSync(path.join(h, '.hidden'), path.join(h, 'link'));
+  fs.writeFileSync(path.join(h, 'bin', 'date'), '#!/bin/sh\nenv\n', { mode: 0o755 });
+  return h;
+}
+
+test('Mini 简单命令：清单里只读的直接跑（不经 shell，~ 和通配符这边展开，不带隐藏文件）；隐藏 / Library / 链接到隐藏的不碰；管道、清单外、grep -r 不跑；有动静的要确认；不带 API Key', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-')), h = fakeHome();
+  const m = await fakeModel([
+    '我看看。\n```claw\nls ~/Desktop/*.png\ncat ~/.hidden/k\nls | wc -l\n```',
+    '```claw\nrm -rf ~/Desktop\ngrep -rn x ~\ncat link/k\n```',
+    '```claw\nmkdir ~/newdir\ntouch ~/t.txt\n$ cat notes.txt\n```',
+    '```claw\ndate\ncat ~/Library/x\n```',
+    '看完了。']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'gemma-4-31b-it', MINI_MODEL: 'gemma-4-31b-it', MINI_CMDS: '1', HOME: h, MINI_API_KEY: 'sk-test-secret', PATH: path.join(h, 'bin') + ':' + process.env.PATH },
+    p => /^mkdir/.test(p.toolCall.rawInput.command) ? 'allow' : 'reject');
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    const r = await say(a, n.sessionId, '看看桌面');
+    assert.equal(r.result.stopReason, 'end_turn');
+    assert.equal(m.reqs.length, 5);
+    const sys = m.reqs[0].messages[0].content;
+    assert.match(sys, /不能操作用户的电脑（下面的简单命令除外）/);
+    assert.match(sys, /简单命令：date cal .* 直接跑；open mkdir touch cp mv say 要用户在网页上点确认/);
+    assert.match(sys, /不经 shell：不能用管道、重定向、cd（~ 和通配符可以用）/);
+    const res = i => m.reqs[i].messages.at(-1).content;
+    assert.equal(res(1).split('\n\n')[0], '[命令结果]\n$ ls ~/Desktop/*.png\n' + h + '/Desktop/a.png\n' + h + '/Desktop/b.png');   // 展开不带 .c.png
+    assert.match(res(1), /\$ cat ~\/\.hidden\/k\n没跑：~\/\.hidden\/k 是隐藏的目录 \/ 文件，不能碰。/);
+    assert.match(res(1), /\$ ls \| wc -l\n没跑：不经 shell/);
+    assert.match(res(1), /接着回答用户；还要跑命令就再调用 claw 工具。$/);
+    assert.match(res(2), /\$ rm -rf ~\/Desktop\n这条命令跑不了：rm 不在简单命令清单里/);
+    assert.match(res(2), /\$ grep -rn x ~\n没跑：grep 不能搜整个目录/);
+    assert.match(res(2), /\$ cat link\/k\n没跑：link\/k 是隐藏的目录 \/ 文件，不能碰。/);   // 链接按真实位置算
+    assert.match(res(4), /\$ cat ~\/Library\/x\n没跑：~\/Library\/x 所在的目录不能碰/);
+    assert.ok(fs.existsSync(path.join(h, 'Desktop')));
+    assert.deepEqual(a.asks.map(x => [x.toolCall.title, x.toolCall.kind, x.toolCall.rawInput.command]), [['Bash', 'execute', 'mkdir ~/newdir'], ['Bash', 'execute', 'touch ~/t.txt']]);
+    assert.ok(fs.statSync(path.join(h, 'newdir')).isDirectory());
+    assert.ok(!fs.existsSync(path.join(h, 't.txt')));
+    assert.match(res(3), /\$ touch ~\/t\.txt\n用户没有允许跑这条命令。/);
+    assert.match(res(3), /\$ cat notes\.txt\n记一笔/);
+    assert.match(res(4), new RegExp('HOME=' + h));
+    assert.doesNotMatch(res(4), /sk-test-secret|MINI_/);
+    assert.equal(textOf(a.updates), '我看看。\n\n看完了。');
+    const tc = toolsOf(a.updates).filter(u => u.sessionUpdate === 'tool_call');
+    assert.equal(tc.length, 11);
+    assert.ok(tc.every(u => u.title === 'Bash' && u.kind === 'execute'));
+  } finally { a.stop(); m.srv.close(); }
+});
+
+test('Mini 简单命令：协同 / 群里别人转来的那一轮（_meta.peer）每条都要确认；小模型不给命令；关掉（MINI_CMDS=0）就不提', { timeout: 20000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mini-sess-'));
+  const m = await fakeModel(['```claw\necho 你好\n```', '好。', '```claw\necho 你好\n```', '好。']);
+  const a = startAgent({ MINI_BASE_URL: m.url, MINI_DIR: dir, MINI_MODELS: 'deepseek-flash', MINI_MODEL: 'deepseek-flash', MINI_CMDS: '1' }, () => 'reject');
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await a.rpc('session/prompt', { sessionId: n.sessionId, prompt: [{ type: 'text', text: '打个招呼' }], _meta: { peer: true } });
+    assert.equal(a.asks.length, 1);
+    assert.match(m.reqs[1].messages.at(-1).content, /\$ echo 你好\n用户没有允许/);
+    assert.match(m.reqs[0].messages[0].content, /要用简单命令时调用 claw 工具。命令照常写/);
+    assert.equal(m.reqs[0].tools[0].function.name, 'claw');
+    await say(a, n.sessionId, '再打个招呼');                         // 用户自己发的：只读的直接跑
+    assert.equal(a.asks.length, 1);
+    assert.match(m.reqs[3].messages.at(-1).content, /\$ echo 你好\n你好\n/);
+  } finally { a.stop(); m.srv.close(); }
+  const m2 = await fakeModel(['好。']);
+  const small = startAgent({ MINI_BASE_URL: m2.url, MINI_DIR: dir, MINI_MODELS: 'qwen3:4b', MINI_MODEL: 'qwen3:4b', MINI_CMDS: '1' });
+  const off = startAgent({ MINI_BASE_URL: m2.url, MINI_DIR: dir, MINI_MODELS: 'deepseek-flash', MINI_MODEL: 'deepseek-flash' });
+  try {
+    for (const x of [small, off]) {
+      await x.rpc('initialize', {});
+      await say(x, (await x.rpc('session/new', { cwd: os.tmpdir() })).result.sessionId, '你好');
+    }
+    assert.ok(m2.reqs.every(q => !/简单命令/.test(q.messages[0].content) && !q.tools));
+  } finally { small.stop(); off.stop(); m2.srv.close(); }
 });

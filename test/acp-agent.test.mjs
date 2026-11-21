@@ -298,7 +298,7 @@ test('网页带来的设备（devNext）：跟着下一次 send 走、放进 ses
     r.devNext = 'windows'; r.send('a');
     await until(() => of('turn.done').length === 1);
     assert.equal(seen[0]._meta, undefined);            // 默认不带
-    r.promptMeta = dev => ({ device: dev });
+    r.promptMeta = dev => dev ? { device: dev } : null;
     r.devNext = 'windows'; r.send('b');
     await until(() => of('turn.done').length === 2);
     assert.deepEqual(seen[1]._meta, { device: 'windows' });

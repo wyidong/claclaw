@@ -2,8 +2,9 @@
 // 极简对话 agent（ACP，stdin/stdout 一行一条 JSON-RPC）：问答为主，不碰这台电脑上的文件和任意命令；
 // 能力够的模型（名字里的参数量不到 7B 的本机小模型除外）还能用 claclaw 自带的技能（skills/，电视、听歌、视频、换肤……）：
 // 模型在回复里写 ```claw 代码块（read 技能名 / 技能命令），这边只认技能清单里的命令，不经 shell 直接用 node 跑技能脚本，结果再交给模型接着答。
+// 同样的写法还能跑几条简单命令（date、ls、df、cat……，见 CMDS）：只读的直接跑，open、mkdir 这类要用户在网页上点确认；不经 shell，隐藏文件、~/Library、claclaw 的 data 不碰。
 // 用途：拿模型库里的模型（尤其本地 Ollama）直接答疑，顺便看模型快不快、好不好用。
-// - 每轮请求只有一段很短的系统提示 + 对话本身，不带工具定义，首字最快
+// - 每轮请求只有一段很短的系统提示 + 对话本身，首字最快（技能和命令只有一个 claw 工具）
 // - 默认关思考（reasoning_effort=none）；会话设置里可以打开
 // - 请求前缀保持不变（Ollama 能复用已处理的部分）；超出预算才一次性丢掉最早的几轮，不做「压缩」那种额外请求
 // - 每轮结束在 usage_update 的 _meta.mini 里带上首字耗时、生成速度，claclaw 显示成一行小字
@@ -36,6 +37,8 @@ const SKILLS = (() => {
     return md && fs.existsSync(js) ? { name: x.name, desc, js, md: md.replace(/^---[\s\S]*?---\s*/, '').trim() } : null;
   }).filter(Boolean);
 })();
+// 简单命令：MINI_CMDS=0 关掉（测试用）
+const CMDS_ON = process.env.MINI_CMDS !== '0';
 const MAX_STEPS = 4;          // 一轮里最多用几次技能（每次一个 claw 代码块，最多 3 条命令）
 const SKILL_MS = 120000;      // 一条技能命令最多跑多久
 
@@ -102,31 +105,46 @@ const DEVICES = { mac: 'Mac 电脑', windows: 'Windows 电脑', linux: 'Linux �
 const devLine = d => !DEVICES[d] ? ''
   : /^(iphone|ipad|android|harmony)$/.test(d) ? `\n用户在用${DEVICES[d]}和你对话；只有要给电脑命令、又不知道电脑是什么系统时，才先问一句。`
   : `\n用户在用${DEVICES[d]}和你对话；要给命令时按这个系统给${d === 'windows' ? '（默认 PowerShell）' : ''}，用户说了别的系统就按说的给。`;
-// 模型够不够用技能：名字里写了参数量、不到 7B 的（本机小模型）不给——跟不住「先读说明、再写命令、再按结果回复」这几步，技能清单还拖慢首字
+// 模型够不够用技能、命令：名字里写了参数量、不到 7B 的（本机小模型）不给——跟不住「先读说明、再写命令、再按结果回复」这几步，清单还拖慢首字
 const sizeOf = m => { const x = /(\d+(?:\.\d+)?)b(?![a-z])/i.exec(String(m || '').replace(/^.*\//, '')); return x ? Number(x[1]) : null; };
-const skillsOn = s => { const n = sizeOf(s.model); return SKILLS.length > 0 && (n == null || n >= 7); };   // 没写参数量的（云上的大模型）算够
-// 怎么调技能：OpenAI 格式的接口用原生工具调用（声明一个 claw 工具；DeepSeek 这类不声明工具时会把自己的工具调用标记当文字写出来）；
-// 别的格式、或者接口不收工具（回 400 后 plain）就在回复里写 claw 代码块
-const nativeOn = s => FORMAT === 'openai' && skillsOn(s) && !s.plain;
-const CLAW_TOOL = { type: 'function', function: { name: 'claw', description: '运行 claclaw 技能：read 技能名（看它的说明），或者技能命令（以技能名开头、不写路径），一次最多 3 条',
-  parameters: { type: 'object', properties: { commands: { type: 'array', items: { type: 'string' }, description: '比如 ["read claw-tv"]、["claw-tv \\"四川卫视\\""]' } }, required: ['commands'] } } };
-const skillsText = s => `
-
-你还能用 claclaw 的技能：命令由 claclaw 在用户电脑上替你跑，结果再发给你。技能有：
-${SKILLS.map(k => '- ' + k.name + '：' + k.desc).join('\n')}
-${nativeOn(s) ? `要用技能时调用 claw 工具。第一次用某个技能先读它的说明（commands 写 ["read claw-tv"]），读过就照说明写命令（以技能名开头，不写路径），比如 ["claw-tv \\"四川卫视\\""]。` : `要用技能时，回复里写一个 claw 代码块就停下，等结果。第一次用某个技能先读它的说明：
+const bigEnough = s => { const n = sizeOf(s.model); return n == null || n >= 7; };   // 没写参数量的（云上的大模型）算够
+const skillsOn = s => SKILLS.length > 0 && bigEnough(s);
+const cmdsOn = s => CMDS_ON && bigEnough(s);
+const toolsOn = s => skillsOn(s) || cmdsOn(s);
+const whatOf = s => skillsOn(s) && cmdsOn(s) ? '技能和简单命令' : skillsOn(s) ? '技能' : '简单命令';
+// 怎么调：OpenAI 格式的接口用原生工具调用（声明一个 claw 工具；DeepSeek 这类不声明工具时会把自己的工具调用标记当文字写出来）；
+// 别的格式、或者接口不收工具（回 400 后 plain）就在回复里写 claw 代码块。技能和简单命令走同一个工具 / 代码块：以技能名开头的是技能，别的按简单命令认
+const nativeOn = s => FORMAT === 'openai' && toolsOn(s) && !s.plain;
+const CLAW_TOOL = { type: 'function', function: { name: 'claw', description: '运行 claclaw 技能或简单命令：read 技能名（看它的说明）、技能命令（以技能名开头、不写路径），或者清单里的简单命令；一次最多 3 条',
+  parameters: { type: 'object', properties: { commands: { type: 'array', items: { type: 'string' }, description: '比如 ["read claw-tv"]、["claw-tv \\"四川卫视\\""]、["df -h"]' } }, required: ['commands'] } } };
+const OS = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }[process.platform] || process.platform;
+const toolsText = s => {
+  const sk = skillsOn(s), cm = cmdsOn(s), what = whatOf(s), use = sk && cm ? '要用时' : '要用' + what + '时';
+  const how = nativeOn(s)
+    ? `${use}调用 claw 工具。` + (sk ? `第一次用某个技能先读它的说明（commands 写 ["read claw-tv"]），读过就照说明写命令（以技能名开头，不写路径），比如 ["claw-tv \\"四川卫视\\""]。` : '') + (cm ? `命令照常写，比如 ["df -h"]。` : '')
+    : `${use}，回复里写一个 claw 代码块就停下，等结果。` + (sk ? `第一次用某个技能先读它的说明：
 \`\`\`claw
 read claw-tv
 \`\`\`
 读过就照说明写命令（一行一条，最多 3 条，以技能名开头，不写路径），比如：
 \`\`\`claw
 claw-tv "四川卫视"
-\`\`\``}
-结果回来后照技能说明回复用户（要原样贴的代码块原样贴）。用不上技能就直接回答，不要提技能。`;
+\`\`\`` : '') + (cm ? (sk ? '\n' : '') + `命令也写在 claw 代码块里（一行一条，最多 3 条），比如：
+\`\`\`claw
+df -h
+\`\`\`` : '');
+  return `
+
+你还能用 claclaw 的${what}：命令由 claclaw 在它所在的电脑（${OS}）上替你跑，结果再发给你。` + (sk ? `技能有：
+${SKILLS.map(k => '- ' + k.name + '：' + k.desc).join('\n')}
+` : '\n') + (cm ? `简单命令：${cmdList(false)} 直接跑；${cmdList(true)} 要用户在网页上点确认。不经 shell：不能用管道、重定向、cd（~ 和通配符可以用），相对路径从主目录 ~ 算；隐藏文件、~/Library 不能碰。别的命令跑不了，就给出命令让用户自己跑。
+` : '') + how + `
+结果回来后${sk && cm ? '接着回答用户，用了技能就照它的说明回复（要原样贴的代码块原样贴）。用不上就直接回答，不要提这些' : sk ? '照技能说明回复用户（要原样贴的代码块原样贴）。用不上技能就直接回答，不要提技能' : '接着回答用户。用不上就直接回答，不要提简单命令'}。`;
+};
 const systemOf = s => `你是答疑助手，简洁回答；用户用什么语言就用什么语言。今天是 ${new Date().toLocaleDateString('sv')}。
-你不能上网，也不能操作用户的电脑${skillsOn(s) ? '（下面的技能除外）' : ''}；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
+你不能上网，也不能操作用户的电脑${toolsOn(s) ? '（下面的' + whatOf(s) + '除外）' : ''}；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
 要给命令时，放进标明语言的代码块（bash、powershell、cmd 等），一行一条，说明写在代码块外面。
-你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。${skillsOn(s) ? skillsText(s) : ''}${devLine(s.dev)}`;
+你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。${toolsOn(s) ? toolsText(s) : ''}${devLine(s.dev)}`;
 // 发给模型的历史：旧版本（还能调工具时）留下的工具标签和工具结果不发；空回复不发；
 // 去掉这些后相邻同角色的并成一条（有的接口不收连续两条 user / assistant），开头不能是 assistant
 const LEGACY_TOOL = /^\s*<(run|read|write)[\s>]/;
@@ -393,9 +411,13 @@ function runSkill(k, args, signal) {
 // seen：这一轮里给过说明的技能。没读说明就直接跑命令的（有的模型不听「先读」），结果后面附上说明，让它照「怎么回复」贴
 async function runClaw(s, lines, signal, seen = new Set()) {
   const outs = [], docs = [];
-  for (const line of lines) {
-    const a = argsOf(line), id = 'claw-' + crypto.randomUUID().slice(0, 8);
+  let used = false;   // 用了技能（不只是简单命令）
+  for (const raw of lines) {
+    const line = raw.replace(/^\$\s+/, ''), a = argsOf(line), id = 'claw-' + crypto.randomUUID().slice(0, 8);
     const read = /^read$/i.test(a[0] || ''), k = skillOf(read ? a[1] : a[0]);
+    // 不是技能（也不像技能名）的按简单命令跑
+    if (!read && !k && cmdsOn(s) && !/(^|\/)claw-/.test(a[0] || '')) { outs.push('$ ' + line + '\n' + ((await runSimple(s, line, id, signal)) || '（没有输出）')); continue; }
+    used = true;
     update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: k ? k.name : 'claw', kind: read ? 'read' : 'execute', status: 'in_progress', rawInput: { command: line } });
     let text, ok = true;
     if (!k) { ok = false; text = '没有这个技能：' + (read ? a[1] : a[0]) + '。能用的：' + SKILLS.map(x => x.name).join('、'); }
@@ -403,7 +425,7 @@ async function runClaw(s, lines, signal, seen = new Set()) {
     else {
       if (!seen.has(k.name)) { seen.add(k.name); docs.push(k); }
       const r = await runSkill(k, a.slice(1), signal);
-      if (signal?.aborted) { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed' }); throw Object.assign(new Error('cancelled'), { name: 'AbortError' }); }
+      if (signal?.aborted) { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed' }); throw aborted(); }
       ok = r.code === 0;
       text = cap(r.out.trim(), 12000) + (ok ? '' : '\n（退出码 ' + r.code + (r.err.trim() ? '：' + cap(r.err.trim(), 1500) : '') + '）');
     }
@@ -411,7 +433,141 @@ async function runClaw(s, lines, signal, seen = new Set()) {
     outs.push('$ ' + line + '\n' + (text || '（没有输出）'));
   }
   const doc = docs.map(k => '\n\n[' + k.name + ' 的说明（你没读过，照里面的「怎么回复」回复）]\n' + k.md.replace(/~\/\.claclaw\/bin\//g, '')).join('');
-  return '[技能结果]\n' + outs.join('\n\n') + doc + '\n\n照技能说明回复用户；还要用技能就再写一个 claw 代码块。';
+  const more = nativeOn(s) ? '再调用 claw 工具' : '再写一个 claw 代码块';
+  return used ? '[技能结果]\n' + outs.join('\n\n') + doc + '\n\n照技能说明回复用户；还要用技能就' + more + '。'
+    : '[命令结果]\n' + outs.join('\n\n') + '\n\n接着回答用户；还要跑命令就' + more + '。';
+}
+
+// ---------- 简单命令 ----------
+// 名字 → { ask：有动静的，要用户在网页上点确认；no(args)：不让跑的原因；fix(args)：改参数 }。别的只读，直接跑。
+// 不经 shell：管道、重定向、命令替换一律不收；开头的 ~、$HOME 和没加引号的通配符这边展开（展开不带隐藏文件，和 shell 一样）；只按名字在 PATH 里找（写了路径也只认名字）。
+// 环境变量只给 PATH、HOME 这几个（Mini 进程里有 API Key，不能带过去）；工作目录是主目录，20 秒超时，输出超过 10 万字就停。
+// 隐藏的目录和文件（.ssh、.claclaw、.env……）、~/Library、claclaw 的 data、/dev，以及名字像密钥、密码的文件不碰（链接按真实位置算）。
+// 协同 / 群里别人转来的那一轮（session/prompt 的 _meta.peer）每条都要确认（claclaw 那边先过 peerguard）
+const CMD_MS = 20000, CMD_OUT = 100000;
+const flags = a => a.filter(x => /^-[^-]/.test(x)).join('');   // 短选项拼在一起看（-rn 里有 r）
+const CMDS = {
+  date: {}, cal: {}, uptime: {}, whoami: {}, hostname: {}, uname: {}, sw_vers: {}, pwd: {}, which: {}, echo: {},
+  ls: {}, du: {}, df: {}, stat: {}, wc: {}, head: {}, cat: {}, md5: {}, shasum: {}, vm_stat: {}, system_profiler: {},
+  file: { no: a => /C/.test(flags(a)) ? 'file 不能 -C（会写文件）' : '' },
+  tail: { no: a => /[fF]/.test(flags(a)) || a.some(x => /^--follow/.test(x)) ? 'tail 不能 -f（停不下来）' : '' },
+  grep: { no: a => /[rR]/.test(flags(a)) || a.some((x, i) => /^--(recursive|dereference-recursive|directories=recurse)$/.test(x) || (x === '-d' && a[i + 1] === 'recurse')) ? 'grep 不能搜整个目录（-r），把要搜的文件写出来' : '' },
+  find: { no: a => a.some(x => /^-(exec|execdir|ok|okdir|delete|fprint0?|fprintf|fls)$/.test(x)) ? 'find 不能带 -exec、-delete 这类' : '' },
+  sysctl: { no: a => a.some(x => x.includes('=') || /^-\w*w/.test(x)) ? 'sysctl 只能查' : '' },
+  pmset: { no: a => a[0] !== '-g' ? 'pmset 只能 -g 查' : '' },
+  diskutil: { no: a => /^(list|info)$/.test(a[0] || '') || (a[0] === 'apfs' && a[1] === 'list') ? '' : 'diskutil 只能 list、info、apfs list' },
+  ipconfig: { no: a => a[0] === 'getifaddr' ? '' : 'ipconfig 只能 getifaddr' },
+  ifconfig: { no: a => a.length > 1 ? 'ifconfig 只能查' : '' },
+  ping: { fix: a => {   // 最多 5 次
+    const i = a.indexOf('-c'), n = Math.min(5, Math.max(1, parseInt(i >= 0 ? a[i + 1] : a.find(x => /^-c\d+$/.test(x))?.slice(2), 10) || 4));
+    return ['-c', String(n), ...a.filter((x, j) => !(i >= 0 && (j === i || j === i + 1)) && !/^-c\d+$/.test(x))];
+  } },
+  open: { ask: true }, mkdir: { ask: true }, touch: { ask: true }, cp: { ask: true }, mv: { ask: true }, say: { ask: true },
+};
+const cmdList = ask => Object.keys(CMDS).filter(k => !!CMDS[k].ask === ask).join(' ');
+// 真实位置：不存在的按上一级的真实位置拼（mkdir、touch 的新名字）
+function realOf(p) {
+  try { return fs.realpathSync(p); } catch {}
+  try { return path.join(fs.realpathSync(path.dirname(p)), path.basename(p)); } catch { return path.resolve(p); }
+}
+const NO_GO = [path.join(HOME, 'Library'), path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data'), process.env.CLACLAW_DATA,
+  path.basename(DIR) === 'mini-sessions' ? path.dirname(DIR) : '', '/dev'].filter(Boolean).map(realOf);
+const SECRET = /(credential|secret|token|passw|id_rsa|id_ed25519|id_ecdsa|keychain|cookies?$|\.(pem|key|p12|pfx|kdbx)$)/i;
+// 一个参数要是路径（带 / 或 ~，或者主目录下有这个名字；选项看 = 后面或 / 起的部分；网址不算）：碰不碰得
+function badPath(arg) {
+  let v = arg;
+  if (v.startsWith('-')) { const i = v.search(/[=/~]/); if (i < 0) return ''; v = v.slice(v[i] === '=' ? i + 1 : i); }
+  if (!v || /^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return '';
+  if (!/[/~]/.test(v) && !fs.existsSync(path.join(HOME, v))) return '';
+  const abs = realOf(path.resolve(HOME, v.replace(/^~(?=\/|$)/, HOME)));
+  if (v === HOME || v.startsWith(HOME + '/')) v = '~' + v.slice(HOME.length);   // 说的时候照模型的写法
+  if (abs.split(path.sep).some(c => c.startsWith('.'))) return v + ' 是隐藏的目录 / 文件，不能碰';
+  if (NO_GO.some(d => abs === d || abs.startsWith(d + path.sep))) return v + ' 所在的目录不能碰';
+  if (SECRET.test(path.basename(abs))) return v + ' 看着像密钥、密码一类的文件，不能碰';
+  return '';
+}
+// 命令行 → 参数（同 argsOf，另外记下有没有没加引号的通配符），以及引号外面有没有 shell 才认的符号
+function cmdArgs(line) {
+  const out = []; let cur = '', q = '', any = false, glob = false, shell = false;
+  const push = () => { if (cur || any) out.push({ v: cur, glob }); cur = ''; any = false; glob = false; };
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) { if (c === q) q = ''; else if (q === '"' && c === '\\' && /["\\$`]/.test(line[i + 1] || '')) cur += line[++i]; else { if (q === '"' && (c === '`' || (c === '$' && line[i + 1] === '('))) shell = true; cur += c; } }
+    else if (c === '"' || c === "'") { q = c; any = true; }
+    else if (/\s/.test(c)) push();
+    else { if (/[|;&<>`]/.test(c) || (c === '$' && line[i + 1] === '(')) shell = true; if (/[*?[]/.test(c)) glob = true; cur += c; }
+  }
+  push();
+  return { args: out, shell };
+}
+const homeOf = v => v.replace(/^~(?=\/|$)/, HOME).replace(/^\$(HOME|\{HOME\})(?=\/|$)/, HOME);
+function expand(args) {
+  const out = [];
+  for (const { v, glob } of args) {
+    const x = homeOf(v);
+    let hit = [];
+    if (glob) { try { hit = fs.globSync(x, { cwd: HOME }).filter(p => !path.basename(p).startsWith('.') && !badPath(p)).sort(); } catch {} }   // 碰不得的（~/Library 等）当没有
+    out.push(...(hit.length ? hit.slice(0, 500) : [x]));   // 没匹配到的原样传（和 shell 一样）
+  }
+  return out;
+}
+function cmdEnv() {
+  const e = { TERM: 'dumb', PAGER: 'cat' };
+  for (const k of ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TMPDIR', 'SHELL']) if (process.env[k]) e[k] = process.env[k];
+  return e;
+}
+function runCmd(argv, signal) {
+  return new Promise(res => {
+    let out = '', note = '', done = false;
+    const p = spawn(argv[0], argv.slice(1), { cwd: HOME, stdio: ['ignore', 'pipe', 'pipe'], env: cmdEnv() });
+    const kill = () => { try { p.kill('SIGKILL'); } catch {} };
+    const fin = code => { if (done) return; done = true; clearTimeout(to); signal?.removeEventListener?.('abort', kill); res({ code, out, note }); };
+    const to = setTimeout(() => { note = '超过 ' + CMD_MS / 1000 + ' 秒，停掉了'; kill(); }, CMD_MS);
+    signal?.addEventListener?.('abort', kill, { once: true });
+    const take = d => { if (out.length >= CMD_OUT) return; out += d; if (out.length >= CMD_OUT) { note = '输出太多，停掉了'; kill(); } };
+    p.stdout.setEncoding('utf8'); p.stderr.setEncoding('utf8');
+    p.stdout.on('data', take); p.stderr.on('data', take);
+    p.on('error', e => { out += e.code === 'ENOENT' ? '这台电脑上没有 ' + argv[0] + ' 命令' : e.message; fin(-1); });
+    p.on('close', code => fin(code));
+  });
+}
+// 要用户确认：发 session/request_permission，claclaw 显示成和别家一样的确认条；停掉这一轮就不等了
+const waits = new Map(); let askSeq = 0;
+function askUser(s, toolCallId, line, signal) {
+  return new Promise(res => {
+    const id = 'ask-' + (++askSeq);
+    const fin = ok => { if (!waits.delete(id)) return; signal?.removeEventListener?.('abort', stop); res(ok); };
+    const stop = () => fin(false);
+    waits.set(id, r => fin(r?.outcome?.outcome === 'selected' && r.outcome.optionId === 'allow'));
+    signal?.addEventListener?.('abort', stop, { once: true });
+    send({ id, method: 'session/request_permission', params: { sessionId: s.id, toolCall: { toolCallId, title: 'Bash', kind: 'execute', rawInput: { command: line } },
+      options: [{ optionId: 'allow', name: '允许', kind: 'allow_once' }, { optionId: 'reject', name: '不允许', kind: 'reject_once' }] } });
+  });
+}
+const aborted = () => Object.assign(new Error('cancelled'), { name: 'AbortError' });
+// 一条简单命令：网页上一张 Bash 卡片；返回发给模型的结果
+async function runSimple(s, line, id, signal) {
+  update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: 'Bash', kind: 'execute', status: 'in_progress', rawInput: { command: line } });
+  const end = (ok, text) => { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(text, 4000) } }] }); return text; };
+  const { args: toks, shell } = cmdArgs(line);
+  const name = (toks[0]?.v || '').replace(/^.*\//, ''), c = Object.hasOwn(CMDS, name) ? CMDS[name] : null;
+  if (!c) return end(false, '这条命令跑不了：' + (name || '（空）') + ' 不在简单命令清单里。能跑的：' + Object.keys(CMDS).join(' ') + '。别的给出命令让用户自己跑。');
+  if (shell) return end(false, '没跑：不经 shell，不能用管道、重定向、;、&&、命令替换。拆成单独的命令再跑（比如只跑 ls ~/Desktop，数数、筛选你自己来）。');
+  let args = expand(toks.slice(1));
+  const why = args.map(badPath).find(Boolean) || c.no?.(args) || '';
+  if (why) return end(false, '没跑：' + why + '。');
+  if (c.fix) args = c.fix(args);
+  if (c.ask || s.peer) {
+    const ok = await askUser(s, id, line, signal);
+    if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
+    if (!ok) return end(false, '用户没有允许跑这条命令。');
+  }
+  const r = await runCmd([name, ...args], signal);
+  if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
+  const ok = r.code === 0;
+  // macOS 的隐私保护（桌面、文稿、下载等要单独授权）：说清楚是系统拦的、怎么开，模型好转告用户
+  const tcc = process.platform === 'darwin' && /Operation not permitted/.test(r.out) ? '\n（macOS 隐私保护拦下了：claclaw 没有读这个文件夹的权限。要用的话，用户在「系统设置 → 隐私与安全性 → 完全磁盘访问权限」里加上 ' + process.execPath + '，再重启 claclaw）' : '';
+  return end(ok, cap(r.out.trim(), 12000) + (r.note ? '\n（' + r.note + '）' : '') + (ok ? '' : '\n（退出码 ' + r.code + '）') + tcc);
 }
 
 // ---------- 一轮 ----------
@@ -432,7 +588,7 @@ async function prompt(s, text, images = []) {
   s.messages.push(um);
   if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50) || '图片'; update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
   let full = '', parts = 0, steps = 0, seg = '';   // seg：上次用技能之后写的（到了长度上限接着写时整段发回去）
-  const skills = skillsOn(s), ex = [], seen = new Set();                 // ex：这一轮里用技能的来回（模型写的 claw 代码块、技能结果）
+  const tools = toolsOn(s), ex = [], seen = new Set();                   // ex：这一轮里用技能 / 命令的来回（模型写的 claw 代码块、结果）
   const say = t => update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
   let kept = false;
   const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, at: Date.now(), ...(parts > 1 ? { parts } : {}) }); } };
@@ -446,7 +602,7 @@ async function prompt(s, text, images = []) {
       parts++;
       const base = full, extra = [...ex, ...(seg ? [{ role: 'assistant', content: seg }, { role: 'user', content: CONTINUE }] : [])];
       const glue = t => { if (!base) return t.replace(/^\s+/, ''); return base + (after && t && !/\n\s*$/.test(base) ? '\n\n' : '') + t; };   // 开头的空行不要
-      const vis = t => skills ? hideClaw(t) : t;
+      const vis = t => tools ? hideClaw(t) : t;
       let sent = base.length, cut = false;
       const r = await chat(s, ac.signal, raw => {
         const now = glue(vis(clean(raw)));
@@ -454,7 +610,7 @@ async function prompt(s, text, images = []) {
         if (now.length > sent) { say(now.slice(sent)); sent = now.length; }
       }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }), extra, run.calls);
       if (r.leaked && !s.noOff && !s.think) s.noOff = true;
-      const blk = skills && steps < MAX_STEPS ? nativeBlock(r, steps) || clawBlock(r.text) : null;
+      const blk = tools && steps < MAX_STEPS ? nativeBlock(r, steps) || clawBlock(r.text) : null;
       if (blk) {   // 用技能：代码块前面写的照常显示；跑完把结果交给模型接着写（不算「接着写」的段数）
         steps++; parts--;
         full = glue(r.text.slice(0, blk.at).replace(/\s+$/, ''));
@@ -468,7 +624,7 @@ async function prompt(s, text, images = []) {
         if (r.first) gen += (r.end - r.first) / 1000;
         continue;
       }
-      const txt = skills ? r.text.replace(/(^|\n)```claw[\s\S]*?(?:\n```[^\n]*|$)/g, '$1').replace(/\s+$/, '') : r.text;   // 技能用满了还写 claw 块：不显示
+      const txt = tools ? r.text.replace(/(^|\n)```claw[\s\S]*?(?:\n```[^\n]*|$)/g, '$1').replace(/\s+$/, '') : r.text;   // 技能用满了还写 claw 块：不显示
       full = glue(txt); seg += r.text; after = false;
       if (full.length > sent) say(full.slice(sent));
       if (!t0) { t0 = r.t0; first = r.first; }
@@ -517,6 +673,7 @@ const handlers = {
     const images = (p.prompt || []).filter(b => b?.type === 'image' && EXT[b.mimeType] && typeof b.data === 'string' && b.data).map(b => ({ mime: b.mimeType, data: b.data }));
     if (!text && !images.length) return { stopReason: 'end_turn' };
     s.dev = DEVICES[p._meta?.device] ? p._meta.device : '';   // 这一条是用什么设备发的（协同、群里转来的没有）
+    s.peer = p._meta?.peer === true;                          // 协同 / 群里别人转来的：简单命令每条都要用户确认
     return { stopReason: await prompt(s, text, images) };
   },
   'session/set_model': p => { const s = open(String(p.sessionId)); setModel(s, String(p.modelId)); save(s); return {}; },
@@ -537,6 +694,7 @@ process.stdin.on('data', d => {
     const line = buf.slice(0, i); buf = buf.slice(i + 1);
     if (!line.trim()) continue;
     let m; try { m = JSON.parse(line); } catch { continue; }
+    if (!m.method && m.id != null && waits.has(m.id)) { waits.get(m.id)(m.result); continue; }   // 确认的答复
     if (m.method === 'session/cancel') { sessions.get(String(m.params?.sessionId))?.abort?.abort(); continue; }
     if (m.method && m.id != null) {
       Promise.resolve().then(() => { const h = handlers[m.method]; if (!h) throw Object.assign(new Error('method not supported: ' + m.method), { code: -32601 }); return h(m.params || {}); })

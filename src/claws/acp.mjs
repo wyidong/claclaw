@@ -330,7 +330,7 @@ export class AcpAgent {
 // ---------- 打开的会话 ----------
 // 子类的静态字段：agent（AcpAgent）、prefix（'ds:' …）、runners（id → runner 的 Map）、label（'DeepSeek' …，模型分组名 group 默认同它）；
 // 可调选项 cfgIds / cfgNames / commands 默认是模型和模式
-// 子类可以覆盖的：history()、modelNameOf(cfg)、ownModel(o, store)、cleanName(name)、ctxNow()、beforePrompt()、afterPrompt()、promptMeta(dev)、
+// 子类可以覆盖的：history()、modelNameOf(cfg)、ownModel(o, store)、cleanName(name)、ctxNow()、beforePrompt()、afterPrompt()、promptMeta(dev, peer)、
 // prepareAttach()、attachError(e)、permInfo(tc, known)、imageError
 const MODEL_CMD = { name: 'model', description: '切换模型（不带参数：列出可选模型）', hint: '<模型>', builtin: true };
 // 输入框的命令：/model、（more）、/mode；modeWhat：/mode 的说明里怎么叫它
@@ -383,7 +383,7 @@ export class AcpRunner {
   ctxNow() { return this.ctx; }
   beforePrompt() {}
   afterPrompt() {}
-  promptMeta() { return null; }   // session/prompt 的 _meta（默认不带；Mini 带上用户的设备）
+  promptMeta() { return null; }   // session/prompt 的 _meta（参数：网页带来的设备、是不是协同那一轮；默认不带，Mini 带上）
   async prepareAttach() {}
   attachDone() {}
   attachError(e) { return e; }
@@ -701,7 +701,7 @@ export class AcpRunner {
           ...images.map(i => ({ type: 'image', mimeType: i.media_type, data: i.data })),
           ...(text ? [{ type: 'text', text }] : []),
         ];
-        const meta = dev ? this.promptMeta(dev) : null;
+        const meta = this.promptMeta(dev, !!pt);
         const r = await this.agent.rpc('session/prompt', { sessionId: this.sid, prompt, ...(meta ? { _meta: meta } : {}) });
         this.afterPrompt();
         this.finish({ reason: r?.stopReason || 'end_turn', turn });
