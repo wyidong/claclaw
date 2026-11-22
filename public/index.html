@@ -2280,9 +2280,48 @@ function audioChain(f,au){
     });
   });
 }
+// 一次发来几张图片（send_file 的 paths）：合成一组叠放卡片——最上面一张完整、后面两张露边斜叠，旁边「展开 N」，点开按九宫格看全部
+var SENT_PIC=/\.(png|jpe?g|gif|webp)$/i;
+function picStack(fs){
+  var w=document.createElement('div');w.className='sfstack';
+  var pile=document.createElement('div');pile.className='sfs-pile';
+  var grid=document.createElement('div');grid.className='sfs-grid'+(fs.length===2||fs.length===4?' c2':'');grid.hidden=true;
+  var thumb=function(f){return '/api/upload/file?thumb=1&id='+encodeURIComponent(f[0])};
+  var view=function(f,im){im.addEventListener('click',function(e){e.stopPropagation();imgView(thumb(f),upUrl(f[0]))})};
+  var bad=function(im){im.addEventListener('error',function(){im.classList.add('bad');im.removeAttribute('src')})};
+  for(var i=Math.min(fs.length,3)-1;i>=0;i--){   // 后面的先放：最上面一张在最后
+    var im=document.createElement('img');im.src=thumb(fs[i]);im.alt=i?'':fs[i][1];im.loading='lazy';im.className=i?'sfs-b sfs-b'+i:'sfs-top';bad(im);
+    if(!i){view(fs[0],im);im.addEventListener('load',function(){scrollDown()})}else im.setAttribute('aria-hidden','true');
+    pile.appendChild(im);
+  }
+  fs.forEach(function(f){
+    var t=document.createElement('div');t.className='sfs-t';
+    var im=document.createElement('img');im.alt=f[1];im.loading='lazy';im.dataset.src=thumb(f);bad(im);view(f,im);t.appendChild(im);
+    var b=dlBtn();b.addEventListener('click',function(e){e.stopPropagation();dlFile({id:f[0]},f[1],f[2],b)});t.appendChild(b);
+    grid.appendChild(t);
+  });
+  var more=document.createElement('button');more.type='button';more.className='sfs-more';
+  var lbl=function(){more.textContent=grid.hidden?'展开 '+fs.length:'收起';more.setAttribute('aria-expanded',String(!grid.hidden))};
+  more.addEventListener('click',function(e){
+    e.stopPropagation();grid.hidden=!grid.hidden;pile.hidden=!grid.hidden;w.classList.toggle('open',!grid.hidden);lbl();
+    if(!grid.hidden)grid.querySelectorAll('img[data-src]').forEach(function(im){im.src=im.dataset.src;im.removeAttribute('data-src')});
+  });
+  pile.addEventListener('click',function(){more.click()});   // 点露出来的边也展开（点最上面那张是看大图）
+  lbl();
+  var tot=fs.reduce(function(a,f){return a+(+f[2]||0)},0);
+  var cap=document.createElement('div');cap.className='sfs-cap';cap.textContent=fs.length+' 张图片 · '+fmtSize(tot);
+  var row=document.createElement('div');row.className='sfs-row';row.appendChild(pile);row.appendChild(more);
+  w.appendChild(row);w.appendChild(grid);w.appendChild(cap);
+  return w;
+}
+function sentCard(f){return (SENT_PIC.test(f[0])?imgCard:/\.svg$/i.test(f[0])?svgCard:AUDIO_EXT.test(f[0])||SENT_VIDEO.test(f[0])?mediaCard:dlCard)(f[0],f[1],f[2])}
 function finishCard(c,output,isError){
-  var sf=!isError&&output&&SENT_FILE.exec(output);
-  if(sf){(c.el.closest('.tgroup')||c.el).after((/\.(png|jpe?g|gif|webp)$/i.test(sf[1])?imgCard:/\.svg$/i.test(sf[1])?svgCard:AUDIO_EXT.test(sf[1])||SENT_VIDEO.test(sf[1])?mediaCard:dlCard)(sf[1],sf[2],sf[3]));scrollDown()}
+  var fs=[];if(!isError&&output)for(var re=new RegExp(SENT_FILE.source,'g'),x;(x=re.exec(output));)fs.push([x[1],x[2],x[3]]);
+  if(fs.length){
+    var pics=fs.filter(function(f){return SENT_PIC.test(f[0])}),els=[],put=false;
+    fs.forEach(function(f){if(pics.length>1&&SENT_PIC.test(f[0])){if(!put){els.push(picStack(pics));put=true}}else els.push(sentCard(f))});
+    (c.el.closest('.tgroup')||c.el).after.apply(c.el.closest('.tgroup')||c.el,els);scrollDown();
+  }
   if(output&&output.trim())c.add(outNode(output));
   c.status(isError?'no':'ok',isError?'出错':(c.stat||'完成'));
   c.collapse();
