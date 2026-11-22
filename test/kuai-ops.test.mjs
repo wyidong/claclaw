@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { tok, capTok, readArgs, readFile, decodeText, searchArgs, searchFiles, ipPrivate, hostSafe, urlOf, htmlText, charsetOf, fetchPage, pageParts, quote } from '../src/claws/kuai-ops.mjs';
+import { tok, capTok, sliceTok, readArgs, readFile, decodeText, searchArgs, searchFiles, ipPrivate, hostLocal, hostSafe, urlOf, htmlText, charsetOf, fetchPage, quote } from '../src/claws/kuai-ops.mjs';
 import { renderTools, renderResult } from '../src/claws/kuai-render.mjs';
 import { styleOf, profileOf, tierOf, TIER_BUILT } from '../src/claws/kuai-profiles.mjs';
 
@@ -26,6 +26,7 @@ test('kuAi read：带行号；可以只读一段（10-20 / 10 20 / 文件:10-20�
   assert.deepEqual(readArgs(['a.txt', '10', '20']), { file: 'a.txt', from: 10, to: 20 });
   assert.deepEqual(readArgs(['a.txt', '10']), { file: 'a.txt', from: 10, to: 0 });
   assert.deepEqual(readArgs(['/nope/a.txt:10-20']), { file: '/nope/a.txt', from: 10, to: 20 });
+  assert.deepEqual(readArgs(['a:1-2'], () => true), { file: 'a:1-2', from: 0, to: 0 });   // 真有叫这个名字的文件（存不存在由调用的人按会话目录判断）就不拆
   const d = tmp(), f = path.join(d, 'a.txt');
   fs.writeFileSync(f, Array.from({ length: 1000 }, (_, i) => '第 ' + (i + 1) + ' 行').join('\n') + '\n');
   const all = readFile({ abs: f, show: 'a.txt', cap: 100000 });
@@ -54,6 +55,8 @@ test('kuAi search：在目录里逐个文件搜，给出 文件:行号；隐藏�
   assert.deepEqual(searchArgs(['TODO']), { pattern: 'TODO', target: '.', glob: '' });
   assert.deepEqual(searchArgs(['-i', 'foo bar', 'src', '-g', '*.js']), { pattern: 'foo bar', target: 'src', glob: '*.js' });
   assert.deepEqual(searchArgs(['x', '--glob=*.md', 'docs']), { pattern: 'x', target: 'docs', glob: '*.md' });
+  assert.deepEqual(searchArgs(['foo', '-i', 'src']), { pattern: 'foo', target: 'src', glob: '' });   // 选项写在后面也不当成目录
+  assert.deepEqual(searchArgs(['-e', '-rf', 'src']), { pattern: '-rf', target: 'src', glob: '' });
   const d = tmp(), w = (p, t) => { fs.mkdirSync(path.dirname(path.join(d, p)), { recursive: true }); fs.writeFileSync(path.join(d, p), t); };
   w('a.js', 'const TIMEOUT = 45;\nlet x = (1);\n'); w('src/b.js', '// timeout 在 a.js 里\n'); w('notes.md', '超时时间 45 秒\n');
   w('.env', 'TIMEOUT=1\n'); w('.git/config', 'timeout\n'); w('node_modules/m/i.js', 'timeout\n'); w('secret/token.txt', 'timeout\n'); w('data/x.txt', 'timeout\n'); w('pw/password.txt', 'timeout\n');
@@ -91,7 +94,11 @@ test('kuAi fetch：本机和内网的地址不取（按解析出来的地址判�
   assert.equal(await hostSafe('ok.example', lookup), '');
   assert.match(await hostSafe('rebind.example', lookup), /是本机或内网的地址，不取/);   // 解析出来有一个内网地址就不取
   assert.match(await hostSafe('in.example', lookup), /不取/);
-  assert.equal(await hostSafe('unknown.example', lookup), '');                          // 本机解析不了的（走代理时会这样）放行，由代理去连
+  assert.match(await hostSafe('unknown.example', lookup), /解析不出来，不取/);          // 解析不了的不取；
+  assert.equal(await hostSafe('unknown.example', lookup, true), '');                    // 走代理时本机可能解析不了外面的域名：放行，由代理去连
+  // hostLocal：不查域名就看得出来的（用户还没点头时只做这一步——查域名本身就会把域名发出去）
+  for (const h of ['localhost', 'router', 'nas.local', '127.0.0.1', '[::1]', '10.0.0.1']) assert.match(hostLocal(h), /不取/, h);
+  for (const h of ['ok.example', 'rebind.example', '8.8.8.8']) assert.equal(hostLocal(h), '', h);
   for (const h of ['localhost', 'router', 'nas.local', 'x.internal', '127.0.0.1', '[::1]', '192.168.1.1']) assert.match(await hostSafe(h, lookup), /不取/, h);
   assert.equal(urlOf('https://a.example/x?y=1').href, 'https://a.example/x?y=1');
   for (const u of ['ftp://a.example', 'file:///etc/passwd', 'https://user:pw@a.example', 'javascript:alert(1)', 'not a url', '']) assert.equal(urlOf(u), null, u);
@@ -106,6 +113,10 @@ test('kuAi fetch：网页只留正文的文字（脚本、样式、导航不要�
   assert.match(page.text, /^# 大标题\n第一段 文字，加粗。\n\n- 一\n- 二\n正文正文/);
   assert.doesNotMatch(page.text, /不要|首页|版权所有|\.a\{/);
   assert.equal(htmlText('<p>a&lt;b &#20013;&#x6587; &unknown;</p>').text, 'a<b 中文 &unknown;');
+  assert.deepEqual(htmlText('<!DOCTYPE html><html><head><title>T</title></head><body><header>头</header><p>1 < 2，<b>对</b></p><headline>不是 head</headline></body></html>'), { title: 'T', text: '头\n1 < 2，对\n不是 head' });
+  assert.equal(htmlText('<title>' + '长'.repeat(5000) + '</title><p>x</p>').title.length, 200);   // 标题也是别人给的：限长
+  // 故意写坏的网页（几十万个不收尾的标签）也要很快：一遍扫过去，不能越长越慢得离谱（期间整个 agent 是卡住的）
+  for (const bad of ['<script ', '<title>', '<!--', '<', '<article ', '<h1 ', '&amp']) { const t0 = Date.now(); htmlText(bad.repeat(Math.floor(1500000 / bad.length))); assert.ok(Date.now() - t0 < 5000, bad + ' 用了 ' + (Date.now() - t0) + ' 毫秒'); }
   assert.equal(charsetOf('text/html; charset=GBK', Buffer.from('')), 'gbk');
   assert.equal(charsetOf('text/html', Buffer.from('<meta charset="gb2312">')), 'gb2312');
   assert.equal(charsetOf('text/html', Buffer.from('<p>')), 'utf-8');
@@ -137,9 +148,12 @@ test('kuAi fetch：网页只留正文的文字（脚本、样式、导航不要�
   assert.match((await get('https://loop.example/')).error, /跳转太多次/);
   assert.match((await get('https://down.example/')).error, /^网页取不下来（ECONNREFUSED）/);
   assert.match((await get('file:///etc/passwd')).error, /只取 http \/ https 开头的/);
-  // 长网页切段
-  const parts = pageParts(Array.from({ length: 100 }, (_, i) => '第' + i + '段：' + '文'.repeat(40)).join('\n'), 500);
-  assert.ok(parts.length >= 8 && parts.every(p => tok(p) <= 520)); assert.match(parts[1], /^第\d+段：/);
+  // 长网页一截一截取：按字数接着往下，上限变了也不丢字、不重复
+  const long = Array.from({ length: 100 }, (_, i) => '第' + i + '段：' + '文'.repeat(40)).join('\n');
+  let got = '', at = 0, n = 0;
+  for (const capN of [500, 120, 900, 60, 2000, 300, 5000]) { const s = sliceTok(long, at, capN); assert.ok(tok(s.text) <= Math.max(50, capN) + 5); got += (got && long[at - 1] === '\n' ? '\n' : '') + s.text; at = s.next; n++; if (at >= long.length) break; }
+  assert.equal(got, long); assert.ok(n >= 6);
+  assert.deepEqual(sliceTok('短的', 0, 500), { text: '短的', next: 2 }); assert.deepEqual(sliceTok('短的', 99, 500), { text: '', next: 2 });
 });
 
 test('kuAi 画像：提示怎么写按家族来——Claude 用 XML 标签、GPT / Gemini / Mistral 用 Markdown 标题、小模型和别的家族用短句；哪些能原生调工具', () => {

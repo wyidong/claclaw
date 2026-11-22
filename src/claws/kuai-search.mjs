@@ -61,6 +61,8 @@ function walk(dir) {
   for (const d of dirs) { if (stop()) return; walk(d); }   // 先看完这一层的文件，再往下走
 }
 let st; try { st = fs.statSync(a.root); } catch { out({ error: '没有这个目录或文件：' + a.root }); }
+// 起点本身不让进的（agent 那边已经查过，这里再挡一道）
+if ([...noGo].some(d => inside(a.root, d)) || (fileJailed(a.root) && !inside(a.jail.keep, a.root))) out({ error: '这个位置不能搜：' + a.root });
 if (st.isDirectory()) walk(a.root); else look(a.root);
 // -g 写的那类文件这里一个都没有（弱一些的模型会凭印象写 *.py）：不限文件名重搜一遍，并告诉它
 if (st.isDirectory() && globs.length && !scanned && other) { anyName = true; other = 0; walk(a.root); }

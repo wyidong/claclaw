@@ -23,7 +23,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { HOME, tilde, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
 import { profileOf, tierOf, parseSize, isLocalHost, budgetOf, styleOf, TIER_BUILT } from './kuai-profiles.mjs';
-import { tok, capTok, readArgs, readFile, searchArgs, searchFiles, urlOf, hostSafe, fetchPage, pageParts } from './kuai-ops.mjs';
+import { tok, capTok, sliceTok, readArgs, readFile, searchArgs, searchFiles, urlOf, hostLocal, fetchPage } from './kuai-ops.mjs';
 import { renderTools, renderResult } from './kuai-render.mjs';
 import { loadFills, routeFill, askSlots, fillSchema, fillAsk, parseFill, enough, fillArgs, fillLine, fillLead, pasteOut } from './kuai-fill.mjs';
 import { QUIZ_V, QUIZ_SKILLS, QUIZ_FILL_META, QUESTIONS, TOOL_KEYS, fakeRun, grade, settled, quizTier, quizCount, nextQuestion } from './kuai-quiz.mjs';
@@ -306,9 +306,9 @@ function reqOf(s, extra = [], opt = {}) {
     url: BASE + '/models/' + encodeURIComponent(String(s.model).replace(/^models\//, '')) + ':streamGenerateContent?alt=sse', headers: { 'x-goog-api-key': KEY },
     // 接口不收系统提示的模型（Gemma 1–3）：并进第一条用户消息
     body: { ...(prof.system === 'user' ? {} : { systemInstruction: { parts: [{ text: system }] } }),
-      // 原生调用：模型那条里的 functionCall 原样发回去（raw——3 代起带着 thoughtSignature，少了回 400），有几个调用就回几个 functionResponse（结果放在第一个里）
+      // 原生调用：模型那条里的 functionCall 原样发回去（raw——3 代起带着 thoughtSignature，少了回 400），有几个调用就回几个 functionResponse（结果放在第一个 claw 调用的那个里）
       contents: msgs.map((x, i) => x.calls ? { role: 'model', parts: [...(x.content ? [{ text: x.content }] : []), ...(x.raw?.length ? x.raw : x.calls.map(c => ({ functionCall: { name: 'claw', args: { commands: c.lines } } })))] }
-        : x.role === 'tool' ? { role: 'user', parts: (x.names?.length ? x.names : ['claw']).map((n, k) => ({ functionResponse: { name: n || 'claw', response: { output: k ? '（结果并在上一条里）' : x.content } } })) }
+        : x.role === 'tool' ? { role: 'user', parts: (ns => ns.map((n, k) => ({ functionResponse: { name: n || 'claw', response: { output: k === Math.max(0, ns.indexOf('claw')) ? x.content : '（结果在 claw 那一条里）' } } })))(x.names?.length ? x.names : ['claw']) }
         : { role: x.role === 'assistant' ? 'model' : 'user', parts: [...(prof.system === 'user' && i === 0 ? [{ text: system }] : []), ...(x.images || []).map(i => ({ inline_data: { mime_type: i.mime, data: i.data } })), ...(x.content || !x.images ? [{ text: x.content }] : [])] }),
       ...(nativeOn(s) && !fill ? { tools: [{ functionDeclarations: [(f => ({ name: f.name, description: f.description, parameters: geminiSchema(f.parameters) }))(clawTool(s).function)] }] } : {}),
       generationConfig: { maxOutputTokens: maxOut, ...(samp.temperature != null ? { temperature: samp.temperature } : {}), ...(samp.top_p != null ? { topP: samp.top_p } : {}), ...(think && Object.keys(think).length ? { thinkingConfig: think } : {}),
@@ -517,6 +517,11 @@ function nativeBlock(r, step) {
   }
   return { id: c.id || 'call_' + step, at: r.text.length, end: r.text.length, lines: lines.slice(0, 3) };
 }
+// 用户在这个会话里给过的网址（原样出现在他的消息里）：整个网址对得上才算，不按开头一段算
+const URL_RE = /https?:\/\/[^\s<>"'`\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]+/gi;
+const normUrl = x => { try { const u = new URL(String(x).replace(/[.,;:!?)\]}'"]+$/, '')); u.hash = ''; return u.href.replace(/\/$/, ''); } catch { return ''; } };
+const userUrls = s => new Set(s.messages.filter(m => m.role === 'user' && !m.tool && typeof m.content === 'string').flatMap(m => m.content.match(URL_RE) || []).map(normUrl).filter(Boolean));
+const VIA_PROXY = process.env.NODE_USE_ENV_PROXY === '1' && !!(process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy);
 const rawOf = r => { const raw = r.calls.map(c => c.raw).filter(Boolean); return raw.length ? { raw } : {}; };   // Gemini 的 functionCall 原样
 function hideClaw(t) {
   const i = t.search(/(^|\n)```claw/);
@@ -614,45 +619,48 @@ async function runOp(s, op, line, a, id, signal, capN, turn = {}) {
   const wd = cwdOf(s), show = abs => inside(abs, wd) ? path.relative(wd, abs) || '.' : tilde(abs);
   const allow = async () => { const ok = await askUser(s, id, line, signal, op === 'fetch' ? '允许 kuAi 打开这个网址？' : op === 'read' ? '允许 kuAi 读这个文件？' : '允许 kuAi 搜这个目录？'); if (signal?.aborted) { end(false, '已停止'); throw aborted(); } return ok; };
   if (op === 'read') {
-    const q = readArgs(a);
+    const q = readArgs(a, f => fs.existsSync(path.resolve(wd, homeOf(f))));
     if (!q.file) return end(false, 'read 后面写文件名或者技能名：read 文件 [起行-止行]');
-    const why = badPath(q.file, wd);
+    const abs = path.resolve(wd, homeOf(q.file)), why = badAbs(abs, wd, q.file);   // 查的就是接下来要打开的那个路径
     if (why) return end(false, '没读：' + why + '。');
     if (s.peer && !(await allow())) return end(false, '用户没有允许读这个文件。');
-    const r = readFile({ abs: path.resolve(wd, homeOf(q.file)), show: q.file, from: q.from, to: q.to, cap: capN });
+    const r = readFile({ abs, show: q.file, from: q.from, to: q.to, cap: capN });
     return end(r.ok, r.text + (r.perm ? TCC() : ''));
   }
   if (op === 'search') {
     const q = searchArgs(a);
     if (!q.pattern) return end(false, '没写要找什么：search "文字或正则" [目录或文件] [-g "*.js"]');
-    const why = badPath(q.target, wd);
+    const root = path.resolve(wd, homeOf(q.target)), why = badAbs(root, wd, q.target);
     if (why) return end(false, '没搜：' + why + '。');
     if (s.peer && !(await allow())) return end(false, '用户没有允许搜这个目录。');
     // jail：会话开在小目录里时，主目录下这个目录以外的不搜（从 / 或 /Users 往下搜也一样）
-    const r = await searchFiles({ pattern: q.pattern, root: realOf(path.resolve(wd, homeOf(q.target))), glob: q.glob, noGo: NO_GO, secret: SECRET.source, jail: fold(wd) !== fold(HOME_REAL) ? { home: HOME_REAL, keep: wd } : null, show, cap: capN, signal, env: cmdEnv() });
+    const r = await searchFiles({ pattern: q.pattern, root: realOf(root), glob: q.glob, noGo: NO_GO, secret: SECRET.source, jail: fold(wd) !== fold(HOME_REAL) ? { home: HOME_REAL, keep: wd } : null, show, cap: capN, signal, env: cmdEnv() });
     if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
     return end(r.ok, r.text);
   }
-  // fetch 网址 [第几段]
-  const u = urlOf(a[0]), part = Math.max(1, parseInt(a[1], 10) || 1);
+  // fetch 网址 [从第几个字起]
+  const u = urlOf(a[0]), from = Math.max(0, parseInt(a[1], 10) || 0);
   if (!u) return end(false, 'fetch 后面写网址（http 或 https 开头）：fetch 网址');
   let page = s.pages?.get(u.href);
   if (!page) {
-    if (!FETCH_LOCAL) { const no = await hostSafe(u.hostname); if (no) return end(false, '没取：' + no + '。'); }
-    const bare = u.href.replace(/\/$/, ''), said = s.messages.some(m => m.role === 'user' && !m.tool && typeof m.content === 'string' && (m.content.includes(bare) || m.content.includes(String(a[0]).replace(/\/$/, ''))));
-    if ((!said || s.peer) && !(await allow())) return end(false, '用户没有允许取这个网址。');
-    const r = await fetchPage(u.href, { signal, allowLocal: FETCH_LOCAL });
+    // 先只看不用查域名就知道的（写的就是本机、内网的地址）。域名要到用户点了头才去查：查域名本身就是往外发东西（把内容编进域名里就带出去了）
+    if (!FETCH_LOCAL) { const no = hostLocal(u.hostname); if (no) return end(false, '没取：' + no + '。'); }
+    if ((!userUrls(s).has(normUrl(u.href)) || s.peer) && !(await allow())) return end(false, '用户没有允许取这个网址。');
+    turn.web = true;   // 从这里起，那边回的任何东西（正文、报错里的标题、跳转的地址）都可能进这一轮的对话
+    const r = await fetchPage(u.href, { signal, allowLocal: FETCH_LOCAL, viaProxy: VIA_PROXY });
     if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
     if (!r.ok) return end(false, '没取成：' + r.error);
-    page = { url: r.url, title: r.title, cut: r.cut, parts: pageParts(r.text, Math.max(200, capN - 80)) };
+    page = { url: r.url.slice(0, 300), title: r.title.slice(0, 120), cut: r.cut, text: r.text };
     (s.pages ||= new Map()).set(u.href, page);
     if (s.pages.size > 4) s.pages.delete(s.pages.keys().next().value);
   }
-  const n = page.parts.length;
-  if (part > n) return end(false, '这个网页一共只有 ' + n + ' 段，没有第 ' + part + ' 段。');
-  turn.web = true;   // 网页的内容进了这一轮的对话
-  return end(true, (page.title ? page.title + '\n' : '') + page.url + (n > 1 ? '（第 ' + part + ' / ' + n + ' 段）' : '') + '\n\n' + capTok(page.parts[part - 1], capN)
-    + (part < n ? '\n（后面还有 ' + (n - part) + ' 段，要看就：fetch ' + a[0] + ' ' + (part + 1) + '）' : '') + (page.cut ? '\n（网页太大，只取了前 2 MB）' : ''));
+  turn.web = true;
+  // 长网页一次给一截（按字数接着往下取，不管上限怎么变都不丢字）
+  const total = page.text.length;
+  if (from >= total) return end(false, '这个网页一共 ' + total + ' 字，第 ' + from + ' 字以后没有内容了。');
+  const sl = sliceTok(page.text, from, Math.max(100, capN - 120));
+  return end(true, (page.title ? page.title + '\n' : '') + page.url + (from || sl.next < total ? '（第 ' + (from + 1) + '–' + sl.next + ' 字，共 ' + total + ' 字）' : '') + '\n\n' + sl.text
+    + (sl.next < total ? '\n（后面还有 ' + (total - sl.next) + ' 字，要看就：fetch ' + u.href + ' ' + sl.next + '）' : '') + (page.cut ? '\n（网页太大，只取了前 2 MB）' : ''));
 }
 
 // ---------- 简单命令 ----------
@@ -694,11 +702,19 @@ const cmdList = ask => Object.keys(CMDS).filter(k => !!CMDS[k].ask === ask).join
 function realOf(p) {
   let head = path.resolve(p); const rest = [];
   for (;;) {
-    try { return path.join(fs.realpathSync.native(head), ...rest); } catch {}
+    try { return path.join(unfirm(fs.realpathSync.native(head)), ...rest); } catch {}
     const up = path.dirname(head);
     if (up === head) return path.resolve(p);
     rest.unshift(path.basename(head)); head = up;
   }
+}
+// macOS：/System/Volumes/Data/Users/… 和 /Users/… 是同一处（数据卷的另一个入口），realpath 不会把它还原。
+// 是同一个文件就换成短的写法——不然从那个入口进来，主目录、~/Library、会话目录这些规矩全都对不上
+const DATA_VOL = '/System/Volumes/Data';
+function unfirm(p) {
+  if (process.platform !== 'darwin' || !(p === DATA_VOL || p.startsWith(DATA_VOL + '/'))) return p;
+  const t = p.slice(DATA_VOL.length) || '/';
+  try { const a = fs.statSync(p), b = fs.statSync(t); return a.ino === b.ino && a.dev === b.dev ? t : p; } catch { return p; }
 }
 // 比较路径：macOS / Windows 默认不分大小写（新建的名字 native 还原不了大小写，比较时一律按小写）
 const fold = process.platform === 'darwin' || process.platform === 'win32' ? x => x.toLowerCase() : x => x;
@@ -714,6 +730,7 @@ function cwdOf(s) { try { const d = realOf(s.cwd || HOME); return fs.statSync(d)
 function badPath(arg, wd = HOME_REAL) {
   if (!arg.startsWith('-')) return badOne(arg, wd);
   const eq = arg.indexOf('='), parts = eq > 0 ? [arg.slice(eq + 1)] : [];
+  if (arg.includes('/')) parts.push(arg);   // 长得像选项的路径（--x/../.env）：整个也当路径看一遍
   if (!arg.startsWith('--')) for (let i = 2; i < arg.length; i++) parts.push(arg.slice(i));
   for (const x of parts) { const why = badOne(x, wd); if (why) return why; }
   return '';
@@ -721,8 +738,12 @@ function badPath(arg, wd = HOME_REAL) {
 // 一段要是路径（带 / 或 ~，或者当前目录下有这个名字；网址不算）：碰不碰得
 function badOne(v, wd) {
   if (!v || /^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return '';
-  if (!/[/~]/.test(v) && !fs.existsSync(path.join(wd, v))) return '';
-  const abs = realOf(path.resolve(wd, v.replace(/^~(?=\/|$)/, HOME)));
+  if (!/[/~$]/.test(v) && !fs.existsSync(path.join(wd, v))) return '';
+  return badAbs(path.resolve(wd, homeOf(v)), wd, v);
+}
+// 一个绝对路径碰不碰得（已经展开、拼好的；v 是说给模型听的写法）。read / search 直接用它：查的和接下来打开的必须是同一个路径
+function badAbs(p, wd, v = p) {
+  const abs = realOf(p);
   v = tilde(v);   // 说的时候照模型的写法
   if ((inside(abs, wd) ? path.relative(wd, abs) : abs).split(path.sep).some(c => c.startsWith('.'))) return v + ' 是隐藏的目录 / 文件，不能碰';
   if (fold(wd) !== fold(HOME_REAL) && inside(abs, HOME_REAL) && !inside(abs, wd)) return v + ' 在会话目录（' + tilde(wd) + '）外面，不能碰';
