@@ -11,6 +11,7 @@ process.env.KUAI_QUIZ = '0';   // 假的模型服务都在 127.0.0.1（算本机
 process.env.KUAI_META = '0';   // 假的模型服务都在 127.0.0.1：不去问它们是不是 Ollama（专门的测试自己打开）
 process.env.CLACLAW_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-data-'));   // kuai.mjs 引入 auth.mjs 前先指到临时目录
 const { pickRoute, statsLine, baseOf, sessionPid, kuNewSession, kuRunners, kuShutdown, KuRunner, kuQuizStart, kuModelNotes } = await import('../src/claws/kuai.mjs');
+const WIN = process.platform === 'win32';
 const AGENT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'claws', 'kuai-agent.mjs');
 
 const P = (id, url, models = ['m1']) => ({ id, name: id, endpoints: { openai: url }, key: 'k', models: models.map(x => ({ id: x })) });
@@ -58,7 +59,8 @@ function strictModel() {
 
 // answer(params) → 选哪个 optionId（默认「允许」）
 function startAgent(env, answer = () => 'allow') {
-  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, KUAI_SKILLS_DIR: '/nonexistent', KUAI_CMDS: '0', ...env }, stdio: ['pipe', 'pipe', 'inherit'] });   // 默认不给技能、不跑命令（测的自己打开）
+  // Windows 上主目录看 USERPROFILE（os.homedir），假主目录两个都设
+  const p = spawn(process.execPath, [AGENT], { env: { ...process.env, KUAI_SKILLS_DIR: '/nonexistent', KUAI_CMDS: '0', ...env, ...(env.HOME && WIN ? { USERPROFILE: env.HOME } : {}) }, stdio: ['pipe', 'pipe', 'inherit'] });   // 默认不给技能、不跑命令（测的自己打开）
   const updates = [], pend = new Map(), asks = [], notes = [];   // notes：别的通知（小测验的进度 _kuai/quiz）
   let buf = '', id = 0;
   p.stdout.on('data', d => {
@@ -756,7 +758,7 @@ function fakeHome() {
   const h = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-home-')));
   fs.mkdirSync(path.join(h, 'Desktop')); fs.mkdirSync(path.join(h, '.hidden')); fs.mkdirSync(path.join(h, 'Library')); fs.mkdirSync(path.join(h, 'bin'));
   for (const f of ['Desktop/a.png', 'Desktop/b.png', 'Desktop/.c.png', '.hidden/k', 'Library/x', 'notes.txt']) fs.writeFileSync(path.join(h, f), f === 'notes.txt' ? '记一笔\n' : 'x');
-  fs.symlinkSync(path.join(h, '.hidden'), path.join(h, 'link'));
+  fs.symlinkSync(path.join(h, '.hidden'), path.join(h, 'link'), 'junction');   // Windows 上普通用户建不了软链接，目录联接可以（别的系统忽略这个参数）
   fs.writeFileSync(path.join(h, 'bin', 'date'), '#!/bin/sh\nenv\n', { mode: 0o755 });
   return h;
 }
@@ -779,10 +781,11 @@ test('kuAi 简单命令：清单里只读的直接跑（不经 shell，~ 和通�
     assert.equal(m.reqs.length, 5);
     const sys = m.reqs[0].messages[0].content;
     assert.match(sys, /不能操作用户的电脑（下面的简单命令除外）/);
-    assert.match(sys, /简单命令：date cal .* 直接跑；open mkdir touch cp mv say 要用户在网页上点确认/);
-    assert.match(sys, /不经 shell：不能用管道、重定向、cd（~ 和通配符可以用）。命令在主目录 ~ 里跑，相对路径从这里算；隐藏文件、~\/Library 不能碰。/);
+    // Windows：只列这台电脑上有的（ls、cat 这些来自 Git for Windows；没有 cal、open、say），私有数据目录是 ~/AppData
+    assert.match(sys, WIN ? /简单命令：date whoami .* 直接跑；mkdir touch cp mv 要用户在网页上点确认/ : /简单命令：date cal .* 直接跑；open mkdir touch cp mv say 要用户在网页上点确认/);
+    assert.match(sys, new RegExp('不经 shell：不能用管道、重定向、cd（~ 和通配符可以用）。命令在主目录 ~ 里跑，相对路径从这里算；隐藏文件、~/' + (WIN ? 'AppData' : 'Library') + ' 不能碰。'));
     const res = i => m.reqs[i].messages.at(-1).content;
-    assert.equal(res(1).split('\n\n')[0], '[命令结果]\n$ ls ~/Desktop/*.png\n' + h + '/Desktop/a.png\n' + h + '/Desktop/b.png');   // 展开不带 .c.png
+    assert.equal(res(1).split('\n\n')[0], '[命令结果]\n$ ls ~/Desktop/*.png\n' + path.join(h, 'Desktop', 'a.png') + '\n' + path.join(h, 'Desktop', 'b.png'));   // 展开不带 .c.png
     assert.match(res(1), /\$ cat ~\/\.hidden\/k\n没跑：~\/\.hidden\/k 是隐藏的目录 \/ 文件，不能碰。/);
     assert.match(res(1), /\$ ls \| wc -l\n没跑：不经 shell/);
     assert.match(res(1), /接着回答用户；还要跑命令就再调用 claw 工具。$/);
@@ -796,7 +799,7 @@ test('kuAi 简单命令：清单里只读的直接跑（不经 shell，~ 和通�
     assert.ok(!fs.existsSync(path.join(h, 't.txt')));
     assert.match(res(3), /\$ touch ~\/t\.txt\n用户没有允许跑这条命令。/);
     assert.match(res(3), /\$ cat notes\.txt\n记一笔/);
-    assert.match(res(4), new RegExp('HOME=' + h));
+    if (!WIN) assert.match(res(4), new RegExp('HOME=' + h));   // 假的 date 是 sh 脚本，Windows 上不经 shell 跑不了（跑的是 Git 带的 date）
     assert.doesNotMatch(res(4), /sk-test-secret|KUAI_/);
     assert.equal(textOf(a.updates), '我看看。\n\n看完了。');
     const tc = toolsOf(a.updates).filter(u => u.sessionUpdate === 'tool_call');
@@ -897,7 +900,7 @@ test('kuAi 能力档：模型库里手动设的优先——小模型设成 L2 �
     await a.rpc('initialize', {});
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result, sid = n.sessionId;
     await say(a, sid, '你好');
-    assert.match(m.reqs[0].messages[0].content, /简单命令：date cal/); assert.equal(m.reqs[0].tools.length, 1);
+    assert.match(m.reqs[0].messages[0].content, WIN ? /简单命令：date whoami/ : /简单命令：date cal/); assert.equal(m.reqs[0].tools.length, 1);
     assert.equal(m.reqs[0].temperature, 0.7); assert.equal(m.reqs[0].top_p, 0.8); assert.equal(m.reqs[0].reasoning_effort, 'none');
     let r = runOf(dir, sid);
     assert.equal(r.tier, 2); assert.equal(r.tierWhy, '模型库里设的'); assert.equal(r.ctx, 32768); assert.equal(r.budget, 6000); assert.equal(r.maxOut, 4096);

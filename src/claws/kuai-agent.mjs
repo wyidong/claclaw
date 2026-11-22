@@ -218,7 +218,7 @@ const nativeOn = s => profileOf({ model: s.model, format: FORMAT, host: HOST }).
 const egOf = s => { const l = skillsFor(s); return l.find(k => k.name === 'claw-tv') || l[0] || { name: 'claw-tv', eg: 'claw-tv "四川卫视"' }; };
 const clawTool = s => { const eg = egOf(s); return { type: 'function', function: { name: 'claw', description: '运行 claclaw 技能或简单命令：read 技能名（看它的说明）、技能命令（以技能名开头、不写路径），或者清单里的简单命令' + (filesOn(s) ? '、只读工具（read 文件、search、fetch）' : '') + '；一次最多 3 条',
   parameters: { type: 'object', properties: { commands: { type: 'array', items: { type: 'string' }, description: '比如 ' + JSON.stringify(['read ' + eg.name]) + '、' + JSON.stringify([eg.eg]) + '、["df -h"]' } }, required: ['commands'] } } }; };
-const cwdLine = s => { const wd = cwdOf(s); return wd === HOME_REAL ? '命令在主目录 ~ 里跑，相对路径从这里算；隐藏文件、~/Library 不能碰。'
+const cwdLine = s => { const wd = cwdOf(s); return wd === HOME_REAL ? '命令在主目录 ~ 里跑，相对路径从这里算；隐藏文件、~/' + PRIV + ' 不能碰。'
   : `命令在会话目录 ${tilde(wd)} 里跑，相对路径从这里算；主目录下这个目录以外的文件、隐藏文件不能碰。`; };
 const OS = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }[process.platform] || process.platform;
 // 工具那一段怎么写在 kuai-render.mjs（按画像的 style 渲染）；这里只备料
@@ -616,7 +616,7 @@ const TCC = () => process.platform === 'darwin' ? '\n（macOS 隐私保护拦下
 async function runOp(s, op, line, a, id, signal, capN, turn = {}) {
   update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: OP_CARD[op][0], kind: OP_CARD[op][1], status: 'in_progress', rawInput: { command: line } });
   const end = (ok, text) => { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(text, 4000) } }] }); return text; };
-  const wd = cwdOf(s), show = abs => inside(abs, wd) ? path.relative(wd, abs) || '.' : tilde(abs);
+  const wd = cwdOf(s), show = abs => inside(abs, wd) ? path.relative(wd, abs).split(path.sep).join('/') || '.' : tilde(abs);   // Windows 上也写成 src/a.js
   const allow = async () => { const ok = await askUser(s, id, line, signal, op === 'fetch' ? '允许 kuAi 打开这个网址？' : op === 'read' ? '允许 kuAi 读这个文件？' : '允许 kuAi 搜这个目录？'); if (signal?.aborted) { end(false, '已停止'); throw aborted(); } return ok; };
   if (op === 'read') {
     const q = readArgs(a, f => fs.existsSync(path.resolve(wd, homeOf(f))));
@@ -683,11 +683,14 @@ const CMDS = {
   sysctl: { no: a => a.some(x => x.includes('=') || /^-\w*w/.test(x)) ? 'sysctl 只能查' : '' },
   pmset: { no: a => a[0] !== '-g' ? 'pmset 只能 -g 查' : '' },
   diskutil: { no: a => /^(list|info)$/.test(a[0] || '') || (a[0] === 'apfs' && a[1] === 'list') ? '' : 'diskutil 只能 list、info、apfs list' },
-  ipconfig: { no: a => a[0] === 'getifaddr' ? '' : 'ipconfig 只能 getifaddr' },
+  ipconfig: { no: a => WIN ? (a.length === 0 || (a.length === 1 && /^[-/]all$/i.test(a[0])) ? '' : 'ipconfig 只能查（不带参数或 /all）')
+    : a[0] === 'getifaddr' ? '' : 'ipconfig 只能 getifaddr' },
   ifconfig: { no: a => a.length > 1 ? 'ifconfig 只能查' : '' },
-  ping: { net: true, fix: a => {   // 最多 5 次；net：会往外发东西（这一轮读过网页以后要确认）
-    const i = a.indexOf('-c'), n = Math.min(5, Math.max(1, parseInt(i >= 0 ? a[i + 1] : a.find(x => /^-c\d+$/.test(x))?.slice(2), 10) || 4));
-    return ['-c', String(n), ...a.filter((x, j) => !(i >= 0 && (j === i || j === i + 1)) && !/^-c\d+$/.test(x))];
+  ping: { net: true, no: a => WIN && a.some(x => /^[-/]t$/i.test(x)) ? 'ping 不能 -t（停不下来）' : '', fix: a => {   // 最多 5 次；net：会往外发东西（这一轮读过网页以后要确认）
+    // Windows 的 ping 次数是 -n（模型照 macOS 写的 -c 也认）
+    const isN = x => x === '-c' || (WIN && /^[-/]n$/i.test(x)), i = a.findIndex(isN);
+    const n = Math.min(5, Math.max(1, parseInt(i >= 0 ? a[i + 1] : a.find(x => /^-c\d+$/.test(x))?.slice(2), 10) || 4));
+    return [WIN ? '-n' : '-c', String(n), ...a.filter((x, j) => !isN(x) && !(j > 0 && isN(a[j - 1])) && !/^-c\d+$/.test(x))];
   } },
   open: { ask: true }, mkdir: { ask: true }, touch: { ask: true }, cp: { ask: true }, mv: { ask: true }, say: { ask: true },
 };
@@ -696,7 +699,8 @@ function dropHidden(t) {
   const lines = t.split('\n'), keep = lines.filter(l => !/(^|[/\s])\.(?!\.?(?:\/|\s|$))[^/\s]/.test(l));
   return keep.join('\n') + (keep.length < lines.length ? '\n（另有 ' + (lines.length - keep.length) + ' 行在隐藏目录里，没给出）' : '');
 }
-const cmdList = ask => Object.keys(CMDS).filter(k => !!CMDS[k].ask === ask).join(' ');
+// 清单里只列这台电脑上真有的（Windows 上没有 sw_vers、open、say 这些；macOS / Linux 照原样全列）
+const cmdList = ask => Object.keys(CMDS).filter(k => !!CMDS[k].ask === ask && hasCmd(k)).join(' ');
 // 真实位置：不存在的按上一级的真实位置拼（mkdir、touch 的新名字）
 // 用 native：macOS 默认不分大小写，~/LIBRARY 也是 ~/Library，native 会还原成磁盘上的写法；不存在的一段段往上找到存在的那级再拼回去
 function realOf(p) {
@@ -718,7 +722,9 @@ function unfirm(p) {
 }
 // 比较路径：macOS / Windows 默认不分大小写（新建的名字 native 还原不了大小写，比较时一律按小写）
 const fold = process.platform === 'darwin' || process.platform === 'win32' ? x => x.toLowerCase() : x => x;
-const NO_GO = [path.join(HOME, 'Library'), path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data'), process.env.CLACLAW_DATA,
+// 存放各个软件私有数据的目录（登录状态、Cookie、密钥都在里面）：macOS 是 ~/Library，Windows 是 ~/AppData（~/Library 照样拦着）
+const PRIV = process.platform === 'win32' ? 'AppData' : 'Library';
+const NO_GO = [path.join(HOME, 'Library'), PRIV === 'Library' ? '' : path.join(HOME, PRIV), path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'data'), process.env.CLACLAW_DATA,
   path.basename(DIR) === 'kuai-sessions' ? path.dirname(DIR) : '', '/dev'].filter(Boolean).map(realOf);
 const SECRET = /(credential|secret|token|passw|id_rsa|id_ed25519|id_ecdsa|keychain|cookies?$|\.(pem|key|p12|pfx|kdbx)$)/i;
 // 命令在会话的目录里跑（新建会话时选的；没有、不是目录就用主目录）。不是主目录时就是「小目录」：主目录下这个目录以外的个人文件不碰（系统目录照常能看）；
@@ -779,7 +785,30 @@ function expand(args, wd) {
 function cmdEnv() {
   const e = { TERM: 'dumb', PAGER: 'cat' };
   for (const k of ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TMPDIR', 'SHELL']) if (process.env[k]) e[k] = process.env[k];
+  if (WIN && GIT_BIN) e.PATH = GIT_BIN + path.delimiter + (e.PATH || '');
   return e;
+}
+// Windows 自己没有 ls、cat、grep、echo（echo 是 cmd 内置的，不经 shell 跑不了）这些。装了 Git for Windows 就借它带的那一套（Git\usr\bin），
+// 放在 PATH 最前面：System32 里的 find 是搜文字的，不能先找到它。位置从 PATH 里的 git 推（Git\cmd、Git\bin、Git\mingw64\bin），再看常见的安装位置
+const WIN = process.platform === 'win32';
+const GIT_BIN = WIN ? gitUsrBin() : '';
+function gitUsrBin() {
+  const roots = [];
+  for (const d of (process.env.PATH || '').split(path.delimiter)) {
+    const m = d.replace(/[\\/]+$/, '').match(/^(.*[\\/]git)[\\/](?:cmd|bin|mingw64[\\/]bin)$/i);
+    if (m) roots.push(m[1]);
+  }
+  for (const k of ['ProgramFiles', 'ProgramW6432', 'ProgramFiles(x86)']) if (process.env[k]) roots.push(path.join(process.env[k], 'Git'));
+  if (process.env.LOCALAPPDATA) roots.push(path.join(process.env.LOCALAPPDATA, 'Programs', 'Git'));
+  for (const r of roots) { const u = path.join(r, 'usr', 'bin'); if (fs.existsSync(path.join(u, 'ls.exe'))) return u; }
+  return '';
+}
+// 这台电脑上有没有这个命令（Windows 按 PATH 找 .exe / .com；别的系统不查，照原样当有）
+const HAS = new Map();
+function hasCmd(name) {
+  if (!WIN) return true;
+  if (!HAS.has(name)) HAS.set(name, (cmdEnv().PATH || '').split(path.delimiter).some(d => d && ['.exe', '.com'].some(x => fs.existsSync(path.join(d, name + x)))));
+  return HAS.get(name);
 }
 function runCmd(argv, signal, wd) {
   return new Promise(res => {
@@ -816,7 +845,8 @@ async function runSimple(s, line, id, signal, capN = ONE_CAP[2], turn = {}) {
   const end = (ok, text) => { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(text, 4000) } }] }); return text; };
   const { args: toks, shell } = cmdArgs(line);
   const name = (toks[0]?.v || '').replace(/^.*\//, ''), c = Object.hasOwn(CMDS, name) ? CMDS[name] : null;
-  if (!c) return end(false, '这条命令跑不了：' + (name || '（空）') + ' 不在简单命令清单里。能跑的：' + Object.keys(CMDS).join(' ') + '。别的给出命令让用户自己跑。');
+  if (!c) return end(false, '这条命令跑不了：' + (name || '（空）') + ' 不在简单命令清单里。能跑的：' + [cmdList(false), cmdList(true)].filter(Boolean).join(' ') + '。别的给出命令让用户自己跑。');
+  if (!hasCmd(name)) return end(false, '这台电脑（' + OS + '）上没有 ' + name + ' 命令。能跑的：' + [cmdList(false), cmdList(true)].filter(Boolean).join(' ') + '。');
   if (shell) return end(false, '没跑：不经 shell，不能用管道、重定向、;、&&、命令替换。拆成单独的命令再跑（比如只跑 ls ~/Desktop，数数、筛选你自己来）。');
   const wd = cwdOf(s);
   let args = expand(toks.slice(1), wd);

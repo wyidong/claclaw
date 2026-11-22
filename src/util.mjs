@@ -8,7 +8,11 @@ import { execFile, execFileSync } from 'node:child_process';
 
 export const HOME = os.homedir();
 // 家目录下的路径显示成 ~/…
-export const tilde = p => { p = String(p || ''); return p === HOME ? '~' : p.startsWith(HOME + '/') ? '~' + p.slice(HOME.length) : p; };
+// Windows：主目录比较不分大小写、\ 和 / 都认，~ 后面统一写成 /（~/www/proj）
+export const tilde = process.platform === 'win32'
+  ? p => { p = String(p || ''); const h = HOME.replace(/[\\/]+$/, '').toLowerCase(), l = p.toLowerCase();
+      return l === h ? '~' : (l.startsWith(h + '\\') || l.startsWith(h + '/')) ? '~' + p.slice(h.length).replace(/\\/g, '/') : p; }
+  : p => { p = String(p || ''); return p === HOME ? '~' : p.startsWith(HOME + '/') ? '~' + p.slice(HOME.length) : p; };
 // 在 cwd 下的给相对路径，其余同 tilde
 export const relPath = (p, cwd) => { if (typeof p !== 'string') return ''; if (cwd && p.startsWith(cwd + '/')) return p.slice(cwd.length + 1); return tilde(p); };
 export const oneLine = t => String(t || '').replace(/\s+/g, ' ').trim();
