@@ -1,4 +1,19 @@
 {
+  "claw-install": {
+    "brief": "装 DeepSeek Harness（要用户点确认）、看装到哪了；别的软件装不了",
+    "ask": "^(?!\\s*(status|now)?\\s*$)",
+    "askTitle": "允许在这台电脑上安装 DeepSeek Harness？",
+    "fill": {
+      "what": "在这台电脑上安装 DeepSeek Harness",
+      "when": "(安装|装上|装一?下|装个|帮我装|给我装|替我装).{0,10}(deepseek|dsh|深度求索)|(deepseek|dsh|深度求索).{0,12}(装上|装一?下|装起来|安装上|安装好|装好$)",
+      "not": "怎么|如何|为什么|哪里|教程|步骤|命令|卸载|假装|伪装|装好了|装了吗|装完了|没装|[?？吗]\\s*$",
+      "slots": { "claw": { "map": [["deepseek|dsh|深度求索", "deepseek"]] } },
+      "need": ["claw"],
+      "args": ["{claw}"],
+      "raw": true,
+      "lead": ""
+    }
+  },
   "claw-theme": {
     "brief": "给网页换皮肤 / 主题、设背景图",
     "fill": {

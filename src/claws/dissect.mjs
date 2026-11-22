@@ -401,8 +401,10 @@ export function dissectKuai(o) {
       if (r.cancelled) cur.interrupted = true;
       cur.kuai = { api: String(r.api || ''), host: String(r.host || ''), think: !!r.think, noOff: !!r.noOff, maxOut: Number(r.maxOut) || 0, sent: Number(r.sent) || 0, dropped: Number(r.dropped) || 0,
         ...(Number.isInteger(r.tier) ? { tier: r.tier, tierWhy: String(r.tierWhy || '') } : {}), ...(Number(r.ctx) > 0 ? { ctx: Number(r.ctx), ctxGuess: !!r.ctxGuess, budget: Number(r.budget) || 0 } : {}),
-        // fill：这一轮是程序认出要用哪个技能、模型只填参数（L1）；slips：调用出错的次数
-        ...(r.fill && typeof r.fill === 'object' ? { fill: { skill: String(r.fill.skill || ''), cmd: String(r.fill.cmd || ''), ok: !!r.fill.ok, bad: !!r.fill.bad } } : {}), ...(Number(r.slips) > 0 ? { slips: Number(r.slips) } : {}),
+        // fill：这一轮是程序认出要用哪个技能、模型只填参数（L1；denied = 要确认的技能、用户没点头）；slips：调用出错的次数
+        ...(r.fill && typeof r.fill === 'object' ? { fill: { skill: String(r.fill.skill || ''), cmd: String(r.fill.cmd || ''), ok: !!r.fill.ok, bad: !!r.fill.bad, ...(r.fill.denied ? { denied: true } : {}) } } : {}), ...(Number(r.slips) > 0 ? { slips: Number(r.slips) } : {}),
+        // steps：这一轮用了几次技能 / 命令；packed：工具结果快把窗口占满了，后面的没再跑；style：提示的写法（md / xml，短句的不写）
+        ...(Number(r.steps) > 0 ? { toolSteps: Number(r.steps) } : {}), ...(r.packed ? { packed: true } : {}), ...(/^(md|xml)$/.test(r.style) ? { style: r.style } : {}),
         sys: String(r.sys || ''), parts: Number(r.parts) || 0, stop: String(r.stop || ''), note: String(r.note || ''), error: String(r.error || '') };
     } else if (m.role === 'assistant' && cur) {
       // 最后的回复 = 存下来的整段（几段续写拼好的）；每一步各自的原文在上面 calls 里。

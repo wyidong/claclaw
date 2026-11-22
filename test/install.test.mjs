@@ -97,3 +97,55 @@ test('安装进度：按 npm http 行数出阶段和百分比，只增不减；h
   p.stderr.emit('data', 'npm error network ETIMEDOUT\n'); p.emit('exit', 1);
   assert.equal(st().status, 'fail'); assert.match(st().error, /ETIMEDOUT/); assert.doesNotMatch(st().error, /npm http/);
 });
+
+// claw-install 技能（kuAi 用）：通过本机接口叫 claclaw 去装，自己不跑 npm；输出是给用户看的话
+test('claw-install 技能：只认 DeepSeek；带本机令牌调 /api/local/install；已经装了、正在装、装好了、没装成各有说法', { timeout: 30000 }, async () => {
+  const { spawn } = await import('node:child_process'), http = await import('node:http');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'claw-inst-')), seen = [];
+  let plan = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      seen.push([req.method, req.url, req.headers['x-claclaw-local'], b]);
+      res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(plan.length > 1 ? plan.shift() : plan[0]));
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  fs.writeFileSync(path.join(home, 'local.json'), JSON.stringify({ url: 'http://127.0.0.1:' + srv.address().port, token: 'tok-123' }));
+  const run = (...args) => new Promise(r => { let out = ''; const p = spawn(process.execPath, [path.join(import.meta.dirname, '..', 'skills', 'claw-install', 'install.mjs'), ...args], { env: { ...process.env, CLACLAW_HOME: home } }); p.stdout.on('data', d => out += d); p.on('close', code => r({ code, out: out.trim() })); });
+  try {
+    // 已经装了：不重复装
+    plan = [{ ok: true, installed: true, label: 'DeepSeek Harness' }];
+    let r = await run('DeepSeek');
+    assert.deepEqual([r.code, r.out], [0, 'DeepSeek Harness 已经装好了，不用再装。还没填 API Key 的话：到 Claw 页，在 DeepSeek 那张卡片上点「填 key」。']);
+    assert.deepEqual(seen.at(-1), ['POST', '/api/local/install', 'tok-123', '{"claw":"deepseek"}']);
+    // 开始装 → 等一小会儿就装好了
+    plan = [{ ok: true, state: { status: 'running', label: 'DeepSeek Harness', pct: 3, tail: '正在查依赖（20 / 约 680）' } }, { ok: true, state: { status: 'ok', label: 'DeepSeek Harness', pct: 100 } }];
+    r = await run('dsh');
+    assert.equal(r.code, 0); assert.match(r.out, /^DeepSeek Harness 装好了。装好后还要填 API Key 才能用：到 Claw 页，在 DeepSeek 那张卡片上点「填 key」/);
+    assert.equal(seen.at(-1)[0], 'GET');                                               // 之后是取进度
+    // 没装成：退出码不是 0，原因照实说
+    plan = [{ ok: true, state: { status: 'running', pct: 1 } }, { ok: true, state: { status: 'fail', label: 'DeepSeek Harness', error: '没有权限安装到全局目录。' } }];
+    r = await run('深度求索');
+    assert.deepEqual([r.code, r.out], [1, 'DeepSeek Harness 没装成：没有权限安装到全局目录。']);
+    // 服务不让装（这台电脑用不了、没有 npm）
+    plan = [{ ok: false, error: '没找到 npm：先装好 Node.js' }];
+    r = await run('deepseek');
+    assert.deepEqual([r.code, r.out], [1, '没装：没找到 npm：先装好 Node.js']);
+    // 看进度
+    plan = [{ ok: true, state: { status: 'running', label: 'DeepSeek Harness', pct: 40, tail: '正在下载（100 / 654 个包）' } }];
+    r = await run('status');
+    assert.equal(r.code, 0); assert.match(r.out, /^已经开始安装 DeepSeek Harness，现在 40%（正在下载（100 \/ 654 个包））。一般要 1–5 分钟/);
+    assert.deepEqual(seen.at(-1).slice(0, 2), ['GET', '/api/local/install']);
+    plan = [{ ok: true, state: { status: 'none' } }];
+    assert.equal((await run()).out, '现在没有在装东西。');
+    // 别的软件：不发请求，直接说装不了
+    const before = seen.length;
+    r = await run('wechat');
+    assert.equal(r.code, 2); assert.match(r.out, /^这里只能装：DeepSeek Harness/); assert.equal(seen.length, before);
+  } finally { srv.close(); }
+  // claclaw 没在运行（找不到本机令牌）
+  const none = fs.mkdtempSync(path.join(os.tmpdir(), 'claw-inst-'));
+  const p = spawn(process.execPath, [path.join(import.meta.dirname, '..', 'skills', 'claw-install', 'install.mjs'), 'deepseek'], { env: { ...process.env, CLACLAW_HOME: none } });
+  let out = ''; p.stdout.on('data', d => out += d);
+  assert.equal(await new Promise(r => p.on('close', r)), 1); assert.match(out, /^claclaw 没在运行/);
+});

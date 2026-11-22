@@ -15,6 +15,7 @@
 //   fill.examples  给模型看的例子 [[用户的话, {参数}], …]；参数写 null 是「不用」的例子
 //   fill.lead      结果前面的一句话（可以带 {参数}）
 //   fill.paste     结果怎么贴：不写 = 原样（带制表符的链接行整理成一行一条）；'files' = 每行第一列是文件路径
+//   fill.raw       true = 技能的输出本身就是给用户看的话：没跑成也原样贴出来，不交给模型转述（小模型转述会走样；装软件这类要照实说）
 
 const re = v => { try { return v ? new RegExp(v, 'i') : null; } catch { return null; } };
 const HOLE = /\{(\w+)\}/g, hasHole = t => /\{\w+\}/.test(t);
@@ -28,7 +29,7 @@ export function loadFills(meta, has = () => true) {
     const slots = Object.entries(f.slots || {}).map(([key, v]) => ({ key, desc: String(v?.desc || key), enum: Array.isArray(v?.enum) ? v.enum.map(String) : null, match: re(v?.match),
       map: Array.isArray(v?.map) ? v.map.map(p => [re(p?.[0]), String(p?.[1] ?? '')]).filter(p => p[0]) : null }));
     out.push({ name, what: String(f.what || name), when, not: re(f.not), slots, need: Array.isArray(f.need) ? f.need.map(String) : [], args: f.args, else: Array.isArray(f.else) ? f.else.map(String) : null,
-      examples: (Array.isArray(f.examples) ? f.examples : []).filter(e => Array.isArray(e) && typeof e[0] === 'string'), lead: String(f.lead || ''), elseLead: String(f.elseLead || ''), paste: String(f.paste || '') });
+      examples: (Array.isArray(f.examples) ? f.examples : []).filter(e => Array.isArray(e) && typeof e[0] === 'string'), lead: String(f.lead || ''), elseLead: String(f.elseLead || ''), paste: String(f.paste || ''), raw: f.raw === true });
   }
   return out;
 }

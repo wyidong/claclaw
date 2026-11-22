@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// 极简对话 agent（ACP，stdin/stdout 一行一条 JSON-RPC）：问答为主，不碰这台电脑上的文件和任意命令；
+// 极简对话 agent（ACP，stdin/stdout 一行一条 JSON-RPC）：问答为主，不改这台电脑上的文件、不跑任意命令；
 // 给模型开放到哪一步看能力档（kuai-profiles.mjs）：模型库里手动设的 > 上岗小测验测出来的（kuai-quiz.mjs）> 按参数量和家族估的。
 // L1（填空，kuai-fill.mjs）：程序按关键词认出用户想用哪个技能，模型只把参数填进固定的 JSON，程序跑技能、把结果贴出来。
 // 能力档到 L2 的模型还能自己用 claclaw 自带的技能（skills/，电视、听歌、视频、换肤……）：
 // 模型在回复里写 ```claw 代码块（read 技能名 / 技能命令），这边只认技能清单里的命令，不经 shell 直接用 node 跑技能脚本，结果再交给模型接着答。
 // 同样的写法还能跑几条简单命令（date、ls、df、cat……，见 CMDS）：只读的直接跑，open、mkdir 这类要用户在网页上点确认；不经 shell，隐藏文件、~/Library、claclaw 的 data 不碰。
+// 能力档到 L3 的再多三样只读工具（kuai-ops.mjs），写法和命令一样：read 文件 [起行-止行]、search "文字或正则" [目录]、fetch 网址；一轮里能连着用 8 次。
+// 工具的结果按窗口截断：每条结果、一轮里结果的总量都有上限，窗口小就跟着收紧（Ollama 超出窗口不报错，直接丢掉最早的消息，连系统提示一起丢）。
+// 提示怎么写按模型画像来（kuai-render.mjs）：Claude 用 XML 标签，GPT / Gemini 用 Markdown 标题，小模型用短句。
 // 用途：拿模型库里的模型（尤其本地 Ollama）直接答疑，顺便看模型快不快、好不好用。
 // - 每轮请求只有一段很短的系统提示 + 对话本身，首字最快（技能和命令只有一个 claw 工具）
 // - 默认关思考；会话设置里可以打开。怎么关、带不带采样参数按模型画像来（kuai-profiles.mjs），拿不准的不发
@@ -12,14 +15,16 @@
 // - 每轮结束在 usage_update 的 _meta.kuai 里带上首字耗时、生成速度，claclaw 显示成一行小字
 // 试出来的特性（关不掉思考、不收调参、不收约束输出、Ollama 实际的窗口）和小测验的结果按模型记在 KUAI_LEARN 指的文件里，换会话不用再试
 // 小测验：本机的模型（没手动设能力档的）用过一次后在后台自己测，来了新消息就让路、下次接着测；云上的只在模型管理里点了才测（_kuai/quiz）
-// 环境变量：KUAI_QUIZ（=0 不自动测）、KUAI_MODEL_INFO（模型库里每个模型的窗口和手动设的能力档，JSON：{ 模型: { ctx, tier } }）、KUAI_LEARN、KUAI_META（=0 不问 Ollama 要模型信息）、KUAI_FORMAT（接口格式 openai | anthropic | gemini，默认 openai）、KUAI_BASE_URL（openai 写到 /v1；anthropic 写到 /v1 之前；gemini 写到 /v1beta）、KUAI_API_KEY、KUAI_MODELS（逗号分隔）、KUAI_MODEL、KUAI_DIR（会话目录）、KUAI_BUDGET（上下文预算 token）、KUAI_MAX_OUT
+// 环境变量：KUAI_FILES（=0 不给只读工具）、KUAI_STYLE（plain | md | xml：提示的写法定死，对比时用）、KUAI_FETCH_LOCAL（=1 fetch 也取本机地址，只给测试用）、KUAI_QUIZ（=0 不自动测）、KUAI_MODEL_INFO（模型库里每个模型的窗口和手动设的能力档，JSON：{ 模型: { ctx, tier } }）、KUAI_LEARN、KUAI_META（=0 不问 Ollama 要模型信息）、KUAI_FORMAT（接口格式 openai | anthropic | gemini，默认 openai）、KUAI_BASE_URL（openai 写到 /v1；anthropic 写到 /v1 之前；gemini 写到 /v1beta）、KUAI_API_KEY、KUAI_MODELS（逗号分隔）、KUAI_MODEL、KUAI_DIR（会话目录）、KUAI_BUDGET（上下文预算 token）、KUAI_MAX_OUT
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { HOME, tilde, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
-import { profileOf, tierOf, parseSize, isLocalHost, budgetOf, TIER_BUILT } from './kuai-profiles.mjs';
+import { profileOf, tierOf, parseSize, isLocalHost, budgetOf, styleOf, TIER_BUILT } from './kuai-profiles.mjs';
+import { tok, capTok, readArgs, readFile, searchArgs, searchFiles, urlOf, hostSafe, fetchPage, pageParts } from './kuai-ops.mjs';
+import { renderTools, renderResult } from './kuai-render.mjs';
 import { loadFills, routeFill, askSlots, fillSchema, fillAsk, parseFill, enough, fillArgs, fillLine, fillLead, pasteOut } from './kuai-fill.mjs';
 import { QUIZ_V, QUIZ_SKILLS, QUIZ_FILL_META, QUESTIONS, TOOL_KEYS, fakeRun, grade, settled, quizTier, quizCount, nextQuestion } from './kuai-quiz.mjs';
 
@@ -47,14 +52,19 @@ const SKILLS = (() => {
     const dir = path.join(SKILLS_DIR, x.name), js = path.join(dir, x.name.slice(5) + '.mjs');
     let md = ''; try { md = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8'); } catch {}
     const desc = String(md.match(/^description:\s*(.+)$/m)?.[1] || x.desc || '').trim();
-    return md && fs.existsSync(js) ? { name: x.name, desc, brief: briefOf(x.name, desc), eg: x.name === 'claw-tv' ? 'claw-tv "四川卫视"' : x.name + ' "关键词"', js, md: md.replace(/^---[\s\S]*?---\s*/, '').trim() } : null;
+    return md && fs.existsSync(js) ? { name: x.name, desc, brief: briefOf(x.name, desc), ask: KU_META[x.name]?.ask ?? null, askTitle: String(KU_META[x.name]?.askTitle || ''), eg: x.name === 'claw-tv' ? 'claw-tv "四川卫视"' : x.name + ' "关键词"', js, md: md.replace(/^---[\s\S]*?---\s*/, '').trim() } : null;
   }).filter(Boolean);
 })();
 const FILLS = loadFills(KU_META, n => SKILLS.some(k => k.name === n));
 const QUIZ_FILL = loadFills(QUIZ_FILL_META)[0];
 // 简单命令：KUAI_CMDS=0 关掉（测试用）
 const CMDS_ON = process.env.KUAI_CMDS !== '0';
-const MAX_STEPS = 4;          // 一轮里最多用几次技能（每次一个 claw 代码块，最多 3 条命令）
+const STEPS = [0, 0, 4, 8];   // 一轮里最多用几次技能 / 命令（每次一个 claw 代码块，最多 3 条命令）：L2 四次，L3 八次
+// 工具结果的上限（token）：一条结果最多 ONE_CAP、一轮里结果加起来最多 TURN_CAP（每一步都要把前面的重发一遍）；窗口知道时再按窗口里剩下的收紧
+const ONE_CAP = [0, 0, 3000, 4000], TURN_CAP = [0, 0, 8000, 16000];
+const FILES_ON = process.env.KUAI_FILES !== '0';             // 只读工具（read / search / fetch）：KUAI_FILES=0 关掉（测试用）
+const FETCH_LOCAL = process.env.KUAI_FETCH_LOCAL === '1';    // fetch 也取本机和内网的地址（只给测试用：假的网页服务在 127.0.0.1）
+const STYLE = ['plain', 'md', 'xml'].includes(process.env.KUAI_STYLE) ? process.env.KUAI_STYLE : '';   // 提示的写法定死（对比不同写法时用）；不设就按画像
 const QUIZ_AUTO = process.env.KUAI_QUIZ !== '0';
 const QUIZ_STEP_MS = Math.max(1000, Number(process.env.KUAI_QUIZ_MS) || 180000);   // 小测验里一次请求最多等多久（本机小模型带着思考一次要一两分钟）
 const QUIZ_WAIT = Math.max(0, Number(process.env.KUAI_QUIZ_WAIT) || 15000);        // 一轮结束后过多久开始后台测（用户多半还要接着问，别刚开始就被打断）
@@ -67,7 +77,7 @@ const send = o => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...o }) 
 const update = (sessionId, u) => send({ method: 'session/update', params: { sessionId, update: u } });
 
 // ---------- 会话 ----------
-const sessions = new Map();   // id → { id, cwd, model, think, noOff, plain, noFmt, bad, down, title, messages, from, abort }
+const sessions = new Map();   // id → { id, cwd, model, think, noOff, plain, noFmt, bad, down, title, messages, from, abort, pages（这个会话里取过的网页） }
 const file = id => path.join(DIR, id + '.json');
 const validId = id => /^[A-Za-z0-9_.-]{4,128}$/.test(id);
 function save(s) {
@@ -190,47 +200,32 @@ const tierNow = s => {
   const t = tierOf({ model: s.model, size: metaOf(s.model).size ?? undefined, user: MODEL_INFO[s.model]?.tier, quiz: q ? { tier: q.tier, ...quizCount(q.pass) } : null, ctx: c.known ? c.ctx : 0 });
   return s.down && t.tier > 0 ? { ...t, tier: Math.max(0, Math.min(t.tier, TIER_BUILT) - s.down), why: t.why + '；这个会话里调用出错多，降了一档' } : t;
 };
+const tierIdx = s => Math.max(0, Math.min(tierNow(s).tier, TIER_BUILT));
 const bigEnough = s => tierNow(s).tier >= 2;
+const maxSteps = s => STEPS[tierIdx(s)];
+const styleNow = s => STYLE || styleOf({ model: s.model, size: metaOf(s.model).size ?? undefined });
 const skillsFor = s => s.quiz ? QUIZ_SKILLS : SKILLS;
 const skillsOn = s => skillsFor(s).length > 0 && bigEnough(s);
 const cmdsOn = s => (CMDS_ON || !!s.quiz) && bigEnough(s);
+const filesOn = s => (FILES_ON || !!s.quiz) && cmdsOn(s) && tierNow(s).tier >= 3;   // 只读工具：L3 才给
 const toolsOn = s => skillsOn(s) || cmdsOn(s);
-const whatOf = s => skillsOn(s) && cmdsOn(s) ? '技能和简单命令' : skillsOn(s) ? '技能' : '简单命令';
-// 怎么调：OpenAI 格式的接口用原生工具调用（声明一个 claw 工具；DeepSeek 这类不声明工具时会把自己的工具调用标记当文字写出来）；
-// 别的格式、或者接口不收工具（回 400 后 plain）就在回复里写 claw 代码块；小测验里原生调用做不对、换成代码块就对了的模型也写代码块（s.block；实测 qwen3:1.7b 原生调用时只把命令当文字写出来，代码块就写对了）。
+const whatOf = s => { const l = [skillsOn(s) && '技能', cmdsOn(s) && '简单命令', filesOn(s) && '只读工具（读文件、搜内容、取网页）'].filter(Boolean); return l.length > 2 ? l.slice(0, -1).join('、') + '和' + l.at(-1) : l.join('和'); };
+// 怎么调：OpenAI、Gemini 格式的接口用原生工具调用（声明一个 claw 工具；DeepSeek 这类不声明工具时会把自己的工具调用标记当文字写出来；
+// 实测 gemini-2.5-flash 关着思考写代码块时不去调、直接编一个答案，原生调用就会去查）；哪些能原生调在画像里（native）。
+// 别的（Anthropic 格式、Gemini 接口上的 Gemma）、或者接口不收工具（回 400 后 plain）就在回复里写 claw 代码块；小测验里原生调用做不对、换成代码块就对了的模型也写代码块（s.block；实测 qwen3:1.7b 原生调用时只把命令当文字写出来，代码块就写对了）。
 // 技能和简单命令走同一个工具 / 代码块：以技能名开头的是技能，别的按简单命令认
-const nativeOn = s => FORMAT === 'openai' && toolsOn(s) && !s.plain && !s.block;
+const nativeOn = s => profileOf({ model: s.model, format: FORMAT, host: HOST }).native && toolsOn(s) && !s.plain && !s.block;
 const egOf = s => { const l = skillsFor(s); return l.find(k => k.name === 'claw-tv') || l[0] || { name: 'claw-tv', eg: 'claw-tv "四川卫视"' }; };
-const clawTool = s => { const eg = egOf(s); return { type: 'function', function: { name: 'claw', description: '运行 claclaw 技能或简单命令：read 技能名（看它的说明）、技能命令（以技能名开头、不写路径），或者清单里的简单命令；一次最多 3 条',
+const clawTool = s => { const eg = egOf(s); return { type: 'function', function: { name: 'claw', description: '运行 claclaw 技能或简单命令：read 技能名（看它的说明）、技能命令（以技能名开头、不写路径），或者清单里的简单命令' + (filesOn(s) ? '、只读工具（read 文件、search、fetch）' : '') + '；一次最多 3 条',
   parameters: { type: 'object', properties: { commands: { type: 'array', items: { type: 'string' }, description: '比如 ' + JSON.stringify(['read ' + eg.name]) + '、' + JSON.stringify([eg.eg]) + '、["df -h"]' } }, required: ['commands'] } } }; };
 const cwdLine = s => { const wd = cwdOf(s); return wd === HOME_REAL ? '命令在主目录 ~ 里跑，相对路径从这里算；隐藏文件、~/Library 不能碰。'
   : `命令在会话目录 ${tilde(wd)} 里跑，相对路径从这里算；主目录下这个目录以外的文件、隐藏文件不能碰。`; };
 const OS = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }[process.platform] || process.platform;
-const toolsText = s => {
-  const sk = skillsOn(s), cm = cmdsOn(s), what = whatOf(s), use = sk && cm ? '要用时' : '要用' + what + '时', eg = egOf(s);
-  const how = nativeOn(s)
-    ? `${use}调用 claw 工具。` + (sk ? `第一次用某个技能先读它的说明（commands 写 ${JSON.stringify(['read ' + eg.name])}），读过就照说明写命令（以技能名开头，不写路径），比如 ${JSON.stringify([eg.eg])}。` : '') + (cm ? `命令照常写，比如 ["df -h"]。` : '')
-    : `${use}，回复里写一个 claw 代码块就停下，等结果。` + (sk ? `第一次用某个技能先读它的说明：
-\`\`\`claw
-read ${eg.name}
-\`\`\`
-读过就照说明写命令（一行一条，最多 3 条，以技能名开头，不写路径），比如：
-\`\`\`claw
-${eg.eg}
-\`\`\`` : '') + (cm ? (sk ? '\n' : '') + `命令也写在 claw 代码块里（一行一条，最多 3 条），比如：
-\`\`\`claw
-df -h
-\`\`\`` : '');
-  return `
-
-你还能用 claclaw 的${what}：命令由 claclaw 在它所在的电脑（${OS}）上替你跑，结果再发给你。` + (sk ? `技能有（每个只写了一句，怎么用在它的说明里）：
-${skillsFor(s).map(k => '- ' + k.name + '：' + k.brief).join('\n')}
-` : '\n') + (cm ? `简单命令：${cmdList(false)} 直接跑；${cmdList(true)} 要用户在网页上点确认。不经 shell：不能用管道、重定向、cd（~ 和通配符可以用）。${cwdLine(s)}别的命令跑不了，就给出命令让用户自己跑。
-` : '') + how + `
-结果回来后${sk && cm ? '接着回答用户，用了技能就照它的说明回复（要原样贴的代码块原样贴）。用不上就直接回答，不要提这些' : sk ? '照技能说明回复用户（要原样贴的代码块原样贴）。用不上技能就直接回答，不要提技能' : '接着回答用户。用不上就直接回答，不要提简单命令'}。`;
-};
+// 工具那一段怎么写在 kuai-render.mjs（按画像的 style 渲染）；这里只备料
+const toolsText = s => '\n\n' + renderTools({ what: whatOf(s), os: OS, native: nativeOn(s), skills: skillsOn(s) ? skillsFor(s).map(k => ({ name: k.name, brief: k.brief })) : null, eg: egOf(s),
+  cmds: cmdsOn(s) ? { free: cmdList(false), ask: cmdList(true), cwd: cwdLine(s) } : null, files: filesOn(s) ? { steps: maxSteps(s) } : null }, styleNow(s));
 const systemOf = s => `你是 kuAi，claclaw 自带的答疑助手，简洁回答；用户用什么语言就用什么语言。今天是 ${new Date().toLocaleDateString('sv')}。
-你不能上网，也不能操作用户的电脑${toolsOn(s) ? '（下面的' + whatOf(s) + '除外）' : ''}；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
+你不能上网，也不能操作用户的电脑${toolsOn(s) ? '（下面的' + whatOf(s).replace(/（.*?）/, '') + '除外）' : ''}；需要在电脑上动手的事，给出具体命令或步骤让用户自己做。不知道就说不知道。
 要给命令时，放进标明语言的代码块（bash、powershell、cmd 等），一行一条，说明写在代码块外面。
 你现在用的模型是 ${s.model}。对话里更早的回答可能出自别的模型；被问到你是谁、是什么模型时，以这一句为准。${toolsOn(s) ? toolsText(s) : ''}${devLine(s.dev)}`;
 // 发给模型的历史：旧版本（还能调工具时）留下的工具标签和工具结果不发；空回复不发；
@@ -261,10 +256,16 @@ function history(s) {
   return out;
 }
 
-// token 估算：中文约 1 字 1 token，英文约 3.5 字符 1 token
-const tok = t => { let n = 0; for (const c of String(t)) n += c.charCodeAt(0) > 255 ? 1 : 0.29; return Math.ceil(n); };
+// token 估算（tok）在 kuai-ops.mjs
 // 超出预算时一次性丢掉最早的几轮，降到 60%（前缀不再每轮变，Ollama 才能复用缓存）；从用户消息处断开，保证最后一轮完整
 // 旧版本（还能调工具时）存下的工具结果也是 role:user，带 tool:true，不能当断点
+const msgTok = x => tok(x.content) + 4 + (Array.isArray(x.images) ? x.images.length * IMG_TOK : 0);
+// 这一轮里工具结果还能放多少 token。fixed：系统提示 + 历史（这一轮开头算一次）；ex：这一轮里已经放进去的来回
+function roomOf(s, fixed, ex) {
+  const t = tierIdx(s), c = ctxOf(s), spent = ex.reduce((a, x) => a + tok(x.content || '') + 4, 0);
+  const byCtx = c.ctx > 0 ? c.ctx - limitsOf(s).maxOut - fixed - spent - 256 : Infinity;
+  return Math.max(0, Math.floor(Math.min(byCtx, TURN_CAP[t] - spent)));
+}
 function trim(s) {
   const m = s.messages, size = from => m.slice(from).reduce((a, x) => a + tok(x.content) + 4 + (Array.isArray(x.images) ? x.images.length * IMG_TOK : 0), 0) + tok(systemOf(s));
   const B = limitsOf(s).budget;
@@ -305,7 +306,11 @@ function reqOf(s, extra = [], opt = {}) {
     url: BASE + '/models/' + encodeURIComponent(String(s.model).replace(/^models\//, '')) + ':streamGenerateContent?alt=sse', headers: { 'x-goog-api-key': KEY },
     // 接口不收系统提示的模型（Gemma 1–3）：并进第一条用户消息
     body: { ...(prof.system === 'user' ? {} : { systemInstruction: { parts: [{ text: system }] } }),
-      contents: msgs.map((x, i) => ({ role: x.role === 'assistant' ? 'model' : 'user', parts: [...(prof.system === 'user' && i === 0 ? [{ text: system }] : []), ...(x.images || []).map(i => ({ inline_data: { mime_type: i.mime, data: i.data } })), ...(x.content || !x.images ? [{ text: x.content }] : [])] })),
+      // 原生调用：模型那条里的 functionCall 原样发回去（raw——3 代起带着 thoughtSignature，少了回 400），有几个调用就回几个 functionResponse（结果放在第一个里）
+      contents: msgs.map((x, i) => x.calls ? { role: 'model', parts: [...(x.content ? [{ text: x.content }] : []), ...(x.raw?.length ? x.raw : x.calls.map(c => ({ functionCall: { name: 'claw', args: { commands: c.lines } } })))] }
+        : x.role === 'tool' ? { role: 'user', parts: (x.names?.length ? x.names : ['claw']).map((n, k) => ({ functionResponse: { name: n || 'claw', response: { output: k ? '（结果并在上一条里）' : x.content } } })) }
+        : { role: x.role === 'assistant' ? 'model' : 'user', parts: [...(prof.system === 'user' && i === 0 ? [{ text: system }] : []), ...(x.images || []).map(i => ({ inline_data: { mime_type: i.mime, data: i.data } })), ...(x.content || !x.images ? [{ text: x.content }] : [])] }),
+      ...(nativeOn(s) && !fill ? { tools: [{ functionDeclarations: [(f => ({ name: f.name, description: f.description, parameters: geminiSchema(f.parameters) }))(clawTool(s).function)] }] } : {}),
       generationConfig: { maxOutputTokens: maxOut, ...(samp.temperature != null ? { temperature: samp.temperature } : {}), ...(samp.top_p != null ? { topP: samp.top_p } : {}), ...(think && Object.keys(think).length ? { thinkingConfig: think } : {}),
         ...(schema ? { responseMimeType: 'application/json', responseSchema: geminiSchema(schema) } : {}) } },
   };
@@ -355,7 +360,7 @@ function pieceOf(j) {
   }
   if (FORMAT === 'gemini') {
     const c = j.candidates?.[0], parts = c?.content?.parts || [], u = j.usageMetadata;
-    return { text: parts.filter(x => !x.thought).map(x => x.text || '').join(''), thought: parts.some(x => x.thought), tt: parts.filter(x => x.thought).map(x => x.text || '').join(''),
+    return { gcalls: parts.filter(x => x.functionCall), text: parts.filter(x => !x.thought).map(x => x.text || '').join(''), thought: parts.some(x => x.thought), tt: parts.filter(x => x.thought).map(x => x.text || '').join(''),
       usage: u ? { in: u.promptTokenCount, cr: u.cachedContentTokenCount, out: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0), think: u.thoughtsTokenCount } : null,
       stop: stopOf(c?.finishReason || j.promptFeedback?.blockReason) };
   }
@@ -376,20 +381,35 @@ function errOf(status, body, headers) {
 }
 // 429 多久恢复：Gemini 在 details 里写明超的是哪项额度（QuotaFailure：每分钟 / 每天）和 RetryInfo.retryDelay；
 // OpenAI、Anthropic 等在 retry-after 头里给秒数（或时间）；都没有就看说明里的「retry in 37.5s」。每天的额度按太平洋时间 0 点重置
-function waitOf(e, msg, headers) {
+const waitOf = (e, msg, headers) => waitInfo(e, msg, headers).text;
+// { text：给人看的说法, sec：多少秒后恢复（不知道是 null）, day：是每天的额度用完了 }
+function waitInfo(e, msg, headers) {
   const det = Array.isArray(e?.details) ? e.details : [];
   const vs = det.find(d => /QuotaFailure/.test(d?.['@type']))?.violations || [];
   const day = vs.find(v => /PerDay/i.test(v?.quotaId || '')), min = vs.find(v => /PerMinute/i.test(v?.quotaId || ''));
   const lim = v => v?.quotaValue ? '（上限 ' + v.quotaValue + ' 次）' : '';
-  if (day) return '今天的额度' + lim(day) + '用完了，' + dayReset() + '恢复';
+  if (day) return { text: '今天的额度' + lim(day) + '用完了，' + dayReset() + '恢复', sec: null, day: true };
   let sec = parseFloat(det.find(d => /RetryInfo/.test(d?.['@type']))?.retryDelay);
   const ra = String(headers?.get?.('retry-after') || '').trim();
   if (!(sec >= 0) && ra) sec = /^\d+(\.\d+)?$/.test(ra) ? Number(ra) : (Date.parse(ra) - Date.now()) / 1000;
   const m = /retry (?:in|after) ([\d.]+)\s*(ms|s)\b/i.exec(msg);
   if (!(sec >= 0) && m) sec = Number(m[1]) / (m[2].toLowerCase() === 'ms' ? 1000 : 1);
   const head = min ? '每分钟的次数' + lim(min) + '用完了，' : '';
-  return sec >= 0 ? head + '约 ' + waitText(sec) + '后恢复' : head ? head + '过一分钟再试' : '';
+  return { text: sec >= 0 ? head + '约 ' + waitText(sec) + '后恢复' : head ? head + '过一分钟再试' : '', sec: sec >= 0 ? sec : null, day: false };
 }
+// 429 的回应 → 等多久能重试（{ sec, day }）
+function retryOf(body, headers) {
+  let e = null, msg = '';
+  try { const j = JSON.parse(body); e = (Array.isArray(j) ? j[0] : j)?.error; msg = typeof e === 'string' ? e : e?.message || ''; } catch {}
+  return waitInfo(e, String(msg || body), headers);
+}
+// 等一会儿（停掉这一轮就不等了）
+const sleep = (ms, signal) => new Promise((res, rej) => {
+  const stop = () => { clearTimeout(t); rej(aborted()); };
+  const t = setTimeout(() => { signal?.removeEventListener?.('abort', stop); res(); }, ms);
+  if (signal?.aborted) return stop();
+  signal?.addEventListener?.('abort', stop, { once: true });
+});
 const waitText = s => s < 60 ? Math.max(1, Math.ceil(s)) + ' 秒' : s < 3600 ? Math.ceil(s / 60) + ' 分钟' : (s / 3600).toFixed(1) + ' 小时';
 function dayReset(now = new Date()) {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hourCycle: 'h23', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(now).map(x => [x.type, x.value]));
@@ -425,6 +445,16 @@ async function chat(s, signal, onText, onThought, extra, calls = [], opt = {}) {
         throw new Error(errOf(r.status, b2, r.headers) + imgHint(r.status, call));
       }
     }
+    // 每分钟的次数超了（Gemini 免费额度每分钟只有 5 次，一轮里连着用几次工具就会撞上）：等它说的那几秒再发，最多等两回；
+    // 要等太久的（opt.waitMax 秒以上，默认 20）、每天的额度用完的不等，照常报错
+    for (let n = 0; r.status === 429 && n < 2; n++) {
+      const b = await r.text(), w = retryOf(b, r.headers);
+      Object.assign(call, { status: 429, ms: Date.now() - call.at, err: errOf(429, b, r.headers).slice(0, 2000), body: b.slice(0, 4000), plain: !!s.plain });
+      if (w.day || w.sec == null || w.sec > (opt.waitMax ?? 20)) throw new Error(errOf(429, b, r.headers));
+      await sleep((w.sec + 1) * 1000, signal);
+      call = { at: Date.now(), retry: true, req: reqRec(reqOf(s, extra, opt)) }; calls.push(call);
+      r = await post(s, signal, extra, opt);
+    }
     call.status = r.status; call.plain = !!s.plain;
     if (r.ok && s.plain) learn(s.model, 'plain', true);   // 去掉调参才成的：按模型记下，别的会话不用再撞一次 400
     if (!r.ok) { const b = await r.text(); call.body = b.slice(0, 4000); throw new Error(errOf(r.status, b, r.headers) + imgHint(r.status, call)); }   // body：服务返回的原文，给解剖看
@@ -446,7 +476,8 @@ async function chat(s, signal, onText, onThought, extra, calls = [], opt = {}) {
         if (x.usage) for (const k of ['in', 'cr', 'cw', 'out', 'think']) if (x.usage[k] != null) u[k] = x.usage[k];
         if (x.stop) stop = x.stop;
         if (x.calls) for (const c of x.calls) { const t = tc[c.index ?? 0] ||= { id: '', name: '', args: '' }; if (c.id) t.id = c.id; if (c.function?.name) t.name = c.function.name; if (c.function?.arguments) t.args += c.function.arguments; }
-        if ((x.text || x.thought || x.calls) && !first) first = Date.now();
+        if (x.gcalls?.length) for (const g of x.gcalls) tc.push({ id: '', name: String(g.functionCall.name || ''), args: JSON.stringify(g.functionCall.args || {}), raw: g });   // Gemini：一个调用一整块，原样留着（回传要用）
+        if ((x.text || x.thought || x.calls || x.gcalls?.length) && !first) first = Date.now();
         if (x.thought) { tt += x.tt || ''; onThought(); }
         if (x.text) { text += x.text; onText(text); }
       }
@@ -473,16 +504,20 @@ function clawBlock(t) {
   const lines = m[2].split('\n').map(x => x.trim()).filter(x => x && !x.startsWith('#')).slice(0, 3);
   return lines.length ? { at: m.index + m[1].length, end: m.index + m[0].length, lines } : null;
 }
-// 原生调的 claw 工具 → 和代码块一样的 { lines }，多带 id（结果按 id 发回去）；同时调了几次只认第一次。
+// 原生调的 claw 工具 → 和代码块一样的 { lines }，多带 id（结果按 id 发回去）；同时调了几次的并成一次（命令接在一起，还是最多 3 条）。
 // 调的不是 claw、参数认不出来：lines 是空的（那次不跑，告诉模型格式不对）
 function nativeBlock(r, step) {
-  const c = r.calls?.find(x => x.name === 'claw') || r.calls?.[0];
+  const all = r.calls || [], cs = all.filter(x => x.name === 'claw'), c = cs[0] || all[0];
   if (!c) return null;
-  if (c.name !== 'claw') return { id: c.id || 'call_' + step, at: r.text.length, end: r.text.length, lines: [] };
-  let a = {}; try { a = JSON.parse(c.args || '{}'); } catch {}
-  const v = Array.isArray(a.commands) ? a.commands : String(a.commands || a.command || '').split('\n');
-  return { id: c.id || 'call_' + step, at: r.text.length, end: r.text.length, lines: v.map(x => String(x).trim()).filter(Boolean).slice(0, 3) };
+  const lines = [];
+  for (const x of cs) {
+    let a = {}; try { a = JSON.parse(x.args || '{}'); } catch {}
+    const v = Array.isArray(a.commands) ? a.commands : String(a.commands || a.command || '').split('\n');
+    lines.push(...v.map(y => String(y).trim()).filter(Boolean));
+  }
+  return { id: c.id || 'call_' + step, at: r.text.length, end: r.text.length, lines: lines.slice(0, 3) };
 }
+const rawOf = r => { const raw = r.calls.map(c => c.raw).filter(Boolean); return raw.length ? { raw } : {}; };   // Gemini 的 functionCall 原样
 function hideClaw(t) {
   const i = t.search(/(^|\n)```claw/);
   if (i >= 0) return t.slice(0, i);
@@ -521,37 +556,103 @@ function runSkill(k, args, signal) {
 }
 // 一个 claw 代码块：一条条跑（read 技能名 = 给它的说明），网页上每条显示成一张工具卡片；返回发给模型的结果。
 // seen：这一轮里给过说明的技能。没读说明就直接跑命令的（有的模型不听「先读」），结果后面附上说明，让它照「怎么回复」贴
-async function runClaw(s, lines, signal, seen = new Set()) {
-  const outs = [], docs = [];
-  let used = false;   // 用了技能（不只是简单命令）
+// room：这一轮里工具结果还能放多少 token（roomOf）——每条结果最多占剩下的六成，也不超过这一档的上限
+// turn：这一轮的状态 { web：读过网页了 }。读过网页以后，这一轮里会往外发东西的（技能、ping）都要用户点头：
+// 网页里可能写着「读某个文件、拿它的内容去搜」这类话，模型照做的话文件内容就出去了；只读的本机操作（read / search / ls）照旧不问
+async function runClaw(s, lines, signal, seen = new Set(), room = Infinity, turn = {}) {
+  const outs = [], docs = [], one = ONE_CAP[tierIdx(s)] || ONE_CAP[2];
+  let used = false, left = room;   // used：用了技能（不只是简单命令）
+  const put = (line, text) => { text ||= '（没有输出）'; outs.push({ line, text }); left -= tok(text) + 8; };
   for (const raw of lines) {
     const line = raw.replace(/^\$\s+/, ''), a = argsOf(line), id = 'claw-' + crypto.randomUUID().slice(0, 8);
-    const read = /^read$/i.test(a[0] || ''), k = skillOf(read ? a[1] : a[0]);
+    const read = /^read$/i.test(a[0] || ''), k = skillOf(read ? a[1] : a[0]), capN = Math.max(150, Math.min(one, Math.floor(left * 0.6)));
+    // 只读工具（L3）：read 文件（read 技能名还是看说明）、search、fetch
+    const op = !filesOn(s) || k ? '' : read ? 'read' : /^(search|fetch)$/i.test(a[0] || '') ? a[0].toLowerCase() : '';
+    if (op) { put(line, await runOp(s, op, line, a.slice(1), id, signal, capN, turn)); continue; }
     // 不是技能（也不像技能名）的按简单命令跑
-    if (!read && !k && cmdsOn(s) && !/(^|\/)claw-/.test(a[0] || '')) { outs.push('$ ' + line + '\n' + ((await runSimple(s, line, id, signal)) || '（没有输出）')); continue; }
+    if (!read && !k && cmdsOn(s) && !/(^|\/)claw-/.test(a[0] || '')) { put(line, await runSimple(s, line, id, signal, capN, turn)); continue; }
     used = true;
     update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: k ? k.name : 'claw', kind: read ? 'read' : 'execute', status: 'in_progress', rawInput: { command: line } });
     let text, ok = true;
     if (!k) { ok = false; text = '没有这个技能：' + (read ? a[1] : a[0]) + '。能用的：' + SKILLS.map(x => x.name).join('、'); }
     else if (read) { text = k.md.replace(/~\/\.claclaw\/bin\//g, ''); seen.add(k.name); }
+    else if ((needAsk(k, a.slice(1)) || turn.web) && !(await askUser(s, id, line, signal, needAsk(k, a.slice(1)) ? k.askTitle : WEB_ASK))) {   // 要用户点头的技能（装软件这类），或者这一轮读过网页了
+      if (signal?.aborted) { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed' }); throw aborted(); }
+      ok = false; text = '用户没有允许跑这条命令。';
+    }
     else {
       if (!seen.has(k.name)) { seen.add(k.name); docs.push(k); }
       const r = await runSkill(k, a.slice(1), signal);
       if (signal?.aborted) { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed' }); throw aborted(); }
       ok = r.code === 0;
-      text = cap(r.out.trim(), 12000) + (ok ? '' : '\n（退出码 ' + r.code + (r.err.trim() ? '：' + cap(r.err.trim(), 1500) : '') + '）');
+      text = capTok(cap(r.out.trim(), 12000), capN) + (ok ? '' : '\n（退出码 ' + r.code + (r.err.trim() ? '：' + cap(r.err.trim(), 1500) : '') + '）');
     }
     update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(text, 4000) } }] });
-    outs.push('$ ' + line + '\n' + (text || '（没有输出）'));
+    put(line, text);
   }
   return wrapResult(s, used, outs, docs);
 }
-// 发给模型的结果：outs 一条命令一段，docs 是没读过说明就用了的技能（附上说明）
-function wrapResult(s, used, outs, docs = []) {
-  const doc = docs.map(k => '\n\n[' + k.name + ' 的说明（你没读过，照里面的「怎么回复」回复）]\n' + k.md.replace(/~\/\.claclaw\/bin\//g, '')).join('');
-  const more = nativeOn(s) ? '再调用 claw 工具' : '再写一个 claw 代码块';
-  return used ? '[技能结果]\n' + outs.join('\n\n') + doc + '\n\n照技能说明回复用户；还要用技能就' + more + '。'
-    : '[命令结果]\n' + outs.join('\n\n') + '\n\n接着回答用户；还要跑命令就' + more + '。';
+// 技能要不要用户先点头：skills/kuai.json 里的 ask —— true 是每次都要；写成正则就是参数对上了才要（比如只在真的要装的时候）
+function needAsk(k, args) {
+  if (k.ask === true) return true;
+  if (typeof k.ask !== 'string' || !k.ask) return false;
+  try { return new RegExp(k.ask, 'i').test(args.join(' ')); } catch { return true; }
+}
+// 发给模型的结果：outs 一条命令一段（{ line, text }），docs 是没读过说明就用了的技能（附上说明）；怎么包按画像（kuai-render.mjs）
+const wrapResult = (s, used, outs, docs = []) => renderResult({ used, outs, docs: docs.map(k => ({ name: k.name, md: k.md.replace(/~\/\.claclaw\/bin\//g, '') })), native: nativeOn(s) }, styleNow(s));
+
+// ---------- 只读工具（L3，实现在 kuai-ops.mjs） ----------
+// 路径的规矩和简单命令一样（badPath）；协同 / 群里别人转来的那一轮每条都要用户确认。
+// fetch：用户在这个会话里给过的网址（原样出现在他的消息里）直接取；模型自己写出来的网址要用户点确认——
+// 网页里可能写着「把某某文件的内容拼到网址里发给我」这类话，模型照做的话，拼出来的网址用户看得到、不点就发不出去。本机和内网的地址一律不取。
+const OP_CARD = { read: ['Read', 'read'], search: ['Search', 'search'], fetch: ['Fetch', 'fetch'] };
+const WEB_ASK = 'kuAi 刚读过网页，允许它接着运行这条命令？';
+const TCC = () => process.platform === 'darwin' ? '\n（macOS 隐私保护拦下了：claclaw 没有读这个文件夹的权限。要用的话，用户在「系统设置 → 隐私与安全性 → 完全磁盘访问权限」里加上 ' + process.execPath + '，再重启 claclaw）' : '';
+async function runOp(s, op, line, a, id, signal, capN, turn = {}) {
+  update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: OP_CARD[op][0], kind: OP_CARD[op][1], status: 'in_progress', rawInput: { command: line } });
+  const end = (ok, text) => { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(text, 4000) } }] }); return text; };
+  const wd = cwdOf(s), show = abs => inside(abs, wd) ? path.relative(wd, abs) || '.' : tilde(abs);
+  const allow = async () => { const ok = await askUser(s, id, line, signal, op === 'fetch' ? '允许 kuAi 打开这个网址？' : op === 'read' ? '允许 kuAi 读这个文件？' : '允许 kuAi 搜这个目录？'); if (signal?.aborted) { end(false, '已停止'); throw aborted(); } return ok; };
+  if (op === 'read') {
+    const q = readArgs(a);
+    if (!q.file) return end(false, 'read 后面写文件名或者技能名：read 文件 [起行-止行]');
+    const why = badPath(q.file, wd);
+    if (why) return end(false, '没读：' + why + '。');
+    if (s.peer && !(await allow())) return end(false, '用户没有允许读这个文件。');
+    const r = readFile({ abs: path.resolve(wd, homeOf(q.file)), show: q.file, from: q.from, to: q.to, cap: capN });
+    return end(r.ok, r.text + (r.perm ? TCC() : ''));
+  }
+  if (op === 'search') {
+    const q = searchArgs(a);
+    if (!q.pattern) return end(false, '没写要找什么：search "文字或正则" [目录或文件] [-g "*.js"]');
+    const why = badPath(q.target, wd);
+    if (why) return end(false, '没搜：' + why + '。');
+    if (s.peer && !(await allow())) return end(false, '用户没有允许搜这个目录。');
+    // jail：会话开在小目录里时，主目录下这个目录以外的不搜（从 / 或 /Users 往下搜也一样）
+    const r = await searchFiles({ pattern: q.pattern, root: realOf(path.resolve(wd, homeOf(q.target))), glob: q.glob, noGo: NO_GO, secret: SECRET.source, jail: fold(wd) !== fold(HOME_REAL) ? { home: HOME_REAL, keep: wd } : null, show, cap: capN, signal, env: cmdEnv() });
+    if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
+    return end(r.ok, r.text);
+  }
+  // fetch 网址 [第几段]
+  const u = urlOf(a[0]), part = Math.max(1, parseInt(a[1], 10) || 1);
+  if (!u) return end(false, 'fetch 后面写网址（http 或 https 开头）：fetch 网址');
+  let page = s.pages?.get(u.href);
+  if (!page) {
+    if (!FETCH_LOCAL) { const no = await hostSafe(u.hostname); if (no) return end(false, '没取：' + no + '。'); }
+    const bare = u.href.replace(/\/$/, ''), said = s.messages.some(m => m.role === 'user' && !m.tool && typeof m.content === 'string' && (m.content.includes(bare) || m.content.includes(String(a[0]).replace(/\/$/, ''))));
+    if ((!said || s.peer) && !(await allow())) return end(false, '用户没有允许取这个网址。');
+    const r = await fetchPage(u.href, { signal, allowLocal: FETCH_LOCAL });
+    if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
+    if (!r.ok) return end(false, '没取成：' + r.error);
+    page = { url: r.url, title: r.title, cut: r.cut, parts: pageParts(r.text, Math.max(200, capN - 80)) };
+    (s.pages ||= new Map()).set(u.href, page);
+    if (s.pages.size > 4) s.pages.delete(s.pages.keys().next().value);
+  }
+  const n = page.parts.length;
+  if (part > n) return end(false, '这个网页一共只有 ' + n + ' 段，没有第 ' + part + ' 段。');
+  turn.web = true;   // 网页的内容进了这一轮的对话
+  return end(true, (page.title ? page.title + '\n' : '') + page.url + (n > 1 ? '（第 ' + part + ' / ' + n + ' 段）' : '') + '\n\n' + capTok(page.parts[part - 1], capN)
+    + (part < n ? '\n（后面还有 ' + (n - part) + ' 段，要看就：fetch ' + a[0] + ' ' + (part + 1) + '）' : '') + (page.cut ? '\n（网页太大，只取了前 2 MB）' : ''));
 }
 
 // ---------- 简单命令 ----------
@@ -576,7 +677,7 @@ const CMDS = {
   diskutil: { no: a => /^(list|info)$/.test(a[0] || '') || (a[0] === 'apfs' && a[1] === 'list') ? '' : 'diskutil 只能 list、info、apfs list' },
   ipconfig: { no: a => a[0] === 'getifaddr' ? '' : 'ipconfig 只能 getifaddr' },
   ifconfig: { no: a => a.length > 1 ? 'ifconfig 只能查' : '' },
-  ping: { fix: a => {   // 最多 5 次
+  ping: { net: true, fix: a => {   // 最多 5 次；net：会往外发东西（这一轮读过网页以后要确认）
     const i = a.indexOf('-c'), n = Math.min(5, Math.max(1, parseInt(i >= 0 ? a[i + 1] : a.find(x => /^-c\d+$/.test(x))?.slice(2), 10) || 4));
     return ['-c', String(n), ...a.filter((x, j) => !(i >= 0 && (j === i || j === i + 1)) && !/^-c\d+$/.test(x))];
   } },
@@ -676,20 +777,20 @@ function runCmd(argv, signal, wd) {
 }
 // 要用户确认：发 session/request_permission，claclaw 显示成和别家一样的确认条；停掉这一轮就不等了
 const waits = new Map(); let askSeq = 0;
-function askUser(s, toolCallId, line, signal) {
+function askUser(s, toolCallId, line, signal, title = '') {   // title：确认条上的问法（不给就是「允许运行这条命令？」）
   return new Promise(res => {
     const id = 'ask-' + (++askSeq);
     const fin = ok => { if (!waits.delete(id)) return; signal?.removeEventListener?.('abort', stop); res(ok); };
     const stop = () => fin(false);
     waits.set(id, r => fin(r?.outcome?.outcome === 'selected' && r.outcome.optionId === 'allow'));
     signal?.addEventListener?.('abort', stop, { once: true });
-    send({ id, method: 'session/request_permission', params: { sessionId: s.id, toolCall: { toolCallId, title: 'Bash', kind: 'execute', rawInput: { command: line } },
+    send({ id, method: 'session/request_permission', params: { sessionId: s.id, toolCall: { toolCallId, title: 'Bash', kind: 'execute', rawInput: { command: line }, ...(title ? { _meta: { title } } : {}) },
       options: [{ optionId: 'allow', name: '允许', kind: 'allow_once' }, { optionId: 'reject', name: '不允许', kind: 'reject_once' }] } });
   });
 }
 const aborted = () => Object.assign(new Error('cancelled'), { name: 'AbortError' });
 // 一条简单命令：网页上一张 Bash 卡片；返回发给模型的结果
-async function runSimple(s, line, id, signal) {
+async function runSimple(s, line, id, signal, capN = ONE_CAP[2], turn = {}) {
   update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: 'Bash', kind: 'execute', status: 'in_progress', rawInput: { command: line } });
   const end = (ok, text) => { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(text, 4000) } }] }); return text; };
   const { args: toks, shell } = cmdArgs(line);
@@ -699,10 +800,10 @@ async function runSimple(s, line, id, signal) {
   const wd = cwdOf(s);
   let args = expand(toks.slice(1), wd);
   const why = args.map(x => badPath(x, wd)).find(Boolean) || c.no?.(args) || '';
-  if (why) return end(false, '没跑：' + why + '。');
+  if (why) return end(false, '没跑：' + why + (name === 'grep' && /整个目录/.test(why) && filesOn(s) ? '；要搜整个目录用 search "文字" 目录' : '') + '。');
   if (c.fix) args = c.fix(args);
-  if (c.ask || s.peer) {
-    const ok = await askUser(s, id, line, signal);
+  if (c.ask || s.peer || (c.net && turn.web)) {
+    const ok = await askUser(s, id, line, signal, c.net && turn.web && !c.ask && !s.peer ? WEB_ASK : '');
     if (signal?.aborted) { end(false, '已停止'); throw aborted(); }
     if (!ok) return end(false, '用户没有允许跑这条命令。');
   }
@@ -712,7 +813,7 @@ async function runSimple(s, line, id, signal) {
   // macOS 的隐私保护（桌面、文稿、下载等要单独授权）：说清楚是系统拦的、怎么开，模型好转告用户
   const tcc = process.platform === 'darwin' && /Operation not permitted/.test(r.out) ? '\n（macOS 隐私保护拦下了：claclaw 没有读这个文件夹的权限。要用的话，用户在「系统设置 → 隐私与安全性 → 完全磁盘访问权限」里加上 ' + process.execPath + '，再重启 claclaw）' : '';
   if (c.out) r.out = c.out(r.out.trim());
-  return end(ok, cap(r.out.trim(), 12000) + (r.note ? '\n（' + r.note + '）' : '') + (ok ? '' : '\n（退出码 ' + r.code + '）') + tcc);
+  return end(ok, capTok(cap(r.out.trim(), 12000), capN) + (r.note ? '\n（' + r.note + '）' : '') + (ok ? '' : '\n（退出码 ' + r.code + '）') + tcc);
 }
 
 // ---------- 一轮 ----------
@@ -729,7 +830,7 @@ function noteOf(stop) {
 }
 // 思考混进正文了（关思考的参数这个模型不认）：按模型记下，之后不再发
 const noteLeak = (s, r) => { if (r.leaked && !s.noOff && !s.think) { s.noOff = true; learn(s.model, 'noOff', true); } };
-const TIER_SAY = ['只问答', '简单技能（程序代填参数）', '技能和命令'];
+const TIER_SAY = ['只问答', '简单技能（程序代填参数）', '技能和命令', '读文件和网页（只读）'];
 const tierSay = t => TIER_SAY[Math.max(0, Math.min(t, TIER_BUILT))];
 
 // 填空（L1）：程序认出了用户想用的技能 f。模型只填参数（参数全由程序定的不问模型），程序校验、跑技能。
@@ -754,12 +855,19 @@ async function tryFill(s, f, text, signal, run, tally) {
   if (!args) { rec.use = false; return null; }
   const line = rec.cmd = fillLine(f.name, args), id = 'claw-' + crypto.randomUUID().slice(0, 8);
   update(s.id, { sessionUpdate: 'tool_call', toolCallId: id, title: k.name, kind: 'execute', status: 'in_progress', rawInput: { command: line } });
+  if (needAsk(k, args) && !(await askUser(s, id, line, signal, k.askTitle))) {   // 要用户点头的技能：没点就不跑，这一轮到这里为止
+    update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed', content: [{ type: 'content', content: { type: 'text', text: '用户没有允许跑这条命令。' } }] });
+    if (signal?.aborted) throw aborted();
+    rec.ok = false; rec.denied = true;
+    return { text: '好的，没有' + f.what + '。' };
+  }
   const r = await runSkill(k, args, signal);
   if (signal?.aborted) { update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed' }); throw aborted(); }
   const ok = rec.ok = r.code === 0 && !!r.out.trim();
   const out = cap(r.out.trim(), 12000) + (ok ? '' : '\n（退出码 ' + r.code + (r.err.trim() ? '：' + cap(r.err.trim(), 1500) : '') + '）');
   update(s.id, { sessionUpdate: 'tool_call_update', toolCallId: id, status: ok ? 'completed' : 'failed', content: [{ type: 'content', content: { type: 'text', text: cap(out, 4000) } }] });
   if (ok) return { text: [other ? f.elseLead : fillLead(f, got.slots), pasteOut(f, cap(r.out.trim(), 12000))].filter(Boolean).join('\n\n') };
+  if (f.raw && r.out.trim()) return { text: cap(r.out.trim(), 4000) };   // 输出本身就是给用户看的话（fill.raw）：没成也原样贴，不让模型转述
   return { ex: [{ role: 'assistant', content: '（我用 claclaw 的「' + f.what + '」试了一下。）' },
     { role: 'user', content: '[claclaw] 刚才替你跑了 ' + line + '，没成：\n' + out + '\n\n用一两句话照实告诉用户没成、是什么原因；不要编结果，不要提命令和这段说明。' }] };
 }
@@ -771,8 +879,8 @@ async function prompt(s, text, images = []) {
   s.messages.push(um);
   if (!s.title) { s.title = text.replace(/\s+/g, ' ').slice(0, 50) || '图片'; update(s.id, { sessionUpdate: 'session_info_update', title: s.title }); }
   let full = '', parts = 0, steps = 0, seg = '';   // seg：上次用技能之后写的（到了长度上限接着写时整段发回去）
-  let tools = false; const ex = [], seen = new Set();                    // ex：这一轮里用技能 / 命令的来回（模型写的 claw 代码块、结果）
-  const ran = new Set(); let slips = 0, again = 0, empty = false;        // ran：这一轮跑过的调用；slips：调用出错的次数（格式不对、重复调用）；again：其中重复的
+  let tools = false; const ex = [], seen = new Set(), turn = {};                    // ex：这一轮里用技能 / 命令的来回（模型写的 claw 代码块、结果）
+  const ran = new Set(); let slips = 0, again = 0, empty = false, packed = false;        // ran：这一轮跑过的调用；slips：调用出错的次数（格式不对、重复调用）；again：其中重复的
   const say = t => update(s.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
   let kept = false;
   const keep = () => { if (full && !kept) { kept = true; s.messages.push({ role: 'assistant', content: full, model: s.model, at: Date.now(), ...(parts > 1 ? { parts } : {}) }); } };
@@ -787,7 +895,8 @@ async function prompt(s, text, images = []) {
     trim(s);
     const tier = tierNow(s), lim = limitsOf(s), win = ctxOf(s);
     // 这一轮怎么答的（给会话解剖、调 kuAi 用）：用的哪个模型、什么接口和参数、发了几条历史、丢了几条、系统提示，以及每次请求的明细
-    const run = um.run = { model: s.model, api: FORMAT, host: hostOf(BASE), think: !!s.think, noOff: !!s.noOff, maxOut: lim.maxOut, budget: lim.budget, ...(win.ctx ? { ctx: win.ctx, ...(win.known ? {} : { ctxGuess: true }) } : {}), tier: tier.tier, tierWhy: tier.why, sys: systemOf(s), sent: history(s).length, dropped: s.from, calls: [] };
+    const maxS = maxSteps(s), sys = systemOf(s), fixed = tok(sys) + history(s).reduce((a, x) => a + msgTok(x), 0);   // fixed：系统提示 + 历史占的 token（算工具结果还能放多少时用）
+    const run = um.run = { model: s.model, api: FORMAT, host: hostOf(BASE), think: !!s.think, noOff: !!s.noOff, maxOut: lim.maxOut, budget: lim.budget, ...(win.ctx ? { ctx: win.ctx, ...(win.known ? {} : { ctxGuess: true }) } : {}), tier: tier.tier, tierWhy: tier.why, ...(tools && styleNow(s) !== 'plain' ? { style: styleNow(s) } : {}), sys, sent: history(s).length, dropped: s.from, calls: [] };
     let tin = 0, tout = 0, gen = 0, t0 = 0, first = 0, end = 0, stop = null;
     const tally = r => { if (!t0) { t0 = r.t0; first = r.first; } tin = r.tin || tin; tout += r.tout; end = r.end; if (r.first) gen += (r.end - r.first) / 1000; };
     // L1：这句话像是要用某个技能 → 模型填参数、程序跑。跑成了结果直接贴出来，这一轮就完了；没成、不用的接着走下面的问答
@@ -808,7 +917,7 @@ async function prompt(s, text, images = []) {
         if (now.length > sent) { say(now.slice(sent)); sent = now.length; }
       }, () => update(s.id, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '' } }), extra, run.calls);
       noteLeak(s, r);
-      const blk = tools && steps < MAX_STEPS ? nativeBlock(r, steps) || clawBlock(r.text) : null;
+      const blk = tools && steps < maxS ? nativeBlock(r, steps) || clawBlock(r.text) : null;
       if (blk) {   // 用技能：代码块前面写的照常显示；跑完把结果交给模型接着写（不算「接着写」的段数）
         steps++; parts--;
         full = glue(r.text.slice(0, blk.at).replace(/\s+$/, ''));
@@ -817,9 +926,14 @@ async function prompt(s, text, images = []) {
         const key = blk.lines.join('\n');
         let res;
         if (!blk.lines.length) { slips++; res = '[claclaw] 这次调用的格式不对，没有跑。只有 claw 一个工具，参数是 {"commands": ["命令"]}；用不上就直接回答用户。'; }
-        else if (ran.has(key)) { slips++; if (++again >= 2) steps = MAX_STEPS; res = '[claclaw] 这条刚才已经跑过，结果在上面，没有再跑。不要重复调用，直接用已有的结果回答用户。'; }
-        else { ran.add(key); res = await runClaw(s, blk.lines, ac.signal, seen); }
-        if (blk.id) ex.push({ role: 'assistant', content: (seg + r.text).trim(), calls: [{ id: blk.id, lines: blk.lines }] }, { role: 'tool', toolId: blk.id, content: res });
+        else if (ran.has(key)) { slips++; if (++again >= 2) steps = maxS; res = '[claclaw] 这条刚才已经跑过，结果在上面，没有再跑。不要重复调用，直接用已有的结果回答用户。'; }
+        else {
+          const room = roomOf(s, fixed, ex);
+          // 放不下了：不跑，让它用已有的回答（再跑下去窗口会满，Ollama 会把最早的消息连系统提示一起丢掉）
+          if (room < 300) { packed = true; steps = maxS; res = '[claclaw] 这一轮查到的内容已经快把上下文占满了，这次没有再跑。用已经拿到的结果回答用户；还没查完就告诉用户查到哪了、接下来该看什么。'; }
+          else { ran.add(key); res = await runClaw(s, blk.lines, ac.signal, seen, room, turn); }
+        }
+        if (blk.id) ex.push({ role: 'assistant', content: (seg + r.text).trim(), calls: [{ id: blk.id, lines: blk.lines }], ...rawOf(r) }, { role: 'tool', toolId: blk.id, content: res, names: r.calls.map(c => c.name) });
         else ex.push({ role: 'assistant', content: seg + r.text.slice(0, blk.end).replace(/\s+$/, '') }, { role: 'user', content: res });
         seg = ''; after = true;
         tally(r);
@@ -840,7 +954,7 @@ async function prompt(s, text, images = []) {
       if (s.bad >= 2 && !s.down && tier.tier >= 2) { s.down = 1; info.push(s.model + ' 在这个会话里调用技能 / 命令出错 ' + s.bad + ' 次（格式不对或者重复调用），先降到「' + tierSay(tierNow(s).tier) + '」；换模型或者新开会话会恢复'); }
     }
     if (quizNews.has(s.model)) { info.push(quizLine(s.model, quizNews.get(s.model))); quizNews.delete(s.model); }
-    Object.assign(run, { endAt: Date.now(), parts, stop, ...(steps ? { steps } : {}), ...(slips ? { slips } : {}), ...(notes ? { note: notes } : {}) });
+    Object.assign(run, { endAt: Date.now(), parts, stop, ...(steps ? { steps } : {}), ...(slips ? { slips } : {}), ...(packed ? { packed: true } : {}), ...(notes ? { note: notes } : {}) });
     keep(); save(s);
     // 生成速度只算第一个字之后的；输出太短（< 8 tok）算出的速度没意义，不报；没有 usage 的服务不报速度（估出来的不准，调试时会误导）
     const stats = { model: s.model, ttft: first ? (first - t0) / 1000 : null, outTokens: tout || null, tps: tout >= 8 && gen > 0.05 ? tout / gen : null, total: (end - t0) / 1000,
@@ -871,10 +985,10 @@ const quizLine = (m, q) => { const c = quizCount(q.pass); return m + ' 的上岗
 // 一道题 → 过没过。rec：这道题的经过（请求明细、模型要跑的命令、最后的回答）
 async function askQuiz(qn, model, signal, rec, block = false) {
   const calls = rec.calls = [], noop = () => {};
-  const s = quizSession(model, qn.key === 'fill' ? 1 : 2, block);
+  const s = quizSession(model, qn.key === 'fill' ? 1 : qn.tier || 2, block);
   s.messages = [{ role: 'user', content: qn.text }];
   if (qn.key === 'fill') {
-    const r = await chat(s, signal, noop, noop, [], calls, { fill: QUIZ_FILL });
+    const r = await chat(s, signal, noop, noop, [], calls, { fill: QUIZ_FILL, waitMax: 65 });
     noteLeak(s, r);
     const fill = parseFill(QUIZ_FILL, r.text, qn.text);
     rec.fill = fill?.slots || null;
@@ -883,15 +997,15 @@ async function askQuiz(qn, model, signal, rec, block = false) {
   const ex = [], lines = [];
   let text = '';
   for (let step = 0; step < qn.steps; step++) {
-    const r = await chat(s, signal, noop, noop, ex, calls);
+    const r = await chat(s, signal, noop, noop, ex, calls, { waitMax: 65 });
     noteLeak(s, r);
     const blk = nativeBlock(r, step) || clawBlock(r.text);
     if (!blk) { text = r.text; break; }
     lines.push(...blk.lines);
     if (qn.key === 'chat' || !blk.lines.length || settled(qn.key, { lines })) break;   // 已经有结论了，不用往下跑
-    const rs = blk.lines.map(l => ({ l, ...fakeRun(l) }));
-    const res = wrapResult(s, rs.some(x => x.skill), rs.map(x => '$ ' + x.l + '\n' + x.out), [...new Set(rs.map(x => x.doc).filter(Boolean))].map(n => QUIZ_SKILLS.find(k => k.name === n)));
-    if (blk.id) ex.push({ role: 'assistant', content: r.text.trim(), calls: [{ id: blk.id, lines: blk.lines }] }, { role: 'tool', toolId: blk.id, content: res });
+    const rs = blk.lines.map(l => ({ l, ...fakeRun(l, { files: filesOn(s) }) }));
+    const res = wrapResult(s, rs.some(x => x.skill), rs.map(x => ({ line: x.l, text: x.out })), [...new Set(rs.map(x => x.doc).filter(Boolean))].map(n => QUIZ_SKILLS.find(k => k.name === n)));
+    if (blk.id) ex.push({ role: 'assistant', content: r.text.trim(), calls: [{ id: blk.id, lines: blk.lines }], ...rawOf(r) }, { role: 'tool', toolId: blk.id, content: res, names: r.calls.map(c => c.name) });
     else ex.push({ role: 'assistant', content: r.text.slice(0, blk.end).replace(/\s+$/, '') }, { role: 'user', content: res });
   }
   rec.lines = lines; if (text) rec.text = text.slice(0, 500);

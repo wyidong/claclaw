@@ -39,7 +39,8 @@ const OWN = { claude: 'claude', glm: 'claude', iflow: 'iflow', codebuddy: 'codeb
 export const targetOf = claw => OWN[claw] || 'agents';
 
 export function catalog() {
-  try { return JSON.parse(fs.readFileSync(path.join(SRC, 'index.json'), 'utf8')).filter(s => s && /^[a-z0-9-]+$/.test(s.name)); }
+  // claws 是空的：只给 kuAi 用的技能（kuAi 直接读仓库里的，不用安装），技能页不显示
+  try { return JSON.parse(fs.readFileSync(path.join(SRC, 'index.json'), 'utf8')).filter(s => s && /^[a-z0-9-]+$/.test(s.name) && Array.isArray(s.claws) && s.claws.length); }
   catch { return []; }
 }
 const versionOf = name => {

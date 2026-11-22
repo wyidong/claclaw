@@ -624,7 +624,7 @@ export class AcpRunner {
     if (known && !known.started) this.toolStart(tc.toolCallId, known, toolTarget(info.raw) || info.target.slice(0, 160), tc.kind);
     const req = {
       t: 'perm.request', requestId, toolUseID: tc.toolCallId, name: info.name,
-      title: null, displayName: info.name, description: '', target: info.target,
+      title: info.title || null, displayName: info.name, description: '', target: info.target,   // title：agent 自己给的问法（kuAi：「允许安装 DeepSeek Harness？」）；没给网页按「允许运行这条命令？」显示
       reason: info.reason || '', canAlways: opts.some(o => o.kind === 'allow_always'), defaultToNo: false,
     };
     const show = (peerKey) => {

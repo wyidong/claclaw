@@ -116,19 +116,35 @@ test('kuAi 小测验：假结果是确定的；判分——闲聊不调、单步
   assert.equal(grade('fill', { fill: parseFill(QF, '{"song":"红豆","artist":"","use":true}', q.text) }), false);
   assert.equal(grade('fill', { fill: null }), false);
   assert.deepEqual(QUIZ_SKILLS.map(k => k.name), ['claw-clock', 'claw-lamp']);
+  // look 题（开了只读工具的假世界）：笔记里写的是「年度检查」——搜「体检」搜不到，要换个找法
+  const F3 = { files: true };
+  assert.match(fakeRun('search "体检"', F3).out, /^没找到（搜了 2 个文件）。先别下结论/);
+  assert.match(fakeRun('search 检查', F3).out, /^notes\.md:4: - 12 月 3 日上午去医院做年度检查/);
+  assert.match(fakeRun('read notes.md', F3).out, /^notes\.md（第 1–5 行，共 5 行）\n1\t# 备忘/);
+  assert.equal(fakeRun('read nope.md', F3).ok, false);
+  assert.match(fakeRun('read notes.md').out, /没有这个技能/);                       // 没开只读工具的题里，read 只认技能
+  assert.match(fakeRun('cat notes.md').out, /年度检查/); assert.match(fakeRun('grep 检查 notes.md').out, /年度检查/);
+  assert.equal(grade('look', { lines: ['search 体检'], text: '没找到' }), false);
+  assert.equal(grade('look', { lines: ['search 体检', 'ls', 'read notes.md'] }), true);
+  assert.equal(grade('look', { lines: ['ls', 'cat ~/notes.md'] }), true);
+  assert.equal(grade('look', { lines: ['search "检查|体检"'] }), true);                 // 换了个词搜到了
+  assert.equal(grade('look', { lines: ['read Report.txt'] }), false);
+  assert.equal(grade('look', { lines: [], text: '是 12 月 3 号' }), true);
+  assert.equal(QUESTIONS.find(q => q.key === 'look').tier, 3);
 });
 
 test('kuAi 小测验：分数 → 能力档；工具题按顺序做，错一题后面的不做', () => {
-  assert.equal(quizTier({ fill: true, chat: true, one: true, chain: true, fix: true }), 3);
+  assert.equal(quizTier({ fill: true, chat: true, one: true, chain: true, fix: true, look: true }), 3);
+  assert.equal(quizTier({ fill: true, chat: true, one: true, chain: true, fix: true, look: false }), 2);   // 没找到不会换个找法：不给只读工具
   assert.equal(quizTier({ fill: false, chat: true, one: true, chain: true, fix: false }), 2);   // 填空没过不挡 L2：L2 用不着它
   assert.equal(quizTier({ fill: true, chat: true, one: false, chain: null, fix: null }), 1);
   assert.equal(quizTier({ fill: true, chat: false, one: null, chain: null, fix: null }), 1);
   assert.equal(quizTier({ fill: false, chat: true, one: true, chain: false, fix: null }), 0);
   assert.equal(quizTier({}), 0);
-  assert.deepEqual(quizCount({ fill: true, chat: true, one: false, chain: null, fix: null }), { pass: 2, of: 5 });
+  assert.deepEqual(quizCount({ fill: true, chat: true, one: false, chain: null, fix: null }), { pass: 2, of: 6 });
   const order = []; const pass = {};
   for (let q; (q = nextQuestion(pass));) { order.push(q.key); pass[q.key] = true; }
-  assert.deepEqual(order, ['fill', 'chat', 'one', 'chain', 'fix']);
+  assert.deepEqual(order, ['fill', 'chat', 'one', 'chain', 'fix', 'look']);
   assert.equal(nextQuestion({ fill: false, chat: true, one: false }), null);        // 单步错了：后面的不做
   assert.equal(nextQuestion({ fill: false })?.key, 'chat');                          // 填空错了不影响工具题
   assert.equal(nextQuestion({ fill: true, chat: true })?.key, 'one');                // 没测完的接着测

@@ -51,7 +51,7 @@ import { readBody, jsonBody } from './src/httpbody.mjs';
 import { makeSkins } from './src/skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './src/util.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginUnsubscribe } from './src/claws/login.mjs';
-import { installStart, installState, installing, markInstallable } from './src/claws/install.mjs';
+import { INSTALLS, installStart, installState, installing, markInstallable } from './src/claws/install.mjs';
 import { claudeExe, claudeRunnable } from './src/claws/claudebin.mjs';
 import { findUserPath, openLocal, previewType, READ_MAX } from './src/localfile.mjs';
 import { peerRisk, destructive, sensitiveRoots, touchesSensitive } from './src/peer/peerguard.mjs';
@@ -762,6 +762,16 @@ async function handleLocal(req, res, url) {
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
   if (url.pathname === '/api/local/shop/search' && req.method === 'POST') return sendJson(res, 200, await shop.search(await jsonBody(req, 4096, {})));   // claw-shopping 技能
+  if (url.pathname === '/api/local/install') {   // claw-install 技能（kuAi 用；装之前 kuAi 已经让用户在网页上点过确认）：GET 进度，POST {claw} 开始装——只能装 INSTALLS 里列的
+    const state = () => ({ ok: true, state: installState() || { status: 'none' } });
+    if (req.method !== 'POST') return sendJson(res, 200, state());
+    const id = String((await jsonBody(req, 1024, {}))?.claw || ''), c = Object.hasOwn(INSTALLS, id) ? detectClaws().find(x => x.id === id) : null;
+    if (!c) return sendJson(res, 200, { ok: false, error: '只能装：' + Object.values(INSTALLS).map(x => x.label).join('、') });
+    if (c.installed) return sendJson(res, 200, { ok: true, installed: true, label: INSTALLS[id].label });
+    if (!c.supported) return sendJson(res, 200, { ok: false, error: c.reason || '这台电脑上用不了 ' + INSTALLS[id].label });
+    try { installStart(id, { log }); } catch (e) { return sendJson(res, 200, { ok: false, error: e.message }); }
+    return sendJson(res, 200, state());
+  }
   if (url.pathname === '/api/local/theme') {   // claw-theme 技能：GET 现在的主题，POST {theme} 换主题
     if (req.method !== 'POST') return sendJson(res, 200, { ok: true, ...themeState() });
     const b = await jsonBody(req, 4096, null);

@@ -41,10 +41,12 @@ const dialectOf = host => { const h = String(host || '').toLowerCase().replace(/
 //   think: { off, on }         关 / 开思考时请求里加什么。off 为 null = 这个模型关不掉（或者不知道怎么关），就不发
 //                              openai 格式：并进请求体顶层；gemini 格式：generationConfig.thinkingConfig 的内容；anthropic 格式：thinking 字段的内容
 //   system: 'system' | 'user'  'user' = 接口不收系统提示（Gemini 接口上的 Gemma 1–3），并进第一条用户消息
+//   native: 能不能用接口原生的工具调用（不能的在回复里写 claw 代码块）。OpenAI 格式都按能（不收的回 400 后 agent 自己退回代码块）；
+//           Gemini 格式：Gemini 能（实测 2.5-flash、3.6-flash 都调得出来，3.6 回传带签名的调用也不报错），Gemma 没测过，先写代码块；Anthropic 格式还没做
 export function profileOf({ model, format = 'openai', host = '' } = {}) {
   const n = baseName(model), family = familyOf(model), dialect = format === 'openai' ? dialectOf(host) : '';
   const open = sizeOf(model) != null || isLocalHost(host);   // 开源权重自己跑的：没有服务商替它定默认采样，按模型卡给
-  const p = { family, dialect, sampling: { off: {}, on: {} }, think: { off: null, on: {} }, system: 'system' };
+  const p = { family, dialect, sampling: { off: {}, on: {} }, think: { off: null, on: {} }, system: 'system', native: format === 'openai' || (format === 'gemini' && family !== 'gemma') };
 
   if (format === 'anthropic') {
     // 不带 thinking 就是不思考；采样一律不发（新的 Claude 传非默认值会被拒，开思考时也不能带）
@@ -76,12 +78,23 @@ export function profileOf({ model, format = 'openai', host = '' } = {}) {
   return p;
 }
 
+// ---------- 提示怎么写（kuai-render.mjs 按这个渲染） ----------
+// 'xml'：Claude（官方建议用 XML 标签分段）；'md'：GPT、Gemini、Mistral（Markdown 标题分节，资料用 XML 标签包）；'plain'：短句加空行。
+// 不到 7B 的小模型一律 plain（标题和标签对它们是负担）。国产几家没查到官方的说法：
+// 实测 DeepSeek（deepseek-flash，2026-11，同样两个跨文件查找的任务各跑一遍）：三种写法都查到了，请求数 plain 3–4、md 3–5、xml 4–7，md 没有更好，就留在实测最多的 plain；别的家族没测过，也先用 plain。
+// Gemini（gemini-3.6-flash）用 md 实测能查对；Claude、GPT 这台机器上没有 key，没测过，只是照官方的建议。
+const STYLES = { claude: 'xml', gpt: 'md', gemini: 'md', mistral: 'md' };
+export function styleOf({ model, size = sizeOf(model) } = {}) {
+  if (size != null && size < 7) return 'plain';
+  return STYLES[familyOf(model)] || 'plain';
+}
+
 // ---------- 能力档 ----------
 // L0 问答 · L1 填空（程序认意图、模型只填参数）· L2 单工具（技能 + 白名单命令）· L3 只读多步 · L4 动手 · L5 规划
-// 现在做出来的是 L0、L1、L2：L2 以上的都按 L2 给。
+// 现在做出来的是 L0–L3：再高的都按 L3 给。
 export const TIER_NAMES = ['问答', '填空', '单工具', '只读多步', '动手', '规划'];
 export const TIER_AUTO_MAX = 3;   // 自动最多定到 L3，往上要用户在模型库里打开
-export const TIER_BUILT = 2;      // 现在做出来的最高一档（再高的都按它给）
+export const TIER_BUILT = 3;      // 现在做出来的最高一档（再高的都按它给）
 // 没有实测（上岗小测验 kuai-quiz.mjs 还没跑过）时按参数量和家族给初值：
 //   没写参数量的当云上的模型 → L3；不到 1.5B → L0；不到 7B → L1；不到 24B → L2；再大 → L3。
 //   Gemma 多步明显弱（BFCL：Gemma-3-27B 多步 10.8%，不如 Qwen3-4B 的 22%），封在 L2。

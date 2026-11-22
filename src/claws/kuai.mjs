@@ -3,7 +3,7 @@
 // - 会话：agent 把每个会话存成 data/kuai-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
 // - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商，每家各起一个进程，会话各走各的（同一个群里几个会话可以同时用不同家的模型）；本机地址（127.0.0.1 / localhost）的排最前；
 //   会话走哪家记在 data/kuai-route.json 的 sessions（没记的按会话的模型认，认不出走默认那家）；provider 是新会话默认走的（最近选的那家）
-// - 能力档（kuai-profiles.mjs）：L1 程序代填参数跑技能，到 L2 的模型自己用技能和命令；模型库里每个模型可以手动设（tier），随 KUAI_MODEL_INFO 传给 agent；
+// - 能力档（kuai-profiles.mjs）：L1 程序代填参数跑技能，到 L2 的模型自己用技能和命令，到 L3 的再多读文件、搜内容、取网页（只读，一轮里能连着查几步）；模型库里每个模型可以手动设（tier），随 KUAI_MODEL_INFO 传给 agent；
 //   没设的按上岗小测验的结果（本机的模型 agent 自己在后台测，云上的在模型管理里点「测一下」→ kuQuizStart），都没有才按参数量估
 // - 改名：agent 没有接口，名字记在 claclaw 这边；删除：把会话文件挪进回收站
 // 网页里 kuAi 会话的 id = 'ku:' + 会话 id（UUID）。
@@ -189,6 +189,8 @@ export class KuRunner extends AcpRunner {
   static onCreated(sid) { saveRoute(sid, route()?.p.id || ''); }
   static prefix = KU_PREFIX; static runners = kuRunners;
   static label = 'kuAi'; static group = 'kuAi'; static permPrefix = 'ku-'; static commands = COMMANDS;
+  // 确认条的问法：agent 在 toolCall._meta.title 里给了就用它的（装软件、打开网址——光看一条命令用户不知道在问什么）
+  permInfo(tc, known) { const i = super.permInfo(tc, known), t = tc?._meta?.title; return typeof t === 'string' && t.trim() ? { ...i, title: t.trim().slice(0, 80) } : i; }
   static cfgIds = { model: 'model' };
   static cfgNames = { model: '模型' };
   static ctxFromUsage = true; static titleFromAgent = true;

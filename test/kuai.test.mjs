@@ -409,11 +409,12 @@ test('kuAi agent：接口报错只取说明；429 写明多久恢复（Gemini �
     [{}, quota('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', '37s')],
     [{}, quota('GenerateRequestsPerDayPerProjectPerModel-FreeTier', '20s')],
     [{ 'retry-after': '125' }, JSON.stringify({ error: { message: 'Rate limit reached' } })],
-    [{}, JSON.stringify({ error: { message: 'slow down, retry after 900ms' } })],
+    [{}, JSON.stringify({ error: { message: 'slow down, retry after 300ms' } })],
+    [{}, 'data: ' + JSON.stringify({ candidates: [{ content: { parts: [{ text: '等到了' }] }, finishReason: 'STOP' }] }) + '\n\n', 200],
     [{}, JSON.stringify({ error: { message: 'too many' } })],
   ];
   let k = 0;
-  const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { const [h, b] = replies[k++]; res.writeHead(429, { 'content-type': 'application/json', ...h }); res.end(b); }); });
+  const srv = http.createServer((req, res) => { req.resume(); req.on('end', () => { const [h, b, st = 429] = replies[k++]; res.writeHead(st, { 'content-type': st === 200 ? 'text/event-stream' : 'application/json', ...h }); res.end(b); }); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const a = startAgent({ KUAI_FORMAT: 'gemini', KUAI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1beta', KUAI_MODEL: 'mx', KUAI_DIR: dir });
   try {
@@ -423,7 +424,10 @@ test('kuAi agent：接口报错只取说明；429 写明多久恢复（Gemini �
     assert.match(await err(), /^模型服务说额度或频率超限（429）：每分钟的次数（上限 10 次）用完了，约 37 秒后恢复。原话：You exceeded your current quota\. \* Quota/);
     assert.match(await err(), /今天的额度（上限 10 次）用完了，(今天|明天) \d\d:\d\d（太平洋时间 0 点）恢复/);
     assert.match(await err(), /：约 3 分钟后恢复。原话：Rate limit reached$/);
-    assert.match(await err(), /：约 1 秒后恢复。/);
+    // 等得起的（20 秒以内）自己等了再发，用户看不到报错；解剖里两次请求都记着
+    const t0 = Date.now(), r = await say(a, n.sessionId, 'hi');
+    assert.equal(r.result.stopReason, 'end_turn'); assert.equal(textOf(a.updates).slice(-3), '等到了'); assert.ok(Date.now() - t0 >= 1200);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, n.sessionId + '.json'), 'utf8')).messages.filter(x => x.run).at(-1).run.calls.map(c => [c.status, !!c.retry]), [[429, false], [200, true]]);
     assert.match(await err(), /：等一会儿再试，或者换个模型。原话：too many$/);
   } finally { a.stop(); srv.close(); }
 });
@@ -811,7 +815,7 @@ test('kuAi 简单命令：协同 / 群里别人转来的那一轮（_meta.peer�
     await a.rpc('session/prompt', { sessionId: n.sessionId, prompt: [{ type: 'text', text: '打个招呼' }], _meta: { peer: true } });
     assert.equal(a.asks.length, 1);
     assert.match(m.reqs[1].messages.at(-1).content, /\$ echo 你好\n用户没有允许/);
-    assert.match(m.reqs[0].messages[0].content, /要用简单命令时调用 claw 工具。命令照常写/);
+    assert.match(m.reqs[0].messages[0].content, /要用简单命令和只读工具时调用 claw 工具。命令照常写/);
     assert.equal(m.reqs[0].tools[0].function.name, 'claw');
     await say(a, n.sessionId, '再打个招呼');                         // 用户自己发的：只读的直接跑
     assert.equal(a.asks.length, 1);
@@ -1093,10 +1097,12 @@ const quizBrain = good => j => {
   if (/磁盘/.test(q)) return good ? '```claw\ndf -h\n```' : 'df -h';
   if (/客厅的灯/.test(q)) return /lr-2/.test(last) ? '```claw\nclaw-lamp lr-2 on\n```' : '```claw\nread claw-lamp\n```';
   if (/report\.txt/.test(q)) return /Report\.txt/.test(last) ? '```claw\nhead -5 Report.txt\n```' : '```claw\nhead -5 report.txt\n```';
+  // 没找到换个找法：搜「体检」没有 → ls → 读 notes.md；good === 'lazy' 的搜一次没有就说没找到
+  if (/体检/.test(q)) return /notes\.md/.test(last) ? '```claw\nread notes.md\n```' : /没找到/.test(last) ? (good === 'lazy' ? '没找到体检的记录。' : '```claw\nls\n```') : '```claw\nsearch "体检"\n```';
   return '好';
 };
 
-test('kuAi 小测验：5 道题走平时那套提示和调用（假技能、假结果，不真跑），按分数定档并按模型记下；测出来的 > 按参数量估的，模型库里手动设的还是最优先', { timeout: 30000 }, async () => {
+test('kuAi 小测验：6 道题走平时那套提示和调用（假技能、假结果，不真跑），按分数定档并按模型记下；测出来的 > 按参数量估的，模型库里手动设的还是最优先', { timeout: 30000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), learn = path.join(dir, 'learn.json');
   const good = await smartModel(quizBrain(true)), bad = await smartModel(quizBrain(false));
   const env = { KUAI_DIR: dir, KUAI_LEARN: learn, KUAI_CMDS: '1', KUAI_MODELS: 'qwen3:1.7b,deepseek-v4-pro' };
@@ -1107,8 +1113,12 @@ test('kuAi 小测验：5 道题走平时那套提示和调用（假技能、假�
     await a.rpc('initialize', {}); await b.rpc('initialize', {});
     // 小模型每题都会：测出来 L3（按参数量只估到 L1）
     const r = (await a.rpc('_kuai/quiz', { model: 'qwen3:1.7b' })).result;
-    assert.equal(r.tier, 3); assert.deepEqual(r.pass, { fill: true, chat: true, one: true, chain: true, fix: true }); assert.ok(r.at > 0);
-    assert.equal(good.reqs.length, 7);   // 填空 1 + 闲聊 1 + 单步 1 + 两步 2 + 出错 2（有结论了就不再往下问）
+    assert.equal(r.tier, 3); assert.deepEqual(r.pass, { fill: true, chat: true, one: true, chain: true, fix: true, look: true }); assert.ok(r.at > 0);
+    assert.equal(good.reqs.length, 10);   // 填空 1 + 闲聊 1 + 单步 1 + 两步 2 + 出错 2 + 换个找法 3（有结论了就不再往下问）
+    // 最后一题开到 L3 做：提示里有只读工具，假结果里搜不到「体检」；前面的题还是 L2 的提示
+    assert.doesNotMatch(good.reqs[6].messages[0].content, /只读工具/); assert.match(good.reqs[7].messages[0].content, /只读工具（写法和命令一样）：read 文件/);
+    assert.match(good.reqs[8].messages.at(-1).content, /^\[命令结果\]\n\$ search "体检"\n没找到（搜了 2 个文件）/);
+    assert.match(good.reqs[9].messages.at(-1).content, /\$ ls\nReport\.txt\nnotes\.md/);
     assert.ok(good.reqs[0].response_format); assert.equal(good.reqs[0].tools, undefined);
     const sys = good.reqs[1].messages[0].content;
     assert.match(sys, /- claw-clock：查世界各地现在几点\n- claw-lamp：开关家里的灯\n/);       // 清单是测验里的假技能
@@ -1116,17 +1126,17 @@ test('kuAi 小测验：5 道题走平时那套提示和调用（假技能、假�
     assert.equal(good.reqs[1].tools[0].function.name, 'claw');
     assert.match(good.reqs[4].messages.at(-1).content, /^\[技能结果\]\n\$ read claw-lamp\n# 开关家里的灯/);
     assert.match(good.reqs[6].messages.at(-1).content, /^\[命令结果\]\n\$ head -5 report\.txt\nhead: report\.txt: No such file or directory。这个目录里有：Report\.txt/);
-    assert.deepEqual(a.notes.filter(x => x.method === '_kuai/quiz').map(x => x.params.state + (x.params.name ? ':' + x.params.done : '')), ['running:0', 'running:1', 'running:2', 'running:3', 'running:4', 'done']);
+    assert.deepEqual(a.notes.filter(x => x.method === '_kuai/quiz').map(x => x.params.state + (x.params.name ? ':' + x.params.done : '')), ['running:0', 'running:1', 'running:2', 'running:3', 'running:4', 'running:5', 'done']);
     const rec = JSON.parse(fs.readFileSync(learn, 'utf8'))[new URL(good.url).host + '|qwen3:1.7b'];
-    assert.equal(rec.quiz.tier, 3); assert.equal(rec.quiz.v, 1);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'kuai-quiz', (new URL(good.url).host + '_qwen3:1.7b').replace(/[^A-Za-z0-9_.-]+/g, '_') + '.json'), 'utf8')).log.length, 5);   // 每题的经过另存一份
+    assert.equal(rec.quiz.tier, 3); assert.equal(rec.quiz.v, 2);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'kuai-quiz', (new URL(good.url).host + '_qwen3:1.7b').replace(/[^A-Za-z0-9_.-]+/g, '_') + '.json'), 'utf8')).log.length, 6);   // 每题的经过另存一份
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
     await say(a, n.sessionId, '你好');
     assert.match(good.reqs.at(-1).messages[0].content, /简单命令/);
-    assert.deepEqual([runOf(dir, n.sessionId).tier, runOf(dir, n.sessionId).tierWhy], [3, '小测验 5/5']);
+    assert.deepEqual([runOf(dir, n.sessionId).tier, runOf(dir, n.sessionId).tierWhy], [3, '小测验 6/6']);
     // 云上的模型不会：填空照抄例子、命令只写不调 → 后面的题不做；原生调用不行，工具题换成代码块的写法再做一遍，还是不行 → L0
     const r2 = (await b.rpc('_kuai/quiz', { model: 'deepseek-v4-pro' })).result;
-    assert.equal(r2.tier, 0); assert.deepEqual(r2.pass, { fill: false, chat: true, one: false, chain: null, fix: null }); assert.equal(r2.block, undefined);
+    assert.equal(r2.tier, 0); assert.deepEqual(r2.pass, { fill: false, chat: true, one: false, chain: null, fix: null, look: null }); assert.equal(r2.block, undefined);
     assert.equal(bad.reqs.length, 4);                                             // 填空、闲聊、单步，再加代码块写法的单步（闲聊过了的不重做）
     assert.ok(bad.reqs[2].tools); assert.match(bad.reqs[2].messages[0].content, /调用 claw 工具/);
     assert.equal(bad.reqs[3].tools, undefined); assert.match(bad.reqs[3].messages[0].content, /回复里写一个 claw 代码块就停下/);
@@ -1134,7 +1144,7 @@ test('kuAi 小测验：5 道题走平时那套提示和调用（假技能、假�
     const n2 = (await b.rpc('session/new', { cwd: os.tmpdir() })).result;
     await say(b, n2.sessionId, '你好');
     assert.doesNotMatch(bad.reqs.at(-1).messages[0].content, /简单命令/);
-    assert.deepEqual([runOf(dir, n2.sessionId).tier, runOf(dir, n2.sessionId).tierWhy], [0, '小测验 1/5']);
+    assert.deepEqual([runOf(dir, n2.sessionId).tier, runOf(dir, n2.sessionId).tierWhy], [0, '小测验 1/6']);
     assert.equal((await b.rpc('_kuai/quiz', {})).error.message, '没说测哪个模型');
     // 手动设的最优先
     await c.rpc('initialize', {});
@@ -1152,10 +1162,12 @@ test('kuAi 小测验：原生调用做不对、写代码块就对的模型——
   const slowM = await smartModel(quizBrain(true), j => /report\.txt/.test(j.messages[1].content) ? 3000 : 0);
   const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_LEARN: learn, KUAI_CMDS: '1', KUAI_MODELS: 'qwen3:8b', KUAI_MODEL: 'qwen3:8b' });
   const b = startAgent({ KUAI_BASE_URL: slowM.url, KUAI_DIR: dir, KUAI_LEARN: learn, KUAI_CMDS: '1', KUAI_MODELS: 'slow:8b', KUAI_MODEL: 'slow:8b', KUAI_QUIZ_MS: '500' });
+  const lazy = await smartModel(quizBrain('lazy'));
+  const c = startAgent({ KUAI_BASE_URL: lazy.url, KUAI_DIR: dir, KUAI_LEARN: learn, KUAI_CMDS: '1', KUAI_MODELS: 'lazy-model', KUAI_MODEL: 'lazy-model' });
   try {
-    await a.rpc('initialize', {}); await b.rpc('initialize', {});
+    await a.rpc('initialize', {}); await b.rpc('initialize', {}); await c.rpc('initialize', {});
     const r = (await a.rpc('_kuai/quiz', { model: 'qwen3:8b' })).result;
-    assert.deepEqual([r.tier, r.block], [3, true]); assert.deepEqual(r.pass, { fill: true, chat: true, one: true, chain: true, fix: true });
+    assert.deepEqual([r.tier, r.block], [3, true]); assert.deepEqual(r.pass, { fill: true, chat: true, one: true, chain: true, fix: true, look: true });
     const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
     await say(a, n.sessionId, '你好');
     assert.equal(m.reqs.at(-1).tools, undefined);                                   // 以后都写代码块，不声明工具
@@ -1163,8 +1175,15 @@ test('kuAi 小测验：原生调用做不对、写代码块就对的模型——
     assert.equal(m.reqs.at(-1).temperature, 0.7);                                   // 调参照旧（和「接口不收调参」是两回事）
     // 最后一题的请求 3 秒才回、这题最多等 0.5 秒 × 4 步：来不及 → 算没过，标成太慢；慢不是写法的事，不换代码块再试
     const r2 = (await b.rpc('_kuai/quiz', { model: 'slow:8b' })).result;
-    assert.deepEqual(r2.pass, { fill: true, chat: true, one: true, chain: true, fix: false }); assert.deepEqual(r2.slow, ['fix']); assert.equal(r2.tier, 2);
-  } finally { a.stop(); b.stop(); m.srv.close(); slowM.srv.close(); }
+    assert.deepEqual(r2.pass, { fill: true, chat: true, one: true, chain: true, fix: false, look: null }); assert.deepEqual(r2.slow, ['fix']); assert.equal(r2.tier, 2);
+    // 搜一次没找到就说没有的模型：最后一题不过，只到 L2（不给只读工具）
+    const r3 = (await c.rpc('_kuai/quiz', { model: 'lazy-model' })).result;
+    assert.deepEqual(r3.pass, { fill: true, chat: true, one: true, chain: true, fix: true, look: false }); assert.equal(r3.tier, 2);
+    const n3 = (await c.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(c, n3.sessionId, '你好');
+    assert.match(lazy.reqs.at(-1).messages[0].content, /简单命令/); assert.doesNotMatch(lazy.reqs.at(-1).messages[0].content, /只读工具/);
+    assert.deepEqual([runOf(dir, n3.sessionId).tier, runOf(dir, n3.sessionId).tierWhy], [2, '小测验 5/6']);
+  } finally { a.stop(); b.stop(); c.stop(); m.srv.close(); slowM.srv.close(); lazy.srv.close(); }
 });
 
 test('kuAi 小测验：本机的模型用过一次后在后台自己测；来了新消息先让路、这一轮完了接着测（做过的题不重做）；测完在下一轮告诉用户', { timeout: 30000 }, async () => {
@@ -1182,11 +1201,11 @@ test('kuAi 小测验：本机的模型用过一次后在后台自己测；来了
     assert.ok(states().includes('stopped'));
     assert.equal(kuaiStats(a.updates).info, undefined);
     await until(() => states().at(-1) === 'done', '接着测完');
-    const quizReqs = m.reqs.filter(j => /点歌|辛苦了|磁盘|客厅的灯|report\.txt/.test(j.messages.filter(x => x.role === 'user')[0].content));
+    const quizReqs = m.reqs.filter(j => /点歌|辛苦了|磁盘|客厅的灯|report\.txt|体检/.test(j.messages.filter(x => x.role === 'user')[0].content));
     assert.equal(quizReqs.filter(j => /点歌/.test(j.messages.at(-1).content)).length, 1);   // 填空那题做过了，接着测时不重做
     assert.equal(JSON.parse(fs.readFileSync(learn, 'utf8'))[new URL(m.url).host + '|qwen3:4b'].quiz.tier, 3);
     await say(a, n.sessionId, '第三句');
-    assert.deepEqual(kuaiStats(a.updates).info, ['qwen3:4b 的上岗小测验做完了：5 题过 5 题，放开到「技能和命令」']);
+    assert.deepEqual(kuaiStats(a.updates).info, ['qwen3:4b 的上岗小测验做完了：6 题过 6 题，放开到「读文件和网页（只读）」']);
     assert.equal(runOf(dir, n.sessionId).tier, 3);
     const before = states().length;
     await say(a, n.sessionId, '第四句');
@@ -1263,7 +1282,7 @@ test('kuAi 模型管理：点「测一下」→ 起那家的进程测，进度�
     await until(() => kuModelNotes().pq?.['qwen3:1.7b']?.quiz, '测完');
     const note = kuModelNotes().pq['qwen3:1.7b'];
     assert.equal(note.run, undefined);
-    assert.deepEqual({ ...note.quiz, at: 0 }, { tier: 3, pass: 5, of: 5, at: 0, each: { fill: true, chat: true, one: true, chain: true, fix: true } });
+    assert.deepEqual({ ...note.quiz, at: 0 }, { tier: 3, pass: 6, of: 6, at: 0, each: { fill: true, chat: true, one: true, chain: true, fix: true, look: true } });
     assert.equal(kuModelNotes().pq.m2, undefined);
   } finally { await kuShutdown(); m.srv.close(); }
 });
@@ -1271,4 +1290,252 @@ test('kuAi 模型管理：点「测一下」→ 起那家的进程测，进度�
 test('kuAi 速度那一行：程序代跑的技能写明是哪个', () => {
   assert.equal(statsLine({ model: 'qwen3:1.7b', ttft: 3.9, outTokens: 11, tps: 14.9, total: 4.75, fill: 'claw-tv' }), 'qwen3:1.7b · 程序代跑 claw-tv · 15 tok/s · 输出 11 tok · 共 4.8 秒');
   assert.equal(statsLine({ model: 'qwen3:1.7b', ttft: null, outTokens: null, tps: null, total: 0.4, fill: 'claw-theme' }), 'qwen3:1.7b · 程序代跑 claw-theme · 共 0.4 秒');
+});
+
+// ---------- 第三期：只读工具（L3）、工具结果按窗口截断、Gemini 原生调用、要确认的技能 ----------
+// 会调工具的假模型（OpenAI 格式）：reply(请求, 第几次) → 文字，或者 { calls: [[命令, …], …], text?, name? }（每个数组是一次 claw 调用）
+function toolModel(reply) {
+  const reqs = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      const j = JSON.parse(b); reqs.push(j);
+      const r = reply(j, reqs.length);
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const w = o => res.write('data: ' + JSON.stringify(o) + '\n\n');
+      if (typeof r === 'string') w({ choices: [{ delta: { content: r }, finish_reason: 'stop' }] });
+      else {
+        if (r.text) w({ choices: [{ delta: { content: r.text } }] });
+        w({ choices: [{ delta: { tool_calls: r.calls.map((c, i) => ({ index: i, id: 'call_' + reqs.length + '_' + i, type: 'function', function: { name: r.name || 'claw', arguments: JSON.stringify({ commands: c }) } })) }, finish_reason: 'tool_calls' }] });
+      }
+      w({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 10 } });
+      res.end('data: [DONE]\n\n');
+    });
+  });
+  return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, reqs, url: 'http://127.0.0.1:' + srv.address().port + '/v1' })));
+}
+const lastMsg = j => j.messages.at(-1).content;
+// 假的主目录，里面一个会话目录 work（笔记、代码、隐藏文件、一个大文件）和目录外的一个文件
+function workHome() {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-home-'))), work = path.join(home, 'work');
+  fs.mkdirSync(path.join(work, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(work, 'notes.md'), '# 备忘\n超时时间定的是 45 秒\n周三开会\n给车买保险\n');
+  fs.writeFileSync(path.join(work, 'src', 'a.js'), 'const TIMEOUT = 45;\n');
+  fs.writeFileSync(path.join(work, '.env'), 'KEY=1\n');
+  fs.writeFileSync(path.join(work, 'big.txt'), Array.from({ length: 1000 }, (_, i) => '第 ' + (i + 1) + ' 行：' + '文'.repeat(40)).join('\n') + '\n');
+  fs.writeFileSync(path.join(home, 'other.txt'), '目录外面的\n');
+  return { home, work };
+}
+
+test('kuAi 只读工具（L3）：云上的模型多了 read / search——写法和命令一样、走同一个 claw 工具；路径的规矩和命令一样；同时调了几次的并成一次；L2 的模型没有这几样', { timeout: 30000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), { home, work } = workHome();
+  const m = await toolModel((j, n) => n === 1 ? { text: '我找一下。', calls: [['search "超时"', 'read notes.md 2-3']] }
+    : n === 2 ? { calls: [['read .env'], ['read ../other.txt', 'read src/a.js']] } : n === 3 ? '超时时间是 45 秒。'
+    : n === 4 ? { calls: [['read notes.md']] } : n === 5 ? '好' : n === 6 ? { calls: [['read notes.md', 'search "超时"']] } : '查不了');
+  const env = { HOME: home, KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_CMDS: '1', KUAI_MODELS: 'deepseek-flash', KUAI_MODEL: 'deepseek-flash' };
+  const asked = [], a = startAgent(env, p => { asked.push(p.toolCall.rawInput.command); return 'allow'; });
+  const b = startAgent({ ...env, KUAI_MODEL_INFO: JSON.stringify({ 'deepseek-flash': { tier: 2 } }) });
+  try {
+    await a.rpc('initialize', {}); await b.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: work })).result;
+    await say(a, n.sessionId, '超时时间定的是多少？');
+    assert.equal(m.reqs.length, 3);
+    const sys = m.reqs[0].messages[0].content;
+    assert.match(sys, /不能操作用户的电脑（下面的简单命令和只读工具除外）/);
+    assert.match(sys, /你还能用 claclaw 的简单命令和只读工具（读文件、搜内容、取网页）：/);
+    assert.match(sys, /\n只读工具（写法和命令一样）：read 文件 \[起行-止行\] 读文件/);
+    assert.match(sys, /一轮最多 8 次/);
+    assert.match(m.reqs[0].tools[0].function.description, /只读工具（read 文件、search、fetch）/);
+    // 第一次：搜到了、读了其中两行
+    assert.equal(lastMsg(m.reqs[1]), '[命令结果]\n$ search "超时"\nnotes.md:2: 超时时间定的是 45 秒\n（共 1 处，在 1 个文件里；搜了 3 个文件）\n\n$ read notes.md 2-3\nnotes.md（第 2–3 行，共 4 行）\n2\t超时时间定的是 45 秒\n3\t周三开会\n（后面还有 1 行，要看就：read notes.md 4-4）\n\n接着回答用户；还要跑命令就再调用 claw 工具。');
+    // 第二次：同时调了两次 claw（一共 3 条）→ 并成一次，回放给模型的也是一次调用；隐藏文件、会话目录外面的不读
+    const [as, tool] = m.reqs[2].messages.slice(-2);
+    assert.deepEqual(as.tool_calls.map(c => JSON.parse(c.function.arguments).commands), [['read .env', 'read ../other.txt', 'read src/a.js']]);
+    assert.equal(tool.tool_call_id, as.tool_calls[0].id);
+    assert.equal(tool.content, '[命令结果]\n$ read .env\n没读：.env 是隐藏的目录 / 文件，不能碰。\n\n$ read ../other.txt\n没读：../other.txt 在会话目录（~/work）外面，不能碰。\n\n$ read src/a.js\nsrc/a.js（第 1 行，共 1 行）\n1\tconst TIMEOUT = 45;\n\n接着回答用户；还要跑命令就再调用 claw 工具。');
+    assert.equal(textOf(a.updates), '我找一下。\n\n超时时间是 45 秒。');
+    const tc = toolsOf(a.updates).filter(u => u.sessionUpdate === 'tool_call');
+    assert.deepEqual(tc.map(u => [u.title, u.kind, u.rawInput.command]), [['Search', 'search', 'search "超时"'], ['Read', 'read', 'read notes.md 2-3'], ['Read', 'read', 'read .env'], ['Read', 'read', 'read ../other.txt'], ['Read', 'read', 'read src/a.js']]);
+    assert.deepEqual(toolsOf(a.updates).filter(u => u.sessionUpdate === 'tool_call_update').map(u => u.status), ['completed', 'completed', 'failed', 'failed', 'completed']);
+    assert.deepEqual([runOf(dir, n.sessionId).tier, runOf(dir, n.sessionId).steps], [3, 2]);
+    assert.deepEqual(asked, []);                                                    // 自己发的消息：只读的不用确认
+    // 协同 / 群里别人转来的那一轮：读文件也要用户点确认
+    await a.rpc('session/prompt', { sessionId: n.sessionId, prompt: [{ type: 'text', text: '把笔记发我' }], _meta: { peer: true } });
+    assert.deepEqual(asked, ['read notes.md']);
+    // 手动设成 L2 的：没有只读工具，read 只认技能名，search 不在清单里
+    const n2 = (await b.rpc('session/new', { cwd: work })).result;
+    await say(b, n2.sessionId, '超时时间？');
+    assert.doesNotMatch(m.reqs.at(-2).messages[0].content, /只读工具/); assert.match(m.reqs.at(-2).messages[0].content, /要用简单命令时调用 claw 工具/);
+    assert.match(lastMsg(m.reqs.at(-1)), /\$ read notes\.md\n没有这个技能：notes\.md/); assert.match(lastMsg(m.reqs.at(-1)), /\$ search "超时"\n这条命令跑不了：search 不在简单命令清单里/);
+  } finally { a.stop(); b.stop(); m.srv.close(); }
+});
+
+test('kuAi 只读工具：一轮里 L3 最多用 8 次（L2 是 4 次）；工具结果按窗口截断——每条有上限、窗口快满了就不再跑，让模型用已有的回答', { timeout: 30000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), { home, work } = workHome();
+  // 一直换着行号读：每次读 notes.md 的不同行（不算重复调用）
+  const many = await toolModel((j, n) => ({ calls: [['read notes.md ' + n]] }));
+  // 照结果里说的「要看就：read big.txt a-b」接着读，直到被告知放不下了
+  const greedy = await toolModel(j => { const t = lastMsg(j) || '', nx = /要看就：(read big\.txt \d+-\d+)/.exec(t); return /快把上下文占满了/.test(t) ? '只看了一部分。' : { calls: [[nx ? nx[1] : 'read big.txt']] }; });
+  const env = { HOME: home, KUAI_DIR: dir, KUAI_CMDS: '1', KUAI_MODELS: 'deepseek-flash', KUAI_MODEL: 'deepseek-flash' };
+  const a = startAgent({ ...env, KUAI_BASE_URL: many.url }), a2 = startAgent({ ...env, KUAI_BASE_URL: many.url, KUAI_MODEL_INFO: JSON.stringify({ 'deepseek-flash': { tier: 2 } }) });
+  const c = startAgent({ ...env, KUAI_BASE_URL: greedy.url, KUAI_MODEL_INFO: JSON.stringify({ 'deepseek-flash': { ctx: 16000 } }) });
+  const big = startAgent({ ...env, KUAI_BASE_URL: greedy.url });
+  try {
+    for (const x of [a, a2, c, big]) await x.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: work })).result;
+    await say(a, n.sessionId, '一直读');
+    assert.equal(many.reqs.length, 9);                                              // 8 次工具 + 第 9 次还在调：不再跑
+    assert.equal(runOf(dir, n.sessionId).steps, 8);
+    assert.match(kuaiStats(a.updates).note, /模型一直在调技能 \/ 命令，没写出回答/);
+    const n2 = (await a2.rpc('session/new', { cwd: work })).result;
+    many.reqs.length = 0;
+    await say(a2, n2.sessionId, '一直读');
+    assert.equal(many.reqs.length, 5); assert.equal(runOf(dir, n2.sessionId).steps, 4);
+    // 窗口 16000：回复留 4096，剩下的装系统提示、历史和工具结果。每条结果最多 4000 token（也不超过剩下的六成），越往后给得越少，最后不再跑
+    const n3 = (await c.rpc('session/new', { cwd: work })).result;
+    await say(c, n3.sessionId, '把 big.txt 读一遍');
+    const results = greedy.reqs.at(-1).messages.filter(x => x.role === 'tool').map(x => x.content);
+    const est = t => { let k = 0; for (const ch of t) k += ch.charCodeAt(0) > 255 ? 1 : 0.29; return Math.ceil(k); };
+    const sizes = results.map(est);
+    assert.ok(sizes[0] > 3000 && sizes[0] <= 4100, '第一条 ' + sizes[0]);
+    assert.ok(sizes.every((s, i) => i === 0 || s <= sizes[i - 1] + 100) && sizes.at(-2) < 1000, '到了上限以后越给越少：' + sizes.join(','));
+    assert.match(results.at(-1), /^\[claclaw\] 这一轮查到的内容已经快把上下文占满了，这次没有再跑。用已经拿到的结果回答用户/);
+    const sysTok = est(greedy.reqs[0].messages[0].content);
+    assert.ok(sysTok + sizes.reduce((x, y) => x + y, 0) < 16000 - 4096, '加起来没超过窗口里留给对话的：' + (sysTok + sizes.reduce((x, y) => x + y, 0)));
+    assert.match(results[0], /^\[命令结果\]\n\$ read big\.txt\nbig\.txt（第 1–\d+ 行，共 1000 行）\n1\t第 1 行：/);
+    assert.match(results[1], /^\[命令结果\]\n\$ read big\.txt \d+-\d+\nbig\.txt（第 \d+–\d+ 行/);                    // 接着上一段读
+    assert.equal(runOf(dir, n3.sessionId).packed, true);
+    assert.equal(textOf(c.updates), '只看了一部分。');
+    // 不知道窗口的（云上、模型库里没填）：一轮里结果的总量按档封顶（L3 是 16000 token），到了也不再跑
+    const n4 = (await big.rpc('session/new', { cwd: work })).result;
+    greedy.reqs.length = 0;
+    await say(big, n4.sessionId, '把 big.txt 读一遍');
+    const all = greedy.reqs.at(-1).messages.filter(x => x.role === 'tool').map(x => est(x.content));
+    assert.ok(all.reduce((x, y) => x + y, 0) <= 16500 && all[0] <= 4100, all.join(','));
+    assert.equal(runOf(dir, n4.sessionId).packed, true);
+  } finally { a.stop(); a2.stop(); c.stop(); big.stop(); many.srv.close(); greedy.srv.close(); }
+});
+
+test('kuAi fetch：用户给过的网址直接取，模型自己写出来的要用户点确认；长网页分段、同一个网页不重取；本机和内网的地址不取', { timeout: 30000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), hits = [];
+  const web = http.createServer((req, res) => {
+    hits.push(req.url);
+    if (req.url === '/doc') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end('<html><head><title>说明书</title><script>x()</script></head><body><article>' + Array.from({ length: 300 }, (_, i) => '<p>第 ' + (i + 1) + ' 段：' + '字'.repeat(40) + '</p>').join('') + '</article></body></html>'); }
+    if (req.url.startsWith('/leak')) { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end('收到'); }
+    res.writeHead(404, { 'content-type': 'text/html' }); res.end('<title>没有这一页</title>');
+  });
+  await new Promise(r => web.listen(0, '127.0.0.1', r));
+  const U = 'http://127.0.0.1:' + web.address().port;
+  const sk = fakeSkills();
+  const m = await toolModel((j, n) => n === 1 ? { calls: [['fetch ' + U + '/doc']] } : n === 2 ? { calls: [['fetch ' + U + '/doc 2', 'fetch ' + U + '/leak?d=KEY%3D1', 'fetch ' + U + '/nope']] } : n === 3 ? '讲的是说明书。'
+    : n === 4 ? { calls: [['claw-echo 先喊', 'fetch ' + U + '/doc', 'claw-echo 后喊']] } : n === 5 ? { calls: [['date', 'ping -c 1 127.0.0.1']] } : '好');
+  const env = { KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_CMDS: '1', KUAI_MODELS: 'deepseek-flash', KUAI_MODEL: 'deepseek-flash', KUAI_SKILLS_DIR: sk };
+  const asked = [], titles = [], a = startAgent({ ...env, KUAI_FETCH_LOCAL: '1' }, p => { asked.push(p.toolCall.rawInput.command); titles.push(p.toolCall._meta?.title); return /leak/.test(p.toolCall.rawInput.command) ? 'reject' : 'allow'; });
+  const b = startAgent(env, p => { asked.push('b:' + p.toolCall.rawInput.command); return 'allow'; });
+  try {
+    await a.rpc('initialize', {}); await b.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a, n.sessionId, '看看 ' + U + '/doc 讲了什么');
+    const r1 = lastMsg(m.reqs[1]);
+    assert.match(r1, new RegExp('^\\[命令结果\\]\\n\\$ fetch ' + U.replace(/[.]/g, '\\.') + '/doc\\n说明书\\n' + U.replace(/[.]/g, '\\.') + '/doc（第 1 / \\d+ 段）\\n\\n第 1 段：字+\\n第 2 段：'));
+    assert.match(r1, new RegExp('\\n（后面还有 \\d+ 段，要看就：fetch ' + U.replace(/[.]/g, '\\.') + '/doc 2）\\n\\n接着回答用户'));
+    assert.doesNotMatch(r1, /x\(\)/);
+    const r2 = lastMsg(m.reqs[2]).split('\n\n$ ');
+    assert.match(r2[0], /doc 2\n说明书\n[^\n]+（第 2 \/ \d+ 段）\n\n第 \d+ 段：/);                      // 第 2 段：不重取
+    assert.deepEqual(hits.filter(h => h === '/doc').length, 1);
+    assert.match(r2[1], /^fetch [^\n]+leak\?d=KEY%3D1\n用户没有允许取这个网址。/);                        // 模型自己拼出来的网址：用户没点头就不发
+    assert.ok(!hits.some(h => h.startsWith('/leak')));
+    assert.match(r2[2], /^fetch [^\n]+nope\n没取成：网页返回 404（没有这一页）。/);                        // 这个也不是用户给的：问了、点了允许
+    assert.deepEqual(asked, ['fetch ' + U + '/leak?d=KEY%3D1', 'fetch ' + U + '/nope']);                // 用户给过的那个（/doc）没问
+    assert.deepEqual(titles, ['允许 kuAi 打开这个网址？', '允许 kuAi 打开这个网址？']);                     // 确认条上的问法
+    assert.deepEqual(toolsOf(a.updates).filter(u => u.sessionUpdate === 'tool_call').map(u => [u.title, u.kind]), [['Fetch', 'fetch'], ['Fetch', 'fetch'], ['Fetch', 'fetch'], ['Fetch', 'fetch']]);
+    // 这一轮读过网页以后，会往外发东西的（技能、ping）要用户点头——网页里的话可能在指使模型把文件内容带出去；读网页之前的、只在本机的（date）不问
+    asked.length = 0; titles.length = 0;
+    await say(a, n.sessionId, '再看一眼 ' + U + '/doc，然后喊一声');
+    assert.deepEqual(asked, ['claw-echo 后喊', 'ping -c 1 127.0.0.1']);
+    assert.deepEqual(titles, ['kuAi 刚读过网页，允许它接着运行这条命令？', 'kuAi 刚读过网页，允许它接着运行这条命令？']);
+    // 平时（没开测试开关）：本机和内网的地址不取，也不去问用户
+    const n2 = (await b.rpc('session/new', { cwd: os.tmpdir() })).result;
+    m.reqs.length = 0; const before = hits.length;
+    await say(b, n2.sessionId, '看看 ' + U + '/doc 讲了什么');
+    assert.match(lastMsg(m.reqs[1]), /\$ fetch [^\n]+\n没取：127\.0\.0\.1 是本机或内网的地址，不取。/);
+    assert.equal(hits.length, before); assert.ok(!asked.some(x => x.startsWith('b:')));
+  } finally { a.stop(); b.stop(); m.srv.close(); web.close(); }
+});
+
+test('kuAi Gemini 格式：原生工具调用——声明 claw 工具（类型名大写），模型的 functionCall 原样发回（带着签名），有几个调用回几个 functionResponse；Gemma 还是写代码块', { timeout: 30000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), reqs = [];
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      reqs.push({ url: req.url, ...JSON.parse(b) });
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const w = (parts, fin) => res.write('data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts }, ...(fin ? { finishReason: fin } : {}) }], usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 5 } }) + '\n\n');
+      const n = reqs.filter(r => r.url === req.url).length;
+      if (/gemma/.test(req.url)) w([{ text: '你好' }], 'STOP');
+      else if (n === 1) { w([{ text: '我看一下。' }]); w([{ functionCall: { name: 'claw', args: { commands: ['echo 一'] } }, thoughtSignature: 'SIG-1' }, { functionCall: { name: 'claw', args: { commands: ['echo 二'] } } }], 'STOP'); }
+      else if (n === 2) w([{ functionCall: { name: 'web_search', args: { q: 'x' } }, thoughtSignature: 'SIG-2' }], 'STOP');
+      else w([{ text: '好了。' }], 'STOP');
+      res.end();
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const a = startAgent({ KUAI_FORMAT: 'gemini', KUAI_BASE_URL: 'http://127.0.0.1:' + srv.address().port + '/v1beta', KUAI_DIR: dir, KUAI_CMDS: '1', KUAI_MODELS: 'gemini-3.6-flash,gemma-4-31b-it', KUAI_MODEL: 'gemini-3.6-flash' });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a, n.sessionId, '喊两声');
+    assert.equal(reqs.length, 3);
+    assert.deepEqual(reqs[0].tools[0].functionDeclarations.map(f => [f.name, f.parameters.type, f.parameters.properties.commands.type, f.parameters.properties.commands.items.type, f.parameters.required]), [['claw', 'OBJECT', 'ARRAY', 'STRING', ['commands']]]);
+    const sys = reqs[0].systemInstruction.parts[0].text;
+    assert.match(sys, /\n\n## 怎么调用\n要用简单命令和只读工具时调用 claw 工具。/);                           // Gemini：Markdown 标题分节
+    // 模型那条原样发回（文字 + 两个 functionCall，签名还在），两个调用各回一个 functionResponse：结果在第一个里
+    const [mo, us] = reqs[1].contents.slice(-2);
+    assert.deepEqual(mo, { role: 'model', parts: [{ text: '我看一下。' }, { functionCall: { name: 'claw', args: { commands: ['echo 一'] } }, thoughtSignature: 'SIG-1' }, { functionCall: { name: 'claw', args: { commands: ['echo 二'] } } }] });
+    assert.equal(us.role, 'user'); assert.deepEqual(us.parts.map(p => p.functionResponse.name), ['claw', 'claw']);
+    assert.equal(us.parts[0].functionResponse.response.output, '<result command="echo 一">\n一\n</result>\n<result command="echo 二">\n二\n</result>\n\n接着回答用户；还要跑命令就再调用 claw 工具。');   // 资料用标签包
+    assert.equal(us.parts[1].functionResponse.response.output, '（结果并在上一条里）');
+    // 调了没有的工具：不跑，按那个名字回一个 functionResponse 说格式不对
+    const [mo2, us2] = reqs[2].contents.slice(-2);
+    assert.equal(mo2.parts[0].thoughtSignature, 'SIG-2');
+    assert.equal(us2.parts[0].functionResponse.name, 'web_search'); assert.match(us2.parts[0].functionResponse.response.output, /^\[claclaw\] 这次调用的格式不对，没有跑/);
+    assert.equal(textOf(a.updates), '我看一下。\n\n好了。');
+    assert.equal(runOf(dir, n.sessionId).style, 'md');
+    assert.deepEqual(runOf(dir, n.sessionId).calls[0].calls, [{ name: 'claw', args: '{"commands":["echo 一"]}' }, { name: 'claw', args: '{"commands":["echo 二"]}' }]);
+    // Gemini 接口上的 Gemma：不声明工具，在回复里写 claw 代码块（Gemma 多步弱，封在 L2：没有只读工具）
+    await a.rpc('session/set_config_option', { sessionId: n.sessionId, configId: 'model', value: 'gemma-4-31b-it' });
+    await say(a, n.sessionId, '你好');
+    assert.equal(reqs.at(-1).tools, undefined);
+    assert.match(reqs.at(-1).systemInstruction.parts[0].text, /回复里写一个 claw 代码块就停下/); assert.doesNotMatch(reqs.at(-1).systemInstruction.parts[0].text, /只读工具|## /);
+  } finally { a.stop(); srv.close(); }
+});
+
+test('kuAi 要确认的技能（skills/kuai.json 的 ask）：跑之前先让用户在网页上点头，没点就不跑；写成正则的只在参数对上时才问；L1 填空也一样', { timeout: 30000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), sk = fakeSkills();
+  const ku = JSON.parse(fs.readFileSync(path.join(sk, 'kuai.json'), 'utf8'));
+  ku['claw-echo'].ask = '^(?!status)';                                              // status 不问，别的都问
+  ku['claw-echo'].askTitle = '允许喊一声？';                                         // 确认条上的问法（不写就是「允许运行这条命令？」）
+  fs.writeFileSync(path.join(sk, 'kuai.json'), JSON.stringify(ku));
+  const m = await toolModel((j, n) => n === 1 ? { calls: [['claw-echo status', 'claw-echo 装上']] } : n === 2 ? { calls: [['claw-echo 再装']] } : '说完了');
+  const small = await smartModel(() => '{"word":"你好","loud":"","use":true}');
+  const asked = []; let ans = 'reject';
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'deepseek-flash', KUAI_MODEL: 'deepseek-flash', KUAI_SKILLS_DIR: sk }, p => { assert.equal(p.toolCall._meta.title, '允许喊一声？'); asked.push(p.toolCall.rawInput.command); return ans; });
+  const b = startAgent({ KUAI_BASE_URL: small.url, KUAI_DIR: dir, KUAI_MODELS: 'qwen3:1.7b', KUAI_MODEL: 'qwen3:1.7b', KUAI_SKILLS_DIR: sk }, p => { asked.push('L1:' + p.toolCall.rawInput.command); return ans; });
+  try {
+    await a.rpc('initialize', {}); await b.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(a, n.sessionId, '装一下');
+    assert.deepEqual(asked, ['claw-echo 装上', 'claw-echo 再装']);                   // status 没问
+    const r1 = lastMsg(m.reqs[1]);
+    assert.match(r1, /\$ claw-echo status\n```tv\n\["status"\]\n```/); assert.match(r1, /\$ claw-echo 装上\n用户没有允许跑这条命令。/);
+    assert.match(lastMsg(m.reqs[2]), /\$ claw-echo 再装\n用户没有允许跑这条命令。/);
+    assert.deepEqual(toolsOf(a.updates).filter(u => u.sessionUpdate === 'tool_call_update').map(u => u.status), ['completed', 'failed', 'failed']);
+    // L1：程序认出技能、填好参数，跑之前照样问；没点头就到此为止（不再问模型），点了才跑
+    const n2 = (await b.rpc('session/new', { cwd: os.tmpdir() })).result;
+    await say(b, n2.sessionId, '喊一声你好');
+    assert.equal(asked.at(-1), 'L1:claw-echo "你好"');
+    assert.equal(textOf(b.updates), '好的，没有喊一声。'); assert.equal(small.reqs.length, 1);
+    assert.deepEqual([runOf(dir, n2.sessionId).fill.ok, runOf(dir, n2.sessionId).fill.denied], [false, true]);
+    ans = 'allow'; b.updates.length = 0;
+    await say(b, n2.sessionId, '喊一声你好');
+    assert.equal(textOf(b.updates), '喊了「你好」：\n\n```tv\n["你好"]\n```');
+  } finally { a.stop(); b.stop(); m.srv.close(); small.srv.close(); }
 });

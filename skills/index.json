@@ -274,5 +274,14 @@
       "iflow",
       "codebuddy"
     ]
+  },
+  {
+    "name": "claw-install",
+    "title": "安装 Agent",
+    "desc": "让 kuAi 请 claclaw 在这台电脑上装 DeepSeek Harness（装之前要用户在网页上点确认）",
+    "group": "通用",
+    "scene": "sessions",
+    "claws": [],
+    "auto": []
   }
 ]
