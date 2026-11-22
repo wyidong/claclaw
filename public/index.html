@@ -230,7 +230,7 @@ window.__sc=(function(){
     <button type="button" data-tab="set"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path class="f" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/><circle cx="12" cy="12" r="3"/></svg><span>设置</span></button>
   </nav>
 
-  <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""></div>
+  <div id="lightbox" role="dialog" aria-label="查看图片"><img alt=""><span class="lb-n" aria-live="polite"></span></div>
   <div id="fview" role="dialog" aria-label="查看文件"><div class="fv-h"><span class="fv-ic"></span><span class="fv-t"><span class="fv-n"></span><span class="fv-z"></span></span><button type="button" class="fv-share fv-mdt" hidden>源码</button><button type="button" class="fv-share">分享 / 保存</button><button type="button" class="fv-x" aria-label="关闭">×</button></div><div class="fv-b"></div></div>
   <div id="diss" role="dialog" aria-label="会话解剖"><div class="fv-h"><button type="button" class="ds-back" aria-label="返回"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="fv-n ds-n">解剖</span><span class="ds-nav"><button type="button" class="fv-share ds-prev">‹ 上一轮</button><button type="button" class="fv-share ds-next">下一轮 ›</button></span><button type="button" class="fv-share ds-re">刷新</button></div><div class="ds-b"></div></div>
   <div id="vplayer" role="dialog" aria-label="播放视频"><video controls playsinline></video><button type="button" aria-label="关闭">×</button></div>
@@ -1810,8 +1810,9 @@ function imgKey(b64){var h=2166136261;for(var i=0;i<b64.length;i+=7){h^=b64.char
 setTimeout(function(){if(window.indexedDB)vidPrune().catch(function(){})},5000);   // 打开页面后清一次过期的
 var lbUrl='';   // 预览里原图的 ObjectURL：换图、关预览、退回压缩图时释放，免得整张原图一直留在内存里
 function lbFree(){if(lbUrl){URL.revokeObjectURL(lbUrl);lbUrl=''}}
-function closeLightbox(){lightbox.classList.remove('on');lbFree()}
+function closeLightbox(){lightbox.classList.remove('on');lbFree();gal=null}
 function showImage(src){
+  gal=null;lbN.textContent='';
   var im=lightbox.querySelector('img');im.onerror=null;im._zs=1;im.removeAttribute('style');im.src=src;lbFree();lightbox.classList.add('on');
   var m=/^data:image\/[\w.+-]+;base64,(.+)$/.exec(src||''),hk2=/^\/api\/himg\?.*[?&]k=([^&]+)/.exec(src||'');   // 历史图片是网址，带着原图的 key
   var key=m?imgKey(m[1]):hk2?decodeURIComponent(hk2[1]):'';if(!key||!window.indexedDB)return;
@@ -1855,7 +1856,33 @@ function pinchZoom(box,dbl){
   ['gesturestart','gesturechange'].forEach(function(n){box.addEventListener(n,function(e){e.preventDefault()})});   // iOS：别让系统再缩整页
 }
 pinchZoom($('#fview .fv-b'),true);pinchZoom(lightbox,false);
-lightbox.addEventListener('click',function(){if(Date.now()-pinchAt<400)return;closeLightbox()});   // 刚捏完松手不算点
+// 聊天里 AI 发来的图片（单张、图组里的每张，标了 .gimg）连成一组：看大图时左右滑 / 方向键切上一张、下一张，顶上显示「3 / 8」
+var gal=null,lbN=lightbox.querySelector('.lb-n');
+function galShow(els,i){
+  var el=els[i];imgView(el.dataset.gs,el.dataset.gf);
+  gal={els:els,i:i};lbN.textContent=els.length>1?(i+1)+' / '+els.length:'';
+}
+function galFrom(el){var els=[].slice.call(feed.querySelectorAll('.gimg')),i=els.indexOf(el);if(i<0){els=[el];i=0}galShow(els,i)}
+function galGo(d){if(!gal)return false;var j=gal.i+d;if(j<0||j>=gal.els.length)return false;galShow(gal.els,j);return true}
+(function(){
+  var sw=null;
+  function im(){return lightbox.querySelector('img')}
+  lightbox.addEventListener('touchstart',function(e){var i=im();sw=gal&&gal.els.length>1&&e.touches.length===1&&(i._zs||1)<=1?{x:e.touches[0].clientX,y:e.touches[0].clientY,dx:0,h:0}:null},{passive:true});
+  lightbox.addEventListener('touchmove',function(e){
+    if(!sw)return;if(e.touches.length!==1){im().style.transform='';sw=null;return}
+    var dx=e.touches[0].clientX-sw.x,dy=e.touches[0].clientY-sw.y;
+    if(!sw.h&&Math.abs(dx)+Math.abs(dy)>10)sw.h=Math.abs(dx)>Math.abs(dy)?1:-1;
+    if(sw.h!==1)return;sw.dx=dx;
+    var edge=(dx>0&&gal.i===0)||(dx<0&&gal.i===gal.els.length-1);   // 到头了：跟手但拉不动多少
+    im().style.transform='translateX('+(edge?dx/4:dx)+'px)';
+  },{passive:true});
+  lightbox.addEventListener('touchend',function(){
+    if(!sw)return;var dx=sw.dx,h=sw.h;sw=null;im().style.transform='';
+    if(h===1){pinchAt=Date.now();if(Math.abs(dx)>50)galGo(dx<0?1:-1)}   // 滑过的松手不算点（不关）
+  });
+})();
+lightbox.addEventListener('click',function(){if(Date.now()-pinchAt<400)return;closeLightbox()});
+document.addEventListener('keydown',function(e){if(gal&&lightbox.classList.contains('on')&&(e.key==='ArrowLeft'||e.key==='ArrowRight')&&galGo(e.key==='ArrowLeft'?-1:1))e.preventDefault()});   // 刚捏完松手不算点
 // 回复里的 Markdown 图片：点开全屏；加载完再滚到底，免得图片撑高后看不到最新内容
 feed.addEventListener('click',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))showImage(e.target.src)});
 feed.addEventListener('load',function(e){if(e.target.classList&&e.target.classList.contains('mdimg'))scrollDown()},true);
@@ -2215,8 +2242,8 @@ function imgView(sm,full,white){
 function imgCard(id,name,size){
   var src='/api/upload/file?thumb=1&id='+encodeURIComponent(id);   // 大图服务端先缩小，省流量
   var f=document.createElement('figure');f.className='sfimg';
-  var im=document.createElement('img');im.src=src;im.alt=name;im.loading='lazy';
-  im.addEventListener('click',function(){imgView(src,upUrl(id))});
+  var im=document.createElement('img');im.src=src;im.alt=name;im.loading='lazy';im.className='gimg';im.dataset.gs=src;im.dataset.gf=upUrl(id);
+  im.addEventListener('click',function(){galFrom(im)});
   im.addEventListener('load',function(){scrollDown()});
   im.addEventListener('error',function(){f.replaceWith(dlCard(id,name,size))});
   sfPic(f,im,id,name,size);
@@ -2287,16 +2314,16 @@ function picStack(fs){
   var pile=document.createElement('div');pile.className='sfs-pile';
   var grid=document.createElement('div');grid.className='sfs-grid'+(fs.length===2||fs.length===4?' c2':'');grid.hidden=true;
   var thumb=function(f){return '/api/upload/file?thumb=1&id='+encodeURIComponent(f[0])};
-  var view=function(f,im){im.addEventListener('click',function(e){e.stopPropagation();imgView(thumb(f),upUrl(f[0]))})};
-  var bad=function(im){im.addEventListener('error',function(){im.classList.add('bad');im.removeAttribute('src')})};
+  var bad=function(im){im.addEventListener('error',function(){im.classList.add('bad');im.classList.remove('gimg');im.removeAttribute('src')})};
   for(var i=Math.min(fs.length,3)-1;i>=0;i--){   // 后面的先放：最上面一张在最后
-    var im=document.createElement('img');im.src=thumb(fs[i]);im.alt=i?'':fs[i][1];im.loading='lazy';im.className=i?'sfs-b sfs-b'+i:'sfs-top';bad(im);
-    if(!i){view(fs[0],im);im.addEventListener('load',function(){scrollDown()})}else im.setAttribute('aria-hidden','true');
+    var im=document.createElement('img');im.src=thumb(fs[i]);im.alt=i?'':fs[i][1];im.loading='lazy';im.className=i?'sfs-b sfs-b'+i:'sfs-top';im.dataset.gs=thumb(fs[i]);im.dataset.gf=upUrl(fs[i][0]);bad(im);
+    if(!i){im.addEventListener('click',function(e){e.stopPropagation();galFrom(grid.querySelector('.gimg')||im)});im.addEventListener('load',function(){scrollDown()})}else im.setAttribute('aria-hidden','true');
     pile.appendChild(im);
   }
   fs.forEach(function(f){
     var t=document.createElement('div');t.className='sfs-t';
-    var im=document.createElement('img');im.alt=f[1];im.loading='lazy';im.dataset.src=thumb(f);bad(im);view(f,im);t.appendChild(im);
+    var im=document.createElement('img');im.alt=f[1];im.loading='lazy';im.dataset.src=thumb(f);im.className='gimg';im.dataset.gs=thumb(f);im.dataset.gf=upUrl(f[0]);bad(im);
+    im.addEventListener('click',function(e){e.stopPropagation();galFrom(im)});t.appendChild(im);
     var b=dlBtn();b.addEventListener('click',function(e){e.stopPropagation();dlFile({id:f[0]},f[1],f[2],b)});t.appendChild(b);
     grid.appendChild(t);
   });
