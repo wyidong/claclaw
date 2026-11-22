@@ -454,8 +454,8 @@ window.__sc=(function(){
       <div class="set-sec">
         <div class="set-h">会话</div>
         <div class="set-card">
-          <label class="set-item"><span class="lb">上下文压缩提示<small>超过就显示压缩按钮，默认 128k</small></span>
-            <span class="set-num"><input id="setCtxK" type="number" inputmode="numeric" min="8" max="2000" step="1" placeholder="128" aria-label="上下文压缩提示（k）">k</span></label>
+          <label class="set-item"><span class="lb">上下文压缩提示<small>超过就显示压缩按钮</small></span>
+            <select id="setCtxK" aria-label="上下文压缩提示"><option value="0">始终</option><option value="32">32k</option><option value="64">64k</option><option value="">128k（默认）</option><option value="256">256k</option></select></label>
           <label class="set-item"><span class="lb">自动压缩上下文<small>回复完超过就自动压缩</small></span>
             <select id="setAutoCompact"><option value="0">从不</option><option value="100">100k</option><option value="150">150k</option><option value="200">200k</option><option value="300">300k</option></select></label>
           <button type="button" class="set-item" id="setEnterSend" hidden><span class="lb">键盘回车键发送<small>开：回车发送；关：回车换行</small></span><span class="sw" aria-hidden="true"></span></button>
@@ -3027,10 +3027,10 @@ function onEvent(m){
 // ---------- 连接 ----------
 
 // 顶部：会话名（加粗）在左，后面是会话 ID 和目录名；没起名字时用目录名当名字
-// 上下文压缩提示：超过设定值（设置里填，单位 k，默认 128）才出现「128k」圆钮，点了压缩；
+// 上下文压缩提示：超过设定值（设置里选：始终 / 32k / 64k / 128k / 256k，默认 128k；始终 = 存 0）才出现「128k」圆钮，点了压缩；
 // 压缩完显示一次压缩后的大小（不知道大小就显示「已压缩」），下一次上下文更新时低于设定值就收起。所有 Claw 都有。
 var ctxAskTimer=null;
-function ctxLimitK(){var v=parseInt(localStorage.getItem('claclaw.ctxWarnK'),10);return v>=8?v:128}
+function ctxLimitK(){var v=parseInt(localStorage.getItem('claclaw.ctxWarnK'),10);return v===0||v>=8?v:128}
 function ctxK(n){return Math.round(n/1000)+'k'}
 function ctxShow(){
   var b=document.getElementById('ctxBtn');if(!b)return;
@@ -3051,14 +3051,15 @@ $('#ctxBtn').addEventListener('click',function(){
   setBusy(true);outboxShow();trySend();
 });
 (function(){
-  var inp=$('#setCtxK');if(!inp)return;
-  var v=localStorage.getItem('claclaw.ctxWarnK');if(v)inp.value=v;
-  inp.addEventListener('input',function(){   // 边输入边存：改完没点别处就杀掉 App 也不丢（不改输入框里的字，免得打字时被清空）
-    var n=parseInt(inp.value,10);try{if(n>=8)localStorage.setItem('claclaw.ctxWarnK',String(n));else localStorage.removeItem('claclaw.ctxWarnK')}catch(_){}
-  });
-  inp.addEventListener('change',function(){
-    var n=parseInt(inp.value,10);
-    try{if(n>=8){localStorage.setItem('claclaw.ctxWarnK',String(n));inp.value=String(n)}else{localStorage.removeItem('claclaw.ctxWarnK');inp.value=''}}catch(_){}
+  var sel=$('#setCtxK');if(!sel)return;
+  function load(){
+    var v=localStorage.getItem('claclaw.ctxWarnK')||'',n=parseInt(v,10);v=n===0||n>=8?(n===128?'':String(n)):'';
+    if(v&&!sel.querySelector('option[value="'+v+'"]')){var o=document.createElement('option');o.value=v;o.textContent=v+'k';sel.insertBefore(o,sel.querySelector('option[value="256"]'))}   // 以前手填的值：留着当一项
+    sel.value=v;
+  }
+  load();sel.addEventListener('focus',load);
+  sel.addEventListener('change',function(){
+    try{if(sel.value)localStorage.setItem('claclaw.ctxWarnK',sel.value);else localStorage.removeItem('claclaw.ctxWarnK')}catch(_){}
     ctxShow();
   });
 })();

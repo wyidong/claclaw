@@ -961,8 +961,6 @@ body:has(#diss.on) #ttsStop,body:has(#cfgDlg[aria-hidden="false"]) #ttsStop{disp
 #setPane .lb small{font-size:12.5px;color:var(--muted)}
 #setPane .set-item select{flex:none;max-width:45%;border:0;background:none;color:var(--muted);font:inherit;font-size:16px;text-align:right;text-align-last:right;-webkit-appearance:none;appearance:none;padding:4px 18px 4px 4px;cursor:pointer;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;background-size:8px 14px}
-#setPane .set-num{flex:none;display:flex;align-items:center;gap:2px;color:var(--muted);font-size:14.5px}
-#setPane .set-num input{width:64px;border:var(--bw) solid var(--line);border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;text-align:left;padding:4px 6px}
 #setPane .chev{flex:none;width:8px;height:14px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2 2l6 6-6 6' fill='none' stroke='%2399a1ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/contain}
 /* ════ 公共 · 朗读 ════ */
 /* 朗读按钮：输入框上方右侧的圆形图标（不压在输入框上；--dockTop = 输入区顶边离屏幕底的距离，脚本随输入区高度更新）。
