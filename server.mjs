@@ -772,6 +772,7 @@ async function handleLocal(req, res, url) {
   for (const [k, v] of localJobs) if (Date.now() - v.at > 30 * 60e3) localJobs.delete(k);
   const q = url.searchParams, wait = Math.max(5, Math.min(Number(q.get('wait')) || 110, 280));
   if (url.pathname === '/api/local/shop/search' && req.method === 'POST') return sendJson(res, 200, await shop.search(await jsonBody(req, 4096, {})));   // claw-shopping 技能
+  if (url.pathname === '/api/local/shop/zz' && req.method === 'POST') return sendJson(res, 200, await shop.zz(await jsonBody(req, 8192, {})));   // 转转：行情、详情、回收估价、问答
   if (url.pathname === '/api/local/install') {   // claw-install 技能（kuAi 用；装之前 kuAi 已经让用户在网页上点过确认）：GET 进度，POST {claw} 开始装——只能装 INSTALLS 里列的
     const state = () => ({ ok: true, state: installState() || { status: 'none' } });
     if (req.method !== 'POST') return sendJson(res, 200, state());

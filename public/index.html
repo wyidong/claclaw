@@ -766,16 +766,17 @@ function mdTv(src){
   }).join('');
   return cards?'<div class="tvg">'+cards+'</div>':mdCode(src);
 }
-// 商品卡片：```shop 代码块，一行一个「平台 | 图片地址 | 标题 | 券后价 | 说明 | 链接」（claw-shopping 技能生成）。图走 /api/shop/img（只代理拼多多图片），点卡片跳平台（拼多多短链会直接拉起 App）
+// 商品卡片：```shop 代码块，一行一个「平台 | 图片地址 | 标题 | 券后价 | 说明 | 链接」（claw-shopping 技能生成）。图走 /api/shop/img（只代理拼多多、转转图片），点卡片跳平台（拼多多短链会直接拉起 App；转转是二手，打开网页详情）
 function mdShop(src){
-  var n=0,cards=src.split('\n').map(function(l){
+  var n=0,pf={},cards=src.split('\n').map(function(l){
     var f=l.split('|').map(function(x){return x.trim()});if(f.length<6||!/^https:\/\/\S+$/.test(f[5]))return '';
-    n++;var img=/^https:\/\/\S+$/.test(f[1])?'<img class="shc-img" src="/api/shop/img?u='+encodeURIComponent(f[1])+'" alt="" loading="lazy" decoding="async">':'';
+    n++;pf[f[0]]=1;var img=/^https:\/\/\S+$/.test(f[1])?'<img class="shc-img" src="/api/shop/img?u='+encodeURIComponent(f[1])+'" alt="" loading="lazy" decoding="async">':'';
     return '<a class="shc" href="'+esc(f[5])+'" target="_blank" rel="noopener noreferrer" title="'+esc(f[2]+' · 去'+f[0]+'看看')+'">'
       +'<span class="shc-p">'+img+'<span class="shc-n">'+n+'</span></span>'
       +'<span class="shc-m"><b>'+esc(f[2])+'</b><span class="shc-pr">¥<em>'+esc(f[3])+'</em></span>'+(f[4]?'<small>'+esc(f[4])+'</small>':'')+'</span></a>';
   }).join('');
-  return cards?'<div class="shg">'+cards+'</div><div class="shg-note">商品链接为推广链接，价格以平台页面为准</div>':mdCode(src);
+  var note=pf['转转']?(pf['拼多多']?'拼多多为推广链接，转转为二手商品；':'转转为二手商品，成色看标题开头；'):'商品链接为推广链接，';
+  return cards?'<div class="shg">'+cards+'</div><div class="shg-note">'+note+'价格以平台页面为准</div>':mdCode(src);
 }
 document.addEventListener('load',function(ev){var t=ev.target;if(t.classList&&t.classList.contains('shc-img'))t.classList.add('ok')},true);
 document.addEventListener('error',function(ev){var t=ev.target;if(t.classList&&t.classList.contains('shc-img'))t.remove()},true);

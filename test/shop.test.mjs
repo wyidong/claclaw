@@ -54,3 +54,53 @@ test('没有本机钥匙时问公开的商品服务，结果缓存；服务报�
     assert.equal(e.ok, false); assert.match(e.error, /冷却/);
   } finally { srv.close(); delete process.env.CLACLAW_SHOP_API; fs.rmSync(DATA, { recursive: true, force: true }); }
 });
+
+test('转转：价格区间、商品条目（图换成 400 宽）、图片域名', async () => {
+  const { zzRange, zzItem } = await import('../src/shop.mjs');
+  assert.equal(zzRange(0, 0), ''); assert.equal(zzRange(0, 5000), '0_5000'); assert.equal(zzRange(3000, 0), '3000_'); assert.equal(zzRange(3000.4, 5000), '3000_5000');
+  const x = zzItem({ infoId: '1', title: '95A 苹果 MacBook', price: '4628', chengSe: '95A', serviceLabelsInfo: ['在仓直发', null], infoImage: 'https://pic1.zhuanstatic.com/a.jpg?w=160', jumpUrl: 'https://zz3.cn/x' });
+  assert.deepEqual([x.platform, x.price, x.cond, x.labels, x.img], ['转转', 4628, '95A', ['在仓直发'], 'https://pic1.zhuanstatic.com/a.jpg?w=400']);
+  assert.ok(shopImgOk('https://pic1.zhuanstatic.com/zhuanzh/a.jpg?w=400'));
+});
+
+test('转转：MCP 先 initialize 再 tools/call search；凭证失效照实说', async () => {
+  const http = await import('node:http'), fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+  const seen = []; let deny = false;
+  const srv = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      if (deny || req.headers.authorization !== 'Bearer T') { res.writeHead(401); return res.end(); }
+      const q = JSON.parse(b); seen.push(q.method + (req.headers['mcp-session-id'] ? '@' + req.headers['mcp-session-id'] : ''));
+      if (!q.id) { res.writeHead(202); return res.end(); }
+      const result = q.method === 'initialize' ? { serverInfo: { name: 'zz' } } : { content: [{ type: 'text', text: JSON.stringify({ items: [
+        { infoId: '1', title: '9A ' + q.params.arguments.keyword, price: '3488', infoImage: 'https://pic1.zhuanstatic.com/a.jpg?w=160', jumpUrl: 'https://zz3.cn/a', priceRange: q.params.arguments.priceRange },
+        { infoId: '2', title: '没链接', price: '1', jumpUrl: '' }] }) }] };
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'mcp-session-id': 'S1' });
+      res.end('event: message\ndata: ' + JSON.stringify({ jsonrpc: '2.0', id: q.id, result }) + '\n\n');
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  process.env.CLACLAW_ZZ_MCP = 'http://127.0.0.1:' + srv.address().port + '/mcp'; process.env.ZZ_MCP_TOKEN = 'T';
+  const { makeShop } = await import('../src/shop.mjs?zz');
+  const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'shop-'));
+  try {
+    const s = makeShop({ DATA });
+    const r = await s.search({ keyword: 'iPhone 15', platform: '转转', max: 4000 });
+    assert.equal(r.ok, true); assert.deepEqual(r.items.map(x => [x.title, x.price, x.url]), [['9A iPhone 15', 3488, 'https://zz3.cn/a']]);
+    assert.deepEqual(seen, ['initialize', 'notifications/initialized@S1', 'tools/call@S1']);
+    deny = true;
+    const e = await s.search({ keyword: 'iPad', platform: '转转' });
+    assert.equal(e.ok, false); assert.match(e.error, /凭证失效/);
+  } finally { srv.close(); delete process.env.CLACLAW_ZZ_MCP; delete process.env.ZZ_MCP_TOKEN; fs.rmSync(DATA, { recursive: true, force: true }); }
+});
+
+test('转转估价结果：有分档只讲分档（分换元）；要确认时列出参数 ID 和选项 ID', async () => {
+  const { zzValuation } = await import('../src/shop.mjs');
+  const a = zzValuation({ priceHit: true, minPrice: '2500', maxPrice: '96000', tiers: [{ desc: '当成色最好', isSingle: false, minPrice: '134500', maxPrice: '137500' }, { desc: '当功能异常/维修', isSingle: true, singlePrice: '3000' }],
+    matchedParams: [{ paramName: '容量', optionName: '128G' }], jumpUrl: 'https://zz3.cn/a' });
+  assert.match(a, /当成色最好：约 1345～1375 元/); assert.match(a, /当功能异常\/维修：约 30 元/); assert.doesNotMatch(a, /25～960/);
+  assert.match(a, /容量 128G/); assert.match(a, /入口：https:\/\/zz3\.cn\/a/);
+  assert.match(zzValuation({ priceHit: true, minPrice: '100000', maxPrice: '120000' }), /约 1000～1200 元/);
+  const b = zzValuation({ priceHit: false, needClarification: true, clarificationOptions: [{ paramId: 'capacityId', paramName: '容量', options: [{ optionId: 1, optionName: '128G' }, { optionId: 2, optionName: '256G' }] }] });
+  assert.match(b, /容量（capacityId）：128G=1、256G=2/); assert.doesNotMatch(b, /回收参考价/);
+  assert.match(zzValuation({ priceHit: false, statusMessage: '暂未命中' }), /暂时估不出价格/);
+});
