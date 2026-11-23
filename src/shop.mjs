@@ -159,7 +159,7 @@ export function makeShop({ DATA, log = () => {} }) {
     const text = await zzCall('search', { keyword, priceOrder: ZZ_SORTS[sort] ?? 0, priceRange: zzRange(min, max) });
     let j; try { j = JSON.parse(text || '{}'); } catch { throw new Error('转转：' + text.slice(0, 200)); }
     for (const g of j.items || []) if (g.infoId && g.jumpUrl) zzRemember(g);
-    const items = (j.items || []).map(zzItem).filter(x => x.title && x.price > 0 && /^https:\/\//.test(x.url));
+    const items = (j.items || []).map(zzItem).filter(x => x.title && x.price > 0 && /^https:\/\//.test(x.url) && x.price >= min && (!max || x.price <= max));   // 转转的价格区间卡得不严，本机再筛
     return resort(items, ZZ_SORTS[sort] === 2 ? 9 : ZZ_SORTS[sort] === 3 ? 10 : 0).slice(0, n);   // 转转的价格排序也不严格，本机再排一次
   }
 

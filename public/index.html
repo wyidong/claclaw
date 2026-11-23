@@ -931,6 +931,16 @@ function mdMovies(items,tiles){
     return tvCard(r[1],r[2],no,MV_COLOR[r[2].site]||'#475569',r[0],r[3]||r[2].site,' mvc');
   }).join('')+'</div>';
 }
+// 代码块按语言画：电视频道（claw-tv）、主题（claw-theme）、商品（claw-shopping）卡片、SVG 图，其余照代码；还没收尾（流式输出中）的照代码显示。列表项里缩进的块也走这里
+function mdFence(cj,lang,done){
+  if(done){
+    if(lang==='tv')return mdTv(cj);
+    if(lang==='theme')return mdTheme(cj);
+    if(lang==='shop')return mdShop(cj);
+    if(lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))return mdSvg(cj);
+  }
+  return mdCode(cj,lang);
+}
 function md(src){
   var L=String(src).replace(/\r\n?/g,'\n').split('\n'),out=[],i=0,m,tiles={};
   while(i<L.length){
@@ -943,11 +953,7 @@ function md(src){
     if((m=l.match(/^\s*(```|~~~)\s*([\w+-]*)/))){            // 代码块
       var fence=m[1],lang=m[2].toLowerCase(),code=[];i++;
       while(i<L.length&&L[i].trim().indexOf(fence)!==0){code.push(L[i]);i++}
-      i++;var cj=code.join('\n');
-      if(lang==='tv'&&i<=L.length){out.push(mdTv(cj));continue}   // 电视频道卡片（claw-tv 技能）
-      if(lang==='theme'&&i<=L.length){out.push(mdTheme(cj));continue}   // 主题卡片（claw-theme 技能）
-      if(lang==='shop'&&i<=L.length){out.push(mdShop(cj));continue}   // 商品卡片（claw-shopping 技能）
-      out.push((lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))&&i<=L.length?mdSvg(cj):mdCode(cj,lang));continue;   // 还没收尾（流式输出中）的照代码显示
+      i++;out.push(mdFence(code.join('\n'),lang,i<=L.length));continue;
     }
     if(SVG_SRC.test(l)){                           // 回复里整段 <svg>…</svg>：到 </svg> 为止画成图；还没收尾的照代码显示
       var se=-1;for(var j2=i;j2<L.length&&j2<i+3000;j2++)if(/<\/svg>\s*$/i.test(L[j2])){se=j2;break}
@@ -984,7 +990,7 @@ function md(src){
         if(items.length&&(fm=L[i].match(/^(\s+)(```|~~~)\s*([\w+-]*)/))){
           var fi=fm[1].length,fc=fm[2],cl=[];i++;
           while(i<L.length&&L[i].trim().indexOf(fc)!==0){cl.push(L[i].slice(0,fi).trim()?L[i]:L[i].slice(fi));i++}
-          i++;items[items.length-1].text+='\n\u0001'+(blocks.push(mdCode(cl.join('\n'),fm[3]))-1);continue;
+          i++;items[items.length-1].text+='\n\u0001'+(blocks.push(mdFence(cl.join('\n'),fm[3].toLowerCase(),i<=L.length))-1);continue;
         }
         if(L[i].trim()&&/^\s{2,}/.test(L[i])&&items.length){items[items.length-1].text+='\n'+L[i].trim();i++;continue}
         break;
