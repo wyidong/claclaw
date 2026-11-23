@@ -61,7 +61,7 @@ test('kuAi search：在目录里逐个文件搜，给出 文件:行号；隐藏�
   w('a.js', 'const TIMEOUT = 45;\nlet x = (1);\n'); w('src/b.js', '// timeout 在 a.js 里\n'); w('notes.md', '超时时间 45 秒\n');
   w('.env', 'TIMEOUT=1\n'); w('.git/config', 'timeout\n'); w('node_modules/m/i.js', 'timeout\n'); w('secret/token.txt', 'timeout\n'); w('data/x.txt', 'timeout\n'); w('pw/password.txt', 'timeout\n');
   fs.writeFileSync(path.join(d, 'bin.dat'), Buffer.concat([Buffer.from([0, 1]), Buffer.from('timeout')]));
-  const show = p => path.relative(d, p), base = { root: d, noGo: [path.join(d, 'data')], secret: '(token|passw)', show, env: { PATH: process.env.PATH } };
+  const show = p => path.relative(d, p).split(path.sep).join('/'), base = { root: d, noGo: [path.join(d, 'data')], secret: '(token|passw)', show, env: { PATH: process.env.PATH } };
   const r = await searchFiles({ ...base, pattern: 'timeout' });
   assert.equal(r.text, 'a.js:1: const TIMEOUT = 45;\nsrc/b.js:1: // timeout 在 a.js 里\n（共 2 处，在 2 个文件里；搜了 3 个文件）');   // 全小写：不分大小写；先这一层再往下
   assert.equal((await searchFiles({ ...base, pattern: 'TIMEOUT' })).text.split('\n')[0], 'a.js:1: const TIMEOUT = 45;');
@@ -77,7 +77,7 @@ test('kuAi search：在目录里逐个文件搜，给出 文件:行号；隐藏�
   // 会话开在小目录里（jail）：从上级目录往下搜，主目录下只搜会话目录里的；主目录外面的照常
   const j = tmp(), jw = (p, t) => { fs.mkdirSync(path.dirname(path.join(j, p)), { recursive: true }); fs.writeFileSync(path.join(j, p), t); };
   jw('home/work/a.txt', 'needle 1\n'); jw('home/other.txt', 'needle 2\n'); jw('home/docs/b.txt', 'needle 3\n'); jw('sys.txt', 'needle 4\n');
-  const jr = await searchFiles({ pattern: 'needle', root: j, jail: { home: path.join(j, 'home'), keep: path.join(j, 'home', 'work') }, show: p => path.relative(j, p), env: { PATH: process.env.PATH } });
+  const jr = await searchFiles({ pattern: 'needle', root: j, jail: { home: path.join(j, 'home'), keep: path.join(j, 'home', 'work') }, show: p => path.relative(j, p).split(path.sep).join('/'), env: { PATH: process.env.PATH } });
   assert.equal(jr.text, 'sys.txt:1: needle 4\nhome/work/a.txt:1: needle 1\n（共 2 处，在 2 个文件里；搜了 2 个文件）');
   // 太多：只给前 60 处
   w('many.txt', Array.from({ length: 200 }, (_, i) => 'hit ' + i).join('\n'));

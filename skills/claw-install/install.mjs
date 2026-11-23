@@ -12,7 +12,10 @@ const HOME_DIR = process.env.CLACLAW_HOME || path.join(os.homedir(), '.claclaw')
 const NAMES = { deepseek: /^(deepseek|deepseekharness|dsh|ds|深度求索)$/ };
 const KEY_TIP = '装好后还要填 API Key 才能用：到 Claw 页，在 DeepSeek 那张卡片上点「填 key」，填 DeepSeek 开放平台（platform.deepseek.com）的 API Key。';
 
-function die(msg, code = 1) { process.stdout.write(msg.replace(/\n?$/, '\n')); process.exit(code); }
+// 说完就结束。不直接 process.exit：Windows 上 fetch 刚用过的连接还在关，这时 exit 会让 node 崩掉（退出码 0xC0000409），
+// 所以先抛出来、在最外面设好退出码，让进程自己退
+class Done { constructor(msg, code) { this.msg = msg; this.code = code; } }
+function die(msg, code = 1) { throw new Done(msg, code); }
 const norm = s => String(s || '').toLowerCase().replace(/[\s·・.,，、:：「」"'（）()_-]/g, '');
 async function call(body) {
   let j;
@@ -22,7 +25,7 @@ async function call(body) {
     const o = await r.json().catch(() => null);
     if (!o) die('claclaw 没认这个命令（' + r.status + '），可能要重启 claclaw 才能用安装');
     return o;
-  } catch (e) { die('claclaw 没有响应（' + (e.cause?.code || e.message) + '），请先启动 claclaw'); }
+  } catch (e) { if (e instanceof Done) throw e; die('claclaw 没有响应（' + (e.cause?.code || e.message) + '），请先启动 claclaw'); }
 }
 // 进度 → 一句话
 function say(st, label = 'DeepSeek Harness') {
@@ -33,17 +36,24 @@ function say(st, label = 'DeepSeek Harness') {
   return '现在没有在装东西。';
 }
 
-const arg = norm(process.argv[2]);
-if (!arg || arg === 'status' || arg === 'now') {
-  const o = await call();
-  if (!o.ok) die(o.error || '查不到安装进度');
+async function main() {
+  const arg = norm(process.argv[2]);
+  if (!arg || arg === 'status' || arg === 'now') {
+    const o = await call();
+    if (!o.ok) die(o.error || '查不到安装进度');
+    die(say(o.state || {}), o.state?.status === 'fail' ? 1 : 0);
+  }
+  const claw = Object.keys(NAMES).find(k => NAMES[k].test(arg));
+  if (!claw) die('这里只能装：DeepSeek Harness（claw-install deepseek）。别的软件装不了，给出命令让用户自己在电脑的终端里装。', 2);
+  let o = await call({ claw });
+  if (!o.ok) die('没装：' + (o.error || '原因不明'));
+  if (o.installed) die((o.label || 'DeepSeek Harness') + ' 已经装好了，不用再装。还没填 API Key 的话：到 Claw 页，在 DeepSeek 那张卡片上点「填 key」。', 0);
+  // 等一小会儿：马上就失败的（没有 npm、没有权限）当场说；还在装就报进度，不一直等到装完（要几分钟）
+  for (let i = 0; i < 8 && o.state?.status === 'running'; i++) { await new Promise(r => setTimeout(r, 2500)); o = await call(); if (!o.ok) break; }
   die(say(o.state || {}), o.state?.status === 'fail' ? 1 : 0);
 }
-const claw = Object.keys(NAMES).find(k => NAMES[k].test(arg));
-if (!claw) die('这里只能装：DeepSeek Harness（claw-install deepseek）。别的软件装不了，给出命令让用户自己在电脑的终端里装。', 2);
-let o = await call({ claw });
-if (!o.ok) die('没装：' + (o.error || '原因不明'));
-if (o.installed) die((o.label || 'DeepSeek Harness') + ' 已经装好了，不用再装。还没填 API Key 的话：到 Claw 页，在 DeepSeek 那张卡片上点「填 key」。', 0);
-// 等一小会儿：马上就失败的（没有 npm、没有权限）当场说；还在装就报进度，不一直等到装完（要几分钟）
-for (let i = 0; i < 8 && o.state?.status === 'running'; i++) { await new Promise(r => setTimeout(r, 2500)); o = await call(); if (!o.ok) break; }
-die(say(o.state || {}), o.state?.status === 'fail' ? 1 : 0);
+try { await main(); } catch (e) {
+  if (!(e instanceof Done)) throw e;
+  process.stdout.write(e.msg.replace(/\n?$/, '\n'));
+  process.exitCode = e.code;
+}
