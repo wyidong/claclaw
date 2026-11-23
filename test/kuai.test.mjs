@@ -858,6 +858,23 @@ test('kuAi 简单命令：会话开在小目录里——命令在那个目录里
   } finally { a.stop(); m.srv.close(); }
 });
 
+// Windows：PATH 里有相对目录（.）时，按名字起程序会跑到会话目录里放的同名 .exe。只认 PATH 里绝对路径的目录、用完整路径起
+test('kuAi 简单命令（Windows）：会话目录里放的 ipconfig.exe 不跑（PATH 里有 . 也一样），跑 PATH 里的', { timeout: 20000, skip: !WIN }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), h = fakeHome(), proj = path.join(h, 'proj');
+  // 冒名的 ipconfig.exe（其实是 hostname）；Git 的 usr\bin 里没有 ipconfig，旧的做法会顺着 PATH 里的 . 找到它
+  fs.mkdirSync(proj); fs.copyFileSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'hostname.exe'), path.join(proj, 'ipconfig.exe'));
+  const m = await fakeModel(['```claw\nipconfig\n```', '好。']);
+  const a = startAgent({ KUAI_BASE_URL: m.url, KUAI_DIR: dir, KUAI_MODELS: 'gemma-4-31b-it', KUAI_MODEL: 'gemma-4-31b-it', KUAI_CMDS: '1', HOME: h, PATH: '.;' + process.env.PATH });
+  try {
+    await a.rpc('initialize', {});
+    const n = (await a.rpc('session/new', { cwd: proj })).result;
+    await say(a, n.sessionId, '看看网络');
+    const res = m.reqs[1].messages.at(-1).content;
+    assert.match(res, /\$ ipconfig\n[\s\S]*Windows IP/);
+    assert.doesNotMatch(res, new RegExp('\\$ ipconfig\\n' + os.hostname(), 'i'));
+  } finally { a.stop(); m.srv.close(); }
+});
+
 test('kuAi 简单命令：选项里连写的路径（-f.env、-of.env、--file=）、换大小写（~/LIBRARY）照样拦；find / du 不给隐藏目录里的路径，ls 不能 -aR', { timeout: 20000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kuai-sess-')), h = fakeHome();
   fs.mkdirSync(path.join(h, 'www')); fs.writeFileSync(path.join(h, 'www', 'k'), 'x');

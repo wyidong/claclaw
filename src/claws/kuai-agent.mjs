@@ -803,17 +803,29 @@ function gitUsrBin() {
   for (const r of roots) { const u = path.join(r, 'usr', 'bin'); if (fs.existsSync(path.join(u, 'ls.exe'))) return u; }
   return '';
 }
-// 这台电脑上有没有这个命令（Windows 按 PATH 找 .exe / .com；别的系统不查，照原样当有）
-const HAS = new Map();
-function hasCmd(name) {
-  if (!WIN) return true;
-  if (!HAS.has(name)) HAS.set(name, (cmdEnv().PATH || '').split(path.delimiter).some(d => d && ['.exe', '.com'].some(x => fs.existsSync(path.join(d, name + x)))));
-  return HAS.get(name);
+// Windows：命令的完整路径，只按 cmdEnv 的 PATH 找 .exe / .com（只认绝对路径的目录）。
+// 不能把名字直接交给 spawn：Windows 起程序会先在工作目录（会话目录）里找，那里放个 ls.exe 跑的就是它。别的系统返回名字本身
+const WHERE = new Map();
+function cmdPath(name) {
+  if (!WIN) return name;
+  if (!WHERE.has(name)) {
+    let hit = '';
+    for (const d of (cmdEnv().PATH || '').split(path.delimiter)) {
+      if (!d || !path.isAbsolute(d)) continue;
+      hit = ['.exe', '.com'].map(x => path.join(d, name + x)).find(f => { try { return fs.statSync(f).isFile(); } catch { return false; } }) || '';
+      if (hit) break;
+    }
+    WHERE.set(name, hit);
+  }
+  return WHERE.get(name);
 }
+const hasCmd = name => !!cmdPath(name);   // 这台电脑上有没有这个命令（别的系统不查，照原样当有）
 function runCmd(argv, signal, wd) {
   return new Promise(res => {
     let out = '', note = '', done = false;
-    const p = spawn(argv[0], argv.slice(1), { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'], env: cmdEnv() });
+    const exe = cmdPath(argv[0]);
+    if (!exe) { res({ code: -1, out: '这台电脑上没有 ' + argv[0] + ' 命令', note: '' }); return; }
+    const p = spawn(exe, argv.slice(1), { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'], env: cmdEnv() });
     const kill = () => { try { p.kill('SIGKILL'); } catch {} };
     const fin = code => { if (done) return; done = true; clearTimeout(to); signal?.removeEventListener?.('abort', kill); res({ code, out, note }); };
     const to = setTimeout(() => { note = '超过 ' + CMD_MS / 1000 + ' 秒，停掉了'; kill(); }, CMD_MS);
