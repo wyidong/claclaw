@@ -117,7 +117,7 @@ window.__sc=(function(){
   if(ss.getItem('claclaw.snap')){var h=document.documentElement;h.classList.add('snap');setTimeout(function(){h.classList.remove('snap')},2000)}   // 有刷新前的画面：页面骨架解析完、画面放回去之前先不显示（不先闪一下空页）
   var rt=ss.getItem('claclaw.reloadTo')||'';   // 刷新前在哪一页（见主脚本 railReload）：直接画那一页
   if(rt){app.className={set:'m-list set-on',host:'m-list host-on',claw:'m-list claw-on',recent:'m-list',chats:'m-list',chat:''}[rt]||'';return}
-  if(onClaw||!/^(claude|openclaw|deepseek|opencode|kimi|qwen|codex|glm|kuai|iflow|minimax|codebuddy|qoder|copilot)$/.test(claw||''))app.className='m-list claw-on';
+  if(onClaw||!/^(claude|openclaw|deepseek|opencode|kimi|qwen|codex|glm|kuai|iflow|minimax|codebuddy|qoder|copilot|gemini)$/.test(claw||''))app.className='m-list claw-on';
   else if(view!=='chat'||!sess)app.className='m-list';
 }catch(e){}})();
 </script>
@@ -144,6 +144,7 @@ window.__sc=(function(){
     <button type="button" class="rclaw" data-claw="codebuddy" aria-label="CodeBuddy Code" title="CodeBuddy Code"><img width="26" height="26" src="https://codebuddy-1328495429.cos.accelerate.myqcloud.com/web/ide/logo.svg" alt=""></button>
     <button type="button" class="rclaw" data-claw="qoder" aria-label="Qoder CLI" title="Qoder CLI"><img width="26" height="26" src="https://img.alicdn.com/imgextra/i4/O1CN01QkSxiCocd3D0prc8_!!6000000008124-2-tps-412-412.png" alt="" class="tile"></button>
     <button type="button" class="rclaw" data-claw="copilot" aria-label="Copilot CLI" title="Copilot CLI"><svg class="cp-mark" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.922 16.992c-.861 1.495-5.859 5.023-11.922 5.023-6.063 0-11.061-3.528-11.922-5.023A.641.641 0 0 1 0 16.736v-2.869a.841.841 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.195 10.195 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952 1.399-1.136 3.392-2.093 6.122-2.093 2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.832.832 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256ZM12.172 11h-.344a4.323 4.323 0 0 1-.355.508C10.703 12.455 9.555 13 7.965 13c-1.725 0-2.989-.359-3.782-1.259a2.005 2.005 0 0 1-.085-.104L4 11.741v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.323 4.323 0 0 1-.355-.508h-.016.016Zm.641-2.935c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/><path d="M14.5 14.25a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1Zm-5 0a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0v-2a1 1 0 0 1 1-1Z"/></svg></button>
+    <button type="button" class="rclaw" data-claw="gemini" aria-label="Gemini CLI" title="Gemini CLI"><svg class="gm-mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4F7CF4" d="M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5-.5-5.6-4.9-10-10.5-10.5C7.1 11.5 11.5 7.1 12 1.5Z"/></svg></button>
     </div>
     <span class="rsep"></span>
     <button type="button" id="railClaw" aria-label="Claw" title="Claw（切换 Claw、模型管理）"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3.25" y="3.25" width="7.21" height="7.21" rx="2.06"/><rect x="13.54" y="3.25" width="7.21" height="7.21" rx="2.06"/><rect x="3.25" y="13.54" width="7.21" height="7.21" rx="2.06"/><rect x="13.54" y="13.54" width="7.21" height="7.21" rx="2.06"/></svg></button>
@@ -339,7 +340,7 @@ window.__sc=(function(){
         </button>
         <!-- Claw 列表：按出品方分组（美国 / 中国 / 开源），每行两个；跟整页一起滚，背景里的「更新客户端」圈被盖住时滚到底就露出来 -->
         <div id="clawList">
-          <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、Copilot CLI 中任意一个后再来。</div>
+          <div class="claw-none" hidden>这台电脑上没有检测到可接管的 Claw。<br>装好 Claude Code、OpenClaw、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、Copilot CLI、Gemini CLI 中任意一个后再来。</div>
           <div class="claw-g"><div class="claw-h">美国 Agent</div><div class="claw-grid">
             <button type="button" class="claw-card" data-claw="claude">
               <span class="claw-tx"><b>Claude Code</b><small>Anthropic</small></span>
@@ -355,6 +356,11 @@ window.__sc=(function(){
               <span class="claw-tx"><b>Copilot CLI</b><small>GitHub</small></span>
               <span class="claw-st"></span>
               <span class="claw-ds">打开终端里开的 Copilot CLI 会话列表</span>
+            </button>
+            <button type="button" class="claw-card" data-claw="gemini">
+              <span class="claw-tx"><b>Gemini CLI</b><small>Google</small></span>
+              <span class="claw-st"></span>
+              <span class="claw-ds">打开终端里开的 Gemini CLI 会话列表</span>
             </button>
           </div></div>
           <div class="claw-g"><div class="claw-h">中国 Agent</div><div class="claw-grid">
@@ -543,6 +549,7 @@ var CLAW_T=[
   {id:'codebuddy',p:'cb',name:'CodeBuddy',long:'CodeBuddy Code',strip:/^cb:/,acp:true},
   {id:'qoder',p:'qd',name:'Qoder',long:'Qoder CLI',strip:/^qd:/,acp:true},
   {id:'copilot',p:'cp',name:'Copilot',long:'Copilot CLI',strip:/^cp:/,acp:true},
+  {id:'gemini',p:'gm',name:'Gemini',long:'Gemini CLI',strip:/^gm:/,acp:true},
   {id:'group',p:'gp',name:'群聊',long:'群聊',strip:/^gp:/}
 ];
 var NOT_CLAUDE=new RegExp('^('+CLAW_T.map(function(c){return c.p}).join('|')+'):');
@@ -4504,7 +4511,7 @@ function peerAddHtml(c){
 // 协同会话：上面「已加入」（按 Claw 分组，一眼看出开放了哪些 Claw 的会话，点「移出」马上生效）；
 // 下面「添加会话」：先选 Claw，再搜 / 按目录勾选，勾上马上加入。不用再点保存
 var peerPoolClaw='',peerPoolQ='';
-var CLAW_ORDER=['claude','codex','copilot','deepseek','kimi','qwen','glm','kuai','iflow','minimax','codebuddy','qoder','opencode','openclaw'];
+var CLAW_ORDER=['claude','codex','copilot','gemini','deepseek','kimi','qwen','glm','kuai','iflow','minimax','codebuddy','qoder','opencode','openclaw'];
 // Claw 的图标：和左边栏用同一份（左边栏的按钮里就是图标）
 var GROUP_SVG='<svg class="gp-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 13.7c.5-.1 1-.2 1.5-.2 2.8 0 5 1.9 5 4.8"/></svg>';
 var COLLAB_SVG='<svg viewBox="0 0 64 48" fill="currentColor" aria-label="协同"><circle cx="14" cy="14" r="7"/><path d="M2 37V32C2 26.5 7.5 23 14 23S26 26.5 26 32V37Z"/><circle cx="50" cy="24" r="7"/><path d="M38 47V42C38 36.5 43.5 33 50 33S62 36.5 62 42V47Z"/><path d="M30 7L37 1V4.5H50V9.5H37V13Z"/><rect x="23" y="11" width="11" height="3" rx="1.5"/><rect x="27" y="19" width="13" height="3" rx="1.5" fill-opacity=".5"/><path d="M41 30L34 24.5V27.5H27V32.5H34V35.5Z"/></svg>';
@@ -4719,7 +4726,7 @@ function applyClaws(list){
     if(c.supported&&!down&&lg&&lg.need)card.querySelector('.claw-st').textContent=lg.can?'未登录':'未登录（要在电脑上登录）';
     if(c.supported&&!down&&lg&&lg.can){
       if(!lb)lb=cardBtn(card,'claw-login',function(){openLogin(c.id)});
-      lb.textContent=lg.ctok?'长期令牌':lg.loggedIn===true?'换账号':lg.key?'填 key':'登录';lb.hidden=false;   // Claude：这里进的是长期令牌（它不在 claclaw 里登录）
+      lb.textContent=lg.ctok?'长期令牌':lg.loggedIn===true?'换账号':lg.key&&!lg.google?'填 key':'登录';lb.hidden=false;   // Claude：这里进的是长期令牌（它不在 claclaw 里登录）
     }else if(lb)lb.hidden=true;
     if((!c.supported||down)&&clawSel===c.id)clawSel=null;
     if(c.installed&&c.supported&&!down)ok.push(c.id);
@@ -4747,17 +4754,28 @@ function openLogin(claw){
   var p=pane('loginPane',closeLogin);
   p.innerHTML='<div class="lg-card"><div class="lg-hd"><b>'+esc((lg.loggedIn===true?'重新登录 ':'登录 ')+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
     +(lg.hint?'<p class="lg-hint">'+esc(lg.hint)+'</p>':'')
+    +'<div class="lg-pick">'
+    // 两种都有的（Gemini）：Google 账号（电脑上起登录命令）/ 模型库里已有的 key / 新填一个 key
+    +(lg.google?'<div class="lg-sec"><div class="lg-lb">用 Google 账号</div><div class="lg-key"><button type="button" class="lg-btn lg-google">用 Google 账号登录</button></div></div>':'')
+    +(lg.google&&lg.keys&&lg.keys.length?'<div class="lg-sec"><div class="lg-lb">用模型库里的 key</div>'+lg.keys.map(function(k){return '<div class="lg-key"><button type="button" class="lg-btn ghost lg-lib" data-id="'+esc(k.id)+'">'+esc(k.label+'（…'+k.last4+'）')+(k.on?' · '+esc('正在用'):'')+'</button></div>'}).join('')+'</div>':'')
+    +(lg.google&&lg.key?'<div class="lg-lb">'+esc('或者填一个新的 API key')+'</div>':'')
     +(lg.keyUrl?'<div class="lg-key"><a class="lg-btn ghost" href="'+esc(lg.keyUrl)+'" target="_blank" rel="noopener">打开平台网页拿 key</a></div>':'')
     +(lg.key?'<div class="lg-key"><input type="password" class="lg-in" placeholder="'+esc(lg.keyLabel||'API key')+'" autocomplete="off"><button type="button" class="lg-btn lg-start">开始</button></div>':'')
-    +'<div class="lg-body"><div class="lg-st">'+(lg.key?'先填上 key':'正在启动登录命令…')+'</div></div>'
+    +'</div>'
+    +'<div class="lg-body"><div class="lg-st">'+(lg.google?'选一种登录方式':lg.key?'先填上 key':'正在启动登录命令…')+'</div></div>'
     +'<div class="lg-ft"><button type="button" class="lg-btn ghost lg-cancel">取消</button></div></div>';
   p.classList.add('on');
   p.querySelector('.lg-x').addEventListener('click',closeLogin);
   p.querySelector('.lg-cancel').addEventListener('click',function(){if(this.textContent==='取消')wsSend({t:'login.cancel',claw:claw});closeLogin()});
+  var pick=p.querySelector('.lg-pick'),start=function(m){pick.hidden=true;p.querySelector('.lg-st').textContent='正在开始…';wsSend(Object.assign({t:'login.start',claw:claw},m))};
+  if(lg.google){
+    p.querySelector('.lg-google').addEventListener('click',function(){start({how:'google'})});
+    p.querySelectorAll('.lg-lib').forEach(function(b){b.addEventListener('click',function(){start({lib:b.dataset.id})})});
+  }
   if(lg.key){
-    var inp=p.querySelector('.lg-in'),go=function(){var v=inp.value.trim();if(!v)return;p.querySelector('.lg-key').hidden=true;wsSend({t:'login.start',claw:claw,key:v})};
-    p.querySelector('.lg-start').addEventListener('click',go);inp.addEventListener('keydown',function(e){if(e.key==='Enter')go()});inp.focus();
-  }else wsSend({t:'login.start',claw:claw});
+    var inp=p.querySelector('.lg-in'),go=function(){var v=inp.value.trim();if(v)start({key:v})};
+    p.querySelector('.lg-start').addEventListener('click',go);inp.addEventListener('keydown',function(e){if(e.key==='Enter')go()});if(!lg.google)inp.focus();
+  }else if(!lg.google)wsSend({t:'login.start',claw:claw});
 }
 function closeLogin(){var p=$('#loginPane');if(p)p.classList.remove('on');loginClaw=null}
 function loginEvent(m){
@@ -4819,7 +4837,7 @@ function openInstall(claw){
   var p=pane('loginPane',closeLogin);
   loginClaw=null;
   p.innerHTML='<div class="lg-card" data-inst="'+esc(claw)+'"><div class="lg-hd"><b>'+esc('安装 '+nm)+'</b><button type="button" class="lg-x" aria-label="关闭">✕</button></div>'
-    +'<p class="lg-hint">在本机安装 '+esc(nm)+'，通常 1–5 分钟（看网速）；装好填 API Key 即可用。</p>'
+    +'<p class="lg-hint">在本机安装 '+esc(nm)+'，通常 1–5 分钟（看网速）；'+esc(claw==='gemini'?'装好登录 Google 账号或填 API key 即可用。':'装好填 API Key 即可用。')+'</p>'
     +'<div class="lg-body"><div class="lg-st">正在开始…</div></div>'
     +'<div class="lg-ft"><button type="button" class="lg-btn ghost lg-cancel">关闭</button></div></div>';
   p.classList.add('on');
@@ -4829,14 +4847,14 @@ function openInstall(claw){
     instCard(claw,j.status==='running');
     var vis=p.classList.contains('on')&&p.querySelector('.lg-card[data-inst="'+claw+'"]');   // 窗口还开着、没换成别的（登录窗口共用这个面板）
     if(j.status!=='running'){clearInterval(instTimer);instTimer=null}
-    if(j.status==='ok'&&!vis){toast(nm+' 装好了：点它的卡片填 API key');getJson('/api/claws').then(applyClaws).catch(function(){})}
+    if(j.status==='ok'&&!vis){toast(nm+' 装好了：点它的卡片'+(claw==='gemini'?'登录':'填 API key'));getJson('/api/claws').then(applyClaws).catch(function(){})}
     if(!vis)return;
     var b=p.querySelector('.lg-body');
     if(j.error&&j.status!=='fail'){b.innerHTML='<div class="lg-st bad">✗ '+esc(j.error)+'</div>';return}
     if(j.status==='ok'){
-      b.innerHTML='<div class="lg-st ok">✓ 安装完成</div><div class="lg-key"><button type="button" class="lg-btn lg-next">下一步：填 API key</button></div>';
+      b.innerHTML='<div class="lg-st ok">✓ 安装完成</div><div class="lg-key"><button type="button" class="lg-btn lg-next">'+esc(claw==='gemini'?'下一步：登录':'下一步：填 API key')+'</button></div>';
       b.querySelector('.lg-next').addEventListener('click',function(){
-        getJson('/api/claws').then(function(list){applyClaws(list);var i=clawInfo[claw];if(i&&i.login&&i.login.key)openLogin(claw);else{closeLogin();pickClaw(claw)}}).catch(function(e){toast(e.message)});
+        getJson('/api/claws').then(function(list){applyClaws(list);var i=clawInfo[claw];if(i&&i.login&&(i.login.key||i.login.google))openLogin(claw);else{closeLogin();pickClaw(claw)}}).catch(function(e){toast(e.message)});
       });
       return;
     }
@@ -4845,7 +4863,7 @@ function openInstall(claw){
     var pc=Math.max(0,Math.min(100,j.pct||0)),el=Math.round((j.elapsed||0)/1000),left=pc>=10&&pc<100?el*(100-pc)/pc:0;
     var mmss=function(t){return Math.floor(t/60)+':'+('0'+t%60).slice(-2)};
     var eta=pc<10?'通常 1–5 分钟':left<60?'预计不到 1 分钟':'预计还要约 '+Math.ceil(left/60)+' 分钟';
-    if(!b.querySelector('.inst-bar'))b.innerHTML='<div class="inst-bar"><i></i></div><div class="inst-meta"><span class="inst-pc"></span><span class="inst-eta"></span></div><div class="lg-st inst-st"></div><div class="inst-note">可以关掉这个窗口，安装在电脑上继续；再点 DeepSeek 卡片能回来看进度。</div>';
+    if(!b.querySelector('.inst-bar'))b.innerHTML='<div class="inst-bar"><i></i></div><div class="inst-meta"><span class="inst-pc"></span><span class="inst-eta"></span></div><div class="lg-st inst-st"></div><div class="inst-note">'+esc('可以关掉这个窗口，安装在电脑上继续；再点 '+nm+' 卡片能回来看进度。')+'</div>';
     b.querySelector('.inst-bar i').style.width=pc+'%';
     b.querySelector('.inst-pc').textContent=pc+'% · 已用 '+mmss(el);
     b.querySelector('.inst-eta').textContent=eta;

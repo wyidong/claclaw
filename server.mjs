@@ -31,6 +31,7 @@ import { isCb, CbRunner, cbRunners, cbSessionList, cbNewSession, cbShutdown, cbA
 import { isQd, QdRunner, qdRunners, qdSessionList, qdNewSession, qdShutdown, qdAcpRunning, qdInfo, qdExists, qdDelete, qdInstalled, qdRename, qdModelsChanged } from './src/claws/qoder.mjs';
 import { Groups, isGroupId, toWire, fromWire, cleanAtt, attText, attKind, ATT_MAX } from './src/peer/group.mjs';
 import { isCp, CpRunner, cpRunners, cpSessionList, cpNewSession, cpShutdown, cpAcpRunning, cpInfo, cpExists, cpDelete, cpInstalled, cpRename, cpModelsChanged } from './src/claws/copilot.mjs';
+import { isGm, GmRunner, gmRunners, gmSessionList, gmNewSession, gmShutdown, gmAcpRunning, gmInfo, gmExists, gmDelete, gmInstalled, gmRename, gmModelsChanged } from './src/claws/gemini.mjs';
 import { isOc, OcRunner, ocRunners, ocSessionList, ocRename, ocDelete, ocGatewayUp, ocCreate, ocStartGateway } from './src/claws/openclaw.mjs';
 import { hostInfo, slowInfo } from './src/host.mjs';
 import { makeTheme } from './src/theme.mjs';
@@ -603,6 +604,11 @@ const CLAWS = [
   infoClaw({ id: 'copilot', label: 'Copilot', logName: 'copilot', prefix: 'cp:', is: isCp, runners: cpRunners, cls: CpRunner,
     info: cpInfo, sessionList: cpSessionList, newSession: cpNewSession, installed: cpInstalled, running: cpAcpRunning, shutdown: cpShutdown, modelsChanged: cpModelsChanged, exists: cpExists,
     del: id => cpDelete(id, TRASH), rename: (id, title) => cpRename(id, title),
+  }),
+  infoClaw({ id: 'gemini', label: 'Gemini', logName: 'gemini', prefix: 'gm:', is: isGm, runners: gmRunners, cls: GmRunner,
+    info: gmInfo, sessionList: gmSessionList, newSession: gmNewSession, installed: gmInstalled, running: gmAcpRunning, shutdown: gmShutdown, modelsChanged: gmModelsChanged, exists: gmExists,
+    // 删除：会话文件挪进回收站；改名：追加 summary 记录（先备份到回收站），名字也记在 claclaw 这边
+    del: id => gmDelete(id, TRASH), rename: (id, title) => gmRename(id, title, TRASH),
   }),
 ];
 const clawOf = id => typeof id === 'string' ? CLAWS.find(c => c.is(id)) : undefined;   // undefined = Claude
@@ -3312,7 +3318,7 @@ function appCss() {
 
 // Claw 登录时填的 key（目前是 DeepSeek）：顺手登记进模型库，再从接口读模型列表填上。
 // 同一个 key 已经在库里就不动；以前这样自动加过（fromLogin）的、这次换了 key：原地换掉，不再多加一条
-const LOGIN_LIB = { deepseek: { openai: 'https://api.deepseek.com', anthropic: 'https://api.deepseek.com/anthropic' } };
+const LOGIN_LIB = { deepseek: { openai: 'https://api.deepseek.com', anthropic: 'https://api.deepseek.com/anthropic' }, gemini: { gemini: 'https://generativelanguage.googleapis.com/v1beta' } };
 function modelsChangedAll() {
   for (const c of CLAWS) c.modelsChanged?.(log);
   for (const c of CLAWS) for (const r of c.runners.values()) if (r.subs?.size && r.xmodels) r.emit({ t: 'xmodels', ...r.xmodels() });
@@ -3407,7 +3413,7 @@ wss.on('connection', (ws, req) => {
       }
       if (m.t === 'visible') { ws.visible = !!m.on; if (ws.visible && runner) clearUnread(runner.id); return; }
       // 各 Claw 的登录（见 login.mjs）：在电脑上起登录命令，网址 / 代码推给这个连接
-      if (m.t === 'login.start') { try { const lj = loginStart(String(m.claw || ''), ws, { key: typeof m.key === 'string' ? m.key : '', log }); if (lj?.status === 'ok' && m.key) loginKeyToLib(lj.claw, m.key); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
+      if (m.t === 'login.start') { try { const lj = loginStart(String(m.claw || ''), ws, { key: typeof m.key === 'string' ? m.key : '', lib: typeof m.lib === 'string' ? m.lib : '', how: m.how === 'google' ? 'google' : '', log }); if (lj?.status === 'ok' && m.key) loginKeyToLib(lj.claw, m.key); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
       if (m.t === 'login.input') { try { loginInput(String(m.claw || ''), String(m.text || '')); } catch (e) { send({ t: 'login.update', claw: m.claw, status: 'fail', error: e.message }); } return; }
       if (m.t === 'login.cancel') { loginCancel(String(m.claw || ''), log); return; }
       if (m.t === 'session.open' || m.t === 'session.new' || m.t === 'session.leave') roStop(ws);   // 换会话：只读的那个不再盯着

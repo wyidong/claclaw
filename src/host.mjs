@@ -14,6 +14,7 @@ import { mmBin } from './claws/minimax.mjs';
 import { cbBin } from './claws/codebuddy.mjs';
 import { qdBin } from './claws/qoder.mjs';
 import { cpBin } from './claws/copilot.mjs';
+import { gmVersion } from './claws/gemini.mjs';
 import { HOME, readJson, classifyAddr } from './util.mjs';
 
 const run = (cmd, args, ms = 4000) => new Promise(ok => {
@@ -52,7 +53,7 @@ async function readSlow(root) {
     claude: semver(claude),
     openclaw: (openclaw.match(/\d{4}\.\d+\.\d+\S*|\d+\.\d+\.\d+\S*/) || [''])[0],
     dsh: readJson('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json').version || '', opencode: semver(opencode), kimi: semver(kimi), qwen: semver(qwen), codex, commit: hash || '', commitAt: ct ? Number(ct) * 1000 : 0,
-    glm: glVersion(), iflow: semver(iflow), minimax: semver(mcode), codebuddy: semver(codebuddy), qoder: semver(qoder), copilot: semver(copilot),
+    glm: glVersion(), iflow: semver(iflow), minimax: semver(mcode), codebuddy: semver(codebuddy), qoder: semver(qoder), copilot: semver(copilot), gemini: gmVersion(),
   };
   slow.at = Date.now();
   return slow.data;
@@ -165,7 +166,7 @@ export async function hostInfo({ root, port, hosts, https, startedAt, sessions, 
       ...(claws.kimi ? [{ id: 'kimi', name: 'Kimi Code', version: s.kimi, ...claws.kimi }] : []),
       ...(claws.qwen ? [{ id: 'qwen', name: 'Qwen Code', version: s.qwen, ...claws.qwen }] : []),
       ...(claws.codex ? [{ id: 'codex', name: 'Codex', version: s.codex, ...claws.codex }] : []),
-      ...[['glm', 'GLM Agent'], ['iflow', 'iFlow CLI'], ['minimax', 'MiniMax Code'], ['codebuddy', 'CodeBuddy Code'], ['qoder', 'Qoder CLI'], ['copilot', 'Copilot CLI']].filter(([k]) => claws[k]).map(([k, n]) => ({ id: k, name: n, version: s[k], ...claws[k] })),
+      ...[['glm', 'GLM Agent'], ['iflow', 'iFlow CLI'], ['minimax', 'MiniMax Code'], ['codebuddy', 'CodeBuddy Code'], ['qoder', 'Qoder CLI'], ['copilot', 'Copilot CLI'], ['gemini', 'Gemini CLI']].filter(([k]) => claws[k]).map(([k, n]) => ({ id: k, name: n, version: s[k], ...claws[k] })),
     ],
   };
 }

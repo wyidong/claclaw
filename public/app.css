@@ -1623,8 +1623,9 @@ select.pe-in{text-align-last:right}
    MiniMax、iFlow 的官方图片自带白底板（深色主题、灰底上会露出白块）：MiniMax 用去掉白底、裁到图形的一份；iFlow 用它安装包里自带的透明底 logo.png（bundle/logo.png）；都内联成 data URI */
 .cx-mark,.mm-logo,img[src*="ide/logo.svg"],img[src*="O1CN01QkSxiCocd3D0prc8"]{--lk:.88}
 .cp-mark{color:var(--ink)}   /* Copilot：GitHub Octicons 的 copilot 图标（MIT），单色，跟着主题的字色 */
+.gm-mark{--lk:.92}   /* Gemini：四角星（自己画的纯色，不是官方素材；别用渐变：定义渐变的那份图标在手机上是隐藏的，复制出去的引用画不出来） */
 .oc-mark{--lk:.9}
-.cc-mark,.ds-mark,.oc-mark,.km-mark,.qw-mark,.cx-mark,.cp-mark,.mm-logo,.if-logo,img[src*="ide/logo.svg"],img[src*="O1CN01QkSxiCocd3D0prc8"],img[src*="z-cdn.chatglm.cn"],img[src*="openclaw.ai"]{scale:calc(var(--lk,1)*var(--lz,1))}
+.cc-mark,.ds-mark,.oc-mark,.km-mark,.qw-mark,.cx-mark,.cp-mark,.gm-mark,.mm-logo,.if-logo,img[src*="ide/logo.svg"],img[src*="O1CN01QkSxiCocd3D0prc8"],img[src*="z-cdn.chatglm.cn"],img[src*="openclaw.ai"]{scale:calc(var(--lk,1)*var(--lz,1))}
 .claw-card .claw-ic{--lz:.86}
 .claw-login{margin-left:auto;flex:none;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);font-size:12.5px;white-space:nowrap;cursor:pointer}   /* 一行「登录 ›」，淡淡一点底色 */
 .claw-login::after{content:' ›'}

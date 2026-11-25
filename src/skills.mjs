@@ -22,7 +22,7 @@ const MARK = '.claclaw-skill';
 // 安装位置：claude 一处，其余 Claw 共用一处
 const TARGETS = {
   claude: { dir: path.join(HOME, '.claude', 'skills'), claws: ['claude', 'glm', 'opencode', 'minimax'], label: 'Claude Code、GLM' },
-  agents: { dir: path.join(HOME, '.agents', 'skills'), claws: ['deepseek', 'opencode', 'kimi', 'qwen', 'codex', 'openclaw', 'minimax', 'qoder', 'copilot'], label: 'DeepSeek、OpenCode、Kimi、Qwen、Codex、OpenClaw、MiniMax、Qoder、Copilot' },
+  agents: { dir: path.join(HOME, '.agents', 'skills'), claws: ['deepseek', 'opencode', 'kimi', 'qwen', 'codex', 'openclaw', 'minimax', 'qoder', 'copilot', 'gemini'], label: 'DeepSeek、OpenCode、Kimi、Qwen、Codex、OpenClaw、MiniMax、Qoder、Copilot、Gemini' },
   iflow: { dir: path.join(HOME, '.iflow', 'skills'), claws: ['iflow'], label: 'iFlow' },
   codebuddy: { dir: path.join(HOME, '.codebuddy', 'skills'), claws: ['codebuddy'], label: 'CodeBuddy' },
 };

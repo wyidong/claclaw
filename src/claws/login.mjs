@@ -3,6 +3,8 @@
 // - 一个 Claw 同一时间只跑一个登录；谁打开登录页都能看到同一份进度（login.update）
 // - 要填 key 的（GLM Agent：glm-acp-agent --setup；iFlow：写 settings.json）：手机上先填 key，再喂给命令 / 写进文件
 // - CodeBuddy 没有单独的登录命令，只能起它的终端界面：自动按掉「信任目录」、选「国内站」，拿到网址；登录成功它就进聊天界面，这时把它关掉
+// - Gemini CLI 两种都有（google）：Google 账号起它的终端界面（先把认证方式设成 Google、NO_BROWSER），它打出网址后问授权码（ask），
+//   手机上登录完把网页显示的授权码粘回来；或者填 API key / 选模型库里的 Gemini key（write）
 // - 推给手机的文字里把 sk- 开头的串打码（Claude 的 setup-token 这类会把令牌打出来）
 // 登没登录（loggedIn）：按各家留在磁盘上的凭据文件判断，判断不了的返回 null
 import fs from 'node:fs';
@@ -20,6 +22,7 @@ import { kmBin } from './kimi.mjs';
 import { cbBin } from './codebuddy.mjs';
 import { cxBin } from './codex.mjs';
 import { glBin } from './glm.mjs';
+import { gmBin, gmLoggedIn, gmKeys, gmKeyChoices, gmUse, gmLoginBegin, gmLoginEnd, gmProxyCached, gmProxyEnv } from './gemini.mjs';
 
 const stripAnsi = s => String(s).replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*(\x07|\x1b\\)|\x1b[()][A-Z0-9]|\r/g, '');
 const redact = s => String(s).replace(/sk-[A-Za-z0-9_-]{12,}/g, 'sk-…');
@@ -91,6 +94,9 @@ export function dsHasKey(file = DSH_CRED()) {
 // 每个能登录的 Claw：label；cmd()：[程序, 参数]（程序找不到返回 null）；cwd；
 // steps：看到什么就自动输什么（终端界面型）；keyPrompt：要先填 key（看到这个提示就把 key 喂进去）；
 // doneWhen(text)：进程不会自己退出的（CodeBuddy）怎么算成功；write(key)：不起命令、直接写文件的
+// google：命令和 write 两种都有（Gemini），网页上让用户选；ask：{ when, prompt } 命令停下来问东西（授权码）时在网页上给个输入框
+// env()：给登录命令加的环境变量（warm()：查登录情况时先在后台备好它要的东西）；before(log)：起命令前做的事；ok(log) / fail(log)：命令登录成功 / 失败（含取消）后收尾；
+// keys()：模型库里能直接选的 key（只给 id、名字、后 4 位）
 // loggedIn()：true / false / null（判断不了）；check()：现查一次（Promise，可省）；libOk()：模型库能顶上、不登录也能用
 // Codex：claclaw 实际起的是 codex-acp（它带着自己那份 Codex）。登录用它转发的 `codex-acp cli login --device-auth`，
 // 跑的就是会话用的同一个 Codex（凭据同样写到 $CODEX_HOME/auth.json）；`codex-acp login` 只有浏览器回调登录，手机上用不了。
@@ -147,6 +153,26 @@ export const SPECS = {
     loggedIn: () => !!process.env.Z_AI_API_KEY || exists(path.join(process.env.XDG_CONFIG_HOME || path.join(HOME, '.config'), 'glm-acp-agent', 'credentials.json')), libOk: libHas('openai'),
     hint: '填入 Z.AI 的 API key，claclaw 替你存进 glm-acp-agent',
   },
+  gemini: {
+    label: 'Gemini CLI', google: true,
+    cmd: () => { const b = gmBin(); return b && [b, []]; }, cwd: LOGIN_WS,
+    // 登录用的空目录直接定成「不信任」：弹了信任对话框的话，认证改在界面里做，粘回去的授权码被界面吃掉、它收不到
+    env: () => ({ ...gmProxyCached(), GEMINI_CLI_TRUST_WORKSPACE: 'false' }), warm: () => gmProxyEnv().catch(() => {}),   // 登录命令是同步起的：代理先在后台探好
+    before: log => gmLoginBegin(log), fail: log => gmLoginEnd(false, log),   // 认证方式设成 Google；换账号时旧凭据先挪开，失败放回去
+    steps: [{ when: /Do you trust the files in this folder/i, send: '3' }, { when: /How would you like to authenticate/i, send: '\r' }],   // 兜底：万一还是弹了信任 / 认证选择，选「不信任」/ 第一个（Google）
+    ask: { when: /Enter the authorization code:/i, prompt: '在手机上登录 Google 后，网页会显示一串授权码：复制，粘贴到这里' },
+    doneWhen: (text, j) => { try { return fs.statSync(path.join(process.env.GEMINI_CLI_HOME || HOME, '.gemini', 'oauth_creds.json')).mtimeMs >= j.startedAt - 1000; } catch { return false; } },
+    ok: log => { gmLoginEnd(true, log); gmUse({ google: true }, log); },
+    keyLabel: 'Gemini API key（AIza 开头）', keyUrl: 'https://aistudio.google.com/apikey',
+    write: (key, { lib } = {}) => {
+      if (lib) return gmUse({ provider: lib });
+      if (!/^[A-Za-z0-9_-]{20,200}$/.test(key)) throw new Error('这不像 Gemini 的 API key（一般是 AIza 开头的一串）');
+      gmUse({ key });   // key 本身由 server.mjs 存进模型库（loginKeyToLib），这里只记下用它
+    },
+    keys: () => gmKeyChoices(),
+    loggedIn: gmLoggedIn, libOk: () => gmKeys().length > 0,
+    hint: '用 Google 账号登录（个人账号有免费额度），或者填 Gemini API key（在 Google AI Studio 里免费创建）。连 Google 要开代理',
+  },
   iflow: {
     label: 'iFlow CLI', keyLabel: '心流平台的 API key（platform.iflow.cn）',
     write: key => {
@@ -166,6 +192,7 @@ export const SPECS = {
 // 伪终端走的是 python3 + tools/ptywrap.py，Windows 上没有这条链（多半也没装 python），
 // 所以那几个在 Windows 上停用，界面提示到电脑终端里登录；只写配置文件的（iFlow 填 key）照常可用。
 const ptyBlocked = s => WIN && !s.write;
+const cmdBlocked = s => WIN && !!s.cmd;   // 两种都有的（Gemini）：Windows 上只能填 key
 const WIN_HINT = 'Windows 上还不能在网页里登录，请在电脑的终端里运行它的登录命令，完成后回来刷新';
 
 export function loginInfo(claw) {
@@ -174,7 +201,9 @@ export function loginInfo(claw) {
   let loggedIn = null; try { loggedIn = s.loggedIn(); } catch {}
   const blocked = ptyBlocked(s);
   const can = !blocked && !!(s.write || s.cmd?.());
-  return { can, key: !!(s.keyPrompt || s.write), keyLabel: s.keyLabel || '', keyUrl: s.keyUrl || '', loggedIn, need: loggedIn !== true && !s.libOk(), hint: blocked ? WIN_HINT : s.hint, running: jobs.has(claw) };
+  s.warm?.();
+  let keys = []; try { keys = s.keys?.() || []; } catch {}
+  return { can, key: !!(s.keyPrompt || s.write), keyLabel: s.keyLabel || '', keyUrl: s.keyUrl || '', google: !!s.google && !cmdBlocked(s), keys, loggedIn, need: loggedIn !== true && !s.libOk(), hint: blocked ? WIN_HINT : s.hint, running: jobs.has(claw) };
 }
 
 // ---------- 正在进行的登录 ----------
@@ -189,32 +218,36 @@ export function tailOf(text) {
   return uniq.slice(-2).join(' · ').slice(0, 200);
 }
 const view = j => ({ t: 'login.update', claw: j.claw, label: j.label, status: j.status, url: j.url, code: j.code, prompt: j.prompt, tail: redact(j.tail), error: j.error ? redact(j.error) : '' });
+const redactKey = s => String(s).replace(/AIza[0-9A-Za-z_-]{20,}/g, 'AIza…');
 // 往登录命令的 stdin 写；进程已退 / stdin 已关就不写，返回 false
 const writeIn = (p, s) => { if (!p || p.exitCode !== null || p.signalCode !== null || !p.stdin?.writable) return false; try { p.stdin.write(s); return true; } catch { return false; } };
 function push(j) { const s = JSON.stringify(view(j)); for (const w of j.subs) if (w.readyState === 1) w.send(s); }
 
 export function loginWatch(claw, ws) { const j = jobs.get(claw); if (j) { j.subs.add(ws); push(j); return true; } return false; }
 
-// 开始登录（已经在跑就接上看进度）。key：要先填 key 的 Claw 这里带上
-export function loginStart(claw, ws, { key = '', log } = {}) {
+// 开始登录（已经在跑就接上看进度）。key：要先填 key 的 Claw 这里带上；lib：选模型库里的 key（供应商 id）；
+// how = 'google'：两种都有的（Gemini）走命令登录，不然走 write
+export function loginStart(claw, ws, { key = '', lib = '', how = '', log } = {}) {
   const s = SPECS[claw];
   if (!s) throw new Error('这个 Claw 不能在这里登录');
-  if (ptyBlocked(s)) throw new Error(WIN_HINT);
+  const viaWrite = s.write && !(s.google && how === 'google');
+  if (viaWrite ? false : (ptyBlocked(s) || (s.google && cmdBlocked(s)))) throw new Error(WIN_HINT);
   let j = jobs.get(claw);
   if (j?.status === 'running') { j.subs.add(ws); push(j); return j; }   // 正在跑：接上看进度
   if (j) jobs.delete(claw);   // 上次的结果：清掉，重新来
   j = { claw, label: s.label, status: 'running', url: '', code: '', prompt: '', tail: '', error: '', text: '', subs: new Set([ws]), startedAt: Date.now(), done: new Set(), key, proc: null, timer: null };
   jobs.set(claw, j);
-  if (s.write) {   // 直接写文件
-    try { if (!key) throw new Error('要先填 key'); s.write(key); finish(j, true, log); } catch (e) { finish(j, false, log, e.message); }
+  if (viaWrite) {   // 直接写文件
+    try { if (!key && !lib) throw new Error('要先填 key'); s.write(key, { lib }); finish(j, true, log); } catch (e) { finish(j, false, log, redactKey(e.message)); }
     return j;
   }
   const c = s.cmd?.();
   if (!c) { finish(j, false, log, '没找到 ' + s.label + ' 的程序'); return j; }
   if (s.keyPrompt && !key) { finish(j, false, log, '要先填 key'); return j; }
   if (s.cwd) fs.mkdirSync(s.cwd, { recursive: true, mode: 0o700 });
+  try { s.before?.(log); } catch (e) { finish(j, false, log, e.message); return j; }
   // 套上伪终端（这些命令在管道里不打网址或直接退出）；BROWSER 指向 true：别在电脑上开浏览器
-  const p = spawn('python3', [PTYWRAP, c[0], ...c[1]], { cwd: s.cwd || HOME, env: { ...binEnv(), BROWSER: '/usr/bin/true', TERM: 'xterm-256color', NO_BROWSER: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const p = spawn('python3', [PTYWRAP, c[0], ...c[1]], { cwd: s.cwd || HOME, env: { ...binEnv(), ...(s.env?.() || {}), BROWSER: '/usr/bin/true', TERM: 'xterm-256color', NO_BROWSER: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
   j.proc = p;
   // 命令已经退了还往 stdin 写（延时的自动按键、用户粘贴）会 EPIPE：没人监听就是未捕获异常，整个 claclaw 会崩
   p.stdin.on('error', e => log?.('login stdin error', claw, e.code || e.message));
@@ -223,10 +256,14 @@ export function loginStart(claw, ws, { key = '', log } = {}) {
     const chunk = stripAnsi(d);
     j.text = (j.text + chunk).slice(-20000);
     // 网址：第一个不是文档 / 帮助页的；代码：XXXX-XXXX 形式的
-    if (!j.url) { const urls = (j.text.match(URL_RE) || []).filter(u => !/docs\.|\/docs\b|vibex\.iflow|manage-apikey|github\.com(?!\/login\/device)|localhost|127\.0\.0\.1/i.test(u)); if (urls.length) j.url = urls[0].replace(/[.,;:!?]+$/, ''); }
+    // 要粘授权码的（Gemini）：码填错了它会重打一个新网址（新的校验码），要换成最新的那个
+    if (!j.url || s.ask) { const urls = (j.text.match(URL_RE) || []).filter(u => !/docs\.|\/docs\b|vibex\.iflow|manage-apikey|github\.com(?!\/login\/device)|localhost|127\.0\.0\.1/i.test(u)); if (urls.length) j.url = urls[s.ask ? urls.length - 1 : 0].replace(/[.,;:!?]+$/, ''); }
     if (!j.code) { const m = j.text.match(CODE_RE); if (m) j.code = m[1]; }
     j.raw = tailOf(j.text);
     j.tail = j.url || j.code ? '等你在网页上完成授权…' : j.raw;   // 网址 / 代码已经给出去了：命令那边刷的「Waiting for auth…」不用再看，给一句明白话
+    // 命令停下来问东西（Gemini 的授权码）：上次回答之后的输出里出现了提问就给输入框（码不对它会马上重问）
+    if (s.ask) { j.askBuf = ((j.askBuf || '') + chunk).slice(-4000); if (!j.prompt && s.ask.when.test(j.askBuf)) { j.prompt = s.ask.prompt; j.askBuf = ''; } }
+    if (j.prompt) j.tail = '等你粘贴授权码…';
     // 要 key 的：看到提示就把 key 喂进去（只一次）
     if (s.keyPrompt && j.key && !j.done.has('key') && s.keyPrompt.test(j.text)) { j.done.add('key'); writeIn(p, j.key + '\n'); j.tail = '已填入 key，等它保存…'; }
     // 终端界面型：按步骤自动输入（每步只一次）
@@ -245,14 +282,15 @@ export function loginStart(claw, ws, { key = '', log } = {}) {
 export function loginInput(claw, text) {
   const j = jobs.get(claw);
   if (!j?.proc || j.status !== 'running') throw new Error('没有正在进行的登录');
-  if (!writeIn(j.proc, String(text).trim() + '\n')) throw new Error('登录命令已经退出了');
-  j.prompt = ''; j.tail = '已发送，等它确认…'; push(j);
+  if (!writeIn(j.proc, String(text).trim() + '\r')) throw new Error('登录命令已经退出了');
+  j.prompt = ''; j.askBuf = ''; j.tail = '已发送，等它确认…'; push(j);
 }
 export function loginCancel(claw, log) { const j = jobs.get(claw); if (j && j.status === 'running') finish(j, false, log, '已取消'); }
 function finish(j, ok, log, error = '') {
   if (j.status !== 'running') return;
   j.status = ok ? 'ok' : 'fail'; j.error = ok ? '' : error; j.prompt = '';
   if (ok) { j.tail = '登录完成'; qoderCache.at = 0; }
+  if (j.proc) { try { (ok ? SPECS[j.claw]?.ok : SPECS[j.claw]?.fail)?.(log); } catch (e) { log?.('login hook failed', j.claw, e.message); } }   // 只有起了命令的才有收尾（写 key 的没有）
   clearTimeout(j.timer);
   if (j.proc) { try { j.proc.stdin.end(); } catch {} setTimeout(() => { try { j.proc.kill(); } catch {} }, ok ? 800 : 0); }
   log?.('login', j.claw, ok ? 'ok' : 'fail', error.slice(0, 120));

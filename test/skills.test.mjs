@@ -61,12 +61,12 @@ test('各 Claw 装到它自己读的目录：GLM → ~/.claude/skills，iFlow、
   assert.equal(skills.targetOf('glm'), 'claude');
   assert.equal(skills.targetOf('iflow'), 'iflow');
   assert.equal(skills.targetOf('codebuddy'), 'codebuddy');
-  for (const c of ['deepseek', 'kimi', 'qwen', 'codex', 'openclaw', 'minimax', 'qoder', 'copilot']) assert.equal(skills.targetOf(c), 'agents');
+  for (const c of ['deepseek', 'kimi', 'qwen', 'codex', 'openclaw', 'minimax', 'qoder', 'copilot', 'gemini']) assert.equal(skills.targetOf(c), 'agents');
   skills.ensure('iflow');
   assert.ok(fs.existsSync(path.join(home, '.iflow', 'skills', 'claw-video', 'SKILL.md')));
   skills.ensure('codebuddy');
   assert.ok(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'claw-file', 'SKILL.md')));
-  const all = ['claude', 'deepseek', 'opencode', 'kimi', 'qwen', 'codex', 'openclaw', 'glm', 'iflow', 'minimax', 'codebuddy', 'qoder', 'copilot'];
+  const all = ['claude', 'deepseek', 'opencode', 'kimi', 'qwen', 'codex', 'openclaw', 'glm', 'iflow', 'minimax', 'codebuddy', 'qoder', 'copilot', 'gemini'];
   for (const n of ['claw-file', 'claw-video', 'claw-audio', 'claw-movie', 'claw-image', 'claw-tv']) assert.deepEqual(skills.catalog().find(s => s.name === n).claws, all);
 });
 

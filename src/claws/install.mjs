@@ -1,5 +1,5 @@
-// 帮用户装 Agent：DeepSeek 没装时（别的 Claw 装没装都一样），网页的 Claw 页显示它的卡片和「安装」按钮，
-// 点了就在电脑上跑 npm install -g 装 DeepSeek Harness（dsh），装完再引导去 DeepSeek 开放平台拿 API key（见 login.mjs 的 deepseek）。
+// 帮用户装 Agent：DeepSeek / Gemini CLI 没装时（别的 Claw 装没装都一样），网页的 Claw 页显示它的卡片和「安装」按钮，
+// 点了就在电脑上跑 npm install -g 装，装完再引导去登录：DeepSeek 填开放平台的 API key，Gemini 登 Google 账号或填 key（见 login.mjs）。
 // - 只能装这里列出的包（不接受网页传来的包名）；同一时间只跑一个
 // - 进度：网页每隔几秒取一次 installState()；结果留 10 分钟
 import fs from 'node:fs';
@@ -24,6 +24,11 @@ export const INSTALLS = {
     // 进度条用的大概数目（2026-11 实测 dsh：查依赖 ≈680 次、装 654 个包、900 多 MB）；查依赖阶段按它估，到顶就停；包数装的时候会数出真的
     expect: { meta: 680, pkgs: 654 },
     allowScripts: ['@deepseek-ai/dsh-subprocess-local', 'node-pty', 'koffi', 'protobufjs', '@google/genai'],
+  },
+  // Gemini CLI：打包好的一个包（2026-11 实测 0.71：压缩 25 MB，没有必需依赖，可选的 node-pty / keytar 有预编译的，不用放行安装脚本）
+  gemini: {
+    label: 'Gemini CLI', pkg: '@google/gemini-cli@latest', bin: 'gemini',
+    expect: { meta: 12, pkgs: 6 },
   },
 };
 // Claw 列表里哪些能在网页上一键装：这里列了、这台机器能用、还没装的，标上 canInstall（网页显示卡片和「安装」按钮）
