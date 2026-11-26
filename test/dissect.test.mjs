@@ -96,6 +96,9 @@ test('等用户回答不算干活；后台任务通知不算一轮', () => {
   ];
   const { summary, turns } = dissectClaudeLines(lines);
   assert.equal(turns.length, 1, '任务通知不算用户的话');
+  // 子 Agent 交回的报告（<agent-message>）也不算
+  const sub = dissectClaudeLines([...lines, { type: 'attachment', timestamp: iso(D + 11000), attachment: { type: 'queued_command', prompt: '<agent-message from="a1">\n[Subagent hand-back] 报告\n</agent-message>' } }]);
+  assert.equal(sub.turns.length, 1, '子 Agent 的报告不算用户的话');
   assert.equal(turns[0].nSteps, 3);
   assert.equal(turns[0].waitMs, D - 1000);
   assert.equal(turns[0].durMs, D + 10000 - (D - 1000), '等用户回答的两天不算干活');

@@ -34,7 +34,7 @@ export function userTextOf(e) {
   return t || (img ? '[图片]' : '');
 }
 // 不是用户说的话：斜杠命令及其输出、后台任务通知、打断提示
-const sysLike = (t) => /^<(local-command|command-|bash-|task-notification)/.test(t) || /^\[(Request interrupted|SYSTEM NOTIFICATION)/.test(t);
+const sysLike = (t) => /^<(local-command|command-|bash-|task-notification|agent-message)/.test(t) || /^\[(Request interrupted|SYSTEM NOTIFICATION)/.test(t);
 
 // 工具调用的一句话：Bash 给命令，读写文件给路径，子代理给任务，其它给第一个字符串参数
 export function toolBrief(name, input) {

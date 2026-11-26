@@ -197,10 +197,11 @@ export function userText(content) {
   return '';
 }
 
-// 系统注入的提示、斜杠命令包装等不是用户真正打的字，不显示
+// 系统注入的提示、斜杠命令包装等不是用户真正打的字，不显示。
+// <agent-message>：子 Agent 干完交回的报告（Claude Code 当插话塞进来的，是模型写的，不是用户的话）
 function isNoise(text) {
   const t = text.trim();
-  return !t || /^<(system-reminder|command-|local-command|task-notification|ide_|user-prompt-submit-hook)/.test(t) || t.startsWith('Caveat:');
+  return !t || /^<(system-reminder|command-|local-command|task-notification|agent-message|ide_|user-prompt-submit-hook)/.test(t) || t.startsWith('Caveat:');
 }
 
 // 别的会话通过跨会话消息发来的：Claude Code 把正文包在 <cross-session-message> 里，前后再加给 Claude 看的说明和安全提示。
