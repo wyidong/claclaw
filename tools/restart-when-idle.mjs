@@ -100,20 +100,30 @@ function winServePid() {
   return pid && alive(pid) ? pid : 0;
 }
 function winKick() {
-  const pid = winServePid() || winServerPid();
+  // 守护和正在监听端口的 server 都结束：server 不一定是这个守护拉起的（别处另起的、守护已经没了），只杀一个会漏
+  const pids = [...new Set([winServePid(), winServerPid()].filter(Boolean))];
+  const pid = pids.join(',');
   // 没在跑（挂了、没人拉起）：不再干等，直接拉起来
   if (!pid) log('    没找到监听 ' + PORT + ' 的进程：直接拉起');
   const TASK = 'claclaw-restart';
   // 新窗口要带上原来的端口 / 监听地址设置（计划任务里起的进程不继承这里的环境变量）
   const env = ['CLACLAW_PORT', 'CLACLAW_HOST'].filter(k => process.env[k]).map(k => `set "${k}=${process.env[k].replace(/["&|<>^%]/g, '')}" && `).join('');
   const ps1 = path.join(LOGDIR, 'restart-task.ps1');
+  // 每一步都记进 handover.log（带时间）：任务中途没了的话，能看出停在哪一步
   const script = [
     `$log = ${psq(LOG)}`,
-    `function L($s) { Add-Content -Path $log -Value $s -Encoding UTF8 }`,
-    ...(pid ? [`taskkill /PID ${pid} /T /F | Out-Null`] : []),   // 连子进程（各 Claw 的 agent、Claude 会话）一起结束，不留孤儿
+    `function L($s) { Add-Content -Path $log -Value ((Get-Date -Format 'HH:mm:ss') + ' ' + $s) -Encoding UTF8 }`,
+    `L '    任务开始'`,
+    ...pids.flatMap(p => [   // 连子进程（各 Claw 的 agent、Claude 会话）一起结束，不留孤儿
+      `$r = taskkill /PID ${p} /T /F 2>&1`,
+      `L ("    taskkill ${p}：退出码 $LASTEXITCODE；" + (($r | Select-Object -Last 2) -join ' '))`,
+    ]),
     `for ($i = 0; $i -lt 40; $i++) { if (-not (Get-NetTCPConnection -LocalPort ${PORT} -State Listen -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Milliseconds 500 }`,
+    `$still = Get-NetTCPConnection -LocalPort ${PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1`,
+    `if ($still) { L ("    端口 ${PORT} 还被 pid " + $still.OwningProcess + " 占着：旧进程没结束，新窗口会因为端口被占自己退出") } else { L '    端口已空出' }`,
     // npm run serve：挂了自动拉起、输出进 Logs\server.log（tools/win-serve.mjs）
     `Start-Process cmd.exe -ArgumentList '/k', ${psq(`title claclaw && ${env}npm run serve`)} -WorkingDirectory ${psq(ROOT)}`,
+    `L '    新窗口已开'`,
     `$up = $false`,
     `for ($i = 0; $i -lt 30 -and -not $up; $i++) { Start-Sleep -Seconds 2; try { $up = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 ${psq(BASE + '/login')}).StatusCode -eq 200 } catch {} }`,
     `$h = (& git -C ${psq(ROOT)} log -1 --format=%h)`,
