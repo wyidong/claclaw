@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Claclaw">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=11">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png?v=11">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=12">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png?v=12">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#161B21" media="(prefers-color-scheme: dark)">
@@ -4668,7 +4668,7 @@ function syncChatsTab(){
   var tb=document.querySelector('#mtabs [data-tab="chats"]');if(!tb)return;
   var k=curClaw()||'';
   // 电脑左栏同一个按钮；一个 Claw 都没有（新装的电脑）：显示 claclaw 的 logo，不显示 Claude 的
-  var rc=$('#railCur'),rk=noClaw?'-':k;if(rc&&rc.dataset.k!==rk){rc.dataset.k=rk;rc.innerHTML=noClaw?'<img class="tile" src="/icons/icon-192.png?v=11" alt="">':k?clawIcon(k):chatsIcon.outerHTML;rc.title=noClaw?'claclaw：还没有 Claw，先装一个':(k?CLAW_NAMES[k]+' ':'')+'会话';rc.setAttribute('aria-label',rc.title)}
+  var rc=$('#railCur'),rk=noClaw?'-':k;if(rc&&rc.dataset.k!==rk){rc.dataset.k=rk;rc.innerHTML=noClaw?'<img class="tile" src="/icons/icon-192.png?v=12" alt="">':k?clawIcon(k):chatsIcon.outerHTML;rc.title=noClaw?'claclaw：还没有 Claw，先装一个':(k?CLAW_NAMES[k]+' ':'')+'会话';rc.setAttribute('aria-label',rc.title)}
   if(tb.dataset.k===k)return;
   var old=tb.querySelector('.ti,.tlogo'),n;
   if(k){n=document.createElement('span');n.className='tlogo';n.innerHTML=clawIcon(k)}else n=chatsIcon;
