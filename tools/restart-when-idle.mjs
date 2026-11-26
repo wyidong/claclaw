@@ -131,12 +131,22 @@ function winKick() {
     `schtasks /delete /tn ${TASK} /f | Out-Null`,
   ].join('\r\n');
   fs.writeFileSync(ps1, '﻿' + script);   // 带 BOM：Windows PowerShell 5.1 才按 UTF-8 读中文路径
-  try {
-    const tr = `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${ps1}"`;
-    execFileSync('schtasks', ['/create', '/tn', TASK, '/tr', tr, '/sc', 'once', '/st', '23:59', '/it', '/f'], { stdio: 'ignore' });
-    execFileSync('schtasks', ['/run', '/tn', TASK], { stdio: 'ignore' });
-    log(`    已交给计划任务 ${TASK}：${pid ? '结束 pid ' + pid + '，' : ''}新窗口 npm run serve`);
-  } catch (e) { log('    计划任务没建成：' + e.message + '（手动关掉 claclaw 窗口再 npm start）'); }
+  const tr = `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${ps1}"`;
+  // 建任务、启动任务偶尔会失败（遇到过一次 /create 失败，手动再跑就成了）：把 schtasks 的报错记下来，隔几秒再试，最多 3 次
+  const sch = args => execFileSync('schtasks', args, { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  for (let i = 1; i <= 3; i++) {
+    try {
+      sch(['/create', '/tn', TASK, '/tr', tr, '/sc', 'once', '/st', '23:59', '/it', '/f']);
+      sch(['/run', '/tn', TASK]);
+      log(`    已交给计划任务 ${TASK}：${pid ? '结束 pid ' + pid + '，' : ''}新窗口 npm run serve`);
+      return;
+    } catch (e) {
+      const why = String(e.stderr || e.stdout || '').trim().replace(/\s+/g, ' ') || e.message;
+      log(`    计划任务第 ${i} 次没成：退出码 ${e.status ?? e.signal ?? '?'}；${why.slice(0, 300)}`);
+      if (i < 3) execFileSync(process.execPath, ['-e', 'setTimeout(() => {}, 5000)']);   // 同步等 5 秒
+    }
+  }
+  log('    计划任务 3 次都没成：手动关掉 claclaw 窗口再 npm run serve');
 }
 
 const t0 = Date.now();
