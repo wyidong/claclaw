@@ -4,7 +4,8 @@
 //   - 登录后不弹窗口，用 node 跑 tools\win-serve.mjs（挂了自动拉起，输出进 %LOCALAPPDATA%\claclaw\Logs\server.log）
 //   - 只自动放一次（data/win-autostart.json 记着）：用户删了这个文件就是不要开机启动，以后不再放回；
 //     设了 CLACLAW_AUTOSTART=0 不放；用 CLACLAW_DATA 指定了别的数据目录（测试、多开）也不放
-//   - 放过、文件还在：安装目录、node 位置、端口、监听地址变了就更新内容
+//   - 放过、文件还在：node 位置、端口、监听地址变了就更新内容；指向的是另一份还在的 claclaw（worktree）不抢，那份没了才改指这里
+//   - 以后：VBScript 微软在逐步淘汰（将来的 Windows 默认关掉），到时换成「登录时运行」的计划任务或隐藏窗口的快捷方式
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,6 +42,9 @@ export function ensureAutostart({ root, data, port, host = '', node = process.ex
     if (fs.existsSync(file)) {
       let old = ''; try { old = fs.readFileSync(file).toString('utf16le').replace(/^﻿/, ''); } catch {}
       if (old === text) return 'ok';
+      // 指向的是另一份还在的 claclaw（开发时在 worktree 里另起一份）：不抢，开机启动的还是原来那份；那份没了才改指这里
+      const was = (old.match(/^sh\.CurrentDirectory = "((?:[^"]|"")*)"/m) || [])[1]?.replace(/""/g, '"');
+      if (was && path.resolve(was).toLowerCase() !== path.resolve(root).toLowerCase() && fs.existsSync(path.join(was, 'server.mjs'))) return 'skip:other-root';
       write(); log('开机启动已更新：' + file); return 'updated';
     }
     if (fs.existsSync(mark)) return 'skip:removed-by-user';

@@ -29,6 +29,19 @@ test('Windows 开机启动：第一次放好 claclaw.vbs（后台跑守护），
   assert.ok(!fs.existsSync(f));
 });
 
+test('Windows 开机启动：已经指向另一份还在的 claclaw（worktree 里另起的）不抢；那份没了才改指这里', () => {
+  const t = fs.mkdtempSync(path.join(os.tmpdir(), 'winstart-')), dir = path.join(t, 'Startup'), main = path.join(t, 'main'), wt = path.join(t, 'wt');
+  for (const d of [main, wt, path.join(t, 'd1'), path.join(t, 'd2')]) fs.mkdirSync(d);
+  fs.writeFileSync(path.join(main, 'server.mjs'), '');
+  const o = { port: 8787, node: 'node.exe', env: {}, platform: 'win32', dir };
+  assert.equal(ensureAutostart({ ...o, root: main, data: path.join(t, 'd1') }), 'created');
+  assert.equal(ensureAutostart({ ...o, root: wt, data: path.join(t, 'd2') }), 'skip:other-root');
+  assert.match(read(path.join(dir, 'claclaw.vbs')), new RegExp('CurrentDirectory = "' + main.replace(/\\/g, '\\\\') + '"'));
+  fs.rmSync(main, { recursive: true });
+  assert.equal(ensureAutostart({ ...o, root: wt, data: path.join(t, 'd2') }), 'updated');
+  assert.match(read(path.join(dir, 'claclaw.vbs')), new RegExp('CurrentDirectory = "' + wt.replace(/\\/g, '\\\\') + '"'));
+});
+
 test('Windows 开机启动：不是 Windows、CLACLAW_AUTOSTART=0、指定了 CLACLAW_DATA（测试、多开）都不放', () => {
   const t = fs.mkdtempSync(path.join(os.tmpdir(), 'winstart-')), dir = path.join(t, 'Startup');
   const o = { root: 'D:\\c', data: t, port: 8787, node: 'node.exe', dir };

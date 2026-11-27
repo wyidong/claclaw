@@ -144,21 +144,25 @@ function winKick() {
   ].join('\r\n');
   fs.writeFileSync(ps1, '﻿' + script);   // 带 BOM：Windows PowerShell 5.1 才按 UTF-8 读中文路径
   const tr = `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${ps1}"`;
-  // 建任务、启动任务偶尔会失败（遇到过一次 /create 失败，手动再跑就成了）：把 schtasks 的报错记下来，隔几秒再试，最多 3 次
+  // 建任务偶尔会失败（遇到过一次 /create 失败，手动再跑就成了）：把 schtasks 的报错记下来，隔几秒再试，最多 3 次。
+  // 启动任务（/run）只跑一次：它报错时任务可能其实已经起来了，再来一遍就会重启两遍；失败了查一下任务状态记下来
   const sch = args => execFileSync('schtasks', args, { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  for (let i = 1; i <= 3; i++) {
-    try {
-      sch(['/create', '/tn', TASK, '/tr', tr, '/sc', 'once', '/st', '23:59', '/it', '/f']);
-      sch(['/run', '/tn', TASK]);
-      log(`    已交给计划任务 ${TASK}：${pid ? '结束 pid ' + pid + '，' : ''}${bootVbs ? '按开机启动的方式在后台拉起' : '新窗口 npm run serve'}`);
-      return;
-    } catch (e) {
-      const why = String(e.stderr || e.stdout || '').trim().replace(/\s+/g, ' ') || e.message;
-      log(`    计划任务第 ${i} 次没成：退出码 ${e.status ?? e.signal ?? '?'}；${why.slice(0, 300)}`);
+  const why = e => `退出码 ${e.status ?? e.signal ?? '?'}；` + (String(e.stderr || e.stdout || '').trim().replace(/\s+/g, ' ') || e.message).slice(0, 300);
+  let made = false;
+  for (let i = 1; i <= 3 && !made; i++) {
+    try { sch(['/create', '/tn', TASK, '/tr', tr, '/sc', 'once', '/st', '23:59', '/it', '/f']); made = true; } catch (e) {
+      log(`    建计划任务第 ${i} 次没成：${why(e)}`);
       if (i < 3) execFileSync(process.execPath, ['-e', 'setTimeout(() => {}, 5000)']);   // 同步等 5 秒
     }
   }
-  log('    计划任务 3 次都没成：手动关掉 claclaw 窗口再 npm run serve');
+  if (!made) { log('    计划任务 3 次都没建成：手动关掉 claclaw 再 npm run serve'); return; }
+  try {
+    sch(['/run', '/tn', TASK]);
+    log(`    已交给计划任务 ${TASK}：${pid ? '结束 pid ' + pid + '，' : ''}${bootVbs ? '按开机启动的方式在后台拉起' : '新窗口 npm run serve'}`);
+  } catch (e) {
+    let st = ''; try { st = (sch(['/query', '/tn', TASK, '/fo', 'list']).match(/^(?:Status|状态):\s*(.+)$/m) || [])[1] || ''; } catch {}
+    log(`    启动计划任务报错（不重试，免得重启两遍）：${why(e)}；任务状态：${st || '查不到'}`);
+  }
 }
 
 const t0 = Date.now();
