@@ -1,11 +1,11 @@
 # claclaw Windows 一键安装 / 更新
 #   用法（任选一种）：
-#     - 从 https://relay.165i.com/claclaw 下载 claclaw-安装.cmd，双击
-#     - 在 PowerShell 里：irm https://relay.165i.com/claclaw/install.ps1 | iex
+#     - 下载仓库里的 install/claclaw-install.cmd，双击
+#     - 在 PowerShell 里：irm https://raw.githubusercontent.com/wyidong/claclaw/main/install/install-win.ps1 | iex
 #   做的事：检查电脑环境 → 没有就装 Node.js（v24，装在用户目录，不用管理员）和 Git → 下载 claclaw 代码 → npm install
 #           → 在后台启动（第一次启动时 claclaw 自己设好开机启动）→ 桌面和开始菜单放「claclaw」图标 → 打开浏览器
 #   再跑一遍就是更新（git pull、npm install，所有会话空闲后重启）。日志在 %LOCALAPPDATA%\claclaw\Logs\install.log
-#   国内网络：连官方源慢或连不上时自动用国内镜像（npmmirror）；GitHub 连不上就从 relay.165i.com 取代码包
+#   国内网络：连官方源慢或连不上时自动用国内镜像（npmmirror）；GitHub 连不上、又配了代码包镜像（$MIRROR）就从镜像取代码包
 #   测试用环境变量：CLACLAW_INSTALL_DIR（装到哪）、CLACLAW_INSTALL_NODE_DIR（Node 装到哪）、CLACLAW_INSTALL_NOSTART=1（装完不启动、不放图标、不开浏览器）、
 #                   CLACLAW_INSTALL_FORCE_NODE=1（已有 Node 也重新下载，配合 CLACLAW_INSTALL_NODE_DIR 用；不改用户的 PATH）
 # 这个文件经 irm | iex 执行：不能用 param、不能 exit（会把用户的 PowerShell 窗口关掉），全部包在一个脚本块里
@@ -19,7 +19,8 @@ try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 $NODE_MAJOR = 24                       # 装哪个大版本（claclaw 平时就在这上面跑）
 $NODE_MIN = [version]'22.13.0'         # 已经装了、够这个版本就不另装（DeepSeek、OpenCode 等要 22.13+）
 $REPO = 'https://github.com/wyidong/claclaw.git'
-$RELAY = 'https://relay.165i.com/claclaw'
+# 代码包镜像（可选，默认不用）：GitHub 连不上时从 $MIRROR/claclaw.bundle（和 claclaw.bundle.sha256）取代码；转发这个脚本的网站可以填上自己的地址（不带末尾 /）
+$MIRROR = ''
 $PORT = 8787
 $LOGDIR = Join-Path $env:LOCALAPPDATA 'claclaw\Logs'
 $DIR = if ($env:CLACLAW_INSTALL_DIR) { $env:CLACLAW_INSTALL_DIR } else { Join-Path $env:USERPROFILE 'claclaw' }
@@ -197,11 +198,12 @@ try {
     Info '从 GitHub 下载...'
     $rc = Run $git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 clone $REPO $DIR
     if ($rc -ne 0 -or -not (Test-Path (Join-Path $DIR 'server.mjs'))) {
-      Warn 'GitHub 连不上，改从 relay.165i.com 下载代码包...'
+      if (-not $MIRROR) { Fail 'GitHub 连不上，下载不了 claclaw。请检查网络后再运行一次。' }
+      Warn 'GitHub 连不上，改从代码包镜像下载...'
       if (Test-Path $DIR) { Remove-Item -Recurse -Force $DIR }
       $b = Join-Path $env:TEMP 'claclaw.bundle'
-      Get-File "$RELAY/claclaw.bundle" $b
-      Get-File "$RELAY/claclaw.bundle.sha256" "$b.sha256"
+      Get-File "$MIRROR/claclaw.bundle" $b
+      Get-File "$MIRROR/claclaw.bundle.sha256" "$b.sha256"
       $want = ((Get-Content "$b.sha256" -Raw).Trim() -split '\s+')[0].ToLower()
       if ($want -ne (Sha256 $b)) { Fail '代码包校验没通过（可能下载坏了）。请再运行一次。' }
       if ((Run $git clone $b $DIR) -ne 0) { Fail '代码包解不开。请再运行一次。' }

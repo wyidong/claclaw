@@ -8,7 +8,7 @@ claclaw 是装在电脑上的一个小网页服务，让你用手机浏览器接
 
 ## 安装
 
-**Windows 一键安装**：打开 https://relay.165i.com/claclaw ，下载「claclaw-安装.cmd」双击（或在 PowerShell 里运行 `irm https://relay.165i.com/claclaw/install.ps1 | iex`）。它检查电脑环境，没有就装好 Node.js（装在用户目录，不用管理员）和 Git，下载 claclaw、装好组件、在后台启动并设好开机启动，桌面放一个「claclaw」图标，最后打开浏览器。国内网络自动用镜像。再运行一次就是更新。脚本在 `install/`。
+**Windows 一键安装**：下载 [install/claclaw-install.cmd](install/claclaw-install.cmd) 双击（或在 PowerShell 里运行 `irm https://raw.githubusercontent.com/wyidong/claclaw/main/install/install-win.ps1 | iex`）。它检查电脑环境，没有就装好 Node.js（装在用户目录，不用管理员）和 Git，下载 claclaw、装好组件、在后台启动并设好开机启动，桌面放一个「claclaw」图标，最后打开浏览器。国内网络自动用镜像。再运行一次就是更新。脚本在 `install/`。
 
 手动安装——要求：macOS 或 Windows，Node.js 18+（DeepSeek、OpenCode、MiniMax Code 要 22.13+，Copilot CLI 要 22+，Gemini CLI 要 20+）。
 
