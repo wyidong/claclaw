@@ -17,6 +17,7 @@ npm install
 npm start          # 默认端口 8787；换端口：npm start -- --port 9000
 ```
 
+- **Windows 开机自动启动**：第一次 `npm start` 后，claclaw 自动在「启动」文件夹里放好 `claclaw.vbs`，以后登录 Windows 就在后台启动（不弹窗口，挂了自动拉起，日志在 `%LOCALAPPDATA%\claclaw\Logs\server.log`）。关机再开机后，直接打开桌面上的 claclaw（网页快捷方式）就能用。不想开机启动：按 Win+R 输入 `shell:startup`，删掉里面的 `claclaw.vbs`（删了以后不会再自动放回）。
 - **第一次打开**：在这台电脑上用 `http://127.0.0.1:8787` 打开，或用手机打开（第一台打开的设备免登录）。进去后按提示设登录账号，设好后所有设备都用这组账号登录。以后改账号：`npm run passwd -- <用户名> <密码>`。
 - **还没装 DeepSeek Harness**：Claw 页有它的卡片，点「安装」自动装好，填好 key 后直接开会话（电脑上一个 Claw 都没有时，Claw 入口会亮红点提示）。
 - **手机怎么连上**：网页默认只监听本机和 Tailscale 地址。装了 Tailscale 就用电脑的 Tailscale 地址打开；没有就用 clarelay（见下），或 SSH 隧道 `ssh -L 8787:127.0.0.1:8787 用户名@那台电脑`。要在局域网里直接打开，用 `CLACLAW_HOST=127.0.0.1,<局域网 IP>` 指定监听地址（不接受 `0.0.0.0`）。

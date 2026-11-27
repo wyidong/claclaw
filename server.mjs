@@ -51,6 +51,7 @@ import { DATA, verify, verifyMasterPassword, verifyPassword, anyNoPassword, setL
 import { readBody, jsonBody } from './src/httpbody.mjs';
 import { makeSkins } from './src/skins.mjs';
 import { relPath, findBin, readJson, procPpid, procStart, sameProcStart, secureDir } from './src/util.mjs';
+import { ensureAutostart } from './src/winstart.mjs';
 import { loginInfo, loginStart, loginInput, loginCancel, loginUnsubscribe } from './src/claws/login.mjs';
 import { INSTALLS, installStart, installState, installing, markInstallable } from './src/claws/install.mjs';
 import { claudeExe, claudeRunnable } from './src/claws/claudebin.mjs';
@@ -3796,6 +3797,8 @@ setInterval(() => {
 // 只能靠 ACL 收紧（macOS / Linux 上是空函数，照旧靠文件权限位）
 try { fs.mkdirSync(DATA, { recursive: true, mode: 0o700 }); } catch {}
 if (secureDir(DATA, log)) log('data 目录已按 ACL 收紧为仅本人可访问');
+// Windows：开机后自动在后台启动（「启动」文件夹里的 claclaw.vbs，见 src/winstart.mjs）；别的系统什么都不做
+ensureAutostart({ root: ROOT, data: DATA, port: PORT, host: process.env.CLACLAW_HOST || '', log });
 skills.setupLocal(PORT, log);
 skills.syncInstalled(log);
 // 端口被占 = 已经有一个 claclaw 在跑（两次重启撞在一起时会这样）。占不到主地址的这个必须退出：

@@ -5,7 +5,8 @@
 //   - 重启后打开一个 Claude 会话、取一次 /login，结果和当前 commit 记到 ~/Library/Logs/claclaw/handover.log
 // 用法：npm run restart [-- <备注>]；指定核实用的会话：CLACLAW_VERIFY_SESSION=<Claude 会话 ID>
 // Windows：没有 launchd。空闲后建一个一次性计划任务（在用户桌面会话里跑，不在 claclaw 的进程树里，杀 claclaw 时不会被带走）：
-//   结束 npm run serve 的守护（没有就结束监听端口的进程）连同子进程，开一个标题为 claclaw 的新窗口 npm run serve，等 /login 通了把结果记进日志，删掉任务；
+//   结束 npm run serve 的守护和监听端口的进程（连同子进程），再拉起来：有开机启动的 claclaw.vbs 就用它在后台拉起（和开机后一样），
+//   没有就开一个标题为 claclaw 的新窗口 npm run serve；等 /login 通了把结果记进日志，删掉任务；
 //   claclaw 已经没在跑时也照样拉起。
 //   日志在 %LOCALAPPDATA%\claclaw\Logs。等的这个进程是 claclaw 的子孙，会跟着被结束，所以核实由计划任务做（只核实 /login）
 import fs from 'node:fs';
@@ -48,6 +49,7 @@ process.on('exit', cleanup);
 const log = s => fs.appendFileSync(LOG, s + '\n');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const { issueToken, revokeToken } = await import(pathToFileURL(path.join(ROOT, 'src', 'auth.mjs')).href);
+const { startupDir } = await import(pathToFileURL(path.join(ROOT, 'src', 'winstart.mjs')).href);
 async function withToken(via, fn) {
   const token = issueToken(via, '127.0.0.1');
   try { return await fn({ cookie: 'claclaw_sid=' + token, origin: BASE }); } finally { revokeToken(token); }
@@ -109,6 +111,10 @@ function winKick() {
   // 新窗口要带上原来的端口 / 监听地址设置（计划任务里起的进程不继承这里的环境变量）
   const env = ['CLACLAW_PORT', 'CLACLAW_HOST'].filter(k => process.env[k]).map(k => `set "${k}=${process.env[k].replace(/["&|<>^%]/g, '')}" && `).join('');
   const ps1 = path.join(LOGDIR, 'restart-task.ps1');
+  const bootVbs = (() => {
+    const f = path.join(startupDir(), 'claclaw.vbs');
+    try { return fs.readFileSync(f).toString('utf16le').includes(ROOT) ? f : ''; } catch { return ''; }
+  })();
   // 每一步都记进 handover.log（带时间）：任务中途没了的话，能看出停在哪一步
   const script = [
     `$log = ${psq(LOG)}`,
@@ -121,9 +127,15 @@ function winKick() {
     `for ($i = 0; $i -lt 40; $i++) { if (-not (Get-NetTCPConnection -LocalPort ${PORT} -State Listen -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Milliseconds 500 }`,
     `$still = Get-NetTCPConnection -LocalPort ${PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1`,
     `if ($still) { L ("    端口 ${PORT} 还被 pid " + $still.OwningProcess + " 占着：旧进程没结束，新窗口会因为端口被占自己退出") } else { L '    端口已空出' }`,
-    // npm run serve：挂了自动拉起、输出进 Logs\server.log（tools/win-serve.mjs）
-    `Start-Process cmd.exe -ArgumentList '/k', ${psq(`title claclaw && ${env}npm run serve`)} -WorkingDirectory ${psq(ROOT)}`,
-    `L '    新窗口已开'`,
+    // 有开机启动的 claclaw.vbs（src/winstart.mjs 放的、指向这份代码）就用它拉起：和开机后一样在后台跑、不弹窗口；
+    // 没有就开一个标题为 claclaw 的窗口 npm run serve。两种都是 tools/win-serve.mjs 守护：挂了自动拉起、输出进 Logs\server.log
+    ...(bootVbs ? [
+      `Start-Process wscript.exe -ArgumentList ${psq('"' + bootVbs + '"')}`,
+      `L '    已按开机启动的方式在后台拉起'`,
+    ] : [
+      `Start-Process cmd.exe -ArgumentList '/k', ${psq(`title claclaw && ${env}npm run serve`)} -WorkingDirectory ${psq(ROOT)}`,
+      `L '    新窗口已开'`,
+    ]),
     `$up = $false`,
     `for ($i = 0; $i -lt 30 -and -not $up; $i++) { Start-Sleep -Seconds 2; try { $up = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 ${psq(BASE + '/login')}).StatusCode -eq 200 } catch {} }`,
     `$h = (& git -C ${psq(ROOT)} log -1 --format=%h)`,
@@ -138,7 +150,7 @@ function winKick() {
     try {
       sch(['/create', '/tn', TASK, '/tr', tr, '/sc', 'once', '/st', '23:59', '/it', '/f']);
       sch(['/run', '/tn', TASK]);
-      log(`    已交给计划任务 ${TASK}：${pid ? '结束 pid ' + pid + '，' : ''}新窗口 npm run serve`);
+      log(`    已交给计划任务 ${TASK}：${pid ? '结束 pid ' + pid + '，' : ''}${bootVbs ? '按开机启动的方式在后台拉起' : '新窗口 npm run serve'}`);
       return;
     } catch (e) {
       const why = String(e.stderr || e.stdout || '').trim().replace(/\s+/g, ' ') || e.message;
