@@ -76,7 +76,7 @@ export function findPeerByToken(c, token) {
 // 不按网卡名认（各系统叫法不一样），改成「排除虚拟网卡」：WSL / Hyper-V / VirtualBox / VMware / Docker /
 // VPN 这些网卡也有私有地址，但对方连不上，选中了协同就开在一个没人能访问的地址上。
 // 剩下的按 en* → 192.168. → 10. → 172.16-31. 排序：macOS 上还是原来那块网卡，不改行为。
-const VIRTUAL_IF = /\b(wsl|hyper-?v|virtualbox|vmware|vethernet|docker|loopback|bluetooth|tailscale|zerotier|utun|bridge\d|awdl|llw)\b/i;
+const VIRTUAL_IF = /\b(wsl|hyper-?v|virtualbox|vmware|vethernet|docker|loopback|bluetooth|tailscale|zerotier)\b|^(utun|bridge|awdl|llw)\d+$/i;   // macOS 的 utun0、bridge100、awdl0、llw0 带编号，要整段匹配（原来 \b 挡不住）
 const PRIVATE_IP = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 export function lanIp() {
   const found = [];

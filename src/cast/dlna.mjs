@@ -7,7 +7,7 @@ import os from 'node:os';
 const SSDP = '239.255.255.250', ST_RENDERER = 'urn:schemas-upnp-org:device:MediaRenderer:1';
 const AVT = 'urn:schemas-upnp-org:service:AVTransport:1', RC = 'urn:schemas-upnp-org:service:RenderingControl:1';
 const PRIVATE_IP = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
-const VIRTUAL_IF = /\b(wsl|hyper-?v|virtualbox|vmware|vethernet|docker|loopback|bluetooth|tailscale|zerotier|utun|bridge\d|awdl|llw)\b/i;   // 同 src/peer/peer.mjs
+const VIRTUAL_IF = /\b(wsl|hyper-?v|virtualbox|vmware|vethernet|docker|loopback|bluetooth|tailscale|zerotier)\b|^(utun|bridge|awdl|llw)\d+$/i;   // 同 src/peer/peer.mjs
 
 export function lanAddrs() {
   const out = [];
