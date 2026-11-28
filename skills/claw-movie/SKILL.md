@@ -45,7 +45,7 @@ claw-movie --cast-status / --cast-pause / --cast-resume / --cast-stop
 
 - 不加 `--to`：只有一台电视就投它，否则投上次投过的那台；都不是就会列出电视名，问用户投哪台，再用 `--to`。
 - 一台电视盒子上常常有好几个接收端（系统自带的、腾讯视频、芒果 TV…），名字不同，都能投。
-- 能投 YouTube、Dailymotion、Internet Archive 的片子；NFB 的暂时投不了。约 10～20 秒电视开始播。
+- 能投 YouTube、Dailymotion、Internet Archive 的片子，还有电视直播的官方直播流（CGTN 那种 .m3u8，`--cast 网址`）；NFB 的片子、YouTube 直播暂时投不了。约 10～20 秒电视开始播。
 - 也可以告诉用户：网页上播放器的标题条有个电视图标，点它选电视，手机就成了遥控器（暂停、拖进度、停止投屏）。
 - 投出来没声音：多半是电视那边的音量 / 声音输出（比如设成了耳机），让用户用遥控器调。
 

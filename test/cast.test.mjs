@@ -61,9 +61,9 @@ test('DIDL：标题和网址里的 & < > 转义', () => {
   assert.match(x, />http:\/\/a\/b\?x=1&amp;y=2<\/res>/);
 });
 
-test('能投屏的网址：YouTube、Dailymotion、Archive；NFB、B 站不行', () => {
-  for (const u of ['https://www.youtube.com/watch?v=dTN7JhVLPJI', 'https://youtu.be/dTN7JhVLPJI', 'https://www.dailymotion.com/video/x4js048', 'https://archive.org/details/suddenly']) assert.ok(CASTABLE.test(u), u);
-  for (const u of ['https://www.nfb.ca/film/x/', 'https://www.bilibili.com/video/BV1xx411c7mD']) assert.ok(!CASTABLE.test(u), u);
+test('能投屏的网址：YouTube、Dailymotion、Archive、https 直播流；NFB、B 站、http 直链不行', () => {
+  for (const u of ['https://www.youtube.com/watch?v=dTN7JhVLPJI', 'https://youtu.be/dTN7JhVLPJI', 'https://www.dailymotion.com/video/x4js048', 'https://archive.org/details/suddenly', 'https://english-livebkali.cgtn.com/live/encgtn.m3u8']) assert.ok(CASTABLE.test(u), u);
+  for (const u of ['https://www.nfb.ca/film/x/', 'https://www.bilibili.com/video/BV1xx411c7mD', 'http://a/b.m3u8', 'https://x.com/a.mp4']) assert.ok(!CASTABLE.test(u), u);
 });
 
 test('走代理取上游：HTTP CONNECT 隧道，跟着跳转走', async () => {

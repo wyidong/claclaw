@@ -658,14 +658,19 @@ async function stream(u) {
   const px = await proxy();
   const yt = /(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/.test(u);
   if (/nfb\.ca|onf\.ca/.test(u)) die('NFB 的片子暂时投不了屏');
+  if (/^https:\/\/[^\s?#]+\.m3u8(\?|$)/.test(u)) { console.log(JSON.stringify({ title: '', dur: 0, page: u, proxy: px || '', kind: 'hls', url: u, height: 0 })); return; }   // 直播流直链（CGTN 等）
   if ((yt || /dailymotion\.com|dai\.ly/.test(u)) && !px) die('要能上 YouTube / Dailymotion 才能投屏（没找到代理）');
   const j = JSON.parse(await ytdlp(['-J', '--no-playlist', u], { proxy: !!px, timeout: 60000 }));
   const fs_ = j.formats || [], maxH = +opt.height || 1080;
   const base = { title: j.title || '', dur: Math.round(j.duration || 0), page: u, proxy: px || '' };
   const hls = f => /^m3u8/.test(f.protocol || '');
   let out;
-  if (yt) {
-    const vs = fs_.filter(f => hls(f) && /^avc1/.test(f.vcodec || '') && (!f.acodec || f.acodec === 'none') && f.height && f.height <= maxH).sort((a, b) => a.height - b.height || (a.tbr || 0) - (b.tbr || 0));
+  // YouTube 直播（电视台的 24 小时直播）：音画合一的 HLS，直接转
+  const live = yt && j.is_live && fs_.filter(f => hls(f) && /^avc1/.test(f.vcodec || '') && f.acodec && f.acodec !== 'none' && (f.height || 0) <= maxH).sort((a, b) => (a.height || 0) - (b.height || 0)).at(-1);
+  if (live) out = { kind: 'hls', url: live.url, height: live.height || 0, live: true };
+  else if (yt && j.is_live) die('YouTube 直播暂时投不了屏（音视频分开、列表一直在变）；CGTN 可以投它的官方直播流');
+  else if (yt) {
+    const vs =fs_.filter(f => hls(f) && /^avc1/.test(f.vcodec || '') && (!f.acodec || f.acodec === 'none') && f.height && f.height <= maxH).sort((a, b) => a.height - b.height || (a.tbr || 0) - (b.tbr || 0));
     const as = fs_.filter(f => hls(f) && f.vcodec === 'none');
     const a = as.find(f => f.format_id === '234') || as.find(f => /^mp4a\.40\.2/.test(f.acodec || '')) || as.at(-1);
     const v = vs.at(-1);

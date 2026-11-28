@@ -16,7 +16,7 @@ import { mux } from './tsmux.mjs';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 const IDLE = 3 * 3600e3;
-export const CASTABLE = /^https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?|shorts\/|live\/|embed\/)|youtu\.be\/|(?:www\.)?dailymotion\.com\/video\/|dai\.ly\/|archive\.org\/details\/)/;
+export const CASTABLE = /^https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?|shorts\/|live\/|embed\/)|youtu\.be\/|(?:www\.)?dailymotion\.com\/video\/|dai\.ly\/|archive\.org\/details\/)|^https:\/\/[^\s?#]+\.m3u8(?:\?|$)/;   // 最后一种：直播流直链（CGTN 等）
 
 // ---------- 走代理取上游（Node 的 fetch 不认代理）：HTTP CONNECT 隧道；Clash 的 7890 / 7897 混合端口也认 ----------
 function tunnel(px, host, port) {
@@ -163,7 +163,7 @@ export function makeCaster({ ROOT, DATA = '', log = () => {} }) {
   // 开始投：马上返回，进度看 status()
   async function play({ page, title = '', device: devId, start = 0 }) {
     page = String(page || '').trim();
-    if (!CASTABLE.test(page)) throw new Error('这个视频投不了屏（只支持 YouTube、Dailymotion、Internet Archive）');
+    if (!CASTABLE.test(page)) throw new Error('这个视频投不了屏（只支持 YouTube、Dailymotion、Internet Archive 和直播流）');
     const d = await device(String(devId || ''));
     const my = ++gen;
     polled = { at: 0, v: null };

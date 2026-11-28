@@ -1284,7 +1284,7 @@ function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
 // 投屏：正在播的电影 / 视频投到和电脑同一个局域网里的电视、投影（DLNA）。找电视、推视频都是电脑（claclaw 服务器）做的，
 // 手机只当遥控器，所以手机在外面也能投家里的电视。投着屏时这里换成遥控器：暂停 / 继续、拖进度、停止投屏；
 // 点列表里别的片子直接投到同一台电视；停止投屏后在手机上从电视播到的地方接着看。服务器那边见 src/cast/cast.mjs
-var TP_CAST=/^https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?|shorts\/|live\/|embed\/)|youtu\.be\/|(?:www\.)?dailymotion\.com\/video\/|dai\.ly\/|archive\.org\/details\/)/;
+var TP_CAST=/^https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?|shorts\/|live\/|embed\/)|youtu\.be\/|(?:www\.)?dailymotion\.com\/video\/|dai\.ly\/|archive\.org\/details\/)|^https:\/\/[^\s?#]+\.m3u8(?:\?|$)/;
 var tc=null,tcTimer=0,tcSeeking=false;   // tc：{dev:{id,name}, page, st:服务器的投屏状态}
 function tcUrl(x){x=x||tp.list[tp.i];var u=x&&x.a.getAttribute('href');return u&&TP_CAST.test(u)?u:''}
 function tcPost(b){return fetch('/api/cast',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()})}
