@@ -1353,6 +1353,8 @@ textarea.md-in:focus-visible{outline:none}
 .cr-row .cr-btns{flex-basis:100%;display:flex;justify-content:flex-end;gap:8px}
 .cr-row .md-pill.del{color:var(--deny);background:color-mix(in srgb,var(--deny) 10%,transparent)}
 .cr-row .md-pill:disabled{opacity:.5}
+.up-row small.up-new{color:var(--accent,var(--ink));font-weight:600}   /* 有新版本 / 已装好等重启 */
+.up-row small.up-err{color:var(--warn)}
 .md-acts{margin:0}
 .md-save{display:block;width:100%;height:46px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink,#fff);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
 .md-save:active{opacity:.8}
