@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { marketOf, kindOfCode, boardOf, cleanQuery, parseHint, parseSuggest, rank, parseQuote, phase, parseKEm, parseKTx, sma, spark, pctStr, money, renderQuote, renderK, renderCmp } from '../skills/claw-stock/stock.mjs';
 import { loadFills, routeFill } from '../src/claws/kuai-fill.mjs';
@@ -99,34 +100,87 @@ test('均线、小走势图、数字的写法', () => {
 });
 
 const KS = Array.from({ length: 61 }, (_, i) => ({ date: '2026-09-' + String(i + 1).padStart(2, '0'), open: 100 + i, close: 100 + i, high: 101 + i, low: 99 + i, vol: 1000, amount: 1e8 }));
-test('排版：个股带估值、指数不带；最后都有来源说明，没有买卖建议的词', () => {
+const lines = out => out.split('\n').filter(l => l.includes(' | ')).map(l => l.split(' | '));
+const of = (out, kind, name) => lines(out).find(f => f[0] === kind && (!name || f[1] === name));
+test('输出是 ```stock 块：个股带估值、指数不带、基金写规模；最后有来源说明，没有买卖建议的词', () => {
   const q = { ...parseQuote(QT).sh600519, kind: '个股' };
   const out = renderQuote(q, KS, [{ name: '贵州茅台', code: '600519', exact: true }]);
-  assert.match(out, /^\*\*贵州茅台\*\* `600519` · 沪市主板/);
-  assert.match(out, /\*\*1472\.36\*\* ▲ \+3\.36（\+0\.23%）/);
-  assert.match(out, /市盈率 TTM/);
-  assert.match(out, /近 60 个交易日 [▁-█]{30} \+60\.00%/);      // 61 根：从第 1 根的收盘 100 涨到 160
-  assert.match(out, /不是投资建议。$/);
+  assert.match(out, /^```stock\n股 \| /); assert.match(out, /\n```$/);
+  assert.deepEqual(of(out, '股'), ['股', '贵州茅台', '600519', '沪市主板', '1472.36', '+3.36', '+0.23%', '2026-11-27 16:14 · ' + phase('2026-11-27 16:14')]);
+  assert.deepEqual(of(out, '项', '今开'), ['项', '今开', '1469.99', '+']);      // 比昨收 1469.00 高：红
+  assert.deepEqual(of(out, '项', '最低'), ['项', '最低', '1452.99', '-']);      // 比昨收低：绿
+  assert.deepEqual(of(out, '项', '昨收'), ['项', '昨收', '1469.00']);           // 末尾空着的字段不写
+  assert.deepEqual(of(out, '项', '市盈率 TTM'), ['项', '市盈率 TTM', '22.40']);
+  const t = of(out, '势');
+  assert.deepEqual(t.slice(1, 4), ['近 60 个交易日', '+60.00%', '最低 100.00 · 最高 161.00 · 前复权']);   // 61 根：从第 1 根的收盘 100 涨到 160
+  assert.equal(t[4].split(',').length, 60); assert.equal(t[4].split(',').at(-1), '160.00');
+  assert.equal(lines(out).at(-1)[0], '注'); assert.match(out, /不是投资建议。\n```$/);
   assert.doesNotMatch(out, /名字相近的还有/);
   const idx = renderQuote({ ...q, name: '上证指数', code: '000001', kind: '指数', pe: null, cap: null }, KS);
-  assert.doesNotMatch(idx, /市盈率|前复权/);
-  assert.match(idx, /成交量/);
+  assert.doesNotMatch(idx, /市盈率|前复权/); assert.ok(of(idx, '项', '成交量'));
   const fund = renderQuote({ ...q, name: '沪深300ETF', code: '510300', kind: '基金' }, KS);
-  assert.match(fund, /规模/); assert.doesNotMatch(fund, /市盈率/);
+  assert.ok(of(fund, '项', '规模')); assert.doesNotMatch(fund, /市盈率/);
+  assert.deepEqual(of(renderQuote({ ...q, pe: -3 }, KS), '项', '市盈率 TTM'), ['项', '市盈率 TTM', '—', '', '亏损']);
   const amb = renderQuote(q, KS, [{ name: '平安银行', code: '000001', exact: false }, { name: '中国平安', code: '601318' }]);
-  assert.match(amb, /名字相近的还有：中国平安 `601318`/);
+  assert.match(amb, /\n注 \| 名字相近的还有：中国平安 601318。/);
+  assert.match(renderQuote({ ...q, name: '怪|名\n字' }, KS), /^```stock\n股 \| 怪｜名 字 \| /);       // 名字里的 | 和换行不会把一行拆坏
   for (const o of [out, idx, renderK(q, KS, 20), renderCmp([{ q, ks: KS }, { q, ks: KS.slice(0, 5) }])]) assert.doesNotMatch(o, /建议买|建议卖|买入|卖出|看涨|看跌|支撑位|压力位|目标价/);
 });
 test('走势：区间、均线、最近 5 天；对比：数据不够的写 —', () => {
   const q = { ...parseQuote(QT).sh600519, kind: '个股' }, k = renderK(q, KS, 20);
-  assert.match(k, /\*\*2026-09-42 ～ 2026-09-61，20 个交易日\*\*（前复权）/);
-  assert.match(k, /MA5 158\.00（现价在它上方/);
-  assert.match(k, /MA60 130\.50/);
-  assert.equal(k.split('\n').filter(l => /^\| 2026-09-/.test(l)).length, 5);
-  assert.match(renderK(q, KS.slice(0, 10), 10), /MA20 数据不够/);
-  const c = renderCmp([{ q, ks: KS }, { q: { ...q, name: '新股', pe: -3 }, ks: KS.slice(0, 5) }]);
-  assert.match(c, /\| 贵州茅台 `600519` \| 1472\.36 \| \+0\.23% \| \+14\.29% \| \+60\.00% \| 22\.4 \|/);
-  assert.match(c, /\| 新股 `600519` \| 1472\.36 \| \+0\.23% \| — \| — \| — \|/);
+  assert.deepEqual(of(k, '势').slice(1, 4), ['2026-09-42 ～ 2026-09-61 · 20 个交易日', '+13.48%', '前复权']);
+  assert.deepEqual(of(k, '项', '区间涨跌'), ['项', '区间涨跌', '+13.48%', '+']);
+  assert.deepEqual(of(k, '项', '最高'), ['项', '最高', '161.00', '', '09-61']);
+  assert.deepEqual(of(k, '项', 'MA5'), ['项', 'MA5', '158.00', '', '现价在上方 1.3%']);
+  assert.equal(of(k, '项', 'MA60')[2], '130.50');
+  const days = lines(k).filter(f => f[0] === '日');
+  assert.equal(days.length, 5);
+  assert.deepEqual(days.at(-1), ['日', '2026-09-61', '160.00', '160.00', '161.00', '159.00', '+0.63%', '1.00 亿']);
+  assert.deepEqual(of(renderK(q, KS.slice(0, 10), 10), '项', 'MA20'), ['项', 'MA20', '—', '', '数据不够']);
+  const dn = renderK(q, KS.map((x, i) => ({ ...x, close: 200 - i })), 20);
+  assert.deepEqual(of(dn, '项', '区间涨跌').slice(2), ['-11.95%', '-']);
+  const c = renderCmp([{ q, ks: KS }, { q: { ...q, name: '新股', pe: -3, pb: 0 }, ks: KS.slice(0, 5) }]);
+  assert.deepEqual(of(c, '比', '贵州茅台'), ['比', '贵州茅台', '600519', '1472.36', '+0.23%', '+14.29%', '+60.00%', '22.4', '6.79', '1.84 万亿']);
+  assert.deepEqual(of(c, '比', '新股').slice(3, 9), ['1472.36', '+0.23%', '—', '—', '—', '—']);
+});
+
+// 页面那一半：把 public/index.html 里画行情卡片的那段原样抽出来测
+const page = fs.readFileSync('public/index.html', 'utf8'), pi = page.indexOf('// ---------- 行情卡片：'), pj = page.indexOf('// ---------- 行情卡片完', pi);
+const pctx = { esc: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'), mdCode: s => 'CODE:' + s };
+vm.createContext(pctx); vm.runInContext(page.slice(pi, pj), pctx);
+const { mdStock, stkCls } = pctx, body = s => s.replace(/^```stock\n/, '').replace(/\n```$/, '');
+test('页面：红涨绿跌，平盘不上色', () => {
+  assert.ok(pi > 0 && pj > pi, '找不到行情卡片那段');
+  assert.match(page, /if\(lang==='stock'\)return mdStock\(cj\);/);
+  assert.deepEqual(['+0.23%', '+3.36', '-1.77%', '-0.22', '0.00%', '+0.00%', '-0.00', '—', '', '-'].map(stkCls), [' up', ' up', ' dn', ' dn', '', '', '', '', '', '']);
+  const css = fs.readFileSync('public/app.css', 'utf8');
+  assert.match(css, /\.stk\{--up:color-mix\(in srgb,#E5352B /);      // 涨：红
+  assert.match(css, /--dn:color-mix\(in srgb,#149A52 /);              // 跌：绿
+  assert.match(css, /\.stk \.up\{color:var\(--up\)\}\.stk \.dn\{color:var\(--dn\)\}/);
+});
+test('页面：命令的输出画成卡片（现价上色、一格一个数、折线、表），认不出的照代码显示', () => {
+  const q = { ...parseQuote(QT).sh600519, kind: '个股' }, h = mdStock(body(renderQuote(q, KS)));
+  assert.match(h, /^<div class="stk"><div class="stk-h"><b>贵州茅台<\/b><code>600519<\/code><small>沪市主板<\/small><\/div>/);
+  assert.match(h, /<div class="stk-p up"><em>1472\.36<\/em><span>▲ \+3\.36<\/span><span>\+0\.23%<\/span><\/div>/);
+  assert.match(h, /<small>今开<\/small><b class="up">1469\.99<\/b>/);
+  assert.match(h, /<small>最低<\/small><b class="dn">1452\.99<\/b>/);
+  assert.match(h, /<small>昨收<\/small><b class="">1469\.00<\/b>/);
+  assert.match(h, /<svg class="stk-l up" viewBox="0 0 300 64"/);
+  assert.equal((/<polyline points="([^"]+)"/.exec(h)[1].split(' ')).length, 60);
+  assert.match(h, /<div class="stk-n">数据来自/);
+  const down = mdStock(body(renderQuote({ ...q, chg: -3.36, pct: -0.23 }, KS.map((x, i) => ({ ...x, close: 200 - i })))));
+  assert.match(down, /<div class="stk-p dn"><em>1472\.36<\/em><span>▼ -3\.36<\/span>/);
+  assert.match(down, /<svg class="stk-l dn"/);
+  const k = mdStock(body(renderK(q, KS, 20)));
+  assert.equal(k.split('<tr><td>').length - 1, 5);
+  assert.match(k, /<td>09-61<\/td><td>160\.00<\/td>.*<span class="stk-v up">\+0\.63%<\/span>/);
+  assert.match(k, /<small>MA5<\/small><b class="">158\.00<\/b><i>现价在上方 1\.3%<\/i>/);
+  const c = mdStock(body(renderCmp([{ q, ks: KS }, { q: { ...q, name: '跌的', pct: -2 }, ks: KS }])));
+  assert.match(c, /^<div class="stk"><div class="stk-tb stk-cmp">/);
+  assert.match(c, /<b>跌的<\/b><code>600519<\/code><\/td><td>1472\.36<\/td><td><span class="stk-v dn">-2\.00%<\/span>/);
+  assert.equal(mdStock('随便一段\n不是行情'), 'CODE:随便一段\n不是行情');
+  assert.equal(mdStock('势 | 标题 | +1% | 说明 | 不是数字'), 'CODE:势 | 标题 | +1% | 说明 | 不是数字');
+  assert.match(mdStock('股 | <b>x</b> | 1 | 板 | 1 | +1 | +1% | t'), /<b>&lt;b&gt;x&lt;\/b&gt;<\/b>/);     // 名字里的标签不会被当成网页
 });
 
 test('命令：不写参数退出 1 并给用法；cmp 只写一只退出 1（都不联网）', () => {

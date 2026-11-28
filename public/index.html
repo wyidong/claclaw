@@ -808,6 +808,52 @@ function mdShop(src){
 }
 document.addEventListener('load',function(ev){var t=ev.target;if(t.classList&&t.classList.contains('shc-img'))t.classList.add('ok')},true);
 document.addEventListener('error',function(ev){var t=ev.target;if(t.classList&&t.classList.contains('shc-img'))t.remove()},true);
+// ---------- 行情卡片：```stock 代码块（claw-stock 技能生成），红涨绿跌 ----------
+// 一行一条，第一段是这行的种类：
+//   股 | 名称 | 代码 | 板块 | 现价 | 涨跌 | 涨跌幅 | 报价时间        卡片头：大字现价，按涨跌上色
+//   项 | 名字 | 值 | + 或 -（值的颜色，空着不上色）| 小字说明       一格一个数
+//   势 | 标题 | 涨跌幅 | 说明 | 收盘价（逗号分开）                  折线图，涨是红、跌是绿
+//   日 | 日期 | 开 | 收 | 高 | 低 | 涨跌幅 | 成交额                 最近几天的表
+//   比 | 名称 | 代码 | 现价 | 今日 | 近 20 日 | 近 60 日 | 市盈率 | 市净率 | 总市值   几只对比的表
+//   注 | 一句说明
+// 带正负号的数（+1.23%、-0.5）自己上色；一条能认的都没有就照代码显示
+function stkCls(s){s=String(s||'');return /^[+-]0(\.0+)?%?$/.test(s)?'':s.charAt(0)==='+'?' up':s.charAt(0)==='-'&&/\d/.test(s)?' dn':''}
+function stkNum(s){return '<span class="stk-v'+stkCls(s)+'">'+esc(s||'—')+'</span>'}
+function stkLine(csv,cls){
+  var v=String(csv||'').split(',').map(Number).filter(function(x){return isFinite(x)});if(v.length<2)return '';
+  var lo=Math.min.apply(null,v),hi=Math.max.apply(null,v),W=300,H=64,P=3,sp=hi-lo||1;
+  var pt=v.map(function(x,i){return (i*W/(v.length-1)).toFixed(1)+','+(P+(H-2*P)*(1-(x-lo)/sp)).toFixed(1)}).join(' ');
+  return '<svg class="stk-l'+cls+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,'+H+' '+pt+' '+W+','+H+'"/><polyline points="'+pt+'"/></svg>';
+}
+function mdStock(src){
+  var head='',items='',trend='',days='',cmp='',notes='',ok=0;
+  src.split('\n').forEach(function(l){
+    var f=l.split('|').map(function(x){return x.trim()}),k=f[0];
+    if(k==='股'&&f.length>=7){
+      ok++;var c=stkCls(f[6])||stkCls(f[5]);
+      head='<div class="stk-h"><b>'+esc(f[1])+'</b><code>'+esc(f[2])+'</code><small>'+esc(f[3])+'</small></div>'
+        +'<div class="stk-p'+c+'"><em>'+esc(f[4])+'</em><span>'+(c===' up'?'▲ ':c===' dn'?'▼ ':'')+esc(f[5])+'</span><span>'+esc(f[6])+'</span></div>'
+        +(f[7]?'<div class="stk-t">'+esc(f[7])+'</div>':'');
+    }else if(k==='项'&&f.length>=3){
+      ok++;var cc=f[3]==='+'?' up':f[3]==='-'?' dn':'';
+      items+='<span class="stk-i"><small>'+esc(f[1])+'</small><b class="'+cc.trim()+'">'+esc(f[2])+'</b>'+(f[4]?'<i>'+esc(f[4])+'</i>':'')+'</span>';
+    }else if(k==='势'&&f.length>=5){
+      var sv=stkLine(f[4],stkCls(f[2]));if(!sv)return;ok++;
+      trend+='<div class="stk-s"><div class="stk-sc"><span>'+esc(f[1])+'</span>'+stkNum(f[2])+'</div>'+sv+(f[3]?'<div class="stk-t">'+esc(f[3])+'</div>':'')+'</div>';
+    }else if(k==='日'&&f.length>=8){
+      ok++;days+='<tr><td>'+esc(f[1].replace(/^\d{4}-/,''))+'</td><td>'+esc(f[2])+'</td><td>'+esc(f[3])+'</td><td>'+esc(f[4])+'</td><td>'+esc(f[5])+'</td><td>'+stkNum(f[6])+'</td><td>'+esc(f[7])+'</td></tr>';
+    }else if(k==='比'&&f.length>=10){
+      ok++;cmp+='<tr><td><b>'+esc(f[1])+'</b><code>'+esc(f[2])+'</code></td><td>'+esc(f[3])+'</td><td>'+stkNum(f[4])+'</td><td>'+stkNum(f[5])+'</td><td>'+stkNum(f[6])+'</td><td>'+esc(f[7])+'</td><td>'+esc(f[8])+'</td><td>'+esc(f[9])+'</td></tr>';
+    }else if(k==='注'&&f[1])notes+='<div class="stk-n">'+esc(f.slice(1).join(' | '))+'</div>';
+  });
+  if(!ok)return mdCode(src);
+  var th=function(a){return '<tr>'+a.map(function(x){return '<th>'+x+'</th>'}).join('')+'</tr>'};
+  return '<div class="stk">'+head+(items?'<div class="stk-g">'+items+'</div>':'')+trend
+    +(days?'<div class="stk-tb"><table>'+th(['日期','开','收','高','低','涨跌','成交额'])+days+'</table></div>':'')
+    +(cmp?'<div class="stk-tb stk-cmp"><table>'+th(['名称','现价','今日','近 20 日','近 60 日','市盈率','市净率','总市值'])+cmp+'</table></div>':'')
+    +notes+'</div>';
+}
+// ---------- 行情卡片完 ----------
 // 主题卡片：```theme 代码块，一行一个「主题 id | 名字 | 说明」（claw-theme 技能生成）。卡片上画一小块那个主题的界面，点了马上换上（别的设备也跟着换）
 // id：auto / light / dark / ziwei / shichen（按时辰轮流）/ shichen@0～11（固定一个时辰）。颜色取自 app.css 各主题的 --bg / --surface / --accent / --ink
 var THP={light:['#F1F3F5','#FFFFFF','#12864A','#14181C'],dark:['#0E1115','#161B21','#3FCB86','#E7EBEF'],ziwei:['#F2F0F8','#FFFFFF','#5B21B6','#1F1B2D'],
@@ -965,6 +1011,7 @@ function mdFence(cj,lang,done){
     if(lang==='tv')return mdTv(cj);
     if(lang==='theme')return mdTheme(cj);
     if(lang==='shop')return mdShop(cj);
+    if(lang==='stock')return mdStock(cj);
     if(lang==='svg'||(!lang||lang==='xml'||lang==='html')&&SVG_SRC.test(cj))return mdSvg(cj);
   }
   return mdCode(cj,lang);

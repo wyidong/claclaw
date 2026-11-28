@@ -4,6 +4,7 @@
 //   claw-stock k 茅台 [--days 120]   一段时间的走势：区间涨跌、最高最低、均线、最近 5 天
 //   claw-stock cmp 茅台 五粮液 …      几只放一起比（2～6 只）
 //   claw-stock find 平安             这个名字对得上哪几只（重名、不确定代码时）
+// 输出 ```stock 代码块：claclaw 画成行情卡片（红涨绿跌、走势折线，public/index.html 的 mdStock）；find 输出 Markdown 表格。
 // 来源（都是公开行情页面用的接口，不用登录、没有签名）：
 //   报价 腾讯证券 qt.gtimg.cn；日 K 东方财富 push2his（前复权），不通时换腾讯；找代码 腾讯 smartbox，没有时换东方财富（北交所只有它按名字找得到）
 // 单位（两家不一样，这里统一）：成交量 = 手，成交额 = 元，市值 = 元。
@@ -134,36 +135,54 @@ export const money = v => v == null || !Number.isFinite(v) ? '—' : Math.abs(v)
 const volStr = v => v == null ? '—' : v >= 1e8 ? (v / 1e8).toFixed(2) + ' 亿手' : v >= 1e4 ? (v / 1e4).toFixed(1) + ' 万手' : v.toFixed(0) + ' 手';
 const chgOver = (ks, n) => ks.length > n ? (ks.at(-1).close / ks.at(-1 - n).close - 1) * 100 : null;      // 近 n 个交易日涨跌
 const table = (heads, rows) => ['| ' + heads.join(' | ') + ' |', '|' + heads.map(() => ' --- ').join('|') + '|', ...rows.map(r => '| ' + r.join(' | ') + ' |')].join('\n');
-const head = q => `**${q.name}** \`${q.code}\` · ${boardOf(q.mkt, q.code, q.kind)}`;
-const priceLine = q => `**${q.price}** ${arrow(q.chg)} ${q.chg > 0 ? '+' : ''}${fx(q.chg, dp(q.price))}（${pctStr(q.pct)}） · ${q.time}（${phase(q.time)}）`;
-const others = cands => cands.length > 1 && !cands[0].exact ? '\n\n名字相近的还有：' + cands.slice(1, 5).map(c => `${c.name} \`${c.code}\``).join('、') + '。要看哪只，把名字或代码说全。' : '';
+// 输出是 ```stock 代码块，claclaw 画成行情卡片（红涨绿跌、走势折线）。一行一条，字段用 | 分开，旧页面当代码显示也看得懂：
+//   股 | 名称 | 代码 | 板块 | 现价 | 涨跌 | 涨跌幅 | 报价时间和说明
+//   项 | 名字 | 值 | 颜色（+ 红、- 绿、空着不上色）| 小字说明
+//   势 | 标题 | 涨跌幅 | 说明 | 收盘价，逗号分开（画折线）
+//   日 | 日期 | 开 | 收 | 高 | 低 | 涨跌幅 | 成交额
+//   比 | 名称 | 代码 | 现价 | 今日 | 近 20 日 | 近 60 日 | 市盈率 | 市净率 | 总市值
+//   注 | 一句说明
+const row = (...f) => f.map(x => String(x ?? '').replace(/\|/g, '｜').replace(/\s*\n\s*/g, ' ')).join(' | ').replace(/(\s*\|)+\s*$/, '');   // 末尾空着的字段不写
+const block = lines => '```stock\n' + lines.filter(Boolean).join('\n') + '\n```';
+const sign = v => v > 0 ? '+' : v < 0 ? '-' : '';
+const signed = (v, d) => v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : '') + v.toFixed(d);
+const headRow = q => row('股', q.name, q.code, boardOf(q.mkt, q.code, q.kind), q.price, signed(q.chg, dp(q.price)), pctStr(q.pct), `${q.time} · ${phase(q.time)}`);
+const vs = (v, q) => v == null || q.prev == null ? '' : sign(v - q.prev);                        // 今开、最高、最低：比昨收高是红、低是绿
+// 折线用的收盘价：最多 80 个点（多了按段取每段最后一天）
+const pts = (ks, d, w = 80) => { const v = ks.map(k => k.close), p = v.length <= w ? v : Array.from({ length: w }, (_, i) => v[Math.round((i + 1) * v.length / w) - 1]); return p.map(x => x.toFixed(d)).join(','); };
+const othersRow = cands => cands.length > 1 && !cands[0].exact ? row('注', '名字相近的还有：' + cands.slice(1, 5).map(c => `${c.name} ${c.code}`).join('、') + '。要看哪只，把名字或代码说全。') : '';
 
 export function renderQuote(q, ks, cands = []) {
-  const d = dp(q.price), idx = q.kind === '指数', rows1 = [[fx(q.open, d), fx(q.high, d), fx(q.low, d), fx(q.prev, d), q.amp == null ? '—' : q.amp.toFixed(2) + '%']];
-  const out = [head(q), '', priceLine(q), '', table(['今开', '最高', '最低', '昨收', '振幅'], rows1), ''];
-  out.push(idx ? table(['成交量', '成交额'], [[volStr(q.vol), money(q.amount)]])
-    : q.kind === '基金' ? table(['成交额', '换手率', '规模'], [[money(q.amount), q.turn == null ? '—' : q.turn.toFixed(2) + '%', money(q.cap)]])
-    : table(['成交额', '换手率', '市盈率 TTM', '市净率', '总市值'], [[money(q.amount), q.turn == null ? '—' : q.turn.toFixed(2) + '%', q.pe == null || q.pe <= 0 ? '—（亏损或没有）' : q.pe.toFixed(2), fx(q.pb), money(q.cap)]]));
+  const d = dp(q.price), idx = q.kind === '指数', out = [headRow(q),
+    row('项', '今开', fx(q.open, d), vs(q.open, q)), row('项', '最高', fx(q.high, d), vs(q.high, q)), row('项', '最低', fx(q.low, d), vs(q.low, q)), row('项', '昨收', fx(q.prev, d)), row('项', '振幅', q.amp == null ? '—' : q.amp.toFixed(2) + '%')];
+  if (idx) out.push(row('项', '成交量', volStr(q.vol)), row('项', '成交额', money(q.amount)));
+  else {
+    out.push(row('项', '成交额', money(q.amount)), row('项', '换手率', q.turn == null ? '—' : q.turn.toFixed(2) + '%'));
+    if (q.kind === '基金') out.push(row('项', '规模', money(q.cap)));
+    else out.push(row('项', '市盈率 TTM', q.pe == null || q.pe <= 0 ? '—' : q.pe.toFixed(2), '', q.pe != null && q.pe <= 0 ? '亏损' : ''), row('项', '市净率', fx(q.pb)), row('项', '总市值', money(q.cap)));
+  }
   if (ks.length > 2) {   // ks 多带了前一天那根：涨跌从它的收盘价算起，和 cmp 的「近 N 日」是同一个算法
     const w = ks.slice(1), lo = Math.min(...w.map(k => k.low)), hi = Math.max(...w.map(k => k.high));
-    out.push('', `近 ${w.length} 个交易日 ${spark(w.map(k => k.close))} ${pctStr((w.at(-1).close / ks[0].close - 1) * 100)}，最低 ${fx(lo, d)}、最高 ${fx(hi, d)}${idx ? '' : '（前复权）'}`);
+    out.push(row('势', `近 ${w.length} 个交易日`, pctStr((w.at(-1).close / ks[0].close - 1) * 100), `最低 ${fx(lo, d)} · 最高 ${fx(hi, d)}${idx ? '' : ' · 前复权'}`, pts(w, d)));
   }
-  return out.join('\n') + others(cands) + '\n\n' + NOTE;
+  return block([...out, othersRow(cands), row('注', NOTE)]);
 }
 export function renderK(q, all, days, cands = []) {
-  const ks = all.slice(-days), d = dp(q.price), last = ks.at(-1), hi = ks.reduce((a, k) => k.high > a.high ? k : a), lo = ks.reduce((a, k) => k.low < a.low ? k : a);
+  const ks = all.slice(-days), d = dp(q.price), last = ks.at(-1), hi = ks.reduce((a, k) => k.high > a.high ? k : a), lo = ks.reduce((a, k) => k.low < a.low ? k : a), total = (last.close / ks[0].close - 1) * 100;
   const dayPct = ks.map((k, i) => i ? { date: k.date, p: (k.close / ks[i - 1].close - 1) * 100 } : null).filter(Boolean), up = dayPct.reduce((a, b) => b.p > a.p ? b : a, dayPct[0]), dn = dayPct.reduce((a, b) => b.p < a.p ? b : a, dayPct[0]);
-  const amt = ks.filter(k => k.amount != null), ma = n => { const v = sma(all, n); return v == null ? `MA${n} 数据不够` : `MA${n} ${fx(v, d)}（现价在它${last.close >= v ? '上方' : '下方'} ${Math.abs((last.close / v - 1) * 100).toFixed(1)}%）`; };
-  const out = [head(q), '', priceLine(q), '', `**${ks[0].date} ～ ${last.date}，${ks.length} 个交易日**${q.kind === '指数' ? '' : '（前复权）'}`, '', spark(ks.map(k => k.close), 40), '',
-    table(['区间涨跌', '最高', '最低', '单日最大涨', '单日最大跌', '日均成交额'], [[pctStr((last.close / ks[0].close - 1) * 100), `${fx(hi.high, d)}（${hi.date.slice(5)}）`, `${fx(lo.low, d)}（${lo.date.slice(5)}）`,
-      up ? `${pctStr(up.p)}（${up.date.slice(5)}）` : '—', dn ? `${pctStr(dn.p)}（${dn.date.slice(5)}）` : '—', amt.length ? money(amt.reduce((s, k) => s + k.amount, 0) / amt.length) : '—']]), '',
-    '均线：' + [5, 20, 60].map(ma).join('；'), '', '最近 5 个交易日：', '',
-    table(['日期', '开', '收', '高', '低', '涨跌', '成交额'], ks.slice(-5).map(k => { const i = all.indexOf(k), p = i > 0 ? (k.close / all[i - 1].close - 1) * 100 : null; return [k.date, fx(k.open, d), fx(k.close, d), fx(k.high, d), fx(k.low, d), pctStr(p), money(k.amount)]; }))];
-  return out.join('\n') + others(cands) + '\n\n' + NOTE;
+  const amt = ks.filter(k => k.amount != null);
+  const ma = n => { const v = sma(all, n); return v == null ? row('项', 'MA' + n, '—', '', '数据不够') : row('项', 'MA' + n, fx(v, d), '', `现价在${last.close >= v ? '上方' : '下方'} ${Math.abs((last.close / v - 1) * 100).toFixed(1)}%`); };
+  return block([headRow(q),
+    row('势', `${ks[0].date} ～ ${last.date} · ${ks.length} 个交易日`, pctStr(total), q.kind === '指数' ? '' : '前复权', pts(ks, d)),
+    row('项', '区间涨跌', pctStr(total), sign(total)), row('项', '最高', fx(hi.high, d), '', hi.date.slice(5)), row('项', '最低', fx(lo.low, d), '', lo.date.slice(5)),
+    up && row('项', '单日最大涨', pctStr(up.p), sign(up.p), up.date.slice(5)), dn && row('项', '单日最大跌', pctStr(dn.p), sign(dn.p), dn.date.slice(5)),
+    row('项', '日均成交额', amt.length ? money(amt.reduce((s, k) => s + k.amount, 0) / amt.length) : '—'), ma(5), ma(20), ma(60),
+    ...ks.slice(-5).map(k => { const i = all.indexOf(k), p = i > 0 ? (k.close / all[i - 1].close - 1) * 100 : null; return row('日', k.date, fx(k.open, d), fx(k.close, d), fx(k.high, d), fx(k.low, d), pctStr(p), money(k.amount)); }),
+    othersRow(cands), row('注', NOTE)]);
 }
 export function renderCmp(items) {
-  const rows = items.map(({ q, ks }) => [`${q.name} \`${q.code}\``, q.price, pctStr(q.pct), pctStr(chgOver(ks, 20)), pctStr(chgOver(ks, 60)), q.pe == null || q.pe <= 0 ? '—' : q.pe.toFixed(1), fx(q.pb), money(q.cap)]);
-  return table(['名称', '现价', '今日', '近 20 日', '近 60 日', '市盈率 TTM', '市净率', '总市值'], rows) + `\n\n报价时间 ${items[0].q.time}（${phase(items[0].q.time)}）；近 20 / 60 日按交易日算，前复权。\n\n` + NOTE;
+  return block([...items.map(({ q, ks }) => row('比', q.name, q.code, q.price, pctStr(q.pct), pctStr(chgOver(ks, 20)), pctStr(chgOver(ks, 60)), q.pe == null || q.pe <= 0 ? '—' : q.pe.toFixed(1), q.pb > 0 ? fx(q.pb) : '—', money(q.cap))),
+    row('注', `报价时间 ${items[0].q.time} · ${phase(items[0].q.time)}；近 20 / 60 日按交易日算，前复权。`), row('注', NOTE)]);
 }
 
 // ---------- 命令 ----------
