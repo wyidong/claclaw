@@ -403,3 +403,48 @@ test('页面：换手榜 / 主力榜 / 龙虎榜——表头照「列」写；�
   assert.match(mdStock('列 | <i> | b | c | d\n榜 | 1 | x | 000001 | 1 | +1% | 1 亿'), /<th>&lt;i&gt;<\/th>/);
   assert.match(mdStock('列 | a | b | c | d'), /^CODE:/);                                                 // 只有表头不算卡片
 });
+
+// 只排一个行业里的榜、找代码的卡片
+import { topCount, topIndustry, pickIndustry, parseIndustries, boardKeyOf, industrySecs, renderFind } from '../skills/claw-stock/stock.mjs';
+test('排行榜：从说法里认行业和数量；说榜、说板块的词不算行业', () => {
+  assert.deepEqual(['电子', '电子板块 涨幅 top 50', '通信板块 跌 5', '半导体 主力 双创 4', '银行 成交额', '通信设备里换手率最高的', '', '跌 北交所', '成交额', '主力流出 北交所', '量比 双创 20', '创业板涨幅榜'].map(topIndustry),
+    ['电子', '电子', '通信', '半导体', '银行', '通信设备', '', '', '', '', '', '']);
+  assert.deepEqual(['', '电子 50', '前 5', 'top 300', '0', '电子'].map(topCount), [0, 50, 5, 50, 1, 0]);
+  assert.deepEqual(['600519', '002384', '300308', '688012', '920438', '830001', '430001', '900901'].map(boardKeyOf), ['主板', '主板', '双创', '双创', '北交所', '北交所', '北交所', '']);
+  for (const [s, m] of [['电子 50', '涨'], ['通信板块 跌 5', '跌'], ['半导体 主力 双创 4', '主力'], ['银行 成交额', '成交额']]) assert.equal(topMode(s), m);
+});
+test('排行榜：挑行业——名字一样的最先，不然互相包含的里大类在前、名字短的在前；没有就是没有', () => {
+  const l = [...parseIndustries({ data: { diff: [{ f12: 'BK1036', f14: '电子', f3: 12.48 }, { f12: 'BK0448', f14: '通信', f3: 10.6 }, { f12: 'x', f14: '坏的' }] } }, '大类'),
+    ...parseIndustries({ data: { diff: [{ f12: 'BK1201', f14: '通信设备', f3: 11 }, { f12: 'BK1202', f14: '通信服务', f3: 9 }, { f12: 'BK1203', f14: 'IT服务Ⅱ', f3: 5 }, { f12: 'BK1204', f14: '电子化学品Ⅱ', f3: 9 }] } }, '细分')];
+  assert.deepEqual(l.map(x => x.name), ['电子', '通信', '通信设备', '通信服务', 'IT服务', '电子化学品']);
+  assert.deepEqual(['电子', '通信', '通信设备', '通信板', 'IT服务', '电子化学', '人工智能', ''].map(q => pickIndustry(l, q)?.name), ['电子', '通信', '通信设备', '通信', 'IT服务', '电子化学品', undefined, undefined]);
+  assert.equal(pickIndustry(l, '电子').pct, 12.48);
+});
+test('排行榜：一个行业里的照样按板块分开排；那个板块没有股票就没有那一段；成交额榜不分', () => {
+  const all = parseTop({ data: { diff: [T('主板涨停', '002384', 10, 12e9), T('主板小涨', '600001', 3, 5e8), T('创业板涨停', '300308', 20, 3e9, { f62: 9e8 }), T('科创板跌', '688012', -2, 8e9, { f62: -1e8 })] } });
+  const up = industrySecs(all, '涨', '', '电子', NOW);
+  assert.deepEqual(up.map(s => [s.key, s.limits, s.list.map(x => x.name)]), [['主板', 1, ['主板涨停', '主板小涨']], ['双创', 1, ['创业板涨停', '科创板跌']]]);      // 没有北交所的股票：没有那一段
+  assert.deepEqual(industrySecs(all, '跌', '双创', '电子', NOW).map(s => [s.key, s.list[0].name]), [['双创', '科创板跌']]);
+  assert.deepEqual(industrySecs(all, '涨', '北交所', '电子', NOW), []);
+  assert.deepEqual(industrySecs(all, '主力', '', '电子', NOW).map(s => [s.key, s.list.map(x => x.name)]), [['主板', []], ['双创', ['创业板涨停']]]);
+  const amt = industrySecs(all, '成交额', '', '电子', NOW);
+  assert.deepEqual(amt.map(s => [s.name, s.list.map(x => x.name)]), [['电子', ['主板涨停', '科创板跌', '创业板涨停', '主板小涨']]]);
+  assert.equal(industrySecs(all, '成交额', '双创', '电子', NOW)[0].name, '电子 · 创业板 / 科创板');
+  const ind = { name: '电子', pct: 12.48, total: 4, up: 3, down: 1 }, out = renderTop('涨', up, null, 50, ind);
+  assert.match(out, /^```stock\n题 \| 电子 · 涨幅榜 \| 2026-11-27 16:11 · [^·]+ · 板块 \+12\.48% · 4 只：上涨 3 只、下跌 1 只\n段 \| 沪深主板 · 涨停是 10% · 涨停 1 只\n/);
+  assert.doesNotMatch(out, /全市场/);
+  assert.match(renderTop('主力', industrySecs(all, '主力', '', '电子', NOW), null, 6, ind), /题 \| 电子 · 主力净流入榜 \| .*\n列 \| .*\n段 \| 沪深主板 · 没有主力净流入的股票\n段 \| 创业板 \/ 科创板\n榜 \| 1 \| 创业板涨停 /);
+  assert.match(renderTop('成交额', amt, null, 2, ind), /题 \| 电子 · 成交额榜 \| /);
+});
+test('找代码：也是卡片（排行榜那种行，带现价和涨跌）；报价没拿到的写 —；页面画成表', () => {
+  const list = [{ mkt: 'sz', code: '000001', name: '平安银行', kind: '个股' }, { mkt: 'sh', code: '601318', name: '中国平安', kind: '个股' }, { mkt: 'sz', code: '167002', name: '鼎越LOF', kind: '基金' }];
+  const qs = [{ name: '平安银行', price: '12.23', pct: -1.77, amount: 26.06e8, time: '2026-11-27 16:15' }, null, { name: '鼎越LOF', price: '4.110', pct: 5.9, amount: 119e4, time: '2026-11-27 16:15' }];
+  const out = renderFind('平安', list, qs);
+  assert.match(out, /^```stock\n题 \| 名字像「平安」的 \| 3 只 · 2026-11-27 16:15 · /);
+  assert.deepEqual(lines(out).filter(f => f[0] === '榜'), [['榜', '1', '平安银行', '000001', '12.23', '-1.77%', '26.06 亿', '深市主板'], ['榜', '2', '中国平安', '601318', '—', '—', '—', '沪市主板'], ['榜', '3', '鼎越LOF', '167002', '4.110', '+5.90%', '119 万', '场内基金']]);
+  assert.match(renderFind('平安', list), /^```stock\n题 \| 名字像「平安」的 \| 3 只\n榜 \| 1 \| 平安银行 \| 000001 \| — \| — \| — \| 深市主板\n/);      // 报价整个没拿到也出卡片
+  const h = mdStock(body(out));
+  assert.match(h, /^<div class="stk"><div class="stk-h"><b>名字像「平安」的<\/b><\/div><div class="stk-t">3 只 · [^<]+<\/div><div class="stk-tb stk-fl stk-rk"><table>/);
+  assert.match(h, /<td><i>1<\/i><b>平安银行<\/b><small>000001 · 深市主板<\/small><\/td><td>12\.23<\/td><td><span class="stk-v dn">-1\.77%<\/span><\/td><td>26\.06 亿<\/td>/);
+  assert.match(h, /<b>中国平安<\/b><small>601318 · 沪市主板<\/small><\/td><td>—<\/td><td><span class="stk-v">—<\/span><\/td><td>—<\/td>/);
+});
