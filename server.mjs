@@ -18,6 +18,7 @@ import { z } from 'zod';
 import * as push from './src/push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured, useDevice } from './src/peer/devnotify.mjs';
 import { makeRelayDev } from './src/peer/relaydev.mjs';
+import { makeRelayPair } from './src/peer/relaypair.mjs';
 import { makeShop, serveShopImg } from './src/shop.mjs';
 import { libDir, libImport } from './src/peer/vendor.mjs';
 import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './src/claws/kimi.mjs';
@@ -2096,6 +2097,7 @@ startDevNotify({ log, onOnline: async () => {
 // 内置的 clarelay 电脑端（宿主页「网络 › clarelay」）；主端口占到后才自动连（见下面 listen）
 const peerOpen = () => { const c = loadPeer(); return c.enabled ? { [PEER_BASE]: 'http://127.0.0.1:' + c.port } : {}; };   // clarelay 门卫对协同路径放行，转给本机协同端口
 const relayDev = makeRelayDev({ port: PORT, DATA, log, getOff: () => !!settings().clarelayOff, setOff: v => saveSettings({ clarelayOff: !!v }), onDevice: d => { useDevice(d); setTimeout(refreshOurExtra, 3000); }, getOpen: peerOpen, onLib: () => reloadRelayTunnels() });
+const relayPair = makeRelayPair({ DATA, log, join: inv => relayDev.join(inv) });   // 扫码加入 clarelay（手机扫电脑上的二维码）
 const shop = makeShop({ DATA, log });   // claw-shopping 技能：搜拼多多商品（问公开的商品服务）
 // 协同地址里 clarelay 能补的几样（每分钟看一次）：子域名地址（https://<label>.<域名>/claclaw-peer）、打洞用的 STUN（中继的排第一，第三方的留作备用）
 // 不再探测、公布「外网直连」（公网 IP:协同端口，明文 http）：请求头里的钥匙会明文过公网
@@ -2823,10 +2825,13 @@ const handler = async (req, res) => {
     }
     if (url.pathname === '/api/claude-usage' && req.method === 'GET') return sendJson(res, 200, { usage: claudeUsage.get() });
     if (url.pathname === '/api/clarelay') {   // 内置 clarelay 电脑端：GET 状态；POST {op: join(invite) | connect | disconnect | remove | update（下载新版电脑端）}
-      if (req.method === 'GET') return sendJson(res, 200, relayDev.info());
+      // 扫码加入：pair-start {relay?}（relay 是用户填的中继地址；不填用知道的）| pair-status（网页每 2 秒问一次）| pair-cancel
+      if (req.method === 'GET') return sendJson(res, 200, { ...relayDev.info(), pairRelay: relayPair.bases()[0] || '' });
       if (req.method !== 'POST') return sendJson(res, 405, { error: 'method' });
       if (notJson(req, res)) return;
       const body = await jsonBody(req, 8192);
+      const pairOp = { 'pair-start': () => relayPair.start(body.relay), 'pair-status': () => relayPair.status(), 'pair-cancel': () => relayPair.cancel() }[body.op];
+      if (pairOp) { try { return sendJson(res, 200, await pairOp()); } catch (e) { return sendJson(res, 400, { error: e.message }); } }
       const op = { join: () => relayDev.join(body.invite), connect: () => relayDev.connect(), disconnect: () => relayDev.disconnect(), remove: () => relayDev.remove(), update: () => relayDev.update() }[body.op];
       if (!op) return sendJson(res, 400, { error: 'op' });
       log('clarelay op', body.op);

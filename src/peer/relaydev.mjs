@@ -301,3 +301,12 @@ $ids | Where-Object { $_ -and $_ -ne ${process.pid} } | Sort-Object -Unique | Fo
   };
   return api;
 }
+
+// 扫码加入（relaypair.mjs）用：这台电脑以前加入过的中继（身份文件里的、记过发布公钥的），按这个顺序
+export function knownRelayBases(DATA) {
+  const out = [], add = b => { if (b && !out.includes(b)) out.push(b); };
+  add(stateBase(readJson(relayStatePath(DATA), null)));
+  for (const d of Object.keys(readJson(path.join(DATA, 'clarelay-release-keys.json'), {}))) add(hostBase(d));
+  return out;
+}
+export { deviceName };

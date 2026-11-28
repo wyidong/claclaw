@@ -303,6 +303,27 @@ window.__sc=(function(){
     </form>
   </div>
 
+  <div id="crPairDlg" aria-hidden="true">
+    <form class="dlg" id="crPairForm" role="dialog" aria-label="手机扫码加入 clarelay">
+      <h3>手机扫码加入 clarelay</h3>
+      <div id="crPairRelay" hidden>
+        <p>先填一次你的 clarelay 中继地址（填过就记住，以后不用再填）。</p>
+        <input id="crPairIn" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="relay.example.com">
+      </div>
+      <div id="crPairBox" hidden>
+        <div id="crPairQr"></div>
+        <div id="crPairCode"></div>
+        <p id="crPairTip"></p>
+      </div>
+      <p class="cr-warn">加入后会从这台中继下载它的电脑端程序在本机运行，只加入你信任的中继。</p>
+      <div class="row">
+        <button type="button" class="btn cancel" id="crPairNo">关闭</button>
+        <button type="submit" class="btn" id="crPairGo">下一步</button>
+      </div>
+      <div class="err" id="crPairErr" role="alert"></div>
+    </form>
+  </div>
+
   <div id="keyDlg" aria-hidden="true">
     <form class="dlg" id="keyForm" role="dialog" aria-label="查看 Key">
       <h3 id="keyTitle"></h3>
@@ -3601,9 +3622,9 @@ function crRow(){
   var r=relaySt;if(!r)return '';
   var pill=function(op,t,cls){return '<button type="button" class="md-pill'+(cls?' '+cls:'')+'" data-act="cr-op" data-op="'+op+'"'+(relayBusy?' disabled':'')+'>'+(relayBusy===op?'…':t)+'</button>'};
   var err=r.error?'<small>'+esc(r.error)+'</small>':'';
-  if(!r.joined)return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">未加入<small>在 clarelay「管理」里生成设备邀请码，粘贴进来</small>'+err+'</span><span class="cr-btns">'+pill('join','粘贴邀请码')+'</span></div>';
+  if(!r.joined)return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">未加入<small>用手机上的 clarelay 扫码加入；也可以粘贴 clarelay「管理」里生成的设备邀请码</small>'+err+'</span><span class="cr-btns">'+pill('pair','手机扫码')+pill('join','粘贴邀请码')+'</span></div>';
   var st=r.starting?'连接中…':r.revoked?'已撤销':!r.running?(r.off?'已断开':'未连接'):r.status!=='active'?'等管理员批准':r.online?'在线':'离线';
-  var btns=r.revoked?pill('join','新邀请码重新加入')+pill('remove','移除','del'):(r.running||r.starting?pill('disconnect','断开'):pill('connect','连接'))+pill('remove','移除','del');
+  var btns=r.revoked?pill('pair','扫码重新加入')+pill('join','新邀请码重新加入')+pill('remove','移除','del'):(r.running||r.starting?pill('disconnect','断开'):pill('connect','连接'))+pill('remove','移除','del');
   // 电脑端代码是第三方库（vendor/clarelay，从中继下载）：显示版本，有新版给「更新」
   var l=r.lib||{},lv=l.installed?(l.version?'电脑端 '+l.version:''):'电脑端还没下载（连接时自动下载）';
   if(l.update&&!r.revoked)btns=pill('update','更新到 '+l.latest)+btns;
@@ -3619,9 +3640,63 @@ function crSubmit(e){
 }
 $('#crForm').addEventListener('submit',crSubmit);
 dlgWire($('#crDlg'),$('#crNo'),function(){showDlg($('#crDlg'),false)});
+// 扫码加入 clarelay：服务端向中继要二维码、等手机确认（poll 钥匙只在服务端）；这里每秒走一次倒计时、每 2 秒问一次进度
+// 不知道中继地址（没从中继装、没加入过、没填过）：先让用户填一次
+var crPair={on:false,t:null,n:0,left:0,at:0,svg:'',st:''};
+function crPairOpen(){
+  crPair.on=true;crPair.svg='';crPair.st='';$('#crPairErr').textContent='';$('#crPairBox').hidden=true;$('#crPairRelay').hidden=true;$('#crPairGo').hidden=true;
+  showDlg($('#crPairDlg'),true);
+  if(relaySt&&relaySt.pairRelay)crPairStart('');else crPairAsk();
+}
+function crPairAsk(){$('#crPairRelay').hidden=false;$('#crPairBox').hidden=true;crPairBtn('下一步');setTimeout(function(){$('#crPairIn').focus()},50)}
+function crPairBtn(t){var b=$('#crPairGo');b.hidden=!t;b.disabled=false;if(t)b.textContent=t}
+function crPairStart(relay){
+  $('#crPairErr').textContent='';$('#crPairGo').disabled=true;
+  var body={op:'pair-start'};if(relay)body.relay=relay;
+  postJson('/api/clarelay',body).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+    if(!crPair.on)return;$('#crPairGo').disabled=false;
+    if(!x.ok){$('#crPairErr').textContent=x.j&&x.j.error||'出错了';if(!$('#crPairRelay').hidden)return;if(!crPair.svg){crPairAsk();return}crPairBtn('重试');return}
+    if(x.j.status==='need-relay'){crPairAsk();return}
+    $('#crPairRelay').hidden=true;crPairShow(x.j);crPairTick();
+  }).catch(function(){if(crPair.on){$('#crPairGo').disabled=false;$('#crPairErr').textContent='连不上 claclaw'}});
+}
+function crPairShow(j){
+  crPair.st=j.status;
+  if(j.svg&&j.svg!==crPair.svg){crPair.svg=j.svg;$('#crPairQr').innerHTML=j.svg}
+  if(j.code)$('#crPairCode').textContent=j.code;
+  if('left' in j){crPair.left=j.left;crPair.at=Date.now()}
+  $('#crPairBox').hidden=false;
+  var tip=$('#crPairTip');tip.className='';$('#crPairQr').classList.toggle('old',j.status!=='waiting');
+  if(j.status==='waiting'){crPairBtn('');crPairCount()}
+  else if(j.status==='expired'){tip.textContent='二维码过期了';crPairBtn('刷新二维码')}
+  else if(j.status==='joining'){tip.textContent='手机已确认，正在加入…';crPairBtn('')}
+  else if(j.status==='done'){tip.className='ok';tip.textContent='已加入'+(j.account?' '+j.account+' 的':'')+' clarelay';crPairBtn('');crLoad();setTimeout(function(){if(crPair.on&&crPair.st==='done')crPairClose(true)},2500)}
+  else if(j.status==='error'){tip.textContent='';$('#crPairErr').textContent=j.error||'出错了';crPairBtn('重新出码')}
+  if(j.error&&j.status==='waiting')$('#crPairErr').textContent='和中继联系不上，还在重试：'+j.error;else if(j.status==='waiting')$('#crPairErr').textContent='';
+}
+function crPairCount(){
+  var ms=Math.max(0,crPair.left-(Date.now()-crPair.at)),m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60;
+  $('#crPairTip').textContent='用手机上的 clarelay「邀请 · 管理 › 扫码添加」扫这个码，或在手机上输入上面的配对码 · '+m+':'+(s<10?'0':'')+s+' 后过期';
+}
+function crPairTick(){
+  clearTimeout(crPair.t);if(!crPair.on)return;
+  crPair.t=setTimeout(function(){
+    if(!crPair.on)return;
+    if(crPair.st==='waiting')crPairCount();
+    if(++crPair.n%2||!(crPair.st==='waiting'||crPair.st==='joining')){crPairTick();return}
+    postJson('/api/clarelay',{op:'pair-status'}).then(function(r){return r.json()}).then(function(j){if(crPair.on&&j&&j.status&&j.status!=='idle')crPairShow(j)}).catch(function(){}).then(crPairTick);
+  },1000);
+}
+function crPairClose(done){
+  if(!crPair.on)return;crPair.on=false;clearTimeout(crPair.t);showDlg($('#crPairDlg'),false);
+  if(!done&&crPair.st!=='done')postJson('/api/clarelay',{op:'pair-cancel'}).catch(function(){});
+}
+$('#crPairForm').addEventListener('submit',function(e){e.preventDefault();if(!$('#crPairRelay').hidden){var v=$('#crPairIn').value.trim();if(!v){$('#crPairErr').textContent='先填中继地址';return}crPairStart(v)}else crPairStart('')});
+dlgWire($('#crPairDlg'),$('#crPairNo'),function(){crPairClose(false)});
 function crLoad(){return fetch('/api/clarelay').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){relaySt=j;crPaint()}}).catch(function(){})}
 function crOp(op,inv){
   if(relayBusy)return;var body={op:op};
+  if(op==='pair'){crPairOpen();return}
   if(op==='join'&&!inv){$('#crIn').value='';$('#crErr').textContent='';showDlg($('#crDlg'),true);setTimeout(function(){$('#crIn').focus()},50);return}
   if(op==='join')body.invite=inv;
   if(op==='remove'&&!confirm('移除后这台电脑退出 clarelay：本机身份文件删掉，再加入要新的邀请码；中继那边会一直显示离线，要在管理页手动撤销。确定移除？'))return;
