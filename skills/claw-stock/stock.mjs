@@ -6,6 +6,8 @@
 //   claw-stock find 平安             这个名字对得上哪几只（重名、不确定代码时）
 //   claw-stock flow [细分] [--days 5] 行业板块的主力资金：净流入最多、净流出最多的板块（大类 31 个 / 细分一百多个；当日、近 5 日、近 10 日）
 //   claw-stock top [跌|成交额] [板块]  涨幅榜 / 跌幅榜 / 成交额榜：涨跌幅榜按板块分开排（主板 10%、创业板和科创板 20%、北交所 30%，上限不一样）
+//   claw-stock top 换手|量比|主力 [板块] 换手榜、量比榜（量能）、主力净流入榜（写「主力流出」是净流出榜），也按板块分开排
+//   claw-stock lhb                   龙虎榜：最近一个公布日上榜的股票，净买入最多、净卖出最多的
 // 输出 ```stock 代码块：claclaw 画成行情卡片（红涨绿跌、走势折线，public/index.html 的 mdStock）；find 输出 Markdown 表格。
 // 来源（都是公开行情页面用的接口，不用登录、没有签名）：
 //   报价 腾讯证券 qt.gtimg.cn；日 K 东方财富 push2his（前复权），不通时换腾讯；找代码 腾讯 smartbox，没有时换东方财富（北交所只有它按名字找得到）
@@ -230,11 +232,26 @@ export const BOARDS = [
   { key: '双创', name: '创业板 / 科创板', lim: 20, fs: 'm:0+t:80,m:1+t:23' },
   { key: '北交所', name: '北交所', lim: 30, fs: 'm:0+t:81+s:2048' }];
 const ALL_A = BOARDS.map(b => b.fs).join(',');
-export const topMode = s => /成交|活跃|额/.test(s || '') ? '成交额' : /跌/.test(s || '') ? '跌' : '涨';
+export const topMode = s => (s = s || '', /主力|资金|净流|大单/.test(s) ? (/流出|卖出|净卖/.test(s) ? '主力流出' : '主力') : /量比|量能|放量/.test(s) ? '量比' : /换手/.test(s) ? '换手' : /成交|活跃|额/.test(s) ? '成交额' : /跌/.test(s) ? '跌' : '涨');
+// 按一个数排的榜：换手率、量比、主力净流入（估算口径，同板块资金流）。fid 排序字段，key 是 parseTop 里的名字，po 1 从大到小
+const yi2 = v => (v > 0 ? '+' : v < 0 ? '-' : '') + money(Math.abs(v));          // 个股的金额差得远（几十亿到几百万），单位跟着数走
+const FLOW_NOTE = '「主力净流入」是东方财富按大单成交估算的，不是真实的资金进出账，别家的数会不一样。';
+export const METRIC = {
+  换手: { fid: 'f8', key: 'turn', po: 1, title: '换手榜', col: '换手率', fmt: v => v.toFixed(2) + '%', note: '换手率 = 当天成交的股数 ÷ 流通股数。新股、流通盘小的股票换手率本来就高。' },
+  量比: { fid: 'f10', key: 'vr', po: 1, title: '量比榜', col: '量比', fmt: v => v.toFixed(2), note: '量比 = 今天平均每分钟的成交量 ÷ 过去 5 个交易日平均每分钟的成交量，比 1 大就是比前几天放量。刚开盘时数值偏高；新股没有可比的 5 日均量，数值不准。' },
+  主力: { fid: 'f62', key: 'net', po: 1, title: '主力净流入榜', col: '主力净流入', fmt: yi2, keep: x => x.net > 0, none: '主力净流入', note: FLOW_NOTE },
+  主力流出: { fid: 'f62', key: 'net', po: 0, title: '主力净流出榜', col: '主力净流入', fmt: yi2, keep: x => x.net < 0, none: '主力净流出', note: FLOW_NOTE } };
+const listedDays = (x, today) => /^\d{8}$/.test(x.listed) ? (today - new Date(`${x.listed.slice(0, 4)}-${x.listed.slice(4, 6)}-${x.listed.slice(6)}T00:00:00+08:00`)) / 864e5 : 999;
+// 排好一个板块的这种榜：没数的不要；标记只写新股（上市不到 30 天）和当天涨停 / 跌停
+export function rankMetric(list, mode, lim, today = new Date()) {
+  const m = METRIC[mode], d = m.po ? 1 : -1;
+  return list.filter(x => x[m.key] != null && (!m.keep || m.keep(x))).sort((a, b) => d * (b[m.key] - a[m.key]) || (b.amount || 0) - (a.amount || 0))
+    .map(x => { const t = lim ? limitTag(x, lim, today) : ''; return { ...x, tag: listedDays(x, today) < 30 ? '新股' : t === '不限幅' ? '' : t }; });
+}
 export const topBoard = s => /北交|北证/.test(s || '') ? '北交所' : /创业|科创|双创/.test(s || '') ? '双创' : /主板/.test(s || '') ? '主板' : '';
 export function parseTop(j) {
   const num = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
-  return (j?.data?.diff || []).map(x => ({ code: String(x.f12 || ''), name: String(x.f14 || '').replace(/\s/g, ''), price: num(x.f2), pct: num(x.f3), amount: num(x.f6), turn: num(x.f8),
+  return (j?.data?.diff || []).map(x => ({ code: String(x.f12 || ''), name: String(x.f14 || '').replace(/\s/g, ''), price: num(x.f2), pct: num(x.f3), amount: num(x.f6), turn: num(x.f8), vr: num(x.f10), net: num(x.f62),
     ind: typeof x.f100 === 'string' && x.f100 !== '-' ? x.f100.replace(/[ⅡⅢ]+$/, '') : '', listed: String(x.f26 || ''), ts: num(x.f124) })).filter(x => /^\d{6}$/.test(x.code) && x.name && x.pct != null && x.price != null);
 }
 // 一只在这个板块里算什么：超过上限的 = 不限幅（上市不到 30 天的写「新股」），到了上限的 = 涨停 / 跌停。上限留 0.1 个点的余量（取整）
@@ -249,7 +266,7 @@ export function rankTop(list, lim, dir = 1, today = new Date()) {
   return list.map(x => { const tag = side(x) ? limitTag(x, lim, today) : ''; return { ...x, tag, g: tag === '新股' || tag === '不限幅' ? 0 : tag ? 1 : 2 }; })
     .sort((a, b) => a.g - b.g || (a.g === 1 ? (b.amount || 0) - (a.amount || 0) : dir * (b.pct - a.pct) || (b.amount || 0) - (a.amount || 0)));
 }
-const clist = async (fs, fid, po, pn) => JSON.parse(await get(`https://push2.eastmoney.com/api/qt/clist/get?pn=${pn}&pz=100&po=${po}&np=1&fltt=2&invt=2&fid=${fid}&fs=${encodeURIComponent(fs)}&fields=f2,f3,f6,f8,f12,f14,f26,f100,f124`));
+const clist = async (fs, fid, po, pn) => JSON.parse(await get(`https://push2.eastmoney.com/api/qt/clist/get?pn=${pn}&pz=100&po=${po}&np=1&fltt=2&invt=2&fid=${fid}&fs=${encodeURIComponent(fs)}&fields=f2,f3,f6,f8,f10,f12,f14,f26,f62,f100,f124`));
 // 一个板块的涨（跌）幅榜：一页 100 只，往后翻到出现没涨停的为止（要数清涨停几只、把涨停的按成交额排），最多 10 页
 async function boardTop(b, dir) {
   const all = []; let total = 0;
@@ -263,8 +280,17 @@ async function boardTop(b, dir) {
 // 全市场涨跌家数：上证指数、深证成指、北证 50 这三个指数的行情里带着所在市场的上涨 / 下跌 / 平盘家数
 export const parseBreadth = j => { const d = j?.data?.diff || [], s = k => d.reduce((a, x) => a + (typeof x[k] === 'number' ? x[k] : 0), 0); return d.length ? { up: s('f104'), down: s('f105'), flat: s('f106') } : null; };
 const breadth = async () => { try { return parseBreadth(JSON.parse(await get('https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=1.000001,0.399001,0.899050&fields=f12,f104,f105,f106'))); } catch (e) { warn('涨跌家数没拿到：' + e.message); return null; } };
-// 输出：题 | 标题 | 小字；段 | 小标题；榜 | 名次 | 名称 | 代码 | 现价 | 涨跌幅 | 成交额 | 行业 | 标记（涨停 / 跌停 / 新股 / 不限幅）
+// 输出：题 | 标题 | 小字；列 | 四个表头（最后一列不是成交额时才写）；段 | 小标题；
+//       榜 | 名次 | 名称 | 代码 | 现价 | 涨跌幅 | 成交额（或换手率、量比、主力净流入）| 行业 | 标记（涨停 / 跌停 / 新股 / 不限幅）
 export function renderTop(mode, secs, br, per) {
+  if (METRIC[mode]) {
+    const m = METRIC[mode], ts = Math.max(0, ...secs.flatMap(s => s.list.slice(0, per).map(x => x.ts || 0))), at = ts ? new Date(ts * 1000 + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : '';
+    return block([row('题', m.title, [at && at + ' · ' + phase(at).replace('收盘价，', ''), br && `全市场上涨 ${br.up} 只、下跌 ${br.down} 只、平 ${br.flat} 只`].filter(Boolean).join(' · ')),
+      row('列', '名称', '现价', '涨跌', m.col),
+      ...secs.flatMap(s => [row('段', s.list.length ? s.name : `${s.name} · 没有${m.none || '数据'}的股票`),
+        ...s.list.slice(0, per).map((x, i) => row('榜', i + 1, x.name, x.code, x.price.toFixed(2), pctStr(x.pct), m.fmt(x[m.key]), x.ind, x.tag))]),
+      row('注', '各板块分开排。' + m.note), row('注', '数据来自东方财富的公开行情，可能有延迟；只是数据，不是投资建议。')]);
+  }
   const ts = Math.max(0, ...secs.flatMap(s => s.list.slice(0, per).map(x => x.ts || 0))), at = ts ? new Date(ts * 1000 + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : '';
   const what = mode === '成交额' ? '成交额榜' : mode === '跌' ? '跌幅榜' : '涨幅榜', lw = mode === '跌' ? '跌停' : '涨停';
   return block([row('题', what, [at && at + ' · ' + phase(at).replace('收盘价，', ''), br && `全市场上涨 ${br.up} 只、下跌 ${br.down} 只、平 ${br.flat} 只`].filter(Boolean).join(' · ')),
@@ -274,6 +300,37 @@ export function renderTop(mode, secs, br, per) {
       ...s.list.slice(0, per).map((x, i) => row('榜', i + 1, x.name, x.code, x.price.toFixed(2), pctStr(x.pct), money(x.amount), x.ind, x.tag))]),
     mode !== '成交额' && row('注', `各板块的涨跌幅上限不一样，所以分开排。${lw}的算并列，按成交额从大到小；没${lw}的再按${mode === '跌' ? '跌' : '涨'}幅。新股上市头几天不设上限，排在最前面。`),
     row('注', '数据来自东方财富的公开行情，可能有延迟；只是数据，不是投资建议。')]);
+}
+
+// ---------- 龙虎榜（东方财富数据中心）----------
+// 交易所收盘后公布：当天涨跌幅、换手率、振幅异常，或者连续三天累计偏离大的股票，各自买入、卖出金额最大的 5 个席位的成交。
+// 一只股票可能因为几个原因上榜（一个原因一条），这里合成一条：金额取当天那条的，只有「连续三个交易日」那条时取它（是三天累计的）。
+// 只留 A 股（可转债、B 股不要）。接口里那句「几家机构买入，成功率多少」是网站自己的解读，不用。
+export const lhbWhy = s => (s = String(s || '').replace(/涨跌幅限制/g, ''), /严重异常/.test(s) ? '严重异常波动' : /连续|累计/.test(s) ? (/跌幅/.test(s) ? '3 日跌幅偏离' : '3 日涨幅偏离') : /换手/.test(s) ? '换手率高' : /振幅/.test(s) ? '振幅大' : /跌幅/.test(s) ? '跌幅大' : /涨幅/.test(s) ? '涨幅大' : s.slice(0, 12));
+export function parseLhb(j) {
+  const rows = j?.result?.data || [], date = String(rows[0]?.TRADE_DATE || '').slice(0, 10), by = new Map(), num = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+  for (const r of rows) {
+    const code = String(r.SECURITY_CODE || ''), multi = /连续|累计/.test(r.EXPLANATION || '');
+    if (String(r.TRADE_DATE || '').slice(0, 10) !== date || !/^(6|0|3|92|8|4)\d+$/.test(code) || code.length !== 6 || num(r.BILLBOARD_NET_AMT) == null) continue;
+    const x = { code, name: String(r.SECURITY_NAME_ABBR || '').replace(/\s/g, ''), price: num(r.CLOSE_PRICE), pct: num(r.CHANGE_RATE), net: num(r.BILLBOARD_NET_AMT), buy: num(r.BILLBOARD_BUY_AMT), sell: num(r.BILLBOARD_SELL_AMT), multi, why: [lhbWhy(r.EXPLANATION || '')] };
+    const old = by.get(code);
+    if (!old) by.set(code, x);
+    else { const keep = old.multi && !multi ? x : old; keep.why = [...new Set([...old.why, ...x.why])]; by.set(code, keep); }
+  }
+  return { date, list: [...by.values()].filter(x => x.name && x.price != null && x.pct != null).sort((a, b) => b.net - a.net) };
+}
+const lhb = async () => parseLhb(JSON.parse(await get('https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE,BILLBOARD_NET_AMT&sortTypes=-1,-1&pageSize=500&pageNumber=1&reportName=RPT_DAILYBILLBOARD_DETAILSNEW&columns=SECURITY_CODE,SECURITY_NAME_ABBR,TRADE_DATE,CLOSE_PRICE,CHANGE_RATE,BILLBOARD_NET_AMT,BILLBOARD_BUY_AMT,BILLBOARD_SELL_AMT,EXPLANATION')));
+// 输出同排行榜：最后一列是净买额，「行业」那格写上榜原因
+export function renderLhb({ date, list }, top = 10) {
+  const head = list.filter(x => x.net > 0).slice(0, top), tail = list.filter(x => x.net < 0).slice(-5).reverse();
+  const line = (x, i) => row('榜', i + 1, x.name, x.code, x.price.toFixed(2), pctStr(x.pct), yi2(x.net), x.why.join('、'), x.multi ? '3 日' : '');
+  return block([row('题', '龙虎榜', `${date} · 上榜 ${list.length} 只：${list.filter(x => x.net > 0).length} 只净买入、${list.filter(x => x.net < 0).length} 只净卖出`),
+    row('列', '名称', '收盘', '涨跌', '净买额'),
+    row('段', head.length ? '净买入最多' : '没有净买入的股票'), ...head.map(line),
+    row('段', tail.length ? '净卖出最多' : '没有净卖出的股票'), ...tail.map(line),
+    row('注', '龙虎榜是交易所收盘后公布的：当天涨跌幅、换手率、振幅异常的股票，买入、卖出金额最大的各 5 个席位的成交。净买额 = 这些席位的买入减卖出，不是这只股票的全部成交。'),
+    [...head, ...tail].some(x => x.multi) && row('注', '标「3 日」的是因为连续三个交易日累计偏离上榜的，净买额是这三天合计的。'),
+    row('注', '数据来自东方财富的公开数据，傍晚以后才有当天的；只是数据，不是投资建议。')]);
 }
 
 // ---------- 命令 ----------
@@ -288,6 +345,8 @@ const USAGE = `用法：
   claw-stock find 平安             这个名字对得上哪几只
   claw-stock flow [细分] [--days 5]  行业板块的主力资金：哪些板块净流入最多、最少（默认行业大类、当日；--days 5 或 10 看近几日）
   claw-stock top [跌|成交额] [主板|双创|北交所]  涨幅榜（默认）、跌幅榜、成交额榜；涨跌幅榜按板块分开排，写了板块只排那一个
+  claw-stock top 换手|量比|主力|主力流出 [板块]  换手榜、量比榜、主力净流入榜 / 净流出榜，也按板块分开排
+  claw-stock lhb                   龙虎榜：最近一个公布日，净买入最多、净卖出最多的
   加 --json 输出给程序用的 JSON`;
 
 async function one(raw) {                       // 一句话 → { q 报价, cands 候选 }；找不到退出 2
@@ -313,10 +372,18 @@ async function main(argv) {
     if (mode === '成交额') {
       const b = BOARDS.find(x => x.key === only), list = parseTop(await clist(b ? b.fs : ALL_A, 'f6', 1, 1)).sort((x, y) => (y.amount || 0) - (x.amount || 0));
       secs = [{ name: b ? b.name : '全部 A 股', lim: b ? b.lim : 0, limits: 0, list: list.map(x => ({ ...x, tag: '' })) }];
+    } else if (METRIC[mode]) {
+      const m = METRIC[mode];
+      secs = await Promise.all(BOARDS.filter(b => !only || b.key === only).map(async b => ({ ...b, limits: 0, list: rankMetric(parseTop(await clist(b.fs, m.fid, m.po, 1)), mode, b.lim) })));
     } else secs = await Promise.all(BOARDS.filter(b => !only || b.key === only).map(b => boardTop(b, mode === '跌' ? -1 : 1)));
     if (!secs.some(s => s.list.length)) die(2, '没有拿到排行（行情接口暂时没通，或者还没开盘）。不要自己编数字。');
     const per = secs.length > 1 ? 6 : 15;
     return say(renderTop(mode, secs, await breadth(), per), { mode, sections: secs.map(s => ({ name: s.name, limit: s.lim, limits: s.limits, list: s.list.slice(0, per) })) });
+  }
+  if (cmd === 'lhb' || cmd === '龙虎榜') {
+    const r = await lhb();
+    if (!r.list.length) die(2, '没有拿到龙虎榜（接口暂时没通）。不要自己编数字。');
+    return say(renderLhb(r), r);
   }
   if (cmd === 'find') {
     const q = cleanQuery(rest.slice(1).join(' ')); if (!q) die(1, USAGE);

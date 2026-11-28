@@ -317,3 +317,74 @@ test('kuAi 填空：问行情的走这个技能；问买不买、问概念、别
   for (const t of ['茅台今天股价多少', '查一下宁德时代的行情', '600519现在多少钱', '上证指数今天涨了多少', '看看比亚迪的股价', '大盘今天怎么样']) assert.equal(go(t), 'claw-stock', t);
   for (const t of ['茅台股票能不能买', '股票是什么意思', '推荐几只股票', '为什么今天大盘跌了', '帮我挑个保温杯', '打开四川卫视', '来首周杰伦的歌']) assert.notEqual(go(t), 'claw-stock', t);
 });
+
+// 换手榜 / 量比榜 / 主力榜（f8 换手率、f10 量比、f62 主力净流入）和龙虎榜
+import { METRIC, rankMetric, lhbWhy, parseLhb, renderLhb } from '../skills/claw-stock/stock.mjs';
+test('排行榜：换手 / 量比（量能）/ 主力 / 主力流出的说法；别的说法不变', () => {
+  assert.deepEqual(['换手榜', '换手率最高', '量比榜', '量能榜', '放量的', '主力榜', '主力净流入', '资金流入最多的股票', '主力流出', '主力净卖出 北交所', '成交额', '跌'].map(topMode),
+    ['换手', '换手', '量比', '量比', '量比', '主力', '主力', '主力', '主力流出', '主力流出', '成交额', '跌']);
+  assert.deepEqual(Object.keys(METRIC), ['换手', '量比', '主力', '主力流出']);
+});
+test('排行榜：按一个数排——没数的不要，主力榜只留净流入的、流出榜只留净流出的；新股、涨停打标记', () => {
+  const l = parseTop({ data: { diff: [T('换手高', '600001', 2, 1e9, { f8: 53.78, f10: 1.2, f62: 3e8 }), T('量比高', '600002', 10, 2e9, { f8: 5, f10: 10.42, f62: -7e8 }),
+    T('新股', '600003', 4, 3e9, { f8: 40, f10: 0.9, f62: 5e6, f26: '20261120' }), T('没数', '600004', 1, 1e9, { f8: '-', f10: '-', f62: '-' })] } });
+  assert.deepEqual(l.map(x => [x.turn, x.vr, x.net]), [[53.78, 1.2, 3e8], [5, 10.42, -7e8], [40, 0.9, 5e6], [null, null, null]]);
+  assert.deepEqual(rankMetric(l, '换手', 10, NOW).map(x => [x.name, x.tag]), [['换手高', ''], ['新股', '新股'], ['量比高', '涨停']]);
+  assert.deepEqual(rankMetric(l, '量比', 10, NOW).map(x => x.name), ['量比高', '换手高', '新股']);
+  assert.deepEqual(rankMetric(l, '主力', 10, NOW).map(x => x.name), ['换手高', '新股']);
+  assert.deepEqual(rankMetric(l, '主力流出', 10, NOW).map(x => x.name), ['量比高']);
+});
+test('排行榜：换手 / 量比 / 主力的输出（多一行「列」写表头；金额的单位跟着数走）', () => {
+  const l = parseTop({ data: { diff: [T('东山精密', '002384', 10, 12e9, { f2: 79.77, f8: 12.3, f10: 2.5, f62: 2856356144, f100: '元件' }), T('小的', '600009', -1, 5e8, { f8: 3, f10: 0.8, f62: -2130000 })] } });
+  const sec = m => [{ ...BOARDS[0], limits: 0, list: rankMetric(l, m, 10, NOW) }];
+  const a = renderTop('换手', sec('换手'), { up: 1, down: 2, flat: 3 }, 6);
+  assert.match(a, /^```stock\n题 \| 换手榜 \| 2026-11-27 16:11 · .*全市场上涨 1 只、下跌 2 只、平 3 只\n列 \| 名称 \| 现价 \| 涨跌 \| 换手率\n段 \| 沪深主板\n/);
+  assert.deepEqual(lines(a).filter(f => f[0] === '榜'), [['榜', '1', '东山精密', '002384', '79.77', '+10.00%', '12.30%', '元件', '涨停'], ['榜', '2', '小的', '600009', '10.00', '-1.00%', '3.00%', '半导体']]);
+  assert.match(a, /注 \| 各板块分开排。换手率 = /);
+  const v = renderTop('量比', sec('量比'), null, 6);
+  assert.match(v, /题 \| 量比榜 \| /); assert.match(v, /列 \| 名称 \| 现价 \| 涨跌 \| 量比\n/); assert.deepEqual(lines(v).filter(f => f[0] === '榜').map(f => f[6]), ['2.50', '0.80']);
+  const i = renderTop('主力', sec('主力'), null, 6), o = renderTop('主力流出', sec('主力流出'), null, 6);
+  assert.match(i, /题 \| 主力净流入榜 \| /); assert.deepEqual(lines(i).filter(f => f[0] === '榜').map(f => [f[2], f[6]]), [['东山精密', '+28.56 亿']]);
+  assert.match(o, /题 \| 主力净流出榜 \| /); assert.deepEqual(lines(o).filter(f => f[0] === '榜').map(f => [f[2], f[6]]), [['小的', '-213 万']]);
+  assert.match(i, /按大单成交估算的/);
+  // 普涨那天有的板块一只净流出的都没有：照实写
+  assert.match(renderTop('主力流出', [{ ...BOARDS[2], limits: 0, list: [] }], null, 6), /\n段 \| 北交所 · 没有主力净流出的股票\n/);
+  for (const x of [a, v, i, o]) assert.doesNotMatch(x, /建议买|建议卖|看涨|看跌|龙头|妖股|打板|机构/);
+});
+// 龙虎榜：接口返回的样子（一个上榜原因一条；可转债、B 股也在里面）
+const L = (name, code, net, why, extra = {}) => ({ SECURITY_CODE: code, SECURITY_NAME_ABBR: name, TRADE_DATE: '2026-11-27 00:00:00', CLOSE_PRICE: 20, CHANGE_RATE: 10.0021, BILLBOARD_NET_AMT: net, BILLBOARD_BUY_AMT: 9e8, BILLBOARD_SELL_AMT: 1e8, EXPLANATION: why, EXPLAIN: '2家机构买入，成功率27.76%', ...extra });
+test('龙虎榜：上榜原因写短（「有价格涨跌幅限制的…涨幅」不能认成跌幅）', () => {
+  assert.deepEqual(['日涨幅达到15%的前5只证券', '有价格涨跌幅限制的日收盘价格涨幅达到15%的前五只证券', '有价格涨跌幅限制的日收盘价格跌幅偏离值达到7%的前五只证券', '有价格涨跌幅限制的日换手率达到20%的前五只证券', '当日价格振幅达到30%的前5只股票',
+    '连续三个交易日内，涨幅偏离值累计达到30%的证券', '有价格涨跌幅限制的连续3个交易日内收盘价格跌幅偏离值累计达到30%的证券', '严重异常期间日收盘价格涨幅偏离值累计达到100%的证券'].map(lhbWhy),
+  ['涨幅大', '涨幅大', '跌幅大', '换手率高', '振幅大', '3 日涨幅偏离', '3 日跌幅偏离', '严重异常波动']);
+});
+test('龙虎榜：只留最近那天的 A 股；一只几个原因合成一条，金额取当天那条的', () => {
+  const r = parseLhb({ result: { data: [L('新易盛', '300502', 627814771.33, '日涨幅达到15%的前5只证券'), L('旋极信息', '300324', 280878206.94, '连续三个交易日内，涨幅偏离值累计达到30%的证券'), L('旋极信息', '300324', -10515919.81, '日涨幅达到15%的前5只证券'),
+    L('好当家', '600467', 6689414.06, '有价格涨跌幅限制的日换手率达到20%的前五只证券'), L('好当家', '600467', 6689414.06, '有价格涨跌幅限制的日价格振幅达到15%的前五只证券'),
+    L('只有三日', '600410', 69e6, '连续三个交易日内，涨幅偏离值累计达到20%的证券'), L('某转债', '123456', 9e9, '日涨幅达到15%的前5只可转债'), L('某B股', '900901', 9e9, '日涨幅偏离值达到7%的前5只证券'),
+    L('前一天的', '600000', 9e9, '日涨幅偏离值达到7%的前5只证券', { TRADE_DATE: '2026-11-26 00:00:00' }), L('卖的', '000530', -342e6, '日换手率达到20%的前5只证券', { CHANGE_RATE: -4.45 })] } });
+  assert.equal(r.date, '2026-11-27');
+  assert.deepEqual(r.list.map(x => [x.name, x.net, x.why.join('、'), x.multi]), [['新易盛', 627814771.33, '涨幅大', false], ['只有三日', 69e6, '3 日涨幅偏离', true], ['好当家', 6689414.06, '换手率高、振幅大', false],
+    ['旋极信息', -10515919.81, '3 日涨幅偏离、涨幅大', false], ['卖的', -342e6, '换手率高', false]]);
+  assert.deepEqual(parseLhb(null), { date: '', list: [] });
+  const out = renderLhb(r);
+  assert.match(out, /^```stock\n题 \| 龙虎榜 \| 2026-11-27 · 上榜 5 只：3 只净买入、2 只净卖出\n列 \| 名称 \| 收盘 \| 涨跌 \| 净买额\n段 \| 净买入最多\n/);
+  assert.deepEqual(lines(out).filter(f => f[0] === '榜'), [['榜', '1', '新易盛', '300502', '20.00', '+10.00%', '+6.28 亿', '涨幅大'], ['榜', '2', '只有三日', '600410', '20.00', '+10.00%', '+6900 万', '3 日涨幅偏离', '3 日'],
+    ['榜', '3', '好当家', '600467', '20.00', '+10.00%', '+669 万', '换手率高、振幅大'], ['榜', '1', '卖的', '000530', '20.00', '-4.45%', '-3.42 亿', '换手率高'], ['榜', '2', '旋极信息', '300324', '20.00', '+10.00%', '-1052 万', '3 日涨幅偏离、涨幅大']]);
+  assert.match(out, /注 \| 标「3 日」的/); assert.match(out, /不是这只股票的全部成交/);
+  assert.doesNotMatch(out, /机构|成功率|建议买|建议卖|看涨|看跌|龙头|妖股|打板/);                       // 网站自己的那句解读不带出来
+  const only = renderLhb({ date: '2026-11-27', list: r.list.filter(x => x.net > 0 && !x.multi) });
+  assert.match(only, /\n段 \| 没有净卖出的股票\n/); assert.doesNotMatch(only, /标「3 日」/);
+});
+test('页面：换手榜 / 主力榜 / 龙虎榜——表头照「列」写；带正负号的那格上色、垫色条（单位不一样也按真实大小比）', () => {
+  const t = mdStock('题 | 换手榜\n列 | 名称 | 现价 | 涨跌 | 换手率\n段 | 沪深主板\n榜 | 1 | 北纬科技 | 002148 | 10.66 | -5.66% | 53.78% | 通信服务');
+  assert.match(t, /<table><tr><th>名称<\/th><th>现价<\/th><th>涨跌<\/th><th>换手率<\/th><\/tr>/);
+  assert.match(t, /<td><span class="stk-v dn">-5\.66%<\/span><\/td><td>53\.78%<\/td><\/tr>/);            // 不带正负号的数照写，不上色
+  const m = mdStock('题 | 龙虎榜 | 2026-11-27\n列 | 名称 | 收盘 | 涨跌 | 净买额\n段 | 净买入最多\n榜 | 1 | 新易盛 | 300502 | 226.84 | +20.00% | +6.28 亿 | 涨幅大\n榜 | 2 | 小的 | 600410 | 20.90 | +10.00% | +3140 万 | 3 日涨幅偏离 | 3 日\n段 | 净卖出最多\n榜 | 1 | 冰山冷热 | 000530 | 15.45 | -4.45% | -3.14 亿 | 换手率高');
+  assert.match(m, /<th>收盘<\/th><th>涨跌<\/th><th>净买额<\/th>/);
+  assert.match(m, /<td class="stk-bar up" style="--w:100%"><span class="stk-v up">\+6\.28 亿<\/span><\/td>/);
+  assert.match(m, /<b>小的<\/b><u class="up">3 日<\/u><small>600410 · 3 日涨幅偏离<\/small>.*<td class="stk-bar up" style="--w:5%"><span class="stk-v up">\+3140 万<\/span>/);
+  assert.match(m, /<td class="stk-bar dn" style="--w:50%"><span class="stk-v dn">-3\.14 亿<\/span><\/td>/);
+  assert.match(mdStock('列 | <i> | b | c | d\n榜 | 1 | x | 000001 | 1 | +1% | 1 亿'), /<th>&lt;i&gt;<\/th>/);
+  assert.match(mdStock('列 | a | b | c | d'), /^CODE:/);                                                 // 只有表头不算卡片
+});
