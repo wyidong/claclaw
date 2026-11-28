@@ -2014,7 +2014,8 @@ function toolActivity(name = '') {
 // ---------- 这台电脑装了哪些 Claw（没装的不在网页上列出来）----------
 const inPath = name => !!findBin(name);
 // 新建会话时填的目录：~ 展开成家目录；不是绝对路径返回 null
-const resolveDir = d => { d = String(d || '').trim(); if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1); return path.isAbsolute(d) ? path.resolve(d) : null; };
+// Windows：盘符统一大写（d:\x 和 D:\x 是同一个目录；不统一的话 Claude 会话记的目录写法不同，列表里同一个目录分成两组）
+const resolveDir = d => { d = String(d || '').trim(); if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1); if (!path.isAbsolute(d)) return null; d = path.resolve(d); return process.platform === 'win32' ? d.replace(/^[a-z](?=:)/, c => c.toUpperCase()) : d; };
 const isDir = d => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
 // 新建对话框里改了目录：{ dir }（没改 dir 为空）；填错了 { error }
 function chosenDir(m) {

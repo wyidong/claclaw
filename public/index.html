@@ -4507,7 +4507,9 @@ function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div cl
 function poolTitle(id){var s=poolInfo(id);return s?(s.title||'(无标题)'):shortId(id)}
 var CLAW_NAMES={claude:'Claude Code'};CLAW_T.forEach(function(c){CLAW_NAMES[c.id]=c.long});
 function peNormCfg(c){if(c&&c.dir&&c.dir.indexOf('|')<0)c.dir='claude|'+c.dir;return c}   // 旧配置只存了目录（没有「Claw|」前缀）：初次载入、每次操作后服务端回的配置都要转
-function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':(s.cwd||''))}   // OpenClaw 没有目录，全部归一组
+// 目录分组用的键：Windows 路径不分大小写（d:\x 和 D:\x 是同一个目录，有的程序记小写盘符），/ 和 \ 也当一样
+function dirKey(c){c=String(c||'');return /^[a-zA-Z]:[\\\/]/.test(c)?c.replace(/\//g,'\\').replace(/\\+$/,'').toLowerCase():c}
+function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':dirKey(s.cwd))}   // OpenClaw 没有目录，全部归一组
 function peDirLabel(k){var i=k.indexOf('|'),cl=k.slice(0,i),d=k.slice(i+1).replace(/^\/(Users|home)\/[^\/]+/,'~');return cl==='claude'?(d||'(未知目录)'):CLAW_NAMES[cl]+(d?' · '+d:'')}
 function peDirShort(k){return peDirLabel(k).replace(/^[^·]*· /,'')}   // 不带 Claw 名的目录
 function poolCwd(id){var s=poolInfo(id);return s?peDirKey(s):clawOf(id)+'|'}
@@ -5623,7 +5625,7 @@ function drawList(arr,claw){
     // 按目录分组：哪个目录有最新活动就排最前，组内按时间倒序；点组标题折叠/展开（记在本机）
     var groups={},order=[];
     arr.forEach(function(s){
-      var k=s.cwd||'';
+      var k=dirKey(s.cwd);
       if(!groups[k]){groups[k]={key:k,label:(s.cwdShort||'（目录未知）').replace(/^\/(Users|home)\/[^\/]+$/,'~'),items:[],last:0};order.push(groups[k])}
       var g=groups[k];g.items.push(s);g.last=Math.max(g.last,s.lastModified||0);
     });
