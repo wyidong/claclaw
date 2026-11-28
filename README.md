@@ -1,6 +1,8 @@
 # claclaw
 
-claclaw 是装在电脑上的一个小网页服务，让你用手机浏览器接管这台电脑上的 AI 编程会话：看已有会话、接着聊或新开一个，AI 要改文件、跑命令时在手机上点「允许 / 拒绝」，回复完收到推送。不用 SSH，不怕断线。
+claclaw 是装在电脑上的一个小网页服务，让你在浏览器里（手机上也好用）接管这台电脑上的 AI 编程会话：看已有会话、接着聊或新开一个，AI 要改文件、跑命令时点「允许 / 拒绝」，回复完收到推送。不用 SSH，不怕断线。
+
+**claclaw 和 clarelay 的分工**：claclaw 只管这台电脑上的事——装好、跑起来、管会话和各家 Claw、提供网页。手机等别的设备怎么连进来（外网访问、设备配对、扫码加入）是 clarelay 的事，claclaw 不考虑；clarelay 需要配合时，claclaw 只提供相应的接口。不用 clarelay 也可以自己用 Tailscale、SSH 隧道连。
 
 它把本机的 AI 编程工具叫作 **Claw**，支持 Claude Code、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、GitHub Copilot CLI、Gemini CLI、OpenClaw，以及自带的 kuAi（问答为主；小模型说一句「放首歌」「打开四川卫视」由程序代填参数去用技能，能力够的模型自己用技能、跑几条简单命令，再强一些的还能读文件、在目录里搜内容、看网页，只读不改；放开到哪一步由 6 道题的上岗小测验实测决定，也可以在模型管理里逐个改。没装 DeepSeek Harness 时对它说「帮我装 DeepSeek」，点一下确认就装）。装了任意一个就能用，装了几个就能随时切换。两台电脑上的会话还能互发消息、拉进同一个群聊协作。
 
@@ -22,7 +24,7 @@ npm start          # 默认端口 8787；换端口：npm start -- --port 9000
 - **Windows 开机自动启动**：第一次 `npm start` 后，claclaw 自动在「启动」文件夹里放好 `claclaw.vbs`，以后登录 Windows 就在后台启动（不弹窗口，挂了自动拉起，日志在 `%LOCALAPPDATA%\claclaw\Logs\server.log`）。关机再开机后，直接打开桌面上的 claclaw（网页快捷方式）就能用。不想开机启动：按 Win+R 输入 `shell:startup`，删掉里面的 `claclaw.vbs`（删了以后不会再自动放回）。
 - **第一次打开**：在这台电脑上用 `http://127.0.0.1:8787` 打开，或用手机打开（第一台打开的设备免登录）。进去后按提示设登录账号，设好后所有设备都用这组账号登录。以后改账号：`npm run passwd -- <用户名> <密码>`。
 - **还没装 DeepSeek Harness**：Claw 页有它的卡片，点「安装」自动装好，填好 key 后直接开会话（电脑上一个 Claw 都没有时，Claw 入口会亮红点提示）。
-- **手机怎么连上**：网页默认只监听本机和 Tailscale 地址。装了 Tailscale 就用电脑的 Tailscale 地址打开；没有就用 clarelay（见下），或 SSH 隧道 `ssh -L 8787:127.0.0.1:8787 用户名@那台电脑`。要在局域网里直接打开，用 `CLACLAW_HOST=127.0.0.1,<局域网 IP>` 指定监听地址（不接受 `0.0.0.0`）。
+- **从别的设备打开**：这不归 claclaw 管，网页默认只监听本机和 Tailscale 地址。外网、手机连接用 clarelay（见下）；也可以自己用 Tailscale 地址打开，或 SSH 隧道 `ssh -L 8787:127.0.0.1:8787 用户名@那台电脑`。要在局域网里直接打开，用 `CLACLAW_HOST=127.0.0.1,<局域网 IP>` 指定监听地址（不接受 `0.0.0.0`）。
 
 ## 功能
 
@@ -56,7 +58,7 @@ Qoder、CodeBuddy、Kimi、Codex、MiniMax Code、Copilot 等要账号登录的�
 
 ### clarelay：从外网访问（可选）
 
-clarelay 是可选的第三方中继。在「设置 → 宿主 → 网络 → clarelay」粘贴设备邀请码后，手机在外网也能打开 claclaw；没填邀请码时，claclaw 不下载、不连接 clarelay 的任何东西。电脑端程序从加入的中继下载，用邀请码里的发布公钥验过签名才用，有新版时宿主页出现「更新」。
+clarelay 是独立的、可选的中继，别的设备怎么连进来（配对、外网访问等）都由它负责。在「设置 → 宿主 → 网络 → clarelay」粘贴设备邀请码后，手机在外网也能打开 claclaw；没填邀请码时，claclaw 不下载、不连接 clarelay 的任何东西。电脑端程序从加入的中继下载，用邀请码里的发布公钥验过签名才用，有新版时宿主页出现「更新」。
 
 ### claclaw 协同：会话互发消息
 
