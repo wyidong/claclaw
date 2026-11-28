@@ -73,7 +73,7 @@ test('本机有自己的提交（分叉）：提示，不能更新', async () =>
 test('仓库连不上：从安装时记下的代码包镜像取', async () => {
   const s = setup();
   s.push('镜像里的新版', { 'a.txt': '3' });
-  const bundle = path.join(s.T, 'c.bundle'); G(s.src, 'bundle', 'create', '-q', bundle, 'HEAD', 'main');
+  const bundle = path.join(s.T, 'c.bundle'); G(s.src, 'bundle', 'create', '-q', bundle, 'main');   // 中继上的代码包只有 refs/heads/main，没有 HEAD
   const buf = fs.readFileSync(bundle), sum = crypto.createHash('sha256').update(buf).digest('hex');
   G(s.root, 'remote', 'set-url', 'origin', path.join(s.T, 'nope.git'));   // 仓库连不上
   fs.writeFileSync(path.join(s.data, 'install-origin.json'), JSON.stringify({ relay: 'https://relay.example.com/claclaw' }));
