@@ -26,7 +26,7 @@ const LOG = path.join(LOGDIR, 'handover.log'), PIDFILE = path.join(LOGDIR, 'rest
 const PORT = Number(process.env.CLACLAW_PORT || 8787), BASE = 'http://127.0.0.1:' + PORT;
 const LABEL = 'com.wyidong.claclaw';
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
-const git = (...a) => { try { return execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8' }).trim(); } catch { return ''; } };
+const git = (...a) => { try { return execFileSync('git', ['-C', ROOT, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };   // 桌面安装包没有 .git：git 的报错别打到屏幕上
 
 fs.mkdirSync(LOGDIR, { recursive: true });
 const other = Number(fs.existsSync(PIDFILE) && fs.readFileSync(PIDFILE, 'utf8')) || 0;

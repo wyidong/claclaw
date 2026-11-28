@@ -40,6 +40,10 @@ function stageServer() {
   say(`程序文件 ${files.length} 个 → ${dir}`);
   const npm = WIN ? 'npm.cmd' : 'npm';
   run(npm, ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: dir });
+  // 桌面安装包面向国内用户、只照顾国内的 Agent，不带 Claude Code 本体（@anthropic-ai/claude-agent-sdk-<平台>，两三百 MB）；
+  // 要用 Claude 的话，claclaw 会改用电脑上装的 claude 命令
+  const A = path.join(dir, 'node_modules', '@anthropic-ai');
+  for (const d of fs.existsSync(A) ? fs.readdirSync(A) : []) if (/^claude-agent-sdk-/.test(d)) { fs.rmSync(path.join(A, d), { recursive: true, force: true }); say('不带 Claude Code：删掉 @anthropic-ai/' + d); }
 }
 
 async function stageNode() {

@@ -11,6 +11,7 @@
 - 数据在 `%APPDATA%\claclaw\data`（macOS：`~/Library/Application Support/claclaw/data`），日志在同级的 `logs\`；卸载、更新都不删数据。
 - 这台电脑上已经有一份 claclaw 在 8787 跑着（比如以前用脚本装的）：桌面版不另起，直接用那份；那份停了再自己接手。
 - 以前用脚本装过、建过账号（Windows：「启动」里 claclaw.vbs 指向的目录，或 `%USERPROFILE%\claclaw`，里面有 `data\auth.json`）：桌面版直接用那份数据，账号、会话、设置都在，不会冒出一个没账号的新实例。
+- 不带 Claude Code 本体（面向国内用户，只照顾国内的 Agent；安装包小一百多 MB）。要用 Claude 的话，claclaw 改用电脑上装的 claude 命令。
 - 装各家 Claw 用自带的 npm；用户自己没设 `npm_config_registry` 时用国内镜像 registry.npmmirror.com。
 - 卸载时删掉开机自动启动项（更新安装不删）。
 
