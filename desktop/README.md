@@ -10,6 +10,9 @@
 - 再点桌面图标 = 打开 claclaw 网页（只会有一个在跑）。
 - 数据在 `%APPDATA%\claclaw\data`（macOS：`~/Library/Application Support/claclaw/data`），日志在同级的 `logs\`；卸载、更新都不删数据。
 - 这台电脑上已经有一份 claclaw 在 8787 跑着（比如以前用脚本装的）：桌面版不另起，直接用那份；那份停了再自己接手。
+- 以前用脚本装过、建过账号（Windows：「启动」里 claclaw.vbs 指向的目录，或 `%USERPROFILE%\claclaw`，里面有 `data\auth.json`）：桌面版直接用那份数据，账号、会话、设置都在，不会冒出一个没账号的新实例。
+- 装各家 Claw 用自带的 npm；用户自己没设 `npm_config_registry` 时用国内镜像 registry.npmmirror.com。
+- 卸载时删掉开机自动启动项（更新安装不删）。
 
 claclaw 只管这台电脑上的事；手机等别的设备怎么连进来是 clarelay 的事，安装包里不做。
 
@@ -24,7 +27,7 @@ npm run dist:win      # Windows：dist/out/claclaw-setup-<版本>-win-x64.exe
 npm run dist:mac      # macOS：dmg（还没签名）
 ```
 
-`npm run stage`（build.mjs）先备料到 `dist/stage/`：官方 Node 运行时（下载后按 SHASUMS256 校验，去掉头文件和 corepack）+ 仓库里受版本管理的程序文件 + `npm ci --omit=dev` 装好的依赖。electron-builder 不肯把 extraResources 里的 node_modules 打进去，由 `afterPack.cjs` 补上。
+`npm run stage`（build.mjs）先备料到 `dist/stage/`：官方 Node 运行时（下载后按 SHASUMS256 校验，去掉头文件和 corepack）+ 仓库里受版本管理的程序文件 + `npm ci --omit=dev` 装好的依赖，再给依赖和 npm 瘦身（删文档、类型声明、source map、测试目录，文件数少一半，装得快）。electron-builder 不肯把 extraResources 里的 node_modules 打进去，由 `afterPack.cjs` 补上。
 
 国内网络：`CLACLAW_NODE_MIRROR=https://npmmirror.com/mirrors/node`、`npm_config_registry=https://registry.npmmirror.com`、`ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
 

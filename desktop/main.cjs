@@ -26,7 +26,21 @@ const RES = app.isPackaged ? process.resourcesPath : null;
 const SERVER_DIR = RES ? path.join(RES, 'server') : path.resolve(__dirname, '..');
 const NODE = RES ? path.join(RES, 'node', WIN ? 'node.exe' : path.join('bin', 'node')) : 'node';
 const USER_DIR = app.getPath('userData');
-const DATA = path.join(USER_DIR, 'data');
+// 这台电脑以前用脚本装过 claclaw（Windows：「启动」里 claclaw.vbs 指向的目录，或 %USERPROFILE%\claclaw）、已经建过账号：
+// 桌面版直接用那份数据（账号、会话、设置都在），免得两边开机抢 8787，抢到的是一份没账号的新实例
+function scriptData() {
+  if (!WIN || process.env.CLACLAW_DESKTOP_USER_DIR) return null;   // 测试时不碰
+  const dirs = [];
+  try {
+    const vbs = fs.readFileSync(path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'claclaw.vbs'), 'utf16le');
+    const m = vbs.match(/^sh\.CurrentDirectory = "((?:[^"]|"")*)"/m); if (m) dirs.push(m[1].replace(/""/g, '"'));
+  } catch {}
+  dirs.push(path.join(app.getPath('home'), 'claclaw'));
+  for (const d of dirs) if (fs.existsSync(path.join(d, 'server.mjs')) && fs.existsSync(path.join(d, 'data', 'auth.json'))) return path.join(d, 'data');
+  return null;
+}
+const SCRIPT_DATA = scriptData();
+const DATA = SCRIPT_DATA || path.join(USER_DIR, 'data');
 const LOGS = path.join(USER_DIR, 'logs');
 const STATE = path.join(USER_DIR, 'desktop.json');
 fs.mkdirSync(DATA, { recursive: true });
@@ -64,6 +78,8 @@ function startServer() {
   const out = logFile('server.log');
   const env = { ...process.env, CLACLAW_APP_DATA: DATA, CLACLAW_SUPERVISOR: 'desktop' };
   delete env.ELECTRON_RUN_AS_NODE;
+  // 装各家 Claw 走 npm：用户自己没设下载源就用国内镜像（官方源在国内常常连不上，几百个包装到一半失败）
+  if (!Object.keys(env).some(k => k.toLowerCase() === 'npm_config_registry')) env.npm_config_registry = 'https://registry.npmmirror.com';
   // 自带的 node、npm 放在 PATH 最前面：claclaw 装各家 Claw（npm）、跑技能都用它
   if (RES) env.PATH = path.dirname(NODE) + path.delimiter + (env.PATH || env.Path || '');
   if (RES && WIN) delete env.Path;
@@ -136,7 +152,7 @@ app.on('before-quit', () => { quitting = true; stopServer(); });
 if (process.platform === 'darwin') app.dock?.hide();
 
 app.whenReady().then(async () => {
-  log('启动 ' + app.getVersion() + (HIDDEN ? '（开机自动启动）' : ''));
+  log('启动 ' + app.getVersion() + (HIDDEN ? '（开机自动启动）' : '') + '，数据 ' + DATA + (SCRIPT_DATA ? '（沿用脚本版的）' : ''));
   makeTray();
   const st = readState();
   // 第一次装好：默认开机自动启动（用户在托盘里能关；关了以后不再替他打开）

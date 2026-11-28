@@ -73,6 +73,30 @@ async function stageNode() {
   say('Node ' + v + ' → ' + dir);
 }
 
+// 依赖瘦身：删掉跑起来用不到的文档、类型声明、source map、测试目录。装的时候文件数少一半，杀毒软件逐个扫描也就快一半
+const JUNK_FILE = /\.(md|markdown|map|d\.ts|d\.mts|d\.cts)$|^(changelog|history|authors|contributing)(\.(txt|rst))?$|^\.(npmignore|eslintrc.*|prettierrc.*|travis\.yml|editorconfig)$/i;
+const KEEP_FILE = /^(licen[cs]e|notice|copying)/i;   // 许可证留着
+const JUNK_DIR = new Set(['__tests__', '.github', 'coverage']);
+const JUNK_PKG_DIR = new Set(['test', 'tests', 'example', 'examples', 'docs', 'man']);   // 只删包根目录下的（别处同名目录可能是代码）
+function prune(root) {
+  let n = 0;
+  const walk = d => {
+    let ents; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    const pkgRoot = ents.some(e => e.isFile() && e.name === 'package.json');
+    for (const e of ents) {
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) {
+        if (JUNK_DIR.has(e.name) || (pkgRoot && JUNK_PKG_DIR.has(e.name))) { fs.rmSync(f, { recursive: true, force: true }); n++; }
+        else walk(f);
+      } else if (JUNK_FILE.test(e.name) && !KEEP_FILE.test(e.name)) { fs.rmSync(f, { force: true }); n++; }
+    }
+  };
+  walk(root);
+  say(`瘦身：删了 ${n} 个文件 / 目录（${root}）`);
+}
+
 await stageNode();
 stageServer();
+prune(path.join(STAGE, 'server', 'node_modules'));
+for (const d of [path.join('node_modules', 'npm'), path.join('lib', 'node_modules', 'npm')]) if (fs.existsSync(path.join(STAGE, 'node', d))) prune(path.join(STAGE, 'node', d));
 say('备料好了；接着 electron-builder 打包');
