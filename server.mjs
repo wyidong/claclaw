@@ -18,6 +18,8 @@ import { z } from 'zod';
 import * as push from './src/push.mjs';
 import { startDevNotify, devNotify, devRead, devSync, devStatus, devConfigured, useDevice } from './src/peer/devnotify.mjs';
 import { makeRelayDev } from './src/peer/relaydev.mjs';
+import { makeRelayPair } from './src/peer/relaypair.mjs';
+import { makeUpdater } from './src/update.mjs';
 import { makeShop, serveShopImg } from './src/shop.mjs';
 import { libDir, libImport } from './src/peer/vendor.mjs';
 import { isKm, KmRunner, kmRunners, kmSessionList, kmNewSession, kmShutdown, kmAcpRunning, kmInfo, kmDelete, kmInstalled, kmModelsChanged, kmRename } from './src/claws/kimi.mjs';
@@ -2012,7 +2014,8 @@ function toolActivity(name = '') {
 // ---------- 这台电脑装了哪些 Claw（没装的不在网页上列出来）----------
 const inPath = name => !!findBin(name);
 // 新建会话时填的目录：~ 展开成家目录；不是绝对路径返回 null
-const resolveDir = d => { d = String(d || '').trim(); if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1); return path.isAbsolute(d) ? path.resolve(d) : null; };
+// Windows：盘符统一大写（d:\x 和 D:\x 是同一个目录；不统一的话 Claude 会话记的目录写法不同，列表里同一个目录分成两组）
+const resolveDir = d => { d = String(d || '').trim(); if (d === '~' || d.startsWith('~/')) d = HOME + d.slice(1); if (!path.isAbsolute(d)) return null; d = path.resolve(d); return process.platform === 'win32' ? d.replace(/^[a-z](?=:)/, c => c.toUpperCase()) : d; };
 const isDir = d => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
 // 新建对话框里改了目录：{ dir }（没改 dir 为空）；填错了 { error }
 function chosenDir(m) {
@@ -2096,6 +2099,14 @@ startDevNotify({ log, onOnline: async () => {
 // 内置的 clarelay 电脑端（宿主页「网络 › clarelay」）；主端口占到后才自动连（见下面 listen）
 const peerOpen = () => { const c = loadPeer(); return c.enabled ? { [PEER_BASE]: 'http://127.0.0.1:' + c.port } : {}; };   // clarelay 门卫对协同路径放行，转给本机协同端口
 const relayDev = makeRelayDev({ port: PORT, DATA, log, getOff: () => !!settings().clarelayOff, setOff: v => saveSettings({ clarelayOff: !!v }), onDevice: d => { useDevice(d); setTimeout(refreshOurExtra, 3000); }, getOpen: peerOpen, onLib: () => reloadRelayTunnels() });
+const relayPair = makeRelayPair({ DATA, log, join: inv => relayDev.join(inv) });   // 扫码加入 clarelay（手机扫电脑上的二维码）
+// 应用内更新（宿主 › claclaw › 版本）：每天查一次，用户点了才更新；装好后等所有会话空闲再重启
+const updater = makeUpdater({
+  ROOT, DATA, log,
+  restart: note => new Promise((ok, no) => execFile(process.execPath, [path.join(ROOT, 'tools', 'restart-when-idle.mjs'), note], { cwd: ROOT, timeout: 60000, windowsHide: true },
+    (e, out, err) => e ? no(Object.assign(e, { detail: String(err || out || e.message).trim().slice(0, 300) })) : ok(String(out).trim()))),
+});
+if (!process.env.CLACLAW_DATA) updater.start();   // 测试实例不自动查
 const shop = makeShop({ DATA, log });   // claw-shopping 技能：搜拼多多商品（问公开的商品服务）
 // 协同地址里 clarelay 能补的几样（每分钟看一次）：子域名地址（https://<label>.<域名>/claclaw-peer）、打洞用的 STUN（中继的排第一，第三方的留作备用）
 // 不再探测、公布「外网直连」（公网 IP:协同端口，明文 http）：请求头里的钥匙会明文过公网
@@ -2822,11 +2833,23 @@ const handler = async (req, res) => {
       return sendJson(res, 200, { ...modelsPublic(loadStore(MODELS_FILE)), kuai: kuModelNotes() });   // kuai：每个模型的小测验结果、正在测的进度
     }
     if (url.pathname === '/api/claude-usage' && req.method === 'GET') return sendJson(res, 200, { usage: claudeUsage.get() });
+    if (url.pathname === '/api/update') {   // GET 状态；POST {op: check | apply}
+      if (req.method === 'GET') return sendJson(res, 200, updater.view());
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method' });
+      if (notJson(req, res)) return;
+      const body = await jsonBody(req, 1024);
+      const op = { check: () => updater.check(), apply: () => updater.apply() }[body.op];
+      if (!op) return sendJson(res, 400, { error: 'op' });
+      try { return sendJson(res, 200, await op()); } catch (e) { return sendJson(res, 400, { error: e.message }); }
+    }
     if (url.pathname === '/api/clarelay') {   // 内置 clarelay 电脑端：GET 状态；POST {op: join(invite) | connect | disconnect | remove | update（下载新版电脑端）}
-      if (req.method === 'GET') return sendJson(res, 200, relayDev.info());
+      // 扫码加入：pair-start {relay?}（relay 是用户填的中继地址；不填用知道的）| pair-status（网页每 2 秒问一次）| pair-cancel
+      if (req.method === 'GET') return sendJson(res, 200, { ...relayDev.info(), pairRelay: relayPair.bases()[0] || '' });
       if (req.method !== 'POST') return sendJson(res, 405, { error: 'method' });
       if (notJson(req, res)) return;
       const body = await jsonBody(req, 8192);
+      const pairOp = { 'pair-start': () => relayPair.start(body.relay), 'pair-status': () => relayPair.status(), 'pair-cancel': () => relayPair.cancel() }[body.op];
+      if (pairOp) { try { return sendJson(res, 200, await pairOp()); } catch (e) { return sendJson(res, 400, { error: e.message }); } }
       const op = { join: () => relayDev.join(body.invite), connect: () => relayDev.connect(), disconnect: () => relayDev.disconnect(), remove: () => relayDev.remove(), update: () => relayDev.update() }[body.op];
       if (!op) return sendJson(res, 400, { error: 'op' });
       log('clarelay op', body.op);

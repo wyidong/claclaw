@@ -303,6 +303,27 @@ window.__sc=(function(){
     </form>
   </div>
 
+  <div id="crPairDlg" aria-hidden="true">
+    <form class="dlg" id="crPairForm" role="dialog" aria-label="手机扫码加入 clarelay">
+      <h3>手机扫码加入 clarelay</h3>
+      <div id="crPairRelay" hidden>
+        <p>先填一次你的 clarelay 中继地址（填过就记住，以后不用再填）。</p>
+        <input id="crPairIn" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="relay.example.com">
+      </div>
+      <div id="crPairBox" hidden>
+        <div id="crPairQr"></div>
+        <div id="crPairCode"></div>
+        <p id="crPairTip"></p>
+      </div>
+      <p class="cr-warn">加入后会从这台中继下载它的电脑端程序在本机运行，只加入你信任的中继。</p>
+      <div class="row">
+        <button type="button" class="btn cancel" id="crPairNo">关闭</button>
+        <button type="submit" class="btn" id="crPairGo">下一步</button>
+      </div>
+      <div class="err" id="crPairErr" role="alert"></div>
+    </form>
+  </div>
+
   <div id="keyDlg" aria-hidden="true">
     <form class="dlg" id="keyForm" role="dialog" aria-label="查看 Key">
       <h3 id="keyTitle"></h3>
@@ -3601,9 +3622,9 @@ function crRow(){
   var r=relaySt;if(!r)return '';
   var pill=function(op,t,cls){return '<button type="button" class="md-pill'+(cls?' '+cls:'')+'" data-act="cr-op" data-op="'+op+'"'+(relayBusy?' disabled':'')+'>'+(relayBusy===op?'…':t)+'</button>'};
   var err=r.error?'<small>'+esc(r.error)+'</small>':'';
-  if(!r.joined)return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">未加入<small>在 clarelay「管理」里生成设备邀请码，粘贴进来</small>'+err+'</span><span class="cr-btns">'+pill('join','粘贴邀请码')+'</span></div>';
+  if(!r.joined)return '<div class="h-row cr-row"><span class="k">clarelay</span><span class="v">未加入<small>用手机上的 clarelay 扫码加入；也可以粘贴 clarelay「管理」里生成的设备邀请码</small>'+err+'</span><span class="cr-btns">'+pill('pair','手机扫码')+pill('join','粘贴邀请码')+'</span></div>';
   var st=r.starting?'连接中…':r.revoked?'已撤销':!r.running?(r.off?'已断开':'未连接'):r.status!=='active'?'等管理员批准':r.online?'在线':'离线';
-  var btns=r.revoked?pill('join','新邀请码重新加入')+pill('remove','移除','del'):(r.running||r.starting?pill('disconnect','断开'):pill('connect','连接'))+pill('remove','移除','del');
+  var btns=r.revoked?pill('pair','扫码重新加入')+pill('join','新邀请码重新加入')+pill('remove','移除','del'):(r.running||r.starting?pill('disconnect','断开'):pill('connect','连接'))+pill('remove','移除','del');
   // 电脑端代码是第三方库（vendor/clarelay，从中继下载）：显示版本，有新版给「更新」
   var l=r.lib||{},lv=l.installed?(l.version?'电脑端 '+l.version:''):'电脑端还没下载（连接时自动下载）';
   if(l.update&&!r.revoked)btns=pill('update','更新到 '+l.latest)+btns;
@@ -3619,9 +3640,63 @@ function crSubmit(e){
 }
 $('#crForm').addEventListener('submit',crSubmit);
 dlgWire($('#crDlg'),$('#crNo'),function(){showDlg($('#crDlg'),false)});
+// 扫码加入 clarelay：服务端向中继要二维码、等手机确认（poll 钥匙只在服务端）；这里每秒走一次倒计时、每 2 秒问一次进度
+// 不知道中继地址（没从中继装、没加入过、没填过）：先让用户填一次
+var crPair={on:false,t:null,n:0,left:0,at:0,svg:'',st:''};
+function crPairOpen(){
+  crPair.on=true;crPair.svg='';crPair.st='';$('#crPairErr').textContent='';$('#crPairBox').hidden=true;$('#crPairRelay').hidden=true;$('#crPairGo').hidden=true;
+  showDlg($('#crPairDlg'),true);
+  if(relaySt&&relaySt.pairRelay)crPairStart('');else crPairAsk();
+}
+function crPairAsk(){$('#crPairRelay').hidden=false;$('#crPairBox').hidden=true;crPairBtn('下一步');setTimeout(function(){$('#crPairIn').focus()},50)}
+function crPairBtn(t){var b=$('#crPairGo');b.hidden=!t;b.disabled=false;if(t)b.textContent=t}
+function crPairStart(relay){
+  $('#crPairErr').textContent='';$('#crPairGo').disabled=true;
+  var body={op:'pair-start'};if(relay)body.relay=relay;
+  postJson('/api/clarelay',body).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+    if(!crPair.on)return;$('#crPairGo').disabled=false;
+    if(!x.ok){$('#crPairErr').textContent=x.j&&x.j.error||'出错了';if(!$('#crPairRelay').hidden)return;if(!crPair.svg){crPairAsk();return}crPairBtn('重试');return}
+    if(x.j.status==='need-relay'){crPairAsk();return}
+    $('#crPairRelay').hidden=true;crPairShow(x.j);crPairTick();
+  }).catch(function(){if(crPair.on){$('#crPairGo').disabled=false;$('#crPairErr').textContent='连不上 claclaw'}});
+}
+function crPairShow(j){
+  crPair.st=j.status;
+  if(j.svg&&j.svg!==crPair.svg){crPair.svg=j.svg;$('#crPairQr').innerHTML=j.svg}
+  if(j.code)$('#crPairCode').textContent=j.code;
+  if('left' in j){crPair.left=j.left;crPair.at=Date.now()}
+  $('#crPairBox').hidden=false;
+  var tip=$('#crPairTip');tip.className='';$('#crPairQr').classList.toggle('old',j.status!=='waiting');
+  if(j.status==='waiting'){crPairBtn('');crPairCount()}
+  else if(j.status==='expired'){tip.textContent='二维码过期了';crPairBtn('刷新二维码')}
+  else if(j.status==='joining'){tip.textContent='手机已确认，正在加入…';crPairBtn('')}
+  else if(j.status==='done'){tip.className='ok';tip.textContent='已加入'+(j.account?' '+j.account+' 的':'')+' clarelay';crPairBtn('');crLoad();setTimeout(function(){if(crPair.on&&crPair.st==='done')crPairClose(true)},2500)}
+  else if(j.status==='error'){tip.textContent='';$('#crPairErr').textContent=j.error||'出错了';crPairBtn('重新出码')}
+  if(j.error&&j.status==='waiting')$('#crPairErr').textContent='和中继联系不上，还在重试：'+j.error;else if(j.status==='waiting')$('#crPairErr').textContent='';
+}
+function crPairCount(){
+  var ms=Math.max(0,crPair.left-(Date.now()-crPair.at)),m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60;
+  $('#crPairTip').textContent='用手机上的 clarelay「邀请 · 管理 › 扫码添加」扫这个码，或在手机上输入上面的配对码 · '+m+':'+(s<10?'0':'')+s+' 后过期';
+}
+function crPairTick(){
+  clearTimeout(crPair.t);if(!crPair.on)return;
+  crPair.t=setTimeout(function(){
+    if(!crPair.on)return;
+    if(crPair.st==='waiting')crPairCount();
+    if(++crPair.n%2||!(crPair.st==='waiting'||crPair.st==='joining')){crPairTick();return}
+    postJson('/api/clarelay',{op:'pair-status'}).then(function(r){return r.json()}).then(function(j){if(crPair.on&&j&&j.status&&j.status!=='idle')crPairShow(j)}).catch(function(){}).then(crPairTick);
+  },1000);
+}
+function crPairClose(done){
+  if(!crPair.on)return;crPair.on=false;clearTimeout(crPair.t);showDlg($('#crPairDlg'),false);
+  if(!done&&crPair.st!=='done')postJson('/api/clarelay',{op:'pair-cancel'}).catch(function(){});
+}
+$('#crPairForm').addEventListener('submit',function(e){e.preventDefault();if(!$('#crPairRelay').hidden){var v=$('#crPairIn').value.trim();if(!v){$('#crPairErr').textContent='先填中继地址';return}crPairStart(v)}else crPairStart('')});
+dlgWire($('#crPairDlg'),$('#crPairNo'),function(){crPairClose(false)});
 function crLoad(){return fetch('/api/clarelay').then(function(r){return r.ok?r.json():null}).then(function(j){if(j){relaySt=j;crPaint()}}).catch(function(){})}
 function crOp(op,inv){
   if(relayBusy)return;var body={op:op};
+  if(op==='pair'){crPairOpen();return}
   if(op==='join'&&!inv){$('#crIn').value='';$('#crErr').textContent='';showDlg($('#crDlg'),true);setTimeout(function(){$('#crIn').focus()},50);return}
   if(op==='join')body.invite=inv;
   if(op==='remove'&&!confirm('移除后这台电脑退出 clarelay：本机身份文件删掉，再加入要新的邀请码；中继那边会一直显示离线，要在管理页手动撤销。确定移除？'))return;
@@ -3657,7 +3732,7 @@ function loadHost(){
     var k=x.claclaw;
     var sessSum=function(f){return Object.keys(k.sessions).reduce(function(n,c){var v=k.sessions[c];return n+(v&&typeof v==='object'?v[f]||0:0)},0)};   // 各 Claw 加起来（push 是数字，不算）
     h+=hSec('claclaw',
-      hRow('版本',esc(k.commit||'未知'),k.commitAt?new Date(k.commitAt).toLocaleString():'')+
+      (upVer={commit:k.commit,at:k.commitAt},upRow())+
       hRow('服务已运行',fmtDur(Date.now()-k.startedAt))+
       hRow('打开的会话',String(sessSum('open')),'工作中 '+sessSum('busy'))+
       hRow('推送设备',String(k.sessions.push))+
@@ -3669,9 +3744,60 @@ function loadHost(){
         .replace('<span class="k">','<span class="k"><i class="h-dot'+(on?' on':'')+'"></i>');
     }).join('')+'<div class="h-row h-link" data-act="skills"><span class="k">技能</span><span class="v">'+skillsSum()+'</span><span class="chev" aria-hidden="true"></span></div>'+
       '<div class="h-row h-link" data-act="models"><span class="k">模型管理</span><span class="v">'+modelsSum()+'</span><span class="chev" aria-hidden="true"></span></div>');
-    $('#hostBody').innerHTML=h;crPaint();
+    $('#hostBody').innerHTML=h;crPaint();upLoad();
   }).catch(function(e){if(!$('#hostBody .h-row'))$('#hostBody').innerHTML='<div class="h-empty">读取失败：'+esc(e.message)+'</div>'});
 }
+// 宿主 › claclaw › 版本：应用内更新（脚本装的 claclaw 才有）。每天服务端查一次；用户点「更新」才装，装好等所有会话空闲后自动重启
+var upSt=null,upVer=null,upBusy='',upTimer=0,upRunning='';
+var UP_STEP={pull:'取新版本',deps:'安装组件',check:'自检'};
+function upRow(){
+  var u=upSt,v=upVer||{},sm=function(t,c){return '<small'+(c?' class="'+c+'"':'')+'>'+esc(t)+'</small>'};
+  var ver=esc(v.commit||(u&&u.running)||'未知')+(v.at?sm(new Date(v.at).toLocaleString()):'');
+  if(!u||!u.supported)return '<div class="h-row cr-row up-row"><span class="k">版本</span><span class="v">'+ver+(u&&u.reason?sm(u.reason):'')+'</span></div>';
+  var busy=u.checking||!!UP_STEP[u.phase]||u.phase==='restart',info='',btns='';
+  var pill=function(op,t){return '<button type="button" class="md-pill" data-act="up-op" data-op="'+op+'"'+(busy||upBusy?' disabled':'')+'>'+(upBusy===op?'…':t)+'</button>'};
+  if(UP_STEP[u.phase])info=sm('正在更新到 '+u.to+'：'+UP_STEP[u.phase]+'…');
+  else if(u.phase==='restart')info=sm('新版本 '+u.to+' 已装好，等所有会话空闲后自动重启'+(u.phaseError?'：'+u.phaseError:''),'up-new');
+  else{
+    if(u.phase==='failed')info+=sm(u.phaseError+'（已退回原来的版本）','up-err');
+    if(u.checking)info+=sm('正在检查更新…');
+    else if(u.latest){
+      var L=u.latest;
+      info+=sm('有新版本 '+L.commit+'（'+L.count+' 个更新，'+new Date(L.at).toLocaleDateString()+'）','up-new')+L.log.slice(0,5).map(function(x){return sm('· '+x.s)}).join('')+(L.count>5?sm('……'):'');
+      if(L.diverged)info+=sm('本机有自己的提交，和新版本分叉了，不能在这里更新','up-err');
+      else btns+=pill('apply','更新');
+    }
+    else if(u.error)info+=sm('检查更新没成：'+u.error,'up-err');
+    else if(u.checkedAt)info+=sm('已经是最新（'+new Date(u.checkedAt).toLocaleString()+' 检查）');
+    btns+=pill('check','检查更新');
+  }
+  return '<div class="h-row cr-row up-row"><span class="k">版本</span><span class="v">'+ver+info+'</span>'+(btns?'<span class="cr-btns">'+btns+'</span>':'')+'</div>';
+}
+function upPaint(){var el=$('#hostBody .up-row');if(el)el.outerHTML=upRow()}
+function upSet(j){
+  if(!j||!('supported' in j))return;
+  if(upRunning&&j.running&&j.running!==upRunning){toast('claclaw 已更新到 '+j.running+'，重启好了');lsSet('claclaw.upSeen',j.running);upVer=null}
+  upRunning=j.running||upRunning;upSt=j;upPaint();
+  clearTimeout(upTimer);
+  if((j.checking||UP_STEP[j.phase]||j.phase==='restart')&&$('#app').classList.contains('host-on'))upTimer=setTimeout(upLoad,3000);   // 更新、等重启时一直问；重启那会儿连不上就接着问
+}
+function upLoad(){getJson('/api/update').then(upSet).catch(function(){if(upSt&&upSt.phase==='restart'){clearTimeout(upTimer);upTimer=setTimeout(upLoad,3000)}})}
+function upOp(op){
+  var u=upSt;if(!u)return;
+  if(op==='apply'&&!confirm('更新到 '+(u.latest&&u.latest.commit)+'？装好后等所有会话空闲时自动重启，正在工作的会话不会被打断。'))return;
+  upBusy=op;upPaint();
+  postJson('/api/update',{op:op}).then(function(r){return r.json()}).then(function(j){
+    upBusy='';if(j.error){toast('没成：'+j.error);upPaint();return}
+    upSet(j);if(op==='check'&&!j.latest&&!j.error)toast('已经是最新');
+  }).catch(function(e){upBusy='';upPaint();toast('没成：'+e.message)});
+}
+// 打开网页时：刚更新完提示一次；有新版本提示一次（每个新版本只提示一次）
+getJson('/api/update').then(function(j){
+  if(!j||!j.supported)return;
+  upRunning=j.running;
+  if(j.last&&localStorage.getItem('claclaw.upSeen')!==j.last.to){lsSet('claclaw.upSeen',j.last.to);toast('claclaw 已更新到 '+j.last.to)}
+  else if(j.latest&&!j.latest.diverged&&localStorage.getItem('claclaw.upNote')!==j.latest.commit){lsSet('claclaw.upNote',j.latest.commit);toast('claclaw 有新版本：在「宿主」页 claclaw › 版本 里点「更新」')}
+}).catch(function(){});
 // 宿主（这台电脑）的名字：显示在宿主页标题和设置里
 function hostLabels(){
   var n=hostName||'';
@@ -4142,6 +4268,7 @@ $('#hostBody').addEventListener('click',function(e){
   if(act==='peer'){peerEnter();return}
   if(act==='peer-sub'){peerGo(a.dataset.sub);return}
   if(act==='cr-op'){crOp(a.dataset.op);return}
+  if(act==='up-op'){upOp(a.dataset.op);return}
   if(act==='pool-claw'){peerPoolClaw=a.dataset.claw;poolPaint();document.querySelectorAll('.pe-seg button').forEach(function(b){b.classList.toggle('on',b.dataset.claw===peerPoolClaw)});return}
   if(act==='pool-del'){poolSave((peerCfg.sessions||[]).filter(function(x){return x!==a.dataset.id}));return}
   if(act==='peer-back'&&peerFromList){subBack();return}
@@ -4380,7 +4507,9 @@ function paintPeerMsg(){var m=$('#peMsg');if(m)m.innerHTML=(peerMsg.err?'<div cl
 function poolTitle(id){var s=poolInfo(id);return s?(s.title||'(无标题)'):shortId(id)}
 var CLAW_NAMES={claude:'Claude Code'};CLAW_T.forEach(function(c){CLAW_NAMES[c.id]=c.long});
 function peNormCfg(c){if(c&&c.dir&&c.dir.indexOf('|')<0)c.dir='claude|'+c.dir;return c}   // 旧配置只存了目录（没有「Claw|」前缀）：初次载入、每次操作后服务端回的配置都要转
-function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':(s.cwd||''))}   // OpenClaw 没有目录，全部归一组
+// 目录分组用的键：Windows 路径不分大小写（d:\x 和 D:\x 是同一个目录，有的程序记小写盘符），/ 和 \ 也当一样
+function dirKey(c){c=String(c||'');return /^[a-zA-Z]:[\\\/]/.test(c)?c.replace(/\//g,'\\').replace(/\\+$/,'').toLowerCase():c}
+function peDirKey(s){return (s.claw||'claude')+'|'+(s.claw==='openclaw'?'':dirKey(s.cwd))}   // OpenClaw 没有目录，全部归一组
 function peDirLabel(k){var i=k.indexOf('|'),cl=k.slice(0,i),d=k.slice(i+1).replace(/^\/(Users|home)\/[^\/]+/,'~');return cl==='claude'?(d||'(未知目录)'):CLAW_NAMES[cl]+(d?' · '+d:'')}
 function peDirShort(k){return peDirLabel(k).replace(/^[^·]*· /,'')}   // 不带 Claw 名的目录
 function poolCwd(id){var s=poolInfo(id);return s?peDirKey(s):clawOf(id)+'|'}
@@ -5496,7 +5625,7 @@ function drawList(arr,claw){
     // 按目录分组：哪个目录有最新活动就排最前，组内按时间倒序；点组标题折叠/展开（记在本机）
     var groups={},order=[];
     arr.forEach(function(s){
-      var k=s.cwd||'';
+      var k=dirKey(s.cwd);
       if(!groups[k]){groups[k]={key:k,label:(s.cwdShort||'（目录未知）').replace(/^\/(Users|home)\/[^\/]+$/,'~'),items:[],last:0};order.push(groups[k])}
       var g=groups[k];g.items.push(s);g.last=Math.max(g.last,s.lastModified||0);
     });

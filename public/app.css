@@ -1039,13 +1039,21 @@ html:not(.peer-on) #sPeer{display:none!important}   /* 没用过协同不显示�
 .ctxm button.danger{color:#E5484D}
 .s-del{position:absolute;top:6px;right:6px;width:40px;height:40px;border:0;border-radius:10px;background:none;color:var(--muted);display:grid;place-items:center}
 .s-del:hover,.s-del:focus-visible{color:var(--deny);background:var(--del-bg)}
-#delDlg,#keyDlg,#crDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
-#delDlg.on,#keyDlg.on,#crDlg.on{display:flex}
+#delDlg,#keyDlg,#crDlg,#crPairDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
+#delDlg.on,#keyDlg.on,#crDlg.on,#crPairDlg.on{display:flex}
 #crIn{width:100%;box-sizing:border-box;min-height:180px;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:13px/1.5 var(--mono);resize:vertical}
-#crDlg .cr-warn{color:var(--warn);font-size:13px}   /* 加入 = 在本机运行这台中继给的程序 */
+#crDlg .cr-warn,#crPairDlg .cr-warn{color:var(--warn);font-size:13px}   /* 加入 = 在本机运行这台中继给的程序 */
+/* 扫码加入 clarelay：二维码（白底黑码，深色主题下也照样白底）、配对码、倒计时 */
+#crPairIn{width:100%;box-sizing:border-box;padding:10px 12px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:14px/1.4 var(--mono)}
+#crPairQr{width:220px;height:220px;margin:6px auto 4px;padding:8px;background:#fff;border-radius:12px;box-sizing:border-box}
+#crPairQr svg{display:block;width:100%;height:100%}
+#crPairQr.old{opacity:.25}
+#crPairCode{text-align:center;font:600 22px/1.4 var(--mono);letter-spacing:2px;user-select:all}
+#crPairTip{text-align:center;color:var(--muted);font-size:13px;margin:4px 0 0}
+#crPairTip.ok{color:var(--ok,#16a34a);font-weight:600}
 #newDlg{position:absolute;inset:0;top:env(safe-area-inset-top,0px);display:none;justify-content:center;padding:16px;background:rgba(0,0,0,.5);z-index:9}
 #newDlg.on{display:flex}
-#newDlg,#delDlg,#keyDlg,#crDlg{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-items:flex-start}#newDlg>.dlg,#delDlg>.dlg,#keyDlg>.dlg,#crDlg>.dlg{margin:auto 0}   /* 弹框比屏幕高（手机键盘弹起、选项多）时能上下滚，不会把上面的「目录」挤出屏幕够不着；放得下时照样居中 */
+#newDlg,#delDlg,#keyDlg,#crDlg,#crPairDlg{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-items:flex-start}#newDlg>.dlg,#delDlg>.dlg,#keyDlg>.dlg,#crDlg>.dlg,#crPairDlg>.dlg{margin:auto 0}   /* 弹框比屏幕高（手机键盘弹起、选项多）时能上下滚，不会把上面的「目录」挤出屏幕够不着；放得下时照样居中 */
 #newDlg .newIn{margin:4px 0 8px;font-size:14px;color:var(--muted);line-height:1.6}
 /* 目录看起来就是一段文字；点进去才发现能改（不主动提示） */
 .dlg input.plainIn{display:inline;width:auto;min-height:0;padding:0 2px;border:0;border-bottom:1px solid transparent;border-radius:0;background:none;color:var(--ink);font-family:var(--mono);font-size:13.5px}
@@ -1311,7 +1319,7 @@ body.kb :is(#avPane,#grpPane) .gp-card,body.kb #loginPane .lg-card{max-height:ca
 .pe-back{position:absolute;left:0;top:-6px;bottom:-6px;display:grid;place-items:center;width:48px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer}
 .pe-in{flex:none;width:62%;min-width:0;margin-left:auto;height:32px;padding:0 8px;border:var(--bw) solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;text-align:right;box-sizing:border-box}   /* 各行输入框一样宽、右边对齐 */
 .pe-in::placeholder{text-align:right}
-@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#grpPane input.gp-in,#avPane input.gp-in,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select),#crIn{font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
+@media (pointer:coarse){.pe-in,.dlg input.plainIn,.dlg select,#grpPane input.gp-in,#avPane input.gp-in,#hostPane :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select),#crIn,#crPairIn{font-size:16px}}   /* 手机：输入框字小于 16px 时 iOS 一点就自动放大页面、整页往左偏 */
 .pe-in.left,.pe-in.left::placeholder{text-align:left}
 .md-sub{display:block;margin-top:2px;font-size:12px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere}
 /* 模型管理：Key 列表、Key 详情、接口格式下拉、「更多」、从接口读到的模型 */
@@ -1345,6 +1353,8 @@ textarea.md-in:focus-visible{outline:none}
 .cr-row .cr-btns{flex-basis:100%;display:flex;justify-content:flex-end;gap:8px}
 .cr-row .md-pill.del{color:var(--deny);background:color-mix(in srgb,var(--deny) 10%,transparent)}
 .cr-row .md-pill:disabled{opacity:.5}
+.up-row small.up-new{color:var(--accent,var(--ink));font-weight:600}   /* 有新版本 / 已装好等重启 */
+.up-row small.up-err{color:var(--warn)}
 .md-acts{margin:0}
 .md-save{display:block;width:100%;height:46px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink,#fff);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
 .md-save:active{opacity:.8}
@@ -1827,7 +1837,7 @@ select.pe-in{text-align-last:right}
      圆角外面那一小块用同色的外阴影盖住（只扩 6px，盖不到图标栏的按钮） */
   #app{position:relative;box-sizing:border-box;padding:4px 4px 4px 0;background:var(--strip)}   /* 内圈四周都留 4px */
   #app::after{content:'';position:absolute;top:4px;left:64px;right:4px;bottom:4px;border:var(--bw) solid var(--line);border-radius:12px;box-shadow:0 0 0 6px var(--strip);pointer-events:none;z-index:20}
-  #newDlg,#delDlg,#keyDlg,#crDlg,#cfgDlg,#lightbox,#vplayer,#fview,#diss{z-index:21}   /* 弹框 / 全屏查看盖在这圈边框上面：整屏一起变暗，不留一圈亮边 */
+  #newDlg,#delDlg,#keyDlg,#crDlg,#crPairDlg,#cfgDlg,#lightbox,#vplayer,#fview,#diss{z-index:21}   /* 弹框 / 全屏查看盖在这圈边框上面：整屏一起变暗，不留一圈亮边 */
   /* 聊天区滚动条：位置始终留着（内容不跟着跳），没有底色 */
   #feed{scrollbar-gutter:stable}
   #feed::-webkit-scrollbar{width:8px}
