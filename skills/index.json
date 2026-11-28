@@ -293,5 +293,34 @@
     "scene": "sessions",
     "claws": [],
     "auto": []
+  },
+  {
+    "name": "claw-stock",
+    "title": "查股票",
+    "desc": "用户说「茅台今天多少钱 / 看看宁德时代最近的走势」时现查 A 股行情：现价、涨跌、成交、估值和一段时间的走势。只给数据，不给买卖建议",
+    "group": "生活",
+    "scene": "sessions",
+    "claws": [
+      "claude",
+      "deepseek",
+      "opencode",
+      "kimi",
+      "qwen",
+      "codex",
+      "openclaw",
+      "glm",
+      "iflow",
+      "minimax",
+      "codebuddy",
+      "qoder",
+      "copilot",
+      "gemini"
+    ],
+    "auto": [
+      "claude",
+      "agents",
+      "iflow",
+      "codebuddy"
+    ]
   }
 ]
