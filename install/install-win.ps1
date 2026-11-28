@@ -213,6 +213,13 @@ try {
     Ok ('下载好了（' + $DIR + '）')
   }
 
+  # 从中继转发的安装脚本（$MIRROR 填了）：把中继地址记进 claclaw 的数据目录，「手机扫码加入 clarelay」就不用再问用户中继地址
+  if ($MIRROR) {
+    $dataDir = Join-Path $DIR 'data'
+    New-Item -ItemType Directory -Force $dataDir | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dataDir 'install-origin.json'), (@{ relay = $MIRROR; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress))   # 不带 BOM
+  }
+
   # ---------- 5. 依赖 ----------
   Step '安装 claclaw 用到的组件（npm install）'
   Push-Location $DIR
