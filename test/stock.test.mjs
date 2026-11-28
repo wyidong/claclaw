@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
-import { marketOf, kindOfCode, boardOf, cleanQuery, parseHint, parseSuggest, rank, parseQuote, phase, parseKEm, parseKTx, sma, spark, pctStr, money, renderQuote, renderK, renderCmp } from '../skills/claw-stock/stock.mjs';
+import { marketOf, kindOfCode, boardOf, cleanQuery, parseHint, parseSuggest, rank, parseQuote, phase, parseKEm, parseKTx, sma, spark, pctStr, money, renderQuote, renderK, renderCmp, parseFlow, renderFlow, flowDays, flowLevel, FLOW_LEVEL } from '../skills/claw-stock/stock.mjs';
 import { loadFills, routeFill } from '../src/claws/kuai-fill.mjs';
 
 test('6 位代码属于哪个市场：沪 6/5/900，深 0/3/1/200，京 920/8/4', () => {
@@ -181,6 +181,58 @@ test('页面：命令的输出画成卡片（现价上色、一格一个数、�
   assert.equal(mdStock('随便一段\n不是行情'), 'CODE:随便一段\n不是行情');
   assert.equal(mdStock('势 | 标题 | +1% | 说明 | 不是数字'), 'CODE:势 | 标题 | +1% | 说明 | 不是数字');
   assert.match(mdStock('股 | <b>x</b> | 1 | 板 | 1 | +1 | +1% | t'), /<b>&lt;b&gt;x&lt;\/b&gt;<\/b>/);     // 名字里的标签不会被当成网页
+});
+
+// 板块资金流：接口返回的样子（f62 当日净流入、f184 净占比、f3 涨跌幅；f164 / f165 / f109 是近 5 日；没数的给 "-"）
+const FLOW = { data: { total: 5, diff: [
+  { f12: 'BK1201', f14: '电子', f3: 12.48, f6: 532391793249, f62: 46189514752, f184: 8.68, f109: 9.86, f164: 40320000000, f165: 1.96, f204: '东山精密', f124: 1795765197 },
+  { f12: 'BK1215', f14: '通信', f3: 10.6, f6: 160900000000, f62: 16280000000, f184: 10.12, f109: 11.13, f164: 25280000000, f165: 4.1, f204: '中际旭创', f124: 1795765197 },
+  { f12: 'BK0475', f14: '银行', f3: -1.07, f6: 49400000000, f62: -3550000000, f184: -7.18, f109: 0.5, f164: 120000000, f165: 0.05, f204: '江苏银行', f124: 1795765100 },
+  { f12: 'BK0001', f14: '煤炭', f3: 1.19, f6: 12600000000, f62: -490000000, f184: -3.89, f109: -2, f164: -900000000, f165: -1.2, f204: '-', f124: 1795765197 },
+  { f12: 'BK0002', f14: '新设的板块', f3: '-', f6: '-', f62: '-', f184: '-', f109: '-', f164: '-', f165: '-', f204: '-', f124: '-' }] } };
+test('板块资金流：时长只有当日 / 5 日 / 10 日三档；大类、细分两个层级', () => {
+  assert.deepEqual([undefined, NaN, 0, 1, 2, 3, 5, 6, 10, 20, 60].map(flowDays), [1, 1, 1, 1, 5, 5, 5, 10, 10, 10, 10]);
+  assert.deepEqual(['', '细分', '二级行业', '细一点', '大类', '行业'].map(flowLevel), ['大类', '细分', '细分', '细分', '大类', '大类']);
+  assert.deepEqual(Object.keys(FLOW_LEVEL), ['大类', '细分']);
+});
+test('板块资金流：解析（没数的板块不要；领流入的个股只有当日有）', () => {
+  const d1 = parseFlow(FLOW, 1), d5 = parseFlow(FLOW, 5);
+  assert.deepEqual(d1.map(x => x.name), ['电子', '通信', '银行', '煤炭']);
+  assert.deepEqual([d1[0].net, d1[0].share, d1[0].pct, d1[0].lead], [46189514752, 8.68, 12.48, '东山精密']);
+  assert.equal(d1[3].lead, '');
+  assert.deepEqual([d5[0].net, d5[0].share, d5[0].pct, d5[0].lead], [40320000000, 1.96, 9.86, '']);
+  assert.deepEqual(parseFlow(null), []); assert.deepEqual(parseFlow({ data: { diff: [] } }), []);
+});
+test('板块资金流：输出（名次、带正负号的数、净流入 / 净流出各一段；普涨普跌时一边没有）', () => {
+  const list = parseFlow(FLOW, 1).sort((a, b) => b.net - a.net), out = renderFlow(list, '大类', 1);
+  assert.match(out, /^```stock\n题 \| 行业大类 · 当日主力资金 \| 2026-11-27 15:39 · /);
+  assert.match(out, /4 个板块：2 个净流入、2 个净流出，合计 \+584 亿/);
+  const flows = lines(out).filter(f => f[0] === '流');
+  assert.deepEqual(flows, [['流', '1', '电子', '+462 亿', '+8.68%', '+12.48%', '东山精密'], ['流', '2', '通信', '+163 亿', '+10.12%', '+10.60%', '中际旭创'],
+    ['流', '4', '银行', '-35.5 亿', '-7.18%', '-1.07%', '江苏银行'], ['流', '3', '煤炭', '-4.9 亿', '-3.89%', '+1.19%']]);
+  assert.deepEqual(lines(out).filter(f => f[0] === '段').map(f => f[1]), ['净流入最多', '净流出最多']);
+  const up = renderFlow(list.slice(0, 2), '细分', 5);
+  assert.match(up, /题 \| 行业细分 · 近 5 日主力资金 \| .*2 个板块：2 个净流入、0 个净流出 *\n/);     // 细分不写合计（各板块有重叠）
+  assert.deepEqual(lines(up).filter(f => f[0] === '段').map(f => f[1]), ['净流入最多', '没有净流出的板块']);
+  assert.equal(lines(up).filter(f => f[0] === '流').length, 2);
+  assert.deepEqual(lines(renderFlow(list.slice(2), '大类', 10)).filter(f => f[0] === '段').map(f => f[1]), ['没有净流入的板块', '净流出最多']);
+  assert.match(up, /涨跌幅是这几天累计的。/); assert.doesNotMatch(out, /涨跌幅是这几天累计的/);
+  assert.equal(lines(renderFlow(Array.from({ length: 31 }, (_, i) => ({ name: 'x' + i, net: (15 - i) * 1e8, share: 1, pct: 1, lead: '' })), '大类', 1)).filter(f => f[0] === '流').length, 15);   // 最多前 10 + 后 5
+  assert.doesNotMatch(out, /建议买|建议卖|买入|卖出|看涨|看跌|抄底|机构在买/);
+});
+test('页面：板块资金流画成一张表（两段的列对齐），净流入那格垫色条，长短按最大的数比', () => {
+  const list = parseFlow(FLOW, 1).sort((a, b) => b.net - a.net), h = mdStock(body(renderFlow(list, '大类', 1)));
+  assert.match(h, /^<div class="stk"><div class="stk-h"><b>行业大类 · 当日主力资金<\/b><\/div><div class="stk-t">/);
+  assert.equal(h.split('<table>').length - 1, 1);
+  assert.match(h, /<tr><th>板块<\/th><th>主力净流入<\/th><th>净占比<\/th><th>涨跌<\/th><th>领流入<\/th><\/tr><tr class="stk-cap"><td colspan="5">净流入最多<\/td><\/tr>/);
+  assert.match(h, /<td><i>1<\/i><b>电子<\/b><\/td><td class="stk-bar up" style="--w:100%"><span class="stk-v up">\+462 亿<\/span><\/td><td><span class="stk-v up">\+8\.68%<\/span><\/td>/);
+  assert.match(h, /<td><i>4<\/i><b>银行<\/b><\/td><td class="stk-bar dn" style="--w:8%"><span class="stk-v dn">-35\.5 亿<\/span>/);
+  assert.match(h, /<span class="stk-v up">\+1\.19%<\/span><\/td><td><\/td><\/tr>/);            // 煤炭：资金流出但当天是涨的；没有领流入的个股，那格空着
+  const h5 = mdStock(body(renderFlow(parseFlow(FLOW, 5).sort((a, b) => b.net - a.net), '大类', 5)));
+  assert.match(h5, /<th>涨跌<\/th><\/tr><tr class="stk-cap"><td colspan="4">/);                // 近 5 日没有「领流入」那一列
+  assert.match(mdStock('题 | 只有标题 | 没有内容'), /^CODE:/);
+  assert.match(mdStock('流 | 1 | <i>x</i> | +1 亿 | +1% | +1% | a"b'), /<b>&lt;i&gt;x&lt;\/i&gt;<\/b>.*<td>a&quot;b<\/td>/);
+  assert.match(mdStock('流 | 1 | x | 不是数 | +1% | +1%'), /style="--w:0%"/);                    // 色条的长度只会是数字
 });
 
 test('命令：不写参数退出 1 并给用法；cmp 只写一只退出 1（都不联网）', () => {

@@ -2251,6 +2251,17 @@ select.pe-in{text-align-last:right}
 .stk>.stk-tb:first-child{margin-top:0}.stk>.stk-tb:first-child tr:first-child th{border-top:0;padding-top:0}
 .stk-cmp td:first-child b{display:block;font-weight:600;font-size:13.5px}
 .stk-cmp td:first-child code{font-size:11px;padding:0;background:none}
+/* 板块资金流（claw-stock flow）：一段一个小标题 + 一张表；名次是灰色小字，净流入那格右边垫一条色条（--w 是它占这格的百分比，红流入绿流出） */
+.stk-h+.stk-t+.stk-fl,.stk-h+.stk-fl{padding-top:9px;border-top:var(--bw) solid var(--line)}
+.md .stk-fl tr:first-child th{border-top:0}
+.md .stk-fl tr.stk-cap td{padding:13px 0 5px;border-top:var(--bw) solid var(--line);text-align:left;font-size:12.5px;font-weight:600;color:var(--muted)}
+.md .stk-fl tr:nth-child(2).stk-cap td{padding-top:5px}
+.md .stk-fl tr.stk-cap+tr td{border-top:0}
+.stk-fl td:first-child{white-space:nowrap}
+.stk-fl td:first-child i{display:inline-block;min-width:1.5em;font-style:normal;font-size:11px;color:var(--muted)}
+.stk-fl td:first-child b{font-weight:600;font-size:13px}
+.md .stk-fl td.stk-bar{background:linear-gradient(to left,color-mix(in srgb,currentColor 15%,transparent) var(--w,0%),transparent var(--w,0%)) right center/100% calc(100% - 9px) no-repeat;font-weight:600}
+.stk-fl td:nth-child(5){color:var(--muted)}
 .stk-n{font-size:11px;line-height:1.45;color:var(--muted);margin-top:9px}
 .stk-tb+.stk-n,.stk-s+.stk-n,.stk-g+.stk-n{padding-top:9px;border-top:var(--bw) solid var(--line)}
 

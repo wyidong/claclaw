@@ -4,6 +4,7 @@
 //   claw-stock k 茅台 [--days 120]   一段时间的走势：区间涨跌、最高最低、均线、最近 5 天
 //   claw-stock cmp 茅台 五粮液 …      几只放一起比（2～6 只）
 //   claw-stock find 平安             这个名字对得上哪几只（重名、不确定代码时）
+//   claw-stock flow [细分] [--days 5] 行业板块的主力资金：净流入最多、净流出最多的板块（大类 31 个 / 细分一百多个；当日、近 5 日、近 10 日）
 // 输出 ```stock 代码块：claclaw 画成行情卡片（红涨绿跌、走势折线，public/index.html 的 mdStock）；find 输出 Markdown 表格。
 // 来源（都是公开行情页面用的接口，不用登录、没有签名）：
 //   报价 腾讯证券 qt.gtimg.cn；日 K 东方财富 push2his（前复权），不通时换腾讯；找代码 腾讯 smartbox，没有时换东方财富（北交所只有它按名字找得到）
@@ -185,8 +186,42 @@ export function renderCmp(items) {
     row('注', `报价时间 ${items[0].q.time} · ${phase(items[0].q.time)}；近 20 / 60 日按交易日算，前复权。`), row('注', NOTE)]);
 }
 
+// ---------- 板块资金流（东方财富）----------
+// 行业板块的「主力净流入」：东方财富按大单成交估算的口径（超大单 + 大单的买入减卖出），不是真实的资金进出账，别家算出来不一样。
+// 两个层级：大类（一级行业，31 个）、细分（二级行业，一百多个）。三个时长：当日、近 5 日、近 10 日。接口一页最多 100 条。
+export const FLOW_LEVEL = { 大类: 'm:90+t:2+s:2', 细分: 'm:90+s:4' };
+const FLOW_KEY = { 1: ['f62', 'f184', 'f3', '当日'], 5: ['f164', 'f165', 'f109', '近 5 日'], 10: ['f174', 'f175', 'f160', '近 10 日'] };   // 净流入额、净占比、涨跌幅
+export const flowDays = n => !(n > 1) ? 1 : n <= 5 ? 5 : 10;                       // 只有这三档，说了别的天数取最近的一档
+export const flowLevel = s => /细分|二级|子行业|细/.test(s || '') ? '细分' : '大类';
+// 一条板块 → { name, net 元, share %, pct %, amount 元, lead 当日领流入的个股 }；没数的（停牌、刚设的板块，接口给 "-"）不要
+export function parseFlow(j, days = 1) {
+  const [kn, ks, kp] = FLOW_KEY[days], num = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+  return (j?.data?.diff || []).map(x => ({ code: x.f12, name: x.f14, net: num(x[kn]), share: num(x[ks]), pct: num(x[kp]), amount: num(x.f6), lead: days === 1 && typeof x.f204 === 'string' && x.f204 !== '-' ? x.f204 : '', ts: num(x.f124) }))
+    .filter(x => x.name && x.net != null);
+}
+async function flow(level, days) {
+  const url = pn => `https://push2.eastmoney.com/api/qt/clist/get?pn=${pn}&pz=100&po=1&np=1&fltt=2&invt=2&fid=${FLOW_KEY[days][0]}&fs=${encodeURIComponent(FLOW_LEVEL[level])}&fields=f3,f6,f12,f14,f62,f184,f109,f164,f165,f160,f174,f175,f204,f124`;
+  const first = JSON.parse(await get(url(1))), total = first?.data?.total || 0, list = parseFlow(first, days);
+  for (let pn = 2; (pn - 1) * 100 < total && pn <= 5; pn++) list.push(...parseFlow(JSON.parse(await get(url(pn))), days));
+  return list.sort((a, b) => b.net - a.net);
+}
+const yi = v => (v > 0 ? '+' : '') + (v / 1e8).toFixed(Math.abs(v) >= 1e10 ? 0 : 1) + ' 亿';
+// 输出：题 | 标题 | 小字；段 | 小标题；流 | 名次 | 板块 | 主力净流入 | 净占比 | 涨跌幅 | 领流入的个股（只有当日有）
+export function renderFlow(list, level, days, top = 10) {
+  const label = FLOW_KEY[days][3], ts = Math.max(0, ...list.map(x => x.ts || 0)), at = ts ? new Date(ts * 1000 + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : '';
+  const inN = list.filter(x => x.net > 0).length, outN = list.filter(x => x.net < 0).length, sum = list.reduce((s, x) => s + x.net, 0);
+  const line = x => row('流', list.indexOf(x) + 1, x.name, yi(x.net), pctStr(x.share), pctStr(x.pct), x.lead);
+  // 「净流入最多」下面只放真的净流入的，「净流出最多」下面只放真的净流出的：普涨、普跌的日子一边会不满，甚至没有
+  const head = list.filter(x => x.net > 0).slice(0, top), tail = list.filter(x => x.net < 0).slice(-5).reverse();
+  return block([row('题', `行业${level} · ${label}主力资金`, [at && at + ' · ' + phase(at).replace('收盘价，', ''), `${list.length} 个板块：${inN} 个净流入、${outN} 个净流出` + (level === '大类' ? `，合计 ${yi(sum)}` : '')].filter(Boolean).join(' · ')),
+    row('段', head.length ? '净流入最多' : '没有净流入的板块'), ...head.map(line),
+    row('段', tail.length ? '净流出最多' : '没有净流出的板块'), ...tail.map(line),
+    row('注', '「主力净流入」是东方财富按大单成交估算的，不是真实的资金进出账，别家的数会不一样。' + (days > 1 ? '涨跌幅是这几天累计的。' : '')),
+    row('注', '数据来自东方财富的公开行情，可能有延迟；只是数据，不是投资建议。')]);
+}
+
 // ---------- 命令 ----------
-const warn = m => process.stderr.write('[claw-stock] ' + m + '\n');
+const warn =m => process.stderr.write('[claw-stock] ' + m + '\n');
 // 不直接 process.exit：Windows 上请求还没收尾就退出，libuv 会断言失败（退出码变成 127）。抛出去，最外层设退出码
 class Stop extends Error { constructor(code, m) { super(m); this.code = code; } }
 const die = (code, m) => { throw new Stop(code, m); };
@@ -195,6 +230,7 @@ const USAGE = `用法：
   claw-stock k 茅台 [--days 120]   一段时间的走势（默认 60 个交易日，最多 500）
   claw-stock cmp 茅台 五粮液 …      几只放一起比（2～6 只）
   claw-stock find 平安             这个名字对得上哪几只
+  claw-stock flow [细分] [--days 5]  行业板块的主力资金：哪些板块净流入最多、最少（默认行业大类、当日；--days 5 或 10 看近几日）
   加 --json 输出给程序用的 JSON`;
 
 async function one(raw) {                       // 一句话 → { q 报价, cands 候选 }；找不到退出 2
@@ -209,6 +245,11 @@ async function main(argv) {
   const rest = argv.filter((a, i) => a !== '--json' && a !== '--days' && !(di >= 0 && i === di + 1)), cmd = rest[0] || '';
   const say = (text, data) => process.stdout.write(json ? JSON.stringify(data) + '\n' : text + '\n');
   if (!cmd || cmd === '-h' || cmd === '--help') die(cmd ? 0 : 1, USAGE);
+  if (cmd === 'flow') {
+    const level = flowLevel(rest.slice(1).join(' ')), fd = flowDays(di >= 0 ? parseInt(argv[di + 1], 10) : 1), list = await flow(level, fd);
+    if (!list.length) die(2, '没有拿到板块资金流（行情接口暂时没通，或者还没开盘）。不要自己编数字。');
+    return say(renderFlow(list, level, fd), { level, days: fd, list });
+  }
   if (cmd === 'find') {
     const q = cleanQuery(rest.slice(1).join(' ')); if (!q) die(1, USAGE);
     const list = (await resolve(q)).filter(x => x.name).slice(0, 12);

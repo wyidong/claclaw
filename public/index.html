@@ -815,6 +815,9 @@ document.addEventListener('error',function(ev){var t=ev.target;if(t.classList&&t
 //   势 | 标题 | 涨跌幅 | 说明 | 收盘价（逗号分开）                  折线图，涨是红、跌是绿
 //   日 | 日期 | 开 | 收 | 高 | 低 | 涨跌幅 | 成交额                 最近几天的表
 //   比 | 名称 | 代码 | 现价 | 今日 | 近 20 日 | 近 60 日 | 市盈率 | 市净率 | 总市值   几只对比的表
+//   题 | 标题 | 小字                                               没有「股」那行的卡片（板块资金流）用它做卡片头
+//   段 | 小标题                                                    下面的「流」归这一段，一段一张表
+//   流 | 名次 | 板块 | 主力净流入 | 净占比 | 涨跌幅 | 领流入的个股    板块资金流的一行，净流入那格垫一条色条
 //   注 | 一句说明
 // 带正负号的数（+1.23%、-0.5）自己上色；一条能认的都没有就照代码显示
 function stkCls(s){s=String(s||'');return /^[+-]0(\.0+)?%?$/.test(s)?'':s.charAt(0)==='+'?' up':s.charAt(0)==='-'&&/\d/.test(s)?' dn':''}
@@ -826,7 +829,7 @@ function stkLine(csv,cls){
   return '<svg class="stk-l'+cls+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,'+H+' '+pt+' '+W+','+H+'"/><polyline points="'+pt+'"/></svg>';
 }
 function mdStock(src){
-  var head='',items='',trend='',days='',cmp='',notes='',ok=0;
+  var head='',items='',trend='',days='',cmp='',notes='',ok=0,secs=[];
   src.split('\n').forEach(function(l){
     var f=l.split('|').map(function(x){return x.trim()}),k=f[0];
     if(k==='股'&&f.length>=7){
@@ -844,14 +847,30 @@ function mdStock(src){
       ok++;days+='<tr><td>'+esc(f[1].replace(/^\d{4}-/,''))+'</td><td>'+esc(f[2])+'</td><td>'+esc(f[3])+'</td><td>'+esc(f[4])+'</td><td>'+esc(f[5])+'</td><td>'+stkNum(f[6])+'</td><td>'+esc(f[7])+'</td></tr>';
     }else if(k==='比'&&f.length>=10){
       ok++;cmp+='<tr><td><b>'+esc(f[1])+'</b><code>'+esc(f[2])+'</code></td><td>'+esc(f[3])+'</td><td>'+stkNum(f[4])+'</td><td>'+stkNum(f[5])+'</td><td>'+stkNum(f[6])+'</td><td>'+esc(f[7])+'</td><td>'+esc(f[8])+'</td><td>'+esc(f[9])+'</td></tr>';
+    }else if(k==='题'&&f[1]){
+      head='<div class="stk-h"><b>'+esc(f[1])+'</b></div>'+(f[2]?'<div class="stk-t">'+esc(f[2])+'</div>':'');
+    }else if(k==='段'&&f[1]){
+      secs.push({cap:f[1],rows:[]});
+    }else if(k==='流'&&f.length>=6){
+      ok++;if(!secs.length)secs.push({cap:'',rows:[]});secs[secs.length-1].rows.push(f);
     }else if(k==='注'&&f[1])notes+='<div class="stk-n">'+esc(f.slice(1).join(' | '))+'</div>';
   });
   if(!ok)return mdCode(src);
   var th=function(a){return '<tr>'+a.map(function(x){return '<th>'+x+'</th>'}).join('')+'</tr>'};
+  // 板块资金流：每段一张表；净流入那格后面垫一条色条，长短按这张卡片里最大的那个数来比
+  var mx=0,lead=false,flow='';
+  secs.forEach(function(s){s.rows.forEach(function(f){var v=Math.abs(parseFloat(f[3]))||0;if(v>mx)mx=v;if(f[6])lead=true})});
+  secs.forEach(function(s){   // 几段放在同一张表里（小标题是占一整行的格子），上下两段的列才对得齐
+    flow+=(s.cap?'<tr class="stk-cap"><td colspan="'+(lead?5:4)+'">'+esc(s.cap)+'</td></tr>':'')+s.rows.map(function(f){
+      var w=mx?Math.round((Math.abs(parseFloat(f[3]))||0)/mx*100):0;
+      return '<tr><td><i>'+esc(f[1])+'</i><b>'+esc(f[2])+'</b></td><td class="stk-bar'+stkCls(f[3])+'" style="--w:'+w+'%">'+stkNum(f[3])+'</td><td>'+stkNum(f[4])+'</td><td>'+stkNum(f[5])+'</td>'+(lead?'<td>'+esc(f[6]||'')+'</td>':'')+'</tr>';
+    }).join('');
+  });
+  if(flow)flow='<div class="stk-tb stk-fl"><table>'+th(['板块','主力净流入','净占比','涨跌'].concat(lead?['领流入']:[]))+flow+'</table></div>';
   return '<div class="stk">'+head+(items?'<div class="stk-g">'+items+'</div>':'')+trend
     +(days?'<div class="stk-tb"><table>'+th(['日期','开','收','高','低','涨跌','成交额'])+days+'</table></div>':'')
     +(cmp?'<div class="stk-tb stk-cmp"><table>'+th(['名称','现价','今日','近 20 日','近 60 日','市盈率','市净率','总市值'])+cmp+'</table></div>':'')
-    +notes+'</div>';
+    +flow+notes+'</div>';
 }
 // ---------- 行情卡片完 ----------
 // 主题卡片：```theme 代码块，一行一个「主题 id | 名字 | 说明」（claw-theme 技能生成）。卡片上画一小块那个主题的界面，点了马上换上（别的设备也跟着换）
