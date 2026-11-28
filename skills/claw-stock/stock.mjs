@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // claw-stock：查 A 股行情（沪深京的个股、指数、场内基金）。只给数据，不给买卖建议。
 //   claw-stock "贵州茅台"            现价、涨跌、成交、估值 + 近 60 个交易日走势（名字、简称、拼音首字母、6 位代码都行）
-//   claw-stock k 茅台 [--days 120]   一段时间的走势：区间涨跌、最高最低、均线、最近 5 天
+//   claw-stock k 茅台 [--days 120]   一段时间的走势：日 K 柱和成交量柱（120 个交易日以内；再长画折线）、区间涨跌、最高最低、均线、最近 5 天
 //   claw-stock cmp 茅台 五粮液 …      几只放一起比（2～6 只）
 //   claw-stock find 平安             这个名字对得上哪几只（重名、不确定代码时）
 //   claw-stock flow [细分] [--days 5] 行业板块的主力资金：净流入最多、净流出最多的板块（大类 31 个 / 细分一百多个；当日、近 5 日、近 10 日）
@@ -154,6 +154,9 @@ const headRow = q => row('股', q.name, q.code, boardOf(q.mkt, q.code, q.kind), 
 const vs = (v, q) => v == null || q.prev == null ? '' : sign(v - q.prev);                        // 今开、最高、最低：比昨收高是红、低是绿
 // 折线用的收盘价：最多 80 个点（多了按段取每段最后一天）
 const pts = (ks, d, w = 80) => { const v = ks.map(k => k.close), p = v.length <= w ? v : Array.from({ length: w }, (_, i) => v[Math.round((i + 1) * v.length / w) - 1]); return p.map(x => x.toFixed(d)).join(','); };
+// K 线柱（蜡烛）用的：一根一段「开,收,高,低,成交量（手）」，空格分开。最多 120 根，再多一根太细看不清，改画折线
+const KBARS = 120;
+const bars = (ks, d) => ks.map(k => [k.open, k.close, k.high, k.low].map(x => x.toFixed(d)).join(',') + ',' + Math.round(k.vol || 0)).join(' ');
 const othersRow = cands => cands.length > 1 && !cands[0].exact ? row('注', '名字相近的还有：' + cands.slice(1, 5).map(c => `${c.name} ${c.code}`).join('、') + '。要看哪只，把名字或代码说全。') : '';
 
 export function renderQuote(q, ks, cands = []) {
@@ -172,12 +175,14 @@ export function renderQuote(q, ks, cands = []) {
   return block([...out, othersRow(cands), row('注', NOTE)]);
 }
 export function renderK(q, all, days, cands = []) {
-  const ks = all.slice(-days), d = dp(q.price), last = ks.at(-1), hi = ks.reduce((a, k) => k.high > a.high ? k : a), lo = ks.reduce((a, k) => k.low < a.low ? k : a), total = (last.close / ks[0].close - 1) * 100;
+  const ks = all.slice(-days), d = dp(q.price), last = ks.at(-1), hi = ks.reduce((a, k) => k.high > a.high ? k : a), lo = ks.reduce((a, k) => k.low < a.low ? k : a), base = all.length > ks.length ? all.at(-ks.length - 1).close : ks[0].close, total = (last.close / base - 1) * 100;   // 从这段前一天的收盘价算起，和报价卡片、cmp 的「近 N 日」一个算法；没有前一天就从第一天的收盘算
   const dayPct = ks.map((k, i) => i ? { date: k.date, p: (k.close / ks[i - 1].close - 1) * 100 } : null).filter(Boolean), up = dayPct.reduce((a, b) => b.p > a.p ? b : a, dayPct[0]), dn = dayPct.reduce((a, b) => b.p < a.p ? b : a, dayPct[0]);
   const amt = ks.filter(k => k.amount != null);
   const ma = n => { const v = sma(all, n); return v == null ? row('项', 'MA' + n, '—', '', '数据不够') : row('项', 'MA' + n, fx(v, d), '', `现价在${last.close >= v ? '上方' : '下方'} ${Math.abs((last.close / v - 1) * 100).toFixed(1)}%`); };
   return block([headRow(q),
-    row('势', `${ks[0].date} ～ ${last.date} · ${ks.length} 个交易日`, pctStr(total), q.kind === '指数' ? '' : '前复权', pts(ks, d)),
+    ks.length <= KBARS && ks.every(k => [k.open, k.high, k.low].every(Number.isFinite))
+      ? row('烛', `${ks[0].date} ～ ${last.date} · ${ks.length} 个交易日`, pctStr(total), (q.kind === '指数' ? '' : '前复权 · ') + '上面是日 K，下面是成交量', bars(ks, d))
+      : row('势', `${ks[0].date} ～ ${last.date} · ${ks.length} 个交易日`, pctStr(total), q.kind === '指数' ? '' : '前复权', pts(ks, d)),
     row('项', '区间涨跌', pctStr(total), sign(total)), row('项', '最高', fx(hi.high, d), '', hi.date.slice(5)), row('项', '最低', fx(lo.low, d), '', lo.date.slice(5)),
     up && row('项', '单日最大涨', pctStr(up.p), sign(up.p), up.date.slice(5)), dn && row('项', '单日最大跌', pctStr(dn.p), sign(dn.p), dn.date.slice(5)),
     row('项', '日均成交额', amt.length ? money(amt.reduce((s, k) => s + k.amount, 0) / amt.length) : '—'), ma(5), ma(20), ma(60),

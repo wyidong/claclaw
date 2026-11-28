@@ -813,6 +813,7 @@ document.addEventListener('error',function(ev){var t=ev.target;if(t.classList&&t
 //   股 | 名称 | 代码 | 板块 | 现价 | 涨跌 | 涨跌幅 | 报价时间        卡片头：大字现价，按涨跌上色
 //   项 | 名字 | 值 | + 或 -（值的颜色，空着不上色）| 小字说明       一格一个数
 //   势 | 标题 | 涨跌幅 | 说明 | 收盘价（逗号分开）                  折线图，涨是红、跌是绿
+//   烛 | 标题 | 涨跌幅 | 说明 | 开,收,高,低,成交量 …（一根一段，空格分开）   日 K 柱（蜡烛）+ 下面的成交量柱：收盘比开盘高是红、低是绿
 //   日 | 日期 | 开 | 收 | 高 | 低 | 涨跌幅 | 成交额                 最近几天的表
 //   比 | 名称 | 代码 | 现价 | 今日 | 近 20 日 | 近 60 日 | 市盈率 | 市净率 | 总市值   几只对比的表
 //   题 | 标题 | 小字                                               没有「股」那行的卡片（板块资金流）用它做卡片头
@@ -831,6 +832,19 @@ function stkLine(csv,cls){
   var pt=v.map(function(x,i){return (i*W/(v.length-1)).toFixed(1)+','+(P+(H-2*P)*(1-(x-lo)/sp)).toFixed(1)}).join(' ');
   return '<svg class="stk-l'+cls+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,'+H+' '+pt+' '+W+','+H+'"/><polyline points="'+pt+'"/></svg>';
 }
+// 日 K 柱：上面 76 高画蜡烛（细线是最高到最低，粗柱是开盘到收盘），下面 24 高画成交量。平盘（开 = 收）的看比前一天涨了还是跌了
+function stkCandle(s){
+  var b=String(s||'').split(/\s+/).map(function(x){return x.split(',').map(Number)}).filter(function(a){return a.length>=4&&isFinite(a[0])&&isFinite(a[1])&&isFinite(a[2])&&isFinite(a[3])});
+  if(b.length<2)return '';
+  var lo=Infinity,hi=-Infinity,mv=0;b.forEach(function(a){if(a[3]<lo)lo=a[3];if(a[2]>hi)hi=a[2];if(a[4]>mv)mv=a[4]});
+  var W=300,PH=76,VT=84,VH=24,P=2,sp=hi-lo||1,st=W/b.length,bw=Math.max(.6,st*.68),y=function(v){return P+(PH-2*P)*(1-(v-lo)/sp)},o='';
+  b.forEach(function(a,i){
+    var c=a[1]>a[0]?'up':a[1]<a[0]?'dn':i&&a[1]>b[i-1][1]?'up':i&&a[1]<b[i-1][1]?'dn':'',x=i*st+st/2,t=y(Math.max(a[0],a[1])),h=Math.max(.8,y(Math.min(a[0],a[1]))-t),vh=mv&&a[4]>0?Math.max(.8,a[4]/mv*VH):0;
+    o+='<g'+(c?' class="'+c+'"':'')+'><line x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y(a[2]).toFixed(1)+'" y2="'+y(a[3]).toFixed(1)+'"/><rect x="'+(x-bw/2).toFixed(1)+'" y="'+t.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'"/>'
+      +(vh?'<rect class="stk-kv" x="'+(x-bw/2).toFixed(1)+'" y="'+(VT+VH-vh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+vh.toFixed(1)+'"/>':'')+'</g>';
+  });
+  return '<svg class="stk-k" viewBox="0 0 '+W+' '+(VT+VH)+'" preserveAspectRatio="none" aria-hidden="true">'+o+'</svg>';
+}
 function mdStock(src){
   var head='',items='',trend='',days='',cmp='',notes='',ok=0,secs=[],board=false,cols=null;
   src.split('\n').forEach(function(l){
@@ -846,6 +860,9 @@ function mdStock(src){
     }else if(k==='势'&&f.length>=5){
       var sv=stkLine(f[4],stkCls(f[2]));if(!sv)return;ok++;
       trend+='<div class="stk-s"><div class="stk-sc"><span>'+esc(f[1])+'</span>'+stkNum(f[2])+'</div>'+sv+(f[3]?'<div class="stk-t">'+esc(f[3])+'</div>':'')+'</div>';
+    }else if(k==='烛'&&f.length>=5){
+      var kv=stkCandle(f[4]);if(!kv)return;ok++;
+      trend+='<div class="stk-s"><div class="stk-sc"><span>'+esc(f[1])+'</span>'+stkNum(f[2])+'</div>'+kv+(f[3]?'<div class="stk-t">'+esc(f[3])+'</div>':'')+'</div>';
     }else if(k==='日'&&f.length>=8){
       ok++;days+='<tr><td>'+esc(f[1].replace(/^\d{4}-/,''))+'</td><td>'+esc(f[2])+'</td><td>'+esc(f[3])+'</td><td>'+esc(f[4])+'</td><td>'+esc(f[5])+'</td><td>'+stkNum(f[6])+'</td><td>'+esc(f[7])+'</td></tr>';
     }else if(k==='比'&&f.length>=10){

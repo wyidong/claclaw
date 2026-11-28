@@ -2242,6 +2242,9 @@ select.pe-in{text-align-last:right}
 .stk-l.up{color:var(--up)}.stk-l.dn{color:var(--dn)}
 .stk-l polyline{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .stk-l polygon{fill:currentColor;opacity:.1;stroke:none}
+.stk-k{display:block;width:100%;height:132px;margin-top:8px;color:var(--muted);overflow:visible}
+.stk-k line{stroke:currentColor;stroke-width:1;vector-effect:non-scaling-stroke}
+.stk-k rect{fill:currentColor}.stk-k .stk-kv{opacity:.55}
 .stk-tb{margin-top:12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .md .stk-tb table{width:100%;min-width:0;border-collapse:collapse;font-size:12px;white-space:nowrap}
 .md .stk-tb th,.md .stk-tb td{border:0;border-top:var(--bw) solid var(--line);background:none;padding:6px 3px;text-align:right;vertical-align:baseline}

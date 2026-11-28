@@ -128,8 +128,15 @@ test('输出是 ```stock 块：个股带估值、指数不带、基金写规模�
 });
 test('走势：区间、均线、最近 5 天；对比：数据不够的写 —', () => {
   const q = { ...parseQuote(QT).sh600519, kind: '个股' }, k = renderK(q, KS, 20);
-  assert.deepEqual(of(k, '势').slice(1, 4), ['2026-09-42 ～ 2026-09-61 · 20 个交易日', '+13.48%', '前复权']);
-  assert.deepEqual(of(k, '项', '区间涨跌'), ['项', '区间涨跌', '+13.48%', '+']);
+  // 120 个交易日以内画日 K 柱：一根一段「开,收,高,低,成交量」；涨跌从这段前一天的收盘（140）算到 160，和 cmp 的「近 20 日」一样
+  assert.deepEqual(of(k, '烛').slice(1, 4), ['2026-09-42 ～ 2026-09-61 · 20 个交易日', '+14.29%', '前复权 · 上面是日 K，下面是成交量']);
+  assert.equal(of(k, '势'), undefined);
+  const kb = of(k, '烛')[4].split(' '); assert.equal(kb.length, 20); assert.equal(kb.at(-1), '160.00,160.00,161.00,159.00,1000');
+  assert.deepEqual(of(k, '项', '区间涨跌'), ['项', '区间涨跌', '+14.29%', '+']);
+  assert.equal(of(renderK(q, KS.slice(-20), 20), '项', '区间涨跌')[2], '+13.48%');                 // 没有前一天：从第一天的收盘算
+  const long = Array.from({ length: 241 }, (_, i) => ({ ...KS[0], date: 'd' + i, close: 100 + i, high: 101 + i, low: 99 + i, open: 100 + i })), lk = renderK(q, long, 240);
+  assert.equal(of(lk, '烛'), undefined); assert.equal(of(lk, '势')[4].split(',').length, 80);        // 太长：一根太细，画折线
+  assert.match(renderK({ ...q, kind: '指数' }, KS, 20), /\n烛 \| [^|]+ \| \+14\.29% \| 上面是日 K，下面是成交量 \| /);
   assert.deepEqual(of(k, '项', '最高'), ['项', '最高', '161.00', '', '09-61']);
   assert.deepEqual(of(k, '项', 'MA5'), ['项', 'MA5', '158.00', '', '现价在上方 1.3%']);
   assert.equal(of(k, '项', 'MA60')[2], '130.50');
@@ -138,7 +145,7 @@ test('走势：区间、均线、最近 5 天；对比：数据不够的写 —'
   assert.deepEqual(days.at(-1), ['日', '2026-09-61', '160.00', '160.00', '161.00', '159.00', '+0.63%', '1.00 亿']);
   assert.deepEqual(of(renderK(q, KS.slice(0, 10), 10), '项', 'MA20'), ['项', 'MA20', '—', '', '数据不够']);
   const dn = renderK(q, KS.map((x, i) => ({ ...x, close: 200 - i })), 20);
-  assert.deepEqual(of(dn, '项', '区间涨跌').slice(2), ['-11.95%', '-']);
+  assert.deepEqual(of(dn, '项', '区间涨跌').slice(2), ['-12.50%', '-']);
   const c = renderCmp([{ q, ks: KS }, { q: { ...q, name: '新股', pe: -3, pb: 0 }, ks: KS.slice(0, 5) }]);
   assert.deepEqual(of(c, '比', '贵州茅台'), ['比', '贵州茅台', '600519', '1472.36', '+0.23%', '+14.29%', '+60.00%', '22.4', '6.79', '1.84 万亿']);
   assert.deepEqual(of(c, '比', '新股').slice(3, 9), ['1472.36', '+0.23%', '—', '—', '—', '—']);
@@ -175,6 +182,14 @@ test('页面：命令的输出画成卡片（现价上色、一格一个数、�
   assert.equal(k.split('<tr><td>').length - 1, 5);
   assert.match(k, /<td>09-61<\/td><td>160\.00<\/td>.*<span class="stk-v up">\+0\.63%<\/span>/);
   assert.match(k, /<small>MA5<\/small><b class="">158\.00<\/b><i>现价在上方 1\.3%<\/i>/);
+  // 日 K 柱：一根 = 一条细线（最高到最低）+ 一个柱（开到收）+ 一个成交量柱；收比开高是红、低是绿，平盘看比前一天
+  assert.match(k, /<svg class="stk-k" viewBox="0 0 300 108"/); assert.equal(k.split('<line ').length - 1, 20); assert.equal(k.split('class="stk-kv"').length - 1, 20);
+  const cd = mdStock('烛 | 标题 | -1.00% | 说明 | 10,11,12,9,100 11,10,11.5,9.5,200 10,10,10.5,9.8,0 10,10,10,10,50 10,10.5,x,9,1');
+  assert.deepEqual([...cd.matchAll(/<g( class="(up|dn)")?>/g)].map(m => m[2] || ''), ['up', 'dn', '', '']);      // 第 3、4 根开 = 收，也和前一天平：不上色；坏的那根不画
+  assert.equal(cd.split('class="stk-kv"').length - 1, 3);                                                        // 成交量是 0 的不画量柱
+  assert.match(cd, /<span>标题<\/span><span class="stk-v dn">-1\.00%<\/span><\/div><svg class="stk-k".*<\/svg><div class="stk-t">说明<\/div>/);
+  assert.match(mdStock('烛 | 平 | 0% | | 10,10,10,10,5 10,10.2,10.3,10,5 10.2,10.2,10.2,10.2,5'), /<g><line[^>]*\/><rect[^>]*\/><rect class="stk-kv"[^>]*\/><\/g><g class="up">.*<g>/);
+  assert.match(mdStock('烛 | 标题 | +1% | 说明 | 只有一根 1,2,3,0,5'), /^CODE:/);
   const c = mdStock(body(renderCmp([{ q, ks: KS }, { q: { ...q, name: '跌的', pct: -2 }, ks: KS }])));
   assert.match(c, /^<div class="stk"><div class="stk-tb stk-cmp">/);
   assert.match(c, /<b>跌的<\/b><code>600519<\/code><\/td><td>1472\.36<\/td><td><span class="stk-v dn">-2\.00%<\/span>/);
