@@ -177,6 +177,15 @@ while (Date.now() - t0 < 30 * 60000) {
 }
 const note = process.argv.slice(2).join(' ');
 log(`=== kickstart ${new Date().toISOString()} ${git('log', '-1', '--format=%h')}${note ? ' ' + note : ''} (${idle ? 'all idle' : down >= 6 ? 'down' : 'timeout'}) ===`);
+// 桌面版（desktop/main.cjs 托管 server，环境变量 CLACLAW_SUPERVISOR=desktop）：只结束 server（连同子进程），桌面程序看到它退出会马上重新拉起
+if (process.env.CLACLAW_SUPERVISOR === 'desktop') {
+  let pid = 0;
+  if (WIN) pid = winServerPid();
+  else { try { pid = Number(execFileSync('lsof', ['-tiTCP:' + PORT, '-sTCP:LISTEN'], { encoding: 'utf8' }).trim().split('\n')[0]) || 0; } catch {} }
+  log(pid ? '    桌面版：结束 server ' + pid + '，由桌面程序重新拉起' : '    桌面版：没找到监听 ' + PORT + ' 的进程');
+  if (pid) { try { if (WIN) execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }); else process.kill(pid, 'SIGTERM'); } catch {} }
+  process.exit(0);
+}
 if (WIN) { winKick(); process.exit(0); }   // 计划任务接手；这个进程马上会跟着 claclaw 一起被结束
 const startedOf = () => withToken('restart-wait', async h => (await getJson('/api/host', h)).claclaw?.startedAt).catch(() => null);
 const before = await startedOf();

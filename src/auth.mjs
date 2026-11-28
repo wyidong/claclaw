@@ -11,7 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { readJson, writeJsonAtomic } from './util.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');   // 仓库根目录（本文件在 src/）
-export const DATA = process.env.CLACLAW_DATA ? path.resolve(process.env.CLACLAW_DATA) : path.join(ROOT, 'data');
+// 数据目录：CLACLAW_DATA（测试实例、多开；别处把它当「临时实例」）＞ CLACLAW_APP_DATA（桌面版安装包：数据放用户目录，更新时程序目录整个换掉也不丢）＞ 仓库里的 data/
+export const DATA = process.env.CLACLAW_DATA ? path.resolve(process.env.CLACLAW_DATA)
+  : process.env.CLACLAW_APP_DATA ? path.resolve(process.env.CLACLAW_APP_DATA) : path.join(ROOT, 'data');
 const AUTH_FILE = path.join(DATA, 'auth.json');
 const TOKENS_FILE = path.join(DATA, 'tokens.json');
 

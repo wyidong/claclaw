@@ -1,0 +1,82 @@
+{
+  "name": "claclaw-desktop",
+  "productName": "claclaw",
+  "version": "0.1.0",
+  "description": "claclaw 桌面版：装好就能用，不用自己装 Node、Git",
+  "author": "wyidong",
+  "license": "MIT",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "stage": "node build.mjs",
+    "dist:win": "node build.mjs && electron-builder --win nsis --x64",
+    "dist:mac": "node build.mjs && electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.wyidong.claclaw",
+    "productName": "claclaw",
+    "copyright": "wyidong",
+    "directories": {
+      "output": "dist/out",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "assets/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/stage/server",
+        "to": "server",
+        "filter": [
+          "**/*",
+          "!node_modules"
+        ]
+      },
+      {
+        "from": "dist/stage/node",
+        "to": "node",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "claclaw",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "claclaw-setup-${version}-win-x64.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools"
+    },
+    "afterPack": "./afterPack.cjs"
+  }
+}

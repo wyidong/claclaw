@@ -34,6 +34,7 @@ export function ensureAutostart({ root, data, port, host = '', node = process.ex
   if (platform !== 'win32') return 'skip:not-windows';
   if (env.CLACLAW_AUTOSTART === '0') return 'skip:off';
   if (env.CLACLAW_DATA) return 'skip:custom-data';
+  if (env.CLACLAW_SUPERVISOR) return 'skip:supervised';   // 桌面版：开机启动由桌面程序自己管（desktop/main.cjs）
   const file = path.join(dir, 'claclaw.vbs'), mark = path.join(data, 'win-autostart.json');
   const text = vbsText({ root, node, port, host });
   // UTF-16 带 BOM：WSH 按这个读，安装路径里有中文也不乱
