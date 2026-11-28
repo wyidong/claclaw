@@ -43,14 +43,19 @@ export function makeUpdater({ ROOT, DATA, log = () => {}, restart, fetch: get = 
   }
 
   // 从代码包镜像取：下载 claclaw.bundle，校验，git fetch 进来；返回新版本的 commit
-  async function fromMirror(base) {
+  async function fromMirror(base, branch) {
     const dl = async u => { const r = await get(u, { signal: AbortSignal.timeout(300000) }); if (!r.ok) throw new Error(u + ' → HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); };
     const want = (await dl(base + '/claclaw.bundle.sha256')).toString().trim().split(/\s+/)[0].toLowerCase();
     const buf = await dl(base + '/claclaw.bundle');
     if (crypto.createHash('sha256').update(buf).digest('hex') !== want) throw new Error('代码包校验没通过');
     const f = path.join(os.tmpdir(), 'claclaw-update-' + process.pid + '.bundle');
     fs.writeFileSync(f, buf);
-    try { await git(['fetch', '--quiet', f, 'HEAD'], { timeout: 120000 }); return await git(['rev-parse', 'FETCH_HEAD']); }
+    // 取跟踪的那个分支（代码包里不一定有 HEAD，只有 refs/heads/main）；没有这个分支再试 HEAD
+    try {
+      try { await git(['fetch', '--quiet', f, 'refs/heads/' + branch], { timeout: 120000 }); }
+      catch { await git(['fetch', '--quiet', f, 'HEAD'], { timeout: 120000 }); }
+      return await git(['rev-parse', 'FETCH_HEAD']);
+    }
     finally { fs.rmSync(f, { force: true }); }
   }
 
@@ -67,7 +72,7 @@ export function makeUpdater({ ROOT, DATA, log = () => {}, restart, fetch: get = 
         const m = mirror();
         if (!m) throw new Error('连不上代码仓库：' + (e.detail || e.message));
         log('update: git fetch 失败，改用代码包镜像', e.detail || e.message);
-        target = await fromMirror(m); st.via = 'mirror';
+        target = await fromMirror(m, rest.join('/')); st.via = 'mirror';
       }
       const behind = Number(await git(['rev-list', '--count', 'HEAD..' + target]));
       if (!behind) { st.latest = null; target = ''; }

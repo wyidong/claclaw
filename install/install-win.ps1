@@ -206,7 +206,8 @@ try {
       Get-File "$MIRROR/claclaw.bundle.sha256" "$b.sha256"
       $want = ((Get-Content "$b.sha256" -Raw).Trim() -split '\s+')[0].ToLower()
       if ($want -ne (Sha256 $b)) { Fail '代码包校验没通过（可能下载坏了）。请再运行一次。' }
-      if ((Run $git clone $b $DIR) -ne 0) { Fail '代码包解不开。请再运行一次。' }
+      # 指定 main：代码包里不一定有 HEAD（只有 refs/heads/main），不指定会 clone 出一个空目录却照样返回 0
+      if ((Run $git clone -b main $b $DIR) -ne 0 -or -not (Test-Path (Join-Path $DIR 'server.mjs'))) { Fail '代码包解不开。请再运行一次。' }
       Run $git -C $DIR remote set-url origin $REPO | Out-Null   # 以后照常从 GitHub 更新
       Remove-Item $b, "$b.sha256" -ErrorAction SilentlyContinue
     }

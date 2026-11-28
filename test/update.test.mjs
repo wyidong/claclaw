@@ -27,7 +27,10 @@ function setup({ checkOk = true } = {}) {
 test('检查到新版本、点更新：快进、依赖变了才装、自检、排重启', async () => {
   const s = setup();
   const npmRuns = [], restarts = [];
-  const fakeNpm = path.join(s.T, 'npm.sh'); fs.writeFileSync(fakeNpm, '#!/bin/sh\necho x >> "' + path.join(s.T, 'npm.log') + '"\n'); fs.chmodSync(fakeNpm, 0o755);
+  // 冒充 npm：每跑一次记一行。Windows 跑不了 sh 脚本，用 .cmd（update.mjs 会用 shell 跑 .cmd）
+  const npmLog = path.join(s.T, 'npm.log'), WIN = process.platform === 'win32';
+  const fakeNpm = path.join(s.T, WIN ? 'npm.cmd' : 'npm.sh');
+  fs.writeFileSync(fakeNpm, WIN ? '@echo x>> "' + npmLog + '"\r\n' : '#!/bin/sh\necho x >> "' + npmLog + '"\n'); if (!WIN) fs.chmodSync(fakeNpm, 0o755);
   const u = makeUpdater({ ROOT: s.root, DATA: s.data, npm: fakeNpm, restart: async n => { restarts.push(n); } });
   let v = await u.check();
   assert.equal(v.supported, true); assert.equal(v.latest, null);
@@ -39,7 +42,7 @@ test('检查到新版本、点更新：快进、依赖变了才装、自检、�
   await u.apply();
   await wait(() => u.view().phase === 'restart');
   assert.equal(G(s.root, 'rev-parse', 'HEAD'), G(s.src, 'rev-parse', 'HEAD'));
-  assert.equal(fs.readFileSync(path.join(s.T, 'npm.log'), 'utf8').trim().split('\n').length, 1);   // package.json 变了：装了一次
+  assert.equal(fs.readFileSync(npmLog, 'utf8').trim().split('\n').length, 1);   // package.json 变了：装了一次
   assert.match(restarts[0], /^更新到 \w{7}$/);
   assert.equal(JSON.parse(fs.readFileSync(path.join(s.data, 'update-last.json'), 'utf8')).to, G(s.src, 'rev-parse', '--short=7', 'HEAD'));
   fs.rmSync(s.T, { recursive: true, force: true });
@@ -47,7 +50,7 @@ test('检查到新版本、点更新：快进、依赖变了才装、自检、�
 
 test('自检失败：退回原来的版本，本机没提交的改动保留，不重启', async () => {
   const s = setup();
-  const u = makeUpdater({ ROOT: s.root, DATA: s.data, npm: 'true', restart: async () => { throw new Error('不该重启'); } });
+  const u = makeUpdater({ ROOT: s.root, DATA: s.data, npm: process.platform === 'win32' ? 'cmd' : 'true', restart: async () => { throw new Error('不该重启'); } });
   s.push('坏版本', { 'tools/check.mjs': 'process.exit(1)' });
   fs.writeFileSync(path.join(s.root, 'package.json'), '{"v":1,"local":true}');   // 本机改过（不碰更新的文件）
   const old = G(s.root, 'rev-parse', 'HEAD');
@@ -73,7 +76,7 @@ test('本机有自己的提交（分叉）：提示，不能更新', async () =>
 test('仓库连不上：从安装时记下的代码包镜像取', async () => {
   const s = setup();
   s.push('镜像里的新版', { 'a.txt': '3' });
-  const bundle = path.join(s.T, 'c.bundle'); G(s.src, 'bundle', 'create', '-q', bundle, 'HEAD', 'main');
+  const bundle = path.join(s.T, 'c.bundle'); G(s.src, 'bundle', 'create', '-q', bundle, 'main');   // 中继上的代码包只有 refs/heads/main，没有 HEAD
   const buf = fs.readFileSync(bundle), sum = crypto.createHash('sha256').update(buf).digest('hex');
   G(s.root, 'remote', 'set-url', 'origin', path.join(s.T, 'nope.git'));   // 仓库连不上
   fs.writeFileSync(path.join(s.data, 'install-origin.json'), JSON.stringify({ relay: 'https://relay.example.com/claclaw' }));
