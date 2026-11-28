@@ -165,8 +165,8 @@ test('kuAi 画像：提示怎么写按家族来——Claude 用 XML 标签、GPT
   assert.equal(profileOf({ model: 'deepseek-flash', format: 'openai' }).native, true);
   assert.equal(profileOf({ model: 'gemini-2.5-flash', format: 'gemini' }).native, true);
   assert.equal(profileOf({ model: 'gemma-4-31b-it', format: 'gemini' }).native, false);  // Gemini 接口上的 Gemma：写代码块
-  assert.equal(profileOf({ model: 'claude-sonnet-4-5', format: 'anthropic' }).native, false);
-  assert.equal(TIER_BUILT, 3);
+  assert.equal(profileOf({ model: 'claude-sonnet-4-5', format: 'anthropic' }).native, true);
+  assert.equal(TIER_BUILT, 4);
   assert.equal(tierOf({ model: 'deepseek-flash' }).tier, 3); assert.equal(tierOf({ model: 'deepseek-flash', ctx: 8192 }).tier, 2);   // 只读工具要 16k 的窗口
 });
 

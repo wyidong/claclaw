@@ -3,14 +3,14 @@
 // - 会话：agent 把每个会话存成 data/kuai-sessions/<id>.json（title / cwd / model / messages…）；历史靠 session/load 重放
 // - 模型：模型库里的都能选（OpenAI 兼容 / Anthropic / Gemini 三种接口，一家有几种时按这个顺序挑一种）。一个进程只连一家供应商，每家各起一个进程，会话各走各的（同一个群里几个会话可以同时用不同家的模型）；本机地址（127.0.0.1 / localhost）的排最前；
 //   会话走哪家记在 data/kuai-route.json 的 sessions（没记的按会话的模型认，认不出走默认那家）；provider 是新会话默认走的（最近选的那家）
-// - 能力档（kuai-profiles.mjs）：L1 程序代填参数跑技能，到 L2 的模型自己用技能和命令，到 L3 的再多读文件、搜内容、取网页（只读，一轮里能连着查几步）；模型库里每个模型可以手动设（tier），随 KUAI_MODEL_INFO 传给 agent；
+// - 能力档（kuai-profiles.mjs）：L1 程序代填参数跑技能，到 L2 的模型自己用技能和命令，到 L3 的再多读文件、搜内容、取网页（只读，一轮里能连着查几步）；L4 动手（改文件、经 shell 跑清单外的命令，每一次都要用户点确认；不自动给，要手动设）；模型库里每个模型可以手动设（tier），随 KUAI_MODEL_INFO 传给 agent；
 //   没设的按上岗小测验的结果（本机的模型 agent 自己在后台测，云上的在模型管理里点「测一下」→ kuQuizStart），都没有才按参数量估
 // - 改名：agent 没有接口，名字记在 claclaw 这边；删除：把会话文件挪进回收站
 // 网页里 kuAi 会话的 id = 'ku:' + 会话 id（UUID）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AcpAgent, AcpRunner, localNames } from './acp.mjs';
+import { AcpAgent, AcpRunner, localNames, clipTarget } from './acp.mjs';
 import { tilde, oneLine, readJson, writeJsonAtomic, hash16 } from '../util.mjs';
 import { DATA } from '../auth.mjs';
 import { storeNow, STORE_GROUP, LIB, libModels, hostOf } from '../modelpick.mjs';
@@ -109,10 +109,11 @@ function proxyEnv() {
 }
 function routeEnv(pid) {
   const store = storeNow(), hit = libOf(store).find(x => x.p.id === pid) || route(store), env = { KUAI_DIR: SESSIONS, ...proxyEnv() };
+  // key 不放环境变量：同一个用户的任何进程都读得到别的进程启动时的环境变量（kuAi 动手档跑的命令也是）。在 initialize 里给（init）
+  const key = hit?.p.key || 'none';
   if (hit) {
     env.KUAI_FORMAT = hit.fmt;
     env.KUAI_BASE_URL = baseOf(hit.fmt, epOf(hit));
-    env.KUAI_API_KEY = hit.p.key || 'none';
     env.KUAI_MODELS = hit.p.models.map(m => m.id).join(',');
     env.KUAI_MODEL = hit.m.id;
     // 模型库里填的窗口、手动设的能力档（没设的不带）
@@ -121,8 +122,9 @@ function routeEnv(pid) {
     if (Object.keys(info).length) env.KUAI_MODEL_INFO = JSON.stringify(info);
   }
   env.KUAI_LEARN = LEARN_FILE;
+  env.KUAI_TRASH = path.join(path.dirname(SESSIONS), 'trash');   // 改文件前原来的那份放 claclaw 的回收站（30 天后清）
   if (process.env.CLACLAW_KUAI_BUDGET) env.KUAI_BUDGET = process.env.CLACLAW_KUAI_BUDGET;
-  return { env, sig: hash16(JSON.stringify(env)) };
+  return { env, sig: hash16(JSON.stringify(env) + '\n' + key), init: { kuai: { key } } };
 }
 
 // ---------- ACP 进程（底座见 acp.mjs）：每家供应商一个，用到才起、空闲 10 分钟自己关 ----------
@@ -190,7 +192,11 @@ export class KuRunner extends AcpRunner {
   static prefix = KU_PREFIX; static runners = kuRunners;
   static label = 'kuAi'; static group = 'kuAi'; static permPrefix = 'ku-'; static commands = COMMANDS;
   // 确认条的问法：agent 在 toolCall._meta.title 里给了就用它的（装软件、打开网址——光看一条命令用户不知道在问什么）
-  permInfo(tc, known) { const i = super.permInfo(tc, known), t = tc?._meta?.title; return typeof t === 'string' && t.trim() ? { ...i, title: t.trim().slice(0, 80) } : i; }
+  // agent 自己给的问法（title）、确认条上显示什么（target：改文件时是改动的对比）、「不再问」那个选项上的字（always）
+  permInfo(tc, known) {
+    const i = super.permInfo(tc, known), m = tc?._meta || {}, str = v => typeof v === 'string' && v.trim() ? v.trim() : '';
+    return { ...i, ...(str(m.title) ? { title: str(m.title).slice(0, 80) } : {}), ...(str(m.target) ? { target: clipTarget(str(m.target)) } : {}), ...(str(m.always) ? { alwaysLabel: str(m.always).slice(0, 40), alwaysNote: '这个会话里这条命令不再询问' } : {}) };
+  }
   static cfgIds = { model: 'model' };
   static cfgNames = { model: '模型' };
   static ctxFromUsage = true; static titleFromAgent = true;

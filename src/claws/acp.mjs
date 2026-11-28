@@ -38,6 +38,8 @@ function toolLabel(name = '', kind = '') {
   if (/todo/i.test(name)) return '列计划';
   return '用工具';
 }
+// 确认条上的内容最多 4000 字。放不下时必须说明后面还有——用户点「允许」的是整条命令，不能让他以为看到的就是全部
+export const clipTarget = (t, n = 4000) => { t = String(t); return t.length > n ? t.slice(0, n - 40) + '\n…（后面还有 ' + (t.length - n + 40) + ' 字没显示）' : t; };
 // 工具结束时的输出：文本内容；改文件给「改了 路径」；都没有时看 rawOutput
 const toolOutput = u => {
   let out = (u.content || []).map(c => c.type === 'content' && c.content?.type === 'text' ? c.content.text : c.type === 'diff' ? '改了 ' + (c.path || '') : '').filter(Boolean).join('\n');
@@ -121,7 +123,7 @@ export const stripTags = t => String(t || '').replace(/\s*<(system-reminder|[a-z
 export class AcpAgent {
   // name：日志和报错里的名字（dsh / opencode / kimi）
   // bin()：找程序，找不到返回 null；missing：找不到时的提示
-  // command(bin)：[可执行文件, 参数]；prepare(log)：起进程前调，返回 { env, sig }（模型库注入的环境变量和签名），也可以返回它的 Promise
+  // command(bin)：[可执行文件, 参数]；prepare(log)：起进程前调，返回 { env, sig, init }（模型库注入的环境变量和签名；init 放进 initialize 的 _meta——不该放环境变量的东西走这里），也可以返回它的 Promise
   // rpcError(err)：把 JSON-RPC 的 error 转成给人看的话；hardKill：空闲关进程时除了关 stdin 还 kill
   constructor({ name, bin, missing, command, prepare, rpcError, hardKill = true }) {
     Object.assign(this, { name, findBin: bin, missing, command, prepare, rpcErrorOf: rpcError, hardKill });
@@ -206,7 +208,7 @@ export class AcpAgent {
     // proc/ready 置空，下次用时自动重新拉起；不然整个后端就永久不可用了
     let initTimer = null;
     // clientCapabilities 按 ACP 的样子给全（fs 两项都 false：文件读写由 agent 自己做）；iFlow 少了 fs 这项会拒绝 initialize
-    const init = this.rpc('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: 'claclaw', version: '0.1' } });
+    const init = this.rpc('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: 'claclaw', version: '0.1' }, ...(prep.init ? { _meta: prep.init } : {}) });
     const timeout = new Promise((_, rej) => { initTimer = setTimeout(() => rej(new Error('initialize 45 秒没有应答')), 45000); initTimer.unref?.(); });
     const ready = Promise.race([init, timeout])
       .then(r => {
@@ -611,7 +613,7 @@ export class AcpRunner {
     const isCmd = tc.kind === 'execute' || /^(bash|shell)$/i.test(tool) || typeof raw.command === 'string';
     const isEdit = !isCmd && (tc.kind === 'edit' || /^(edit|write|patch|multiedit)$/i.test(tool));
     const name = isCmd ? 'Bash' : isEdit ? 'Edit' : (tool || '操作');
-    const target = (isCmd && raw.command ? String(raw.command) : toolTarget(raw) || String(tc.title || '')).slice(0, 4000);
+    const target = clipTarget(isCmd && raw.command ? String(raw.command) : toolTarget(raw) || String(tc.title || ''));
     return { name, target, reason: '', ask: isCmd ? '运行命令' : isEdit ? '修改文件' : name, raw };
   }
   askPermission(rpcId, p) {
@@ -626,6 +628,7 @@ export class AcpRunner {
       t: 'perm.request', requestId, toolUseID: tc.toolCallId, name: info.name,
       title: info.title || null, displayName: info.name, description: '', target: info.target,   // title：agent 自己给的问法（kuAi：「允许安装 DeepSeek Harness？」）；没给网页按「允许运行这条命令？」显示
       reason: info.reason || '', canAlways: opts.some(o => o.kind === 'allow_always'), defaultToNo: false,
+      ...(info.alwaysLabel ? { alwaysLabel: info.alwaysLabel, alwaysNote: info.alwaysNote || '' } : {}),   // 「不再问」那个选项上的字、点了以后提示的那一句（agent 自己给的；没给网页按「本会话内同类操作都不再询问」）
     };
     const show = (peerKey) => {
       this.pending.set(requestId, { rpcId, opts, req, peerKey });
@@ -645,7 +648,7 @@ export class AcpRunner {
           const o = this.peerMode && (opts.find(x => x.kind === 'allow_once') || opts.find(x => x.kind === 'allow_always'));
           return o ? this.agent.answer(rpcId, { outcome: { outcome: 'selected', optionId: o.optionId } }) : show();
         }
-        Object.assign(req, { title: ask.title, description: ask.description, canAlways: !!ask.peerKey, alwaysLabel: ask.peerKey ? '本轮同类都允许' : undefined });
+        Object.assign(req, { title: ask.title, description: ask.description, canAlways: !!ask.peerKey, alwaysLabel: ask.peerKey ? '本轮同类都允许' : undefined, alwaysNote: undefined });
         show(ask.peerKey);
       });
   }

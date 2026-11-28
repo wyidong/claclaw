@@ -4,7 +4,7 @@ claclaw 是装在电脑上的一个小网页服务，让你在浏览器里（手
 
 **claclaw 和 clarelay 的分工**：claclaw 只管这台电脑上的事——装好、跑起来、管会话和各家 Claw、提供网页。手机等别的设备怎么连进来（外网访问、设备配对、扫码加入）是 clarelay 的事，claclaw 不考虑；clarelay 需要配合时，claclaw 只提供相应的接口。不用 clarelay 也可以自己用 Tailscale、SSH 隧道连。
 
-它把本机的 AI 编程工具叫作 **Claw**，支持 Claude Code、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、GitHub Copilot CLI、Gemini CLI、OpenClaw，以及自带的 kuAi（问答为主；小模型说一句「放首歌」「打开四川卫视」由程序代填参数去用技能，能力够的模型自己用技能、跑几条简单命令，再强一些的还能读文件、在目录里搜内容、看网页，只读不改；放开到哪一步由 6 道题的上岗小测验实测决定，也可以在模型管理里逐个改。没装 DeepSeek Harness 时对它说「帮我装 DeepSeek」，点一下确认就装）。装了任意一个就能用，装了几个就能随时切换。两台电脑上的会话还能互发消息、拉进同一个群聊协作。
+它把本机的 AI 编程工具叫作 **Claw**，支持 Claude Code、DeepSeek Harness、OpenCode、Kimi Code、Qwen Code、Codex、GLM Agent、iFlow CLI、MiniMax Code、CodeBuddy Code、Qoder CLI、GitHub Copilot CLI、Gemini CLI、OpenClaw，以及自带的 kuAi（问答为主；小模型说一句「放首歌」「打开四川卫视」由程序代填参数去用技能，能力够的模型自己用技能、跑几条简单命令，再强一些的还能读文件、在目录里搜内容、看网页，只读不改；放开到哪一步由 6 道题的上岗小测验实测决定，也可以在模型管理里逐个改。要它动手——改文件、跑别的命令——得在模型管理里把这个模型手动设到「改文件和跑命令」：每一次都先在网页上给你看要改成什么样、要跑哪条命令，点了允许才做，改之前的那份留在回收站，说一句「撤销」能改回去。没装 DeepSeek Harness 时对它说「帮我装 DeepSeek」，点一下确认就装）。装了任意一个就能用，装了几个就能随时切换。两台电脑上的会话还能互发消息、拉进同一个群聊协作。
 
 > 能登录 claclaw 的人，就能在你的电脑上批准任意命令。
 

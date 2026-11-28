@@ -42,11 +42,11 @@ const dialectOf = host => { const h = String(host || '').toLowerCase().replace(/
 //                              openai 格式：并进请求体顶层；gemini 格式：generationConfig.thinkingConfig 的内容；anthropic 格式：thinking 字段的内容
 //   system: 'system' | 'user'  'user' = 接口不收系统提示（Gemini 接口上的 Gemma 1–3），并进第一条用户消息
 //   native: 能不能用接口原生的工具调用（不能的在回复里写 claw 代码块）。OpenAI 格式都按能（不收的回 400 后 agent 自己退回代码块）；
-//           Gemini 格式：Gemini 能（实测 2.5-flash、3.6-flash 都调得出来，3.6 回传带签名的调用也不报错），Gemma 没测过，先写代码块；Anthropic 格式还没做
+//           Gemini 格式：Gemini 能（实测 2.5-flash、3.6-flash 都调得出来，3.6 回传带签名的调用也不报错），Gemma 没测过，先写代码块；Anthropic 格式能（tool_use / tool_result；拿 DeepSeek 的 Anthropic 接口实测过，开着思考也行）
 export function profileOf({ model, format = 'openai', host = '' } = {}) {
   const n = baseName(model), family = familyOf(model), dialect = format === 'openai' ? dialectOf(host) : '';
   const open = sizeOf(model) != null || isLocalHost(host);   // 开源权重自己跑的：没有服务商替它定默认采样，按模型卡给
-  const p = { family, dialect, sampling: { off: {}, on: {} }, think: { off: null, on: {} }, system: 'system', native: format === 'openai' || (format === 'gemini' && family !== 'gemma') };
+  const p = { family, dialect, sampling: { off: {}, on: {} }, think: { off: null, on: {} }, system: 'system', native: format === 'openai' || format === 'anthropic' || (format === 'gemini' && family !== 'gemma') };
 
   if (format === 'anthropic') {
     // 不带 thinking 就是不思考；采样一律不发（新的 Claude 传非默认值会被拒，开思考时也不能带）
@@ -91,10 +91,10 @@ export function styleOf({ model, size = sizeOf(model) } = {}) {
 
 // ---------- 能力档 ----------
 // L0 问答 · L1 填空（程序认意图、模型只填参数）· L2 单工具（技能 + 白名单命令）· L3 只读多步 · L4 动手 · L5 规划
-// 现在做出来的是 L0–L3：再高的都按 L3 给。
+// 现在做出来的是 L0–L4：L5 按 L4 给。L4 不自动给（TIER_AUTO_MAX）：改文件、跑任意命令，要用户在模型库里把这个模型手动设到这一档。
 export const TIER_NAMES = ['问答', '填空', '单工具', '只读多步', '动手', '规划'];
 export const TIER_AUTO_MAX = 3;   // 自动最多定到 L3，往上要用户在模型库里打开
-export const TIER_BUILT = 3;      // 现在做出来的最高一档（再高的都按它给）
+export const TIER_BUILT = 4;      // 现在做出来的最高一档（再高的都按它给）
 // 没有实测（上岗小测验 kuai-quiz.mjs 还没跑过）时按参数量和家族给初值：
 //   没写参数量的当云上的模型 → L3；不到 1.5B → L0；不到 7B → L1；不到 24B → L2；再大 → L3。
 //   Gemma 多步明显弱（BFCL：Gemma-3-27B 多步 10.8%，不如 Qwen3-4B 的 22%），封在 L2。

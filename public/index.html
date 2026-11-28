@@ -1662,7 +1662,7 @@ function dsSec(ms){ms=+ms||0;return (ms/1000).toFixed(ms<10000?2:1)+' 秒'}
 function dsBrief(s){s=String(s||'').replace(/\s+/g,' ').trim();return s.length>120?s.slice(0,119)+'…':s}   // 只给每轮明细列表做一行预览；点进那一轮看全文
 function dsRaw(label,txt,open){return '<details class="ds-raw"'+(open?' open':'')+'><summary>'+label+' · '+dsN(String(txt).length)+' 字</summary><pre>'+esc(txt)+'</pre></details>'}   // 原样显示：标签按源码、换行照留
 // kuAi 这一轮怎么问的：接口、模型、参数、发了几条历史、系统提示；最后出错 / 没写完的说明
-var KU_TIERS=['问答','填空','单工具','只读多步','动手','规划'],KU_SAY=['只问答','简单技能','技能和命令','读文件和网页'],KU_QS=[['fill','填参数'],['chat','闲聊不调工具'],['one','单步调用'],['chain','先读说明再用'],['fix','出错后换参数'],['look','没找到换个找法']];
+var KU_TIERS=['问答','填空','单工具','只读多步','动手','规划'],KU_SAY=['只问答','简单技能','技能和命令','读文件和网页','改文件和跑命令'],KU_QS=[['fill','填参数'],['chat','闲聊不调工具'],['one','单步调用'],['chain','先读说明再用'],['fix','出错后换参数'],['look','没找到换个找法']];
 function dsKuaiAsk(ku){
   var c=['<span class="ds-chip">'+esc(ku.api||'openai')+(ku.host?' · '+esc(ku.host):'')+'</span>','<span class="ds-chip">思考 <b>'+(ku.think?'开':'关')+'</b>'+(ku.noOff?'（这个模型关不掉）':'')+'</span>',
     '<span class="ds-chip">发了 <b>'+ku.sent+'</b> 条对话'+(ku.dropped?'，更早的 '+ku.dropped+' 条已省略':'')+'</span>'];
@@ -2918,7 +2918,7 @@ function reply(decision){
   var p=permQueue[0];if(!p)return;
   wsSend({t:'permission.reply',requestId:p.requestId,decision:decision});
   dropPerm(p.requestId,decision==='deny'?'deny':'allow');
-  if(decision==='allow_session')addSys(p.alwaysLabel?'这一轮同类操作不再询问':'本会话内同类操作不再询问');
+  if(decision==='allow_session')addSys(p.alwaysNote||(p.alwaysLabel?'这一轮同类操作不再询问':'本会话内同类操作不再询问'));
 }
 $('#bAllow').addEventListener('click',function(){reply('allow')});
 $('#bDeny').addEventListener('click',function(){reply('deny')});
@@ -4172,7 +4172,7 @@ function openModels(from){
   hostView='models';mdlSub='';mdlMsg={};mdlRemote=null;mdlForget();renderModels();loadModels();
 }
 function mdlProv(id){return mdl&&mdl.providers.find(function(p){return p.id===id})}
-function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');if(m.tier!=null)a.push('kuAi：'+KU_SAY[Math.min(m.tier,3)]);return a.join(' · ')}
+function mdlCaps(m){var a=[];if(m.context)a.push(m.context>=1e6?(m.context/1e6).toFixed(m.context%1e6?1:0)+'M':Math.round(m.context/1000)+'k');if(m.vision)a.push('识图');if(m.reasoning)a.push('推理');if(m.tier!=null)a.push('kuAi：'+KU_SAY[Math.min(m.tier,4)]);return a.join(' · ')}
 function mdlIn(id,val,attrs,mono,label){   // Key 详情的输入行：上面一行小标题，下面无框输入（点进去小标题变主题色）
   var sec=/type="password"/.test(attrs||'');attrs=(attrs||'').replace(/\s*type="password"/,'');
   return '<div class="h-row md-f"><label class="md-lb" for="'+id+'">'+esc(label||'')+'</label><textarea id="'+id+'" rows="1" class="md-in'+(mono?' mono':'')+(sec?' md-secret':'')+'" autocomplete="off" autocapitalize="off" spellcheck="false" '+attrs+'>'+esc(val==null?'':String(val))+'</textarea></div>'}
@@ -4248,8 +4248,8 @@ function renderModels(){
     var sw=function(id,on,t,sub){return '<label class="h-row md-swrow"><span class="k">'+t+'<small>'+sub+'</small></span><input type="checkbox" class="md-sw" id="'+id+'"'+(on?' checked':'')+'></label>'};
     h+=hSec('能力',sw('mdMVision',m&&m.vision,'能识图','发图片时用得上')+sw('mdMReason',m&&m.reasoning,'会推理（思考）','能开推理强度'));
     // kuAi 的能力档：现在做出来的是四档（只问答 = 0，简单技能 = 1：程序认出要用哪个技能、模型只填参数，技能和命令 = 2，读文件和网页 = 3：多了只读工具、一轮里能连着查几步）；别的值（以后的档）原样留着
-    var tv=m&&m.tier!=null?String(m.tier):'',topt=[['','自动'],['0','只问答'],['1','简单技能（程序代填参数）'],['2','技能和命令'],['3','读文件和网页（只读，能连着查几步）']];if(tv&&!/^[0123]$/.test(tv))topt.push([tv,'L'+tv+' '+(KU_TIERS[+tv]||'')]);
-    h+=hSec('kuAi','<label class="h-row md-swrow"><span class="k">能开放到哪<small>自动：按小测验的结果；没测过的先按模型大小估</small></span><select class="pe-in" id="mdMTier" style="width:auto;max-width:52%" aria-label="kuAi 能开放到哪">'+topt.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===tv?' selected':'')+'>'+o[1]+'</option>'}).join('')+'</select></label>'+(m?'<div class="h-row md-swrow" id="mdQuiz" style="cursor:default">'+mdlQuizHtml(pp.id,m.id)+'</div>':''));
+    var tv=m&&m.tier!=null?String(m.tier):'',topt=[['','自动'],['0','只问答'],['1','简单技能（程序代填参数）'],['2','技能和命令'],['3','读文件和网页（只读，能连着查几步）'],['4','改文件和跑命令（每一次都要你点确认）']];if(tv&&!/^[01234]$/.test(tv))topt.push([tv,'L'+tv+' '+(KU_TIERS[+tv]||'')]);
+    h+=hSec('kuAi','<label class="h-row md-swrow"><span class="k">能开放到哪<small>自动：按小测验的结果；没测过的先按模型大小估，最高到「读文件和网页」。「改文件和跑命令」要在这里手动选</small></span><select class="pe-in" id="mdMTier" style="width:auto;max-width:52%" aria-label="kuAi 能开放到哪">'+topt.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===tv?' selected':'')+'>'+o[1]+'</option>'}).join('')+'</select></label>'+(m?'<div class="h-row md-swrow" id="mdQuiz" style="cursor:default">'+mdlQuizHtml(pp.id,m.id)+'</div>':''));
     if(m)mdlQuizPoll();
     h+='<div class="md-acts"><button type="button" class="md-save" data-act="mdl-model-save">'+(m?'保存':'添加')+'</button></div>';
     if(m)h+='<div class="md-danger"><button type="button" data-act="mdl-model-del">删除模型</button></div>';
