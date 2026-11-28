@@ -79,3 +79,37 @@ test('手机确认后：拿到邀请码走加入流程；中继重启过（gone�
   assert.equal(v.account, 'bo***@example.com');
   assert.deepEqual(joined, ['clarelay-device1.xyz']);
 });
+
+test('倒计时到点时手机刚确认：先再问一次中继，已确认就加入，不取消', async () => {
+  const DATA = tmp();
+  fs.writeFileSync(path.join(DATA, 'install-origin.json'), JSON.stringify({ relay: 'https://relay.example.com' }));
+  let polls = 0;
+  const { f, calls } = fakeRelay({
+    '/_device/pair/start': () => [200, { code: 'ABCDEFGH', poll: 'p1', expires: Date.now() + 150, interval: 0.1, url: 'https://relay.example.com/pair#A' }],
+    '/_device/pair/poll': () => (++polls < 2 ? [200, { status: 'waiting' }] : [200, { status: 'done', invite: 'clarelay-device1.late', account: 'a@b' }]),
+    '/_device/pair/cancel': () => [200, { ok: true }],
+  });
+  const joined = [];
+  const p = makeRelayPair({ DATA, log() {}, join: async inv => { joined.push(inv); return {}; }, fetch: f, minInterval: 0 });
+  await p.start();
+  for (let i = 0; i < 100 && !['done', 'expired'].includes(p.status().status); i++) await wait(20);
+  assert.equal(p.status().status, 'done');
+  assert.deepEqual(joined, ['clarelay-device1.late']);
+  assert.ok(!calls.some(c => c.path === '/_device/pair/cancel'), '没去取消');
+});
+
+test('倒计时到点、还没确认：过期并取消', async () => {
+  const DATA = tmp();
+  fs.writeFileSync(path.join(DATA, 'install-origin.json'), JSON.stringify({ relay: 'https://relay.example.com' }));
+  const { f, calls } = fakeRelay({
+    '/_device/pair/start': () => [200, { code: 'ABCDEFGH', poll: 'p1', expires: Date.now() + 80, interval: 0.1, url: 'https://relay.example.com/pair#A' }],
+    '/_device/pair/poll': () => [200, { status: 'waiting' }],
+    '/_device/pair/cancel': () => [200, { ok: true }],
+  });
+  const p = makeRelayPair({ DATA, log() {}, join: async () => ({}), fetch: f, minInterval: 0 });
+  await p.start();
+  for (let i = 0; i < 100 && p.status().status !== 'expired'; i++) await wait(20);
+  assert.equal(p.status().status, 'expired');
+  await wait(20);
+  assert.ok(calls.some(c => c.path === '/_device/pair/cancel'));
+});

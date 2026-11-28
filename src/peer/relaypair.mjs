@@ -93,11 +93,15 @@ export function makeRelayPair(o) {
 
   async function tick(c) {
     if (cur !== c || c.status !== 'waiting') return;
-    // 没人看了（网页关了、换页了）：取消，不再占着中继
-    if (Date.now() - c.asked > 30000) { log('网页不看了，取消配对'); await cancel(); return; }
-    if (Date.now() > c.expires) { c.status = 'expired'; call(c.base, '/_device/pair/cancel', { poll: c.poll }).catch(() => {}); return; }
-    const j = await call(c.base, '/_device/pair/poll', { poll: c.poll });
+    // 到点了（过期 / 网页不看了）也先再问一次中继：手机可能在最后一个轮询间隔里确认了（中继那边已批准、还续了期），
+    // 这时直接取消会连已批准的邀请码一起作废，手机显示已添加、电脑却没加入。还在等才取消
+    const unwatched = Date.now() - c.asked > 30000, expired = Date.now() > c.expires;
+    let j;
+    try { j = await call(c.base, '/_device/pair/poll', { poll: c.poll }); }
+    catch (e) { if (!unwatched && !expired) throw e; j = { status: 'waiting' }; }
     if (cur !== c) return;
+    if (j.status !== 'done' && unwatched) { log('网页不看了，取消配对'); await cancel(); return; }   // 没人看了（网页关了、换页了）：不再占着中继
+    if (j.status !== 'done' && expired) { c.status = 'expired'; call(c.base, '/_device/pair/cancel', { poll: c.poll }).catch(() => {}); return; }
     c.error = '';
     if (j.status === 'done' && j.invite) {
       c.status = 'joining'; c.account = String(j.account || '');
