@@ -2047,6 +2047,26 @@ select.pe-in{text-align-last:right}
 #tplay .tp-rel{display:flex;gap:10px;overflow-x:auto;padding:8px 10px 10px;background:#16181c;scrollbar-width:thin;overscroll-behavior-x:contain}
 #tplay .tp-rel[hidden]{display:none}
 #tplay .tp-rel-m{font-size:13px;opacity:.7;padding:6px 2px}
+/* 投屏：播放条上的电视按钮（能投的才显示）、选电视的面板、投着屏时画面区换成遥控器 */
+#tplay.nocast .tp-cast,#tplay.tp-a .tp-cast,#tplay.min .tp-castp{display:none}
+#tplay.castp .tp-bar .tp-cast,#tplay.casting .tp-bar .tp-cast{color:#5ec8ff}
+#tplay .tp-castp{display:flex;flex-wrap:wrap;gap:8px;padding:8px 10px 10px;background:#16181c}
+#tplay .tp-castp[hidden]{display:none}
+#tplay .tp-cd{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:8px 12px;border-radius:10px;background:#2a2d33;max-width:calc(100% - 24px)}
+#tplay .tp-cd:hover{background:#353941}
+#tplay .tp-cd b{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tplay .tp-cd small{font-size:11px;opacity:.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tplay .tp-cd.tp-cr{justify-content:center;font-size:13px;opacity:.8;background:none;border:1px solid rgba(255,255,255,.25)}
+#tplay .tp-cv{height:100%;display:flex;flex-direction:column;justify-content:center;gap:12px;padding:14px 18px;box-sizing:border-box;background:radial-gradient(circle at 50% 30%,#1d2a36,#0b0d10)}
+#tplay .tp-cv-h{font-size:15px;font-weight:600}
+#tplay .tp-cv-s{font-size:13px;opacity:.75;line-height:1.45}
+#tplay .tp-cv.err .tp-cv-s{color:#ffb4a8;opacity:1}
+#tplay .tp-cv-k{display:flex;align-items:center;gap:8px;font-size:12px;font-variant-numeric:tabular-nums}
+#tplay .tp-cv-sk{flex:1;min-width:0;accent-color:#5ec8ff}
+#tplay .tp-cv-b{display:flex;gap:10px}
+#tplay .tp-cv-b button{all:unset;cursor:pointer;padding:7px 16px;border-radius:18px;font-size:13.5px;background:#fff;color:#000}
+#tplay .tp-cv-b .tp-cv-x{background:none;color:#fff;border:1px solid rgba(255,255,255,.4)}
+#tplay .tp-cv-b button:disabled{opacity:.4;cursor:default}
 #tplay .tp-ri{all:unset;cursor:pointer;flex:none;width:136px;display:flex;flex-direction:column;gap:3px}
 #tplay .tp-rp{position:relative;width:136px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#2a2d33}
 #tplay .tp-rp img{width:100%;height:100%;object-fit:cover;display:block}

@@ -64,6 +64,7 @@ import { peerJudge } from './src/peer/peerjudge.mjs';
 import { storeNow as libStoreNow, claudeLibProviders, parseLibPick, claudeLibEnv, noProxyAdd } from './src/modelpick.mjs';
 import { loadStore, saveStore, applyOp as modelOp, publicView as modelsPublic, revealKey, fetchModels } from './src/modelstore.mjs';
 import { serveAud } from './src/audproxy.mjs';
+import { makeCaster } from './src/cast/cast.mjs';
 import { serveCover } from './src/cover.mjs';
 import { serveLyric } from './src/lyric.mjs';
 import { saveVideo, videoFile, videoDuration, videoThumb, imageThumb, serveVideo, uploadsDir, cleanup as cleanUploads, KEEP_DAYS_DEFAULT } from './src/video.mjs';
@@ -791,6 +792,10 @@ async function handleLocal(req, res, url) {
     if (!c.supported) return sendJson(res, 200, { ok: false, error: c.reason || '这台电脑上用不了 ' + INSTALLS[id].label });
     try { installStart(id, { log }); } catch (e) { return sendJson(res, 200, { ok: false, error: e.message }); }
     return sendJson(res, 200, state());
+  }
+  if (url.pathname === '/api/local/cast') {   // claw-movie 技能的投屏：GET 状态，POST {op, ...} 同网页
+    if (req.method !== 'POST') return sendJson(res, 200, await caster.status());
+    try { return sendJson(res, 200, await castOp(await jsonBody(req, 4096, {}))); } catch (e) { return sendJson(res, 200, { ok: false, error: e.message }); }
   }
   if (url.pathname === '/api/local/theme') {   // claw-theme 技能：GET 现在的主题，POST {theme} 换主题
     if (req.method !== 'POST') return sendJson(res, 200, { ok: true, ...themeState() });
@@ -2108,6 +2113,14 @@ const updater = makeUpdater({
 });
 if (!process.env.CLACLAW_DATA) updater.start();   // 测试实例不自动查
 const shop = makeShop({ DATA, log });   // claw-shopping 技能：搜拼多多商品（问公开的商品服务）
+const caster = makeCaster({ ROOT, DATA, log });   // 投屏到电视（DLNA），见 src/cast/cast.mjs
+// 网页（/api/cast）和技能（/api/local/cast）共用：{op: devices(fresh) | play(page, title, device, start) | ctl(action: pause|play|stop|seek, t) | status}
+async function castOp(b) {
+  if (b.op === 'devices') return caster.devices({ fresh: !!b.fresh });
+  if (b.op === 'play') return caster.play({ page: b.page, title: String(b.title || '').slice(0, 200), device: b.device, start: b.start });
+  if (b.op === 'ctl') return caster.ctl(String(b.action || ''), b.t);
+  return caster.status();
+}
 // 协同地址里 clarelay 能补的几样（每分钟看一次）：子域名地址（https://<label>.<域名>/claclaw-peer）、打洞用的 STUN（中继的排第一，第三方的留作备用）
 // 不再探测、公布「外网直连」（公网 IP:协同端口，明文 http）：请求头里的钥匙会明文过公网
 async function refreshOurExtra() {
@@ -2841,6 +2854,12 @@ const handler = async (req, res) => {
       const op = { check: () => updater.check(), apply: () => updater.apply() }[body.op];
       if (!op) return sendJson(res, 400, { error: 'op' });
       try { return sendJson(res, 200, await op()); } catch (e) { return sendJson(res, 400, { error: e.message }); }
+    }
+    if (url.pathname === '/api/cast') {   // 投屏：GET 状态；POST {op, ...} 见 castOp
+      if (req.method === 'GET') return sendJson(res, 200, await caster.status());
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method' });
+      if (notJson(req, res)) return;
+      try { return sendJson(res, 200, await castOp(await jsonBody(req, 4096))); } catch (e) { return sendJson(res, 200, { ok: false, error: e.message }); }
     }
     if (url.pathname === '/api/clarelay') {   // 内置 clarelay 电脑端：GET 状态；POST {op: join(invite) | connect | disconnect | remove | update（下载新版电脑端）}
       // 扫码加入：pair-start {relay?}（relay 是用户填的中继地址；不填用知道的）| pair-status（网页每 2 秒问一次）| pair-cancel

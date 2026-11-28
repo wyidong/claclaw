@@ -40,6 +40,7 @@ const USAGE = process.env.CLACLAW_MEDIA_USAGE || `用法：
   claclaw-media link   video|audio "关键词" [--n 1] [--max 秒] [--src a,b]   在线播放链接（聊天里直接播放，不下载）
   claclaw-media movies ["类型 / 片名 / 演员"] [--n 10] [--new] [--year 2026] [--since 2006] [--min 7] [--latest]   官方频道免费完整电影片单（带豆瓣分）；--pick 序号 出播放链接
   claclaw-media related "B 站 / YouTube 视频网址" [--n 20] [--json]   这个视频的相关视频（能在聊天里直接播的）
+  claclaw-media stream "YouTube / Dailymotion / Archive 网址" [--height 1080]   投屏用：电视能播的流（JSON，claclaw 服务器调）
   claclaw-media get    video|audio|image "关键词或网址" [--n 张数] [--max 秒] [--clip 秒] [--max-mb 45] [--src a,b] [--pick 序号]
   claclaw-media find   video|audio|image "关键词" [--n 10] [--max 秒] [--src a,b]
   claclaw-media sources                      来源列表和最近的成败
@@ -647,6 +648,39 @@ async function related(u) {
   else out.forEach((x, i) => console.log([i + 1, `[${x.title.replace(/[\[\]]/g, ' ')}](${x.url})`, fmtDur(x.dur), fmtPlays(x.plays), x.by].join('\t')));
 }
 
+// ---------- 投屏：把视频网页换成电视能播的流（claclaw 服务器调，输出 JSON） ----------
+// 电视（DLNA）不会解析网页，也多半上不了 YouTube：这里找出真正的视频地址，由 claclaw 在局域网里转发给电视（src/cast/）。
+//   YouTube：音频、视频是分开的两路 HLS（分段一一对齐），kind=yt，由 claclaw 按段合成一路 TS；
+//           mp4 直链（18 号格式）不行：不带 PO token 只给开头一两 MB
+//   Dailymotion：音画合一的 HLS，kind=hls；Archive：mp4 直链，kind=file
+// 视频地址绑定了取地址时的出口 IP，所以把用的代理也带上，转发时走同一个
+async function stream(u) {
+  const px = await proxy();
+  const yt = /(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/.test(u);
+  if (/nfb\.ca|onf\.ca/.test(u)) die('NFB 的片子暂时投不了屏');
+  if ((yt || /dailymotion\.com|dai\.ly/.test(u)) && !px) die('要能上 YouTube / Dailymotion 才能投屏（没找到代理）');
+  const j = JSON.parse(await ytdlp(['-J', '--no-playlist', u], { proxy: !!px, timeout: 60000 }));
+  const fs_ = j.formats || [], maxH = +opt.height || 1080;
+  const base = { title: j.title || '', dur: Math.round(j.duration || 0), page: u, proxy: px || '' };
+  const hls = f => /^m3u8/.test(f.protocol || '');
+  let out;
+  if (yt) {
+    const vs = fs_.filter(f => hls(f) && /^avc1/.test(f.vcodec || '') && (!f.acodec || f.acodec === 'none') && f.height && f.height <= maxH).sort((a, b) => a.height - b.height || (a.tbr || 0) - (b.tbr || 0));
+    const as = fs_.filter(f => hls(f) && f.vcodec === 'none');
+    const a = as.find(f => f.format_id === '234') || as.find(f => /^mp4a\.40\.2/.test(f.acodec || '')) || as.at(-1);
+    const v = vs.at(-1);
+    if (!v || !a) die('这个视频没有能投屏的格式');
+    out = { kind: 'yt', video: v.url, audio: a.url, height: v.height };
+  } else {
+    const both = fs_.filter(f => f.vcodec !== 'none' && f.acodec !== 'none' && (!f.height || f.height <= maxH) && (hls(f) || /^https?$/.test(f.protocol || '') && /mp4|m4v|mov/.test(f.ext || '')));
+    both.sort((a, b) => (a.height || 0) - (b.height || 0) || (a.tbr || 0) - (b.tbr || 0));
+    const f = both.at(-1) || (j.url && { url: j.url, protocol: j.protocol, ext: j.ext, height: j.height });
+    if (!f) die('这个视频没有能投屏的格式');
+    out = hls(f) ? { kind: 'hls', url: f.url, height: f.height || 0 } : { kind: 'file', url: f.url, mime: f.ext === 'mov' ? 'video/quicktime' : 'video/mp4', height: f.height || 0 };
+  }
+  console.log(JSON.stringify({ ...base, ...out }));
+}
+
 // ---------- 命令 ----------
 const kind = pos[0], arg = pos.slice(1).join(' ').trim();
 if (cmd === 'sources') {
@@ -661,6 +695,8 @@ if (cmd === 'sources') {
   await movies(pos.join(' ').trim());
 } else if (cmd === 'related' && pos[0]) {
   await related(pos[0]);
+} else if (cmd === 'stream' && pos[0]) {
+  await stream(pos[0]);
 } else if (cmd === 'link' && KINDS[kind] && arg) {
   await link(kind, arg);
 } else if ((cmd === 'find' || cmd === 'get') && KINDS[kind] && arg) {

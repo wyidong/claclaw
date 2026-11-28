@@ -1150,14 +1150,17 @@ function tpLySync(t){
 function tpDur(d){if(d>=2400&&!tp.movie)tpMovie(true)}
 function tpPlay(i,start){
   var el=TPEL,x=tp.list[i];if(!x)return;tp.i=i;tp.t=start||0;
-  var v=el.querySelector('.tp-v'),k=x.e.kind,m;v.innerHTML='';
-  if(k==='file-video'||k==='file-audio'){m=el.ownerDocument.createElement(k==='file-video'?'video':'audio');m.controls=k==='file-video';
+  var v=el.querySelector('.tp-v'),k=x.e.kind,m,cast=tc&&tcUrl(x);v.innerHTML='';
+  if(tc&&!cast)tcStop(false);   // 投着屏换到投不了的：电视停掉，在手机上放
+  if(cast){}   // 投着屏换片：投到同一台电视（下面 tcStart），手机上不放
+  else if(k==='file-video'||k==='file-audio'){m=el.ownerDocument.createElement(k==='file-video'?'video':'audio');m.controls=k==='file-video';
     if(k==='file-audio'){['play','pause','timeupdate','durationchange','loadedmetadata','emptied','error'].forEach(function(n){m.addEventListener(n,tpAuSync)});if(el.classList.contains('float'))tpFloat(false)}m.autoplay=true;m.setAttribute('playsinline','');m.src=x.e.src;
     if(start)m.addEventListener('loadedmetadata',function(){m.currentTime=start},{once:true});
     m.addEventListener('loadedmetadata',function(){tpDur(m.duration)});m.addEventListener('timeupdate',function(){tp.t=m.currentTime});m.addEventListener('ended',function(){if(!tp.movie)tpPlay(tp.i+1)})}
   else{m=el.ownerDocument.createElement('iframe');tpSandbox(m,x.e.src);m.src=tpSrc(x,start);m.allow='autoplay; fullscreen; encrypted-media; picture-in-picture';m.allowFullscreen=true;m.setAttribute('referrerpolicy','strict-origin-when-cross-origin');
     m.addEventListener('load',function(){try{m.contentWindow.postMessage('{"event":"listening","id":1,"channel":"widget"}','*')}catch(_){}})}
-  v.appendChild(m);tpLyric(x,k==='file-audio'?m:null);
+  if(m)v.appendChild(m);tpLyric(x,k==='file-audio'?m:null);
+  el.classList.toggle('nocast',!tcUrl(x));if(!tcUrl(x))tcPanel(false);
   el.classList.toggle('tp-a',k==='audio'||k==='file-audio');el.classList.toggle('tp-fa',k==='file-audio');el.classList.remove('on','err');el.hidden=false;
   tpMovie(tp.movie);
   el.querySelector('.tp-ap').disabled=i<=0&&k!=='file-audio';el.querySelector('.tp-an').disabled=i>=tp.list.length-1;
@@ -1165,6 +1168,7 @@ function tpPlay(i,start){
   el.querySelector('.tp-prev').disabled=i<=0;el.querySelector('.tp-next').disabled=i>=tp.list.length-1;
   tp.list.forEach(function(y,j){y.a.classList.toggle('playing',j===i)});
   el.classList.toggle('norel',!tpRelUrl());if(el.classList.contains('rel'))tpRel(true);
+  if(cast)tcStart(tc.dev);
 }
 // B 站播放器结尾那排推荐、角上的 B 站标志点了是开新窗口跳到 B 站：给它加 sandbox（不给 allow-popups）就跳不走了，
 // 相关视频统一从播放器条上的「相关」点，在 claclaw 里接着播。YouTube 不加（沙箱里有的视频会拒绝播放）
@@ -1178,7 +1182,7 @@ function tpRel(show){
   var el=TPEL,p=el.querySelector('.tp-rel'),u=tpRelUrl();
   if(show===undefined)show=p.hidden;
   if(!show||!u){p.hidden=true;el.classList.remove('rel');return}
-  p.hidden=false;el.classList.add('rel');tpFit();
+  p.hidden=false;el.classList.add('rel');tcPanel(false);tpFit();
   if(p.dataset.u===u)return;p.dataset.u=u;p.scrollLeft=0;
   p.innerHTML='<div class="tp-rel-m">正在找相关视频…</div>';
   getJson('/api/related?u='+encodeURIComponent(u)).then(function(j){
@@ -1206,7 +1210,7 @@ function tpMsg(ev){   // YouTube 播放器发来的进度、状态
   if((d.event==='onStateChange'&&info===0)||info.playerState===0){if(!tp.movie&&tp.i<tp.list.length-1)tpPlay(tp.i+1);else tpRel(true)}   // 没有下一个：摊开相关视频   // 播完：下一个（电影不接）
 }
 window.addEventListener('message',tpMsg);
-function tpClose(){var el=TPEL,p=el.querySelector('.tp-rel');el.hidden=true;el.classList.remove('min','rel','on','err');if('mediaSession' in navigator)try{navigator.mediaSession.metadata=null}catch(_){}p.hidden=true;p.dataset.u='';p.innerHTML='';tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
+function tpClose(){var el=TPEL,p=el.querySelector('.tp-rel');tcDetach();tcPanel(false);el.hidden=true;el.classList.remove('min','rel','on','err');if('mediaSession' in navigator)try{navigator.mediaSession.metadata=null}catch(_){}p.hidden=true;p.dataset.u='';p.innerHTML='';tpFloat(false);el.querySelector('.tp-v').innerHTML='';tp.list.forEach(function(y){y.a.classList.remove('playing')});tp={list:[],i:-1,box:null,t:0}}
 function tpOpen(box,a){
   tp.box=box;tp.list=tpLinks(box);tp.movie=TP_MOVIE.test(box?box.textContent:'');var i=0;
   if(a)tp.list.forEach(function(y,j){if(y.a===a)i=j});
@@ -1230,15 +1234,95 @@ function tpFit(){
 }
 window.addEventListener('resize',tpFit);
 function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
+// 投屏：正在播的电影 / 视频投到和电脑同一个局域网里的电视、投影（DLNA）。找电视、推视频都是电脑（claclaw 服务器）做的，
+// 手机只当遥控器，所以手机在外面也能投家里的电视。投着屏时这里换成遥控器：暂停 / 继续、拖进度、停止投屏；
+// 点列表里别的片子直接投到同一台电视；停止投屏后在手机上从电视播到的地方接着看。服务器那边见 src/cast/cast.mjs
+var TP_CAST=/^https?:\/\/(?:(?:www\.|m\.)?youtube\.com\/(?:watch\?|shorts\/|live\/|embed\/)|youtu\.be\/|(?:www\.)?dailymotion\.com\/video\/|dai\.ly\/|archive\.org\/details\/)/;
+var tc=null,tcTimer=0,tcSeeking=false;   // tc：{dev:{id,name}, page, st:服务器的投屏状态}
+function tcUrl(x){x=x||tp.list[tp.i];var u=x&&x.a.getAttribute('href');return u&&TP_CAST.test(u)?u:''}
+function tcPost(b){return fetch('/api/cast',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()})}
+function tcPanel(show){
+  var el=TPEL,p=el&&el.querySelector('.tp-castp');if(!p)return;
+  if(show===undefined)show=p.hidden;
+  if(!show||!tcUrl()){p.hidden=true;el.classList.remove('castp');return}
+  if(el.classList.contains('rel'))tpRel(false);
+  p.hidden=false;el.classList.add('castp');tcFind(false);
+}
+function tcFind(fresh){
+  var p=TPEL.querySelector('.tp-castp');p.innerHTML='<div class="tp-rel-m">正在找和电脑同一个局域网里的电视…</div>';
+  tcPost({op:'devices',fresh:!!fresh}).then(function(j){
+    if(p.hidden)return;
+    var ds=j&&j.devices||[],last='';try{last=localStorage.getItem('claclaw.castDev')||''}catch(_){}
+    p.innerHTML=ds.length?'':'<div class="tp-rel-m">'+esc(j&&j.error||'没找到电视：电视 / 投影要开着、和装 claclaw 的电脑连同一个路由器，并打开它的投屏接收')+'</div>';
+    ds.sort(function(a,b){return (b.id===last)-(a.id===last)});
+    ds.forEach(function(d){var b=document.createElement('button');b.type='button';b.className='tp-cd';b.innerHTML='<b>'+esc(d.name)+'</b><small>'+esc(d.model||d.host||'')+'</small>';b.addEventListener('click',function(){tcStart(d,Math.floor(tp.t||0))});p.appendChild(b)});
+    var r=document.createElement('button');r.type='button';r.className='tp-cd tp-cr';r.textContent='重新找';r.addEventListener('click',function(){tcFind(true)});p.appendChild(r);
+  },function(){p.innerHTML='<div class="tp-rel-m">找电视失败</div>'});
+}
+function tcStart(d,start){
+  var x=tp.list[tp.i],u=tcUrl(x);if(!u)return;
+  try{localStorage.setItem('claclaw.castDev',d.id)}catch(_){}
+  tcPanel(false);
+  tc={dev:{id:d.id,name:d.name},page:u,st:{phase:'resolving'}};
+  tcView();
+  tcPost({op:'play',page:u,title:x.t,device:d.id,start:start||0}).then(function(j){if(!tc||tc.page!==u)return;tc.st=j&&j.ok===false?{phase:'error',error:j.error}:j;tcRender()},
+    function(){if(tc&&tc.page===u){tc.st={phase:'error',error:'连不上 claclaw'};tcRender()}});
+  clearInterval(tcTimer);tcTimer=setInterval(tcPoll,2000);
+}
+function tcView(){
+  var el=TPEL,v=el.querySelector('.tp-v');el.classList.add('casting');el.classList.remove('on');
+  v.innerHTML='<div class="tp-cv"><div class="tp-cv-h"><span class="tp-cv-d"></span></div><div class="tp-cv-s"></div>'
+    +'<div class="tp-cv-k"><span class="tp-cv-ct">0:00</span><input class="tp-cv-sk" type="range" min="0" max="1000" step="1" value="0" aria-label="电视上的播放进度"><span class="tp-cv-dt">--:--</span></div>'
+    +'<div class="tp-cv-b"><button type="button" class="tp-cv-pp"></button><button type="button" class="tp-cv-x">停止投屏</button></div></div>';
+  var sk=v.querySelector('.tp-cv-sk');
+  sk.addEventListener('input',function(){tcSeeking=true;var d=tc&&tc.st&&tc.st.dur;if(d)v.querySelector('.tp-cv-ct').textContent=tpHms(sk.value/1000*d)});
+  sk.addEventListener('change',function(){var d=tc&&tc.st&&tc.st.dur;tcSeeking=false;if(d)tcPost({op:'ctl',action:'seek',t:Math.round(sk.value/1000*d)}).then(tcGot,function(){})});
+  v.querySelector('.tp-cv-pp').addEventListener('click',function(){
+    if(!tc)return;var s=tc.st||{};
+    if(s.phase==='error'||s.ended){tcStart(tc.dev,s.pos||0);return}   // 出错 / 电视停了：再投一次
+    tcPost({op:'ctl',action:s.state==='PLAYING'?'pause':'play'}).then(tcGot,function(){});
+  });
+  v.querySelector('.tp-cv-x').addEventListener('click',function(){tcStop(true)});
+  tcRender();
+}
+function tcGot(j){if(tc&&j&&j.ok!==false&&j.active){tc.st=j;tcRender()}}
+function tcPoll(){
+  if(!tc){clearInterval(tcTimer);return}
+  getJson('/api/cast').then(function(j){
+    if(!tc||!j)return;
+    if(!j.active&&tc.st&&tc.st.phase!=='error'){tc.st={phase:'error',error:j.ended||'电视上已经不在播了',ended:1,pos:tc.st.pos||0};tcRender();return}
+    if(j.active&&j.page===tc.page){tc.st=j;tcRender()}
+  },function(){});
+}
+function tcRender(){
+  var el=TPEL,c=el&&el.querySelector('.tp-cv');if(!c||!tc)return;
+  var s=tc.st||{},ph=s.phase,stt=s.state;
+  c.querySelector('.tp-cv-d').textContent='投屏到 '+tc.dev.name;
+  c.querySelector('.tp-cv-s').textContent=ph==='resolving'?'正在取视频…':ph==='starting'?'电视正在打开…':ph==='error'?(s.error||'投屏失败')
+    :stt==='PAUSED_PLAYBACK'?'已暂停':stt==='TRANSITIONING'?'电视在缓冲…':stt==='STOPPED'||stt==='NO_MEDIA_PRESENT'?'电视上停了':'正在电视上播放';
+  c.classList.toggle('err',ph==='error');
+  var pp=c.querySelector('.tp-cv-pp');pp.textContent=ph==='error'?'再投一次':stt==='PLAYING'?'暂停':'继续';pp.disabled=ph==='resolving'||ph==='starting';
+  var d=s.dur||0,sk=c.querySelector('.tp-cv-sk');sk.disabled=!d||ph!=='playing';
+  if(!tcSeeking){sk.value=d?Math.round(Math.min(1,(s.pos||0)/d)*1000):0;c.querySelector('.tp-cv-ct').textContent=tpHms(s.pos||0)}
+  c.querySelector('.tp-cv-dt').textContent=d?tpHms(d):'--:--';
+}
+// 停止投屏：电视停掉；resume=true 在手机上从电视播到的地方接着看
+function tcStop(resume){
+  if(!tc)return;var pos=tc.st&&tc.st.pos||0;
+  tcPost({op:'ctl',action:'stop'}).catch(function(){});
+  tcDetach();
+  if(resume)tpPlay(tp.i,pos);
+}
+function tcDetach(){clearInterval(tcTimer);tc=null;if(TPEL)TPEL.classList.remove('casting')}
 (function(){
   var el=document.createElement('div');el.id='tplay';el.hidden=true;TPEL=el;
   var I_PLAY='<svg class="i-play" width="22" height="22" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor"/></svg>',
       I_PAUSE='<svg class="i-pause" width="22" height="22" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor"/></svg>',
       I_PREV='<svg width="20" height="20" viewBox="0 0 24 24"><rect x="5" y="5.5" width="2.6" height="13" rx="1" fill="currentColor"/><path d="M19 6.6v10.8a1 1 0 0 1-1.52.85L9.3 13.2a1.4 1.4 0 0 1 0-2.4l8.18-5.05A1 1 0 0 1 19 6.6Z" fill="currentColor"/></svg>';
   // 纯音频（歌、节目）不用视频那一套：顶上是一条浅色的「正在播放」——左边转动的唱片、歌名，下面一排 上一首 / 播放暂停 / 下一首 和进度条；收起后只剩一行（带播放暂停和细进度线）
-  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><span class="tp-disc" aria-hidden="true"></span><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><span class="tp-ly" aria-live="off"></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-rb-btn" aria-label="相关视频" title="相关视频：点了在这里接着播">相关</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-bp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>'
+  el.innerHTML='<div class="tp-v"></div><div class="tp-bar"><span class="tp-disc" aria-hidden="true"></span><button type="button" class="tp-prev" aria-label="上一个">‹</button><span class="tp-tt"><span class="tp-t"></span><span class="tp-s"></span></span><span class="tp-ly" aria-live="off"></span><button type="button" class="tp-next" aria-label="下一个">›</button><button type="button" class="tp-cast" aria-label="投屏" title="投到电视（和电脑同一个局域网里的电视 / 投影）"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5"/><path d="M3 20h.01M3 16.5a3.5 3.5 0 0 1 3.5 3.5M3 13a7 7 0 0 1 7 7"/></svg></button><button type="button" class="tp-rb-btn" aria-label="相关视频" title="相关视频：点了在这里接着播">相关</button><button type="button" class="tp-pop" aria-label="弹出 / 收回" title="弹出成浮动小窗口；再点一下收回"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button><button type="button" class="tp-bp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-min" aria-label="收起 / 展开">▾</button><button type="button" class="tp-x" aria-label="关闭">×</button></div>'
     +'<div class="tp-ac"><button type="button" class="tp-ap" aria-label="上一首">'+I_PREV+'</button><button type="button" class="tp-pp" aria-label="播放 / 暂停">'+I_PLAY+I_PAUSE+'</button><button type="button" class="tp-an" aria-label="下一首">'+I_PREV+'</button>'
-    +'<span class="tp-ct">0:00</span><input class="tp-sk" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度"><span class="tp-dt">--:--</span><button type="button" class="tp-lyb" aria-label="歌词" title="显示 / 隐藏歌词">词</button></div><div class="tp-rel" hidden></div>';
+    +'<span class="tp-ct">0:00</span><input class="tp-sk" type="range" min="0" max="1000" step="1" value="0" aria-label="播放进度"><span class="tp-dt">--:--</span><button type="button" class="tp-lyb" aria-label="歌词" title="显示 / 隐藏歌词">词</button></div><div class="tp-rel" hidden></div><div class="tp-castp" hidden></div>';
   feed.parentNode.insertBefore(el,feed);
   el.querySelector('.tp-prev').addEventListener('click',function(){tpPlay(tp.i-1)});
   el.querySelector('.tp-next').addEventListener('click',function(){tpPlay(tp.i+1)});
@@ -1252,6 +1336,7 @@ function tpPopOut(){if(tp.list[tp.i])tpFloat(!TPEL.classList.contains('float'))}
   sk.addEventListener('change',function(){var a=tpAu();tpSeeking=false;if(a&&isFinite(a.duration))a.currentTime=sk.value/1000*a.duration;tpAuSync()});
   el.querySelector('.tp-pop').addEventListener('click',tpPopOut);
   el.querySelector('.tp-rb-btn').addEventListener('click',function(){tpRel()});
+  el.querySelector('.tp-cast').addEventListener('click',function(){tcPanel()});
   (function(){   // 浮窗：标题条在视频上面，按住拖到别处
     var g=null,bar=el.querySelector('.tp-bar');
     bar.addEventListener('pointerdown',function(e){if(!el.classList.contains('float')||e.target.closest('button'))return;var r=el.getBoundingClientRect();g={x:e.clientX-r.left,y:e.clientY-r.top,m:0};el.classList.add('drag');try{bar.setPointerCapture(e.pointerId)}catch(_){}});
