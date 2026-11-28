@@ -5,6 +5,7 @@
 //   claw-stock cmp 茅台 五粮液 …      几只放一起比（2～6 只）
 //   claw-stock find 平安             这个名字对得上哪几只（重名、不确定代码时）
 //   claw-stock flow [细分] [--days 5] 行业板块的主力资金：净流入最多、净流出最多的板块（大类 31 个 / 细分一百多个；当日、近 5 日、近 10 日）
+//   claw-stock top [跌|成交额] [板块]  涨幅榜 / 跌幅榜 / 成交额榜：涨跌幅榜按板块分开排（主板 10%、创业板和科创板 20%、北交所 30%，上限不一样）
 // 输出 ```stock 代码块：claclaw 画成行情卡片（红涨绿跌、走势折线，public/index.html 的 mdStock）；find 输出 Markdown 表格。
 // 来源（都是公开行情页面用的接口，不用登录、没有签名）：
 //   报价 腾讯证券 qt.gtimg.cn；日 K 东方财富 push2his（前复权），不通时换腾讯；找代码 腾讯 smartbox，没有时换东方财富（北交所只有它按名字找得到）
@@ -220,8 +221,63 @@ export function renderFlow(list, level, days, top = 10) {
     row('注', '数据来自东方财富的公开行情，可能有延迟；只是数据，不是投资建议。')]);
 }
 
+// ---------- 涨幅榜 / 跌幅榜 / 成交额榜（东方财富）----------
+// 各板块的涨跌幅上限不一样（主板 10%、创业板和科创板 20%、北交所 30%），放在一起排前面全是北交所，所以按板块分开排。
+// 榜内的先后：涨停（跌停）的算并列，按成交额从大到小——它们的涨幅只差在价格取整上（10.00%～10.45%），按那个排没有意义；没涨停的再按涨幅。
+// 涨幅超过上限的（新股上市头几天、恢复上市不设涨跌幅）排最前面，标出来。
+export const BOARDS = [
+  { key: '主板', name: '沪深主板', lim: 10, fs: 'm:1+t:2,m:0+t:6' },
+  { key: '双创', name: '创业板 / 科创板', lim: 20, fs: 'm:0+t:80,m:1+t:23' },
+  { key: '北交所', name: '北交所', lim: 30, fs: 'm:0+t:81+s:2048' }];
+const ALL_A = BOARDS.map(b => b.fs).join(',');
+export const topMode = s => /成交|活跃|额/.test(s || '') ? '成交额' : /跌/.test(s || '') ? '跌' : '涨';
+export const topBoard = s => /北交|北证/.test(s || '') ? '北交所' : /创业|科创|双创/.test(s || '') ? '双创' : /主板/.test(s || '') ? '主板' : '';
+export function parseTop(j) {
+  const num = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
+  return (j?.data?.diff || []).map(x => ({ code: String(x.f12 || ''), name: String(x.f14 || '').replace(/\s/g, ''), price: num(x.f2), pct: num(x.f3), amount: num(x.f6), turn: num(x.f8),
+    ind: typeof x.f100 === 'string' && x.f100 !== '-' ? x.f100.replace(/[ⅡⅢ]+$/, '') : '', listed: String(x.f26 || ''), ts: num(x.f124) })).filter(x => /^\d{6}$/.test(x.code) && x.name && x.pct != null && x.price != null);
+}
+// 一只在这个板块里算什么：超过上限的 = 不限幅（上市不到 30 天的写「新股」），到了上限的 = 涨停 / 跌停。上限留 0.1 个点的余量（取整）
+export function limitTag(x, lim, today = new Date()) {
+  const a = Math.abs(x.pct);
+  if (a > lim + 0.6) { const d = /^\d{8}$/.test(x.listed) ? (today - new Date(`${x.listed.slice(0, 4)}-${x.listed.slice(4, 6)}-${x.listed.slice(6)}T00:00:00+08:00`)) / 864e5 : 999; return d < 30 ? '新股' : '不限幅'; }
+  return a >= lim - 0.1 ? (x.pct > 0 ? '涨停' : '跌停') : '';
+}
+// 排好一个板块的榜：dir 1 涨幅榜、-1 跌幅榜。分三组：0 不限幅的（按涨幅）、1 涨停的（按成交额）、2 其余（按涨幅）
+export function rankTop(list, lim, dir = 1, today = new Date()) {
+  const side = x => dir > 0 ? x.pct > 0 : x.pct < 0;
+  return list.map(x => { const tag = side(x) ? limitTag(x, lim, today) : ''; return { ...x, tag, g: tag === '新股' || tag === '不限幅' ? 0 : tag ? 1 : 2 }; })
+    .sort((a, b) => a.g - b.g || (a.g === 1 ? (b.amount || 0) - (a.amount || 0) : dir * (b.pct - a.pct) || (b.amount || 0) - (a.amount || 0)));
+}
+const clist = async (fs, fid, po, pn) => JSON.parse(await get(`https://push2.eastmoney.com/api/qt/clist/get?pn=${pn}&pz=100&po=${po}&np=1&fltt=2&invt=2&fid=${fid}&fs=${encodeURIComponent(fs)}&fields=f2,f3,f6,f8,f12,f14,f26,f100,f124`));
+// 一个板块的涨（跌）幅榜：一页 100 只，往后翻到出现没涨停的为止（要数清涨停几只、把涨停的按成交额排），最多 10 页
+async function boardTop(b, dir) {
+  const all = []; let total = 0;
+  for (let pn = 1; pn <= 10; pn++) {
+    const j = await clist(b.fs, 'f3', dir > 0 ? 1 : 0, pn), page = parseTop(j); total = j?.data?.total || total; all.push(...page);
+    if (page.length < 100 || page.some(x => dir * x.pct < b.lim - 0.1)) break;
+  }
+  const ranked = rankTop(all, b.lim, dir);
+  return { ...b, total, list: ranked, limits: ranked.filter(x => x.tag === '涨停' || x.tag === '跌停').length };
+}
+// 全市场涨跌家数：上证指数、深证成指、北证 50 这三个指数的行情里带着所在市场的上涨 / 下跌 / 平盘家数
+export const parseBreadth = j => { const d = j?.data?.diff || [], s = k => d.reduce((a, x) => a + (typeof x[k] === 'number' ? x[k] : 0), 0); return d.length ? { up: s('f104'), down: s('f105'), flat: s('f106') } : null; };
+const breadth = async () => { try { return parseBreadth(JSON.parse(await get('https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids=1.000001,0.399001,0.899050&fields=f12,f104,f105,f106'))); } catch (e) { warn('涨跌家数没拿到：' + e.message); return null; } };
+// 输出：题 | 标题 | 小字；段 | 小标题；榜 | 名次 | 名称 | 代码 | 现价 | 涨跌幅 | 成交额 | 行业 | 标记（涨停 / 跌停 / 新股 / 不限幅）
+export function renderTop(mode, secs, br, per) {
+  const ts = Math.max(0, ...secs.flatMap(s => s.list.slice(0, per).map(x => x.ts || 0))), at = ts ? new Date(ts * 1000 + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : '';
+  const what = mode === '成交额' ? '成交额榜' : mode === '跌' ? '跌幅榜' : '涨幅榜', lw = mode === '跌' ? '跌停' : '涨停';
+  return block([row('题', what, [at && at + ' · ' + phase(at).replace('收盘价，', ''), br && `全市场上涨 ${br.up} 只、下跌 ${br.down} 只、平 ${br.flat} 只`].filter(Boolean).join(' · ')),
+    // 涨幅榜只列真的涨了的、跌幅榜只列真的跌了的：普涨的日子有的板块一只下跌的都没有，这时照实写，不拿涨得少的来凑
+    ...secs.map(s => ({ ...s, list: mode === '成交额' ? s.list : s.list.filter(x => mode === '跌' ? x.pct < 0 : x.pct > 0) })).flatMap(s => [
+      row('段', mode === '成交额' ? s.name : s.list.length ? `${s.name} · ${lw}是 ${s.lim}% · ${lw} ${s.limits} 只` : `${s.name} · 没有${mode === '跌' ? '下跌' : '上涨'}的股票`),
+      ...s.list.slice(0, per).map((x, i) => row('榜', i + 1, x.name, x.code, x.price.toFixed(2), pctStr(x.pct), money(x.amount), x.ind, x.tag))]),
+    mode !== '成交额' && row('注', `各板块的涨跌幅上限不一样，所以分开排。${lw}的算并列，按成交额从大到小；没${lw}的再按${mode === '跌' ? '跌' : '涨'}幅。新股上市头几天不设上限，排在最前面。`),
+    row('注', '数据来自东方财富的公开行情，可能有延迟；只是数据，不是投资建议。')]);
+}
+
 // ---------- 命令 ----------
-const warn =m => process.stderr.write('[claw-stock] ' + m + '\n');
+const warn = m =>process.stderr.write('[claw-stock] ' + m + '\n');
 // 不直接 process.exit：Windows 上请求还没收尾就退出，libuv 会断言失败（退出码变成 127）。抛出去，最外层设退出码
 class Stop extends Error { constructor(code, m) { super(m); this.code = code; } }
 const die = (code, m) => { throw new Stop(code, m); };
@@ -231,6 +287,7 @@ const USAGE = `用法：
   claw-stock cmp 茅台 五粮液 …      几只放一起比（2～6 只）
   claw-stock find 平安             这个名字对得上哪几只
   claw-stock flow [细分] [--days 5]  行业板块的主力资金：哪些板块净流入最多、最少（默认行业大类、当日；--days 5 或 10 看近几日）
+  claw-stock top [跌|成交额] [主板|双创|北交所]  涨幅榜（默认）、跌幅榜、成交额榜；涨跌幅榜按板块分开排，写了板块只排那一个
   加 --json 输出给程序用的 JSON`;
 
 async function one(raw) {                       // 一句话 → { q 报价, cands 候选 }；找不到退出 2
@@ -249,6 +306,17 @@ async function main(argv) {
     const level = flowLevel(rest.slice(1).join(' ')), fd = flowDays(di >= 0 ? parseInt(argv[di + 1], 10) : 1), list = await flow(level, fd);
     if (!list.length) die(2, '没有拿到板块资金流（行情接口暂时没通，或者还没开盘）。不要自己编数字。');
     return say(renderFlow(list, level, fd), { level, days: fd, list });
+  }
+  if (cmd === 'top') {
+    const arg = rest.slice(1).join(' '), mode = topMode(arg), only = topBoard(arg);
+    let secs;
+    if (mode === '成交额') {
+      const b = BOARDS.find(x => x.key === only), list = parseTop(await clist(b ? b.fs : ALL_A, 'f6', 1, 1)).sort((x, y) => (y.amount || 0) - (x.amount || 0));
+      secs = [{ name: b ? b.name : '全部 A 股', lim: b ? b.lim : 0, limits: 0, list: list.map(x => ({ ...x, tag: '' })) }];
+    } else secs = await Promise.all(BOARDS.filter(b => !only || b.key === only).map(b => boardTop(b, mode === '跌' ? -1 : 1)));
+    if (!secs.some(s => s.list.length)) die(2, '没有拿到排行（行情接口暂时没通，或者还没开盘）。不要自己编数字。');
+    const per = secs.length > 1 ? 6 : 15;
+    return say(renderTop(mode, secs, await breadth(), per), { mode, sections: secs.map(s => ({ name: s.name, limit: s.lim, limits: s.limits, list: s.list.slice(0, per) })) });
   }
   if (cmd === 'find') {
     const q = cleanQuery(rest.slice(1).join(' ')); if (!q) die(1, USAGE);
@@ -274,6 +342,8 @@ async function main(argv) {
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)))
   main(process.argv.slice(2)).catch(e => {
-    process.stderr.write((e instanceof Stop ? e.message : '行情接口暂时没通（' + (e.cause?.code || e.message) + '），过一会儿再试。不要自己编数字。') + '\n');
+    // 只有真的是网络 / 接口的事才说「没通」；程序自己的错照实说，免得让人白等
+    const net = e?.name === 'TimeoutError' || e?.name === 'AbortError' || e?.name === 'SyntaxError' || /^HTTP \d+|fetch failed/.test(e?.message || '') || !!e?.cause?.code;
+    process.stderr.write((e instanceof Stop ? e.message : net ? '行情接口暂时没通（' + (e.cause?.code || e.message) + '），过一会儿再试。不要自己编数字。' : 'claw-stock 出错了：' + (e?.message || e) + '。这是程序的问题，不是行情的问题；不要自己编数字。') + '\n');
     process.exitCode = e instanceof Stop ? e.code : 2;
   });

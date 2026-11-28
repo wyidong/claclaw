@@ -2262,6 +2262,11 @@ select.pe-in{text-align-last:right}
 .stk-fl td:first-child b{font-weight:600;font-size:13px}
 .md .stk-fl td.stk-bar{background:linear-gradient(to left,color-mix(in srgb,currentColor 15%,transparent) var(--w,0%),transparent var(--w,0%)) right center/100% calc(100% - 9px) no-repeat;font-weight:600}
 .stk-fl td:nth-child(5){color:var(--muted)}
+/* 排行榜（claw-stock top）：名称一格两行——名次 + 名字 + 涨停 / 跌停 / 新股的小标签，下面小字是代码和行业 */
+.md .stk-rk td{vertical-align:top;padding-top:7px;padding-bottom:7px}
+.stk-rk td:first-child small{display:block;margin:1px 0 0 1.5em;font-size:11px;font-weight:400;color:var(--muted);overflow:hidden;text-overflow:ellipsis;max-width:13em}
+.stk-rk td:first-child u{display:inline-block;margin-left:5px;padding:0 4px;border-radius:4px;font-size:10.5px;line-height:15px;font-weight:600;text-decoration:none;vertical-align:1px;background:color-mix(in srgb,currentColor 13%,transparent)}
+.stk-rk td:nth-child(3){font-weight:600}
 .stk-n{font-size:11px;line-height:1.45;color:var(--muted);margin-top:9px}
 .stk-tb+.stk-n,.stk-s+.stk-n,.stk-g+.stk-n{padding-top:9px;border-top:var(--bw) solid var(--line)}
 

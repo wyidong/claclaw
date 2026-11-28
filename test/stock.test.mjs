@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
-import { marketOf, kindOfCode, boardOf, cleanQuery, parseHint, parseSuggest, rank, parseQuote, phase, parseKEm, parseKTx, sma, spark, pctStr, money, renderQuote, renderK, renderCmp, parseFlow, renderFlow, flowDays, flowLevel, FLOW_LEVEL } from '../skills/claw-stock/stock.mjs';
+import { marketOf, kindOfCode, boardOf, cleanQuery, parseHint, parseSuggest, rank, parseQuote, phase, parseKEm, parseKTx, sma, spark, pctStr, money, renderQuote, renderK, renderCmp, parseFlow, renderFlow, flowDays, flowLevel, FLOW_LEVEL, BOARDS, topMode, topBoard, parseTop, limitTag, rankTop, parseBreadth, renderTop } from '../skills/claw-stock/stock.mjs';
 import { loadFills, routeFill } from '../src/claws/kuai-fill.mjs';
 
 test('6 位代码属于哪个市场：沪 6/5/900，深 0/3/1/200，京 920/8/4', () => {
@@ -233,6 +233,77 @@ test('页面：板块资金流画成一张表（两段的列对齐），净流�
   assert.match(mdStock('题 | 只有标题 | 没有内容'), /^CODE:/);
   assert.match(mdStock('流 | 1 | <i>x</i> | +1 亿 | +1% | +1% | a"b'), /<b>&lt;i&gt;x&lt;\/i&gt;<\/b>.*<td>a&quot;b<\/td>/);
   assert.match(mdStock('流 | 1 | x | 不是数 | +1% | +1%'), /style="--w:0%"/);                    // 色条的长度只会是数字
+});
+
+// 排行榜：接口返回的样子（f2 现价、f3 涨跌幅、f6 成交额、f26 上市日期、f100 行业；停牌的给 "-"）
+const T = (name, code, pct, amount, extra = {}) => ({ f12: code, f14: name, f2: 10, f3: pct, f6: amount, f8: 1, f26: '20100101', f100: '半导体', f124: 1795767060, ...extra });
+const NOW = new Date('2026-11-28T12:00:00+08:00');
+test('排行榜：说法 → 哪个榜、哪个板块；三个板块的上限', () => {
+  assert.deepEqual(['', '涨幅榜', '跌', '跌幅榜', '成交额', '最活跃', '北交所 跌'].map(topMode), ['涨', '涨', '跌', '跌', '成交额', '成交额', '跌']);
+  assert.deepEqual(['', '主板', '创业板', '科创板', '双创', '北交所', '北证', '跌 北交所'].map(topBoard), ['', '主板', '双创', '双创', '双创', '北交所', '北交所', '北交所']);
+  assert.deepEqual(BOARDS.map(b => [b.key, b.lim]), [['主板', 10], ['双创', 20], ['北交所', 30]]);
+});
+test('排行榜：解析（停牌的不要，行业去掉 Ⅱ Ⅲ）；涨跌家数是三个市场加起来', () => {
+  const l = parseTop({ data: { diff: [T('东山 精密', '002384', 10, 12e9, { f100: 'IT服务Ⅱ' }), T('停牌的', '000002', '-', '-', { f2: '-' }), T('没行业', '600001', 1, 1e8, { f100: '-' })] } });
+  assert.deepEqual(l.map(x => [x.name, x.code, x.pct, x.ind]), [['东山精密', '002384', 10, 'IT服务'], ['没行业', '600001', 1, '']]);
+  assert.deepEqual(parseTop(null), []);
+  assert.deepEqual(parseBreadth({ data: { diff: [{ f104: 2227, f105: 118, f106: 11 }, { f104: 2872, f105: 64, f106: 4 }, { f104: 357, f105: 0, f106: 0 }] } }), { up: 5456, down: 182, flat: 15 });
+  assert.equal(parseBreadth({ data: { diff: [] } }), null); assert.equal(parseBreadth(null), null);
+});
+test('排行榜：涨停 / 跌停 / 新股 / 不限幅（上限留 0.1 个点的取整余量）', () => {
+  const tag = (pct, lim, listed = '20100101') => limitTag({ pct, listed }, lim, NOW);
+  assert.deepEqual([10, 9.97, 10.45, 9.89, 5, -9.99, -10.02, -9.5].map(p => tag(p, 10)), ['涨停', '涨停', '涨停', '', '', '跌停', '跌停', '']);
+  assert.deepEqual([20, 19.98, 19.89, 10].map(p => tag(p, 20)), ['涨停', '涨停', '', '']);
+  assert.deepEqual([30, 29.96, 27.78].map(p => tag(p, 30)), ['涨停', '涨停', '']);
+  assert.equal(tag(120, 10, '20261120'), '新股');      // 上市 8 天，涨幅超过上限
+  assert.equal(tag(44, 10, '20261001'), '不限幅');     // 上市快两个月了还超过上限：恢复上市之类
+  assert.equal(tag(120, 10, ''), '不限幅');
+});
+test('排行榜：先后——不限幅的最前（按涨幅），涨停的并列按成交额，其余按涨幅；跌幅榜反过来', () => {
+  const l = parseTop({ data: { diff: [T('低价取整', '600001', 10.45, 1e8), T('成交大', '600002', 10, 9e9), T('成交中', '600003', 10.01, 5e9), T('没涨停', '600004', 8, 99e9), T('新股', '600005', 150, 2e9, { f26: '20261125' }), T('跌的', '600006', -3, 1e9)] } });
+  const up = rankTop(l, 10, 1, NOW);
+  assert.deepEqual(up.map(x => x.name), ['新股', '成交大', '成交中', '低价取整', '没涨停', '跌的']);
+  assert.deepEqual(up.map(x => x.tag), ['新股', '涨停', '涨停', '涨停', '', '']);
+  const d = parseTop({ data: { diff: [T('跌停小', '000001', -10, 1e8), T('跌停大', '000002', -9.98, 8e8), T('跌五', '000003', -5, 9e9), T('跌七', '000004', -7, 1e8), T('涨停的', '000005', 10, 9e9)] } });
+  const down = rankTop(d, 10, -1, NOW);
+  assert.deepEqual(down.map(x => x.name), ['跌停大', '跌停小', '跌七', '跌五', '涨停的']);
+  assert.deepEqual(down.map(x => x.tag), ['跌停', '跌停', '', '', '']);      // 跌幅榜里涨停的不打标记
+});
+test('排行榜：输出（按板块分段，写清上限和涨停几只）', () => {
+  const mk = (b, rows) => { const list = rankTop(parseTop({ data: { diff: rows } }), b.lim, 1, NOW); return { ...b, list, limits: list.filter(x => x.tag === '涨停').length }; };
+  const secs = [mk(BOARDS[0], [T('东山精密', '002384', 10, 12178e6, { f2: 79.77, f100: '元件' }), T('小涨', '600009', 3.2, 5e8)]), mk(BOARDS[2], [T('并行科技', '920493', 27.78, 467e6, { f2: 95.45, f100: 'IT服务Ⅱ' })])];
+  const out = renderTop('涨', secs, { up: 5456, down: 182, flat: 15 }, 6);
+  assert.match(out, /^```stock\n题 \| 涨幅榜 \| 2026-11-27 16:11 · .*全市场上涨 5456 只、下跌 182 只、平 15 只\n/);
+  assert.deepEqual(lines(out).filter(f => f[0] === '段').map(f => f[1]), ['沪深主板 · 涨停是 10% · 涨停 1 只', '北交所 · 涨停是 30% · 涨停 0 只']);
+  assert.deepEqual(lines(out).filter(f => f[0] === '榜'), [['榜', '1', '东山精密', '002384', '79.77', '+10.00%', '121.78 亿', '元件', '涨停'],
+    ['榜', '2', '小涨', '600009', '10.00', '+3.20%', '5.00 亿', '半导体'], ['榜', '1', '并行科技', '920493', '95.45', '+27.78%', '4.67 亿', 'IT服务']]);
+  assert.match(out, /注 \| 各板块的涨跌幅上限不一样，所以分开排。涨停的算并列/);
+  assert.equal(lines(renderTop('涨', secs, null, 1)).filter(f => f[0] === '榜').length, 2);               // 每段最多 per 只
+  assert.match(renderTop('涨', secs, null, 6), /^```stock\n题 \| 涨幅榜 \| 2026-11-27 16:11 · [^·\n]+\n/);   // 涨跌家数没拿到就不写
+  const amt = renderTop('成交额', [{ name: '全部 A 股', lim: 0, limits: 0, list: secs[0].list.map(x => ({ ...x, tag: '' })) }], null, 15);
+  assert.match(amt, /题 \| 成交额榜 \| /); assert.match(amt, /\n段 \| 全部 A 股\n/); assert.doesNotMatch(amt, /所以分开排|涨停/);
+  // 跌幅榜只列真的跌了的：这两个板块里没有下跌的，照实写，不拿涨得少的来凑（普涨那天北交所就是这样）
+  const dn = renderTop('跌', secs, null, 6);
+  assert.match(dn, /题 \| 跌幅榜 /);
+  assert.deepEqual(lines(dn).filter(f => f[0] === '段').map(f => f[1]), ['沪深主板 · 没有下跌的股票', '北交所 · 没有下跌的股票']);
+  assert.equal(lines(dn).filter(f => f[0] === '榜').length, 0);
+  const fell = rankTop(parseTop({ data: { diff: [T('跌停的', '600001', -10, 1e9), T('小跌', '600002', -2, 1e9), T('涨的', '600003', 4, 1e9)] } }), 10, -1, NOW);
+  const dn2 = renderTop('跌', [{ ...BOARDS[0], list: fell, limits: 1 }], null, 6);
+  assert.deepEqual(lines(dn2).filter(f => f[0] === '榜').map(f => f[2]), ['跌停的', '小跌']);
+  assert.match(dn2, /\n段 \| 沪深主板 · 跌停是 10% · 跌停 1 只\n/);
+  assert.doesNotMatch(out, /建议买|建议卖|买入|卖出|看涨|看跌|龙头|妖股|打板/);
+});
+test('页面：排行榜画成一张表（名称下面小字是代码和行业，涨停 / 跌停是小标签），涨是红、跌是绿', () => {
+  const h = mdStock('题 | 涨幅榜 | 小字\n段 | 沪深主板 · 涨停是 10% · 涨停 1 只\n榜 | 1 | 东山精密 | 002384 | 79.77 | +10.00% | 121.78 亿 | 元件 | 涨停\n榜 | 2 | 小涨 | 600009 | 10.00 | +3.20% | 5.00 亿 | 半导体\n段 | 北交所\n榜 | 1 | 跌的 | 920001 | 5.00 | -30.00% | 1.00 亿 |  | 跌停');
+  assert.match(h, /^<div class="stk"><div class="stk-h"><b>涨幅榜<\/b><\/div><div class="stk-t">小字<\/div><div class="stk-tb stk-fl stk-rk"><table><tr><th>名称<\/th><th>现价<\/th><th>涨跌<\/th><th>成交额<\/th><\/tr>/);
+  assert.equal(h.split('<table>').length - 1, 1);
+  assert.match(h, /<tr class="stk-cap"><td colspan="4">沪深主板 · 涨停是 10% · 涨停 1 只<\/td><\/tr><tr><td><i>1<\/i><b>东山精密<\/b><u class="up">涨停<\/u><small>002384 · 元件<\/small><\/td><td>79\.77<\/td><td><span class="stk-v up">\+10\.00%<\/span><\/td><td>121\.78 亿<\/td><\/tr>/);
+  assert.match(h, /<td><i>2<\/i><b>小涨<\/b><small>600009 · 半导体<\/small><\/td>/);                       // 没有标记就没有小标签
+  assert.match(h, /<b>跌的<\/b><u class="dn">跌停<\/u><small>920001<\/small><\/td><td>5\.00<\/td><td><span class="stk-v dn">-30\.00%<\/span>/);   // 没有行业只写代码
+  assert.match(mdStock('榜 | 1 | <b>x</b> | 000001 | 1 | +1% | 1 亿 | a&b | <i>'), /<b>&lt;b&gt;x&lt;\/b&gt;<\/b><u class="up">&lt;i&gt;<\/u><small>000001 · a&amp;b<\/small>/);
+  assert.match(mdStock('榜 | 只有三段 | x'), /^CODE:/);
+  // 资金流的卡片不受影响：还是它自己的表头和色条
+  assert.match(mdStock('流 | 1 | 电子 | +462 亿 | +8.68% | +12.48% | 东山精密'), /<div class="stk-tb stk-fl"><table><tr><th>板块<\/th>.*class="stk-bar up"/);
 });
 
 test('命令：不写参数退出 1 并给用法；cmp 只写一只退出 1（都不联网）', () => {
