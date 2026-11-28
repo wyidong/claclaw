@@ -10,7 +10,9 @@ claclaw 是装在电脑上的一个小网页服务，让你在浏览器里（手
 
 ## 安装
 
-**Windows 一键安装**：下载 [install/claclaw-install.cmd](install/claclaw-install.cmd) 双击（或在 PowerShell 里运行 `irm https://raw.githubusercontent.com/wyidong/claclaw/main/install/install-win.ps1 | iex`）。它检查电脑环境，没有就装好 Node.js（装在用户目录，不用管理员）和 Git，下载 claclaw、装好组件、在后台启动并设好开机启动，桌面放一个「claclaw」图标，最后打开浏览器。国内网络自动用镜像。再运行一次就是更新。脚本在 `install/`。
+**Windows 一键安装**：下载 [install/claclaw-install.cmd](install/claclaw-install.cmd) 双击（或在 PowerShell 里运行 `irm https://raw.githubusercontent.com/wyidong/claclaw/main/install/install-win.ps1 | iex`）。它检查电脑环境，没有就装好 Node.js（装在用户目录，不用管理员）和 Git，下载 claclaw、装好组件、在后台启动并设好开机启动，桌面放一个「claclaw」图标，最后打开浏览器。国内网络自动用镜像。脚本在 `install/`。
+
+**更新**：claclaw 每天查一次有没有新版本，有就在网页上提示；在「设置 → 宿主 → claclaw → 版本」看更新了什么，点「更新」才装（取新代码、组件有变才重装、自检，哪步失败就退回原来的版本），装好后等所有会话空闲再自动重启。也可以随时点「检查更新」，或者再运行一次安装脚本。只适用于从代码仓库装的 claclaw（git 仓库、跟踪着远端分支）。
 
 手动安装——要求：macOS 或 Windows，Node.js 18+（DeepSeek、OpenCode、MiniMax Code 要 22.13+，Copilot CLI 要 22+，Gemini CLI 要 20+）。
 
